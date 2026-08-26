@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:7448ec3a1cb755f341939eb62cb23a5917feb35a88ca678f559b99f6b6921be4",
+        "digest": "sha256:2b71401bdcc6690cad5abdb0c2af9f69ba4b318a8c585e7e1e6cf5b1ed9aa68f",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6821,6 +6821,41 @@
       "artifact": {
         "digest": "sha256:364b14ec18502dbe3f7302f248d081ede33ae798d389d085959e2f118db3bddc",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/hitl",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_hitl_tools:_apply_agent_hitl_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-hitl-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:af6130be8419f134c4fd690e48ece451299ed45123c2d4d7738600e600b6a972",
+      "artifact": {
+        "digest": "sha256:3307d3ea020b36e4c8eb1d363d48f07b51b664a1a1a24aa876cc89a88f122f82",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_hitl_tools.py"
       }
     },
     {

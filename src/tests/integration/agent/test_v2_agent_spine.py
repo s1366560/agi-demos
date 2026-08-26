@@ -23,6 +23,8 @@ from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionCon
 from src.infrastructure.agent.processor.factory import ProcessorFactory
 from src.infrastructure.agent.processor.processor import ProcessorConfig
 from src.infrastructure.agent.processor.run_context import RunContext
+from src.infrastructure.agent.tools.clarification import make_clarification_tool
+from src.infrastructure.agent.tools.decision import make_decision_tool
 from src.infrastructure.agent.tools.memory_tools import (
     memory_create_tool,
     memory_delete_tool,
@@ -260,11 +262,15 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
             )
 
             echo = _EchoTool()
+            clarification = make_clarification_tool(hitl_handler=None)
+            decision = make_decision_tool(hitl_handler=None)
             agent = ReActAgent(
                 model="test-model",
                 provider_id="test-provider",
                 tools={
                     "echo": echo,
+                    clarification.name: clarification,
+                    decision.name: decision,
                     memory_search_tool.name: memory_search_tool,
                     memory_get_tool.name: memory_get_tool,
                     memory_create_tool.name: memory_create_tool,
@@ -294,6 +300,8 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
             )
 
             assert raw_tools["echo"] is echo
+            assert raw_tools["ask_clarification"] is clarification
+            assert raw_tools["request_decision"] is decision
             assert raw_tools["memory_search"] is memory_search_tool
             assert "agent_spawn" in raw_tools
             assert "workspace_report_complete" in raw_tools

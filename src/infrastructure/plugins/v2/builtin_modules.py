@@ -16,6 +16,7 @@ from .agent_definition import (
     builtin_agent_definition_contribution_v2,
     builtin_agent_definition_v2,
 )
+from .agent_hitl_tools import builtin_agent_hitl_tool_contribution_definition_v2
 from .agent_lifecycle_notifier import (
     AgentLifecycleConnectionManagerV2,
     agent_lifecycle_notifier_definition_v2,
@@ -421,6 +422,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),
         builtin_tool_contribution_definition_v2(),
+        builtin_agent_hitl_tool_contribution_definition_v2(),
         builtin_agent_memory_tool_contribution_definition_v2(),
         builtin_agent_orchestration_tool_contribution_definition_v2(),
         builtin_agent_definition_v2(),

@@ -2630,11 +2630,28 @@ profile:
         strategy: agent-runtime-state
         source_id: agent-owned-tools
         excluded_tools:
+          - ask_clarification
+          - request_decision
           - memory_search
           - memory_get
           - memory_create
           - memory_update
           - memory_delete
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-hitl-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/hitl
+      enabled: true
+      config:
+        source_id: builtin-agent-hitl-tools
       inject:
         catalog: service:tool-set-catalog
       isolate: {}
