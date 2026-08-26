@@ -169,6 +169,7 @@ class _MemorySessionEventLogStore:
 class _EchoTool:
     name = "echo"
     description = "Return the supplied value."
+    tags = frozenset({"mcp", "sandbox"})
 
     def __init__(self) -> None:
         self.calls: list[str] = []

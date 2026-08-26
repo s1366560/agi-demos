@@ -113,10 +113,7 @@ from .telemetry_runtime import TelemetryRuntimeManagerV2, telemetry_runtime_defi
 from .tenant_agent_config_services import tenant_agent_config_service_definitions_v2
 from .tenant_skill_config_services import tenant_skill_config_service_definitions_v2
 from .tenant_webhook_services import tenant_webhook_service_definitions_v2
-from .tool_set import (
-    builtin_tool_contribution_definition_v2,
-    builtin_tool_set_definition_v2,
-)
+from .tool_set import builtin_tool_set_definition_v2
 from .tunnel_services import tunnel_service_definitions_v2
 from .workflow_pattern_services import workflow_pattern_service_definitions_v2
 from .workflow_runtime import WorkflowRuntimeFactoryV2, workflow_service_definitions_v2
@@ -436,7 +433,6 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),
-        builtin_tool_contribution_definition_v2(),
         builtin_agent_hitl_tool_contribution_definition_v2(),
         builtin_agent_memory_tool_contribution_definition_v2(),
         builtin_agent_model_awareness_tool_contribution_definition_v2(),

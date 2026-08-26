@@ -16,7 +16,7 @@ from src.infrastructure.plugins.v2.channel_adapters import (
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_context import FiberPhaseV2
-from src.infrastructure.plugins.v2.tool_set import TOOL_CONTRIBUTION_MODULE_V2
+from src.infrastructure.plugins.v2.tool_set import TOOL_SET_CATALOG_SERVICE_V2
 
 pytestmark = pytest.mark.unit
 
@@ -35,13 +35,18 @@ class _ChannelResolver:
 def _contract(
     *,
     provides: tuple[tuple[str, str], ...] = (),
+    requires: tuple[tuple[str, str, str], ...] = (),
     handled_events: int = 0,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         services=SimpleNamespace(
             provides=tuple(
                 SimpleNamespace(service=service, version=version) for service, version in provides
-            )
+            ),
+            requires=tuple(
+                SimpleNamespace(alias=alias, service=service, version=version)
+                for alias, service, version in requires
+            ),
         ),
         events=SimpleNamespace(handles=tuple(object() for _ in range(handled_events))),
     )
@@ -52,12 +57,17 @@ def _module(
     *,
     targets: tuple[DataPlaneTargetV2, ...] = (DataPlaneTargetV2.PYTHON,),
     provides: tuple[tuple[str, str], ...] = (),
+    requires: tuple[tuple[str, str, str], ...] = (),
     handled_events: int = 0,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         module_ref=module_ref,
         targets=targets,
-        contract=_contract(provides=provides, handled_events=handled_events),
+        contract=_contract(
+            provides=provides,
+            requires=requires,
+            handled_events=handled_events,
+        ),
     )
 
 
@@ -70,7 +80,16 @@ def test_projection_counts_only_active_python_contracts() -> None:
         ),
         handled_events=1,
     )
-    tool_contribution_module = _module(TOOL_CONTRIBUTION_MODULE_V2, handled_events=2)
+    hitl_tool_module = _module(
+        "builtin://memstack/agent/tool/hitl",
+        requires=(("catalog", TOOL_SET_CATALOG_SERVICE_V2, "1.0.0"),),
+        handled_events=2,
+    )
+    sandbox_mcp_tool_module = _module(
+        "builtin://memstack/agent/tool/sandbox-mcp",
+        requires=(("catalog", TOOL_SET_CATALOG_SERVICE_V2, "1.0.0"),),
+        handled_events=1,
+    )
     channel_module = _module(
         "builtin://memstack/channel/catalog",
         provides=((CHANNEL_ADAPTER_RESOLVER_SERVICE_V2, "1.0.0"),),
@@ -88,7 +107,13 @@ def test_projection_counts_only_active_python_contracts() -> None:
     manifests = (
         SimpleNamespace(
             plugin_id="memstack-runtime-kernel",
-            modules=(tool_set_module, tool_contribution_module, channel_module, disabled_module),
+            modules=(
+                tool_set_module,
+                hitl_tool_module,
+                sandbox_mcp_tool_module,
+                channel_module,
+                disabled_module,
+            ),
         ),
         SimpleNamespace(plugin_id="third-party", modules=(dormant_module,)),
         SimpleNamespace(plugin_id="web-only", modules=(web_only_module,)),
@@ -100,7 +125,7 @@ def test_projection_counts_only_active_python_contracts() -> None:
             module_ref=module.module_ref,
         )
         for index, module in enumerate(
-            (tool_set_module, tool_contribution_module, channel_module),
+            (tool_set_module, hitl_tool_module, sandbox_mcp_tool_module, channel_module),
             start=1,
         )
     )
@@ -116,9 +141,9 @@ def test_projection_counts_only_active_python_contracts() -> None:
 
     assert projection.plugins_total == 2
     assert projection.plugins_enabled == 1
-    assert projection.tool_contributions == 1
+    assert projection.tool_contributions == 2
     assert projection.channel_types == 2
-    assert projection.hook_handlers == 3
+    assert projection.hook_handlers == 4
     assert projection.commands == 0
     assert projection.services == 3
     assert projection.service_provider_effects == 2

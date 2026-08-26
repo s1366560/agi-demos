@@ -27,7 +27,6 @@ from src.infrastructure.plugins.v2.runtime import (
     RuntimeV2Error,
 )
 from src.infrastructure.plugins.v2.tool_set import (
-    TOOL_CONTRIBUTION_MODULE_V2,
     TOOL_SET_MODULE_V2,
     TOOL_SET_RESOLVER_SERVICE_V2,
     ToolSetCatalogV2,
@@ -38,28 +37,17 @@ from src.infrastructure.plugins.v2.tool_set import (
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+_RETIRED_GENERIC_TOOL_CONTRIBUTION_MODULE_V2 = "builtin://memstack/agent/tool-contribution"
 
 
-def _snapshot(*, generation: int, contribution_enabled: bool = True):
+def _snapshot(*, generation: int):
     manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
     document = load_profile_document_v2(_PROFILE_PATH)
     selected_modules = {
         RUNTIME_BOUNDARY_MODULE_V2,
         TOOL_SET_MODULE_V2,
-        TOOL_CONTRIBUTION_MODULE_V2,
     }
-    entries = tuple(
-        replace(
-            entry,
-            enabled=(
-                contribution_enabled
-                if entry.module_ref == TOOL_CONTRIBUTION_MODULE_V2
-                else entry.enabled
-            ),
-        )
-        for entry in document.entries
-        if entry.module_ref in selected_modules
-    )
+    entries = tuple(entry for entry in document.entries if entry.module_ref in selected_modules)
     return compose_profile_v2(
         replace(document, entries=entries),
         {manifest.plugin_id: manifest},
@@ -67,9 +55,9 @@ def _snapshot(*, generation: int, contribution_enabled: bool = True):
     )
 
 
-async def _manager(*, generation: int, contribution_enabled: bool = True) -> GenerationManagerV2:
+async def _manager(*, generation: int) -> GenerationManagerV2:
     runtime_generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(
-        _snapshot(generation=generation, contribution_enabled=contribution_enabled)
+        _snapshot(generation=generation)
     )
     manager = GenerationManagerV2()
     await manager.publish(runtime_generation)
@@ -113,6 +101,22 @@ class _AlternativeToolSetResolver:
     ) -> tuple[dict[str, object], list[object]]:
         self.calls.append((agent, selection_context))
         return {"alternative": object()}, [object()]
+
+
+@pytest.mark.unit
+def test_generic_agent_owned_tool_contribution_is_retired_from_production() -> None:
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    document = load_profile_document_v2(_PROFILE_PATH)
+
+    assert _RETIRED_GENERIC_TOOL_CONTRIBUTION_MODULE_V2 not in {
+        module.module_ref for module in manifest.modules
+    }
+    assert _RETIRED_GENERIC_TOOL_CONTRIBUTION_MODULE_V2 not in {
+        entry.module_ref for entry in document.entries
+    }
+    assert _RETIRED_GENERIC_TOOL_CONTRIBUTION_MODULE_V2 not in {
+        definition.module_ref for definition in builtin_runtime_definitions_v2()
+    }
 
 
 @pytest.mark.unit
@@ -252,36 +256,6 @@ async def test_runtime_consumer_resolves_tools_from_generation_provider() -> Non
                 operation.require(TOOL_SET_RESOLVER_SERVICE_V2),
                 ToolSetResolverV2,
             )
-            raw_tools, definitions = _resolve_current_tools_from_runtime_v2(agent, selection)
-    finally:
-        await manager.close()
-
-    assert set(raw_tools) == {"read"}
-    assert len(definitions) == 1
-    # Sources contribute their complete set; selection runs once after the merge.
-    assert agent.contexts == [None]
-
-
-@pytest.mark.unit
-def test_agent_tool_source_is_an_explicit_profile_entry() -> None:
-    document = load_profile_document_v2(_PROFILE_PATH)
-    modules = {entry.module_ref for entry in document.entries if entry.enabled}
-
-    assert TOOL_CONTRIBUTION_MODULE_V2 in modules
-
-
-@pytest.mark.unit
-async def test_disabling_tool_contribution_removes_tools_without_native_fallback() -> None:
-    manager = await _manager(generation=2, contribution_enabled=False)
-    agent = _ToolAgent()
-    selection = ToolSelectionContext(tenant_id="tenant-a", project_id="project-a")
-
-    try:
-        async with pin_operation_context_v2(
-            manager,
-            operation_id="disabled-tool-contribution",
-            scope=ScopeV2(kind=ScopeKindV2.ROOT),
-        ):
             raw_tools, definitions = _resolve_current_tools_from_runtime_v2(agent, selection)
     finally:
         await manager.close()

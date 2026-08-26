@@ -27,10 +27,7 @@ from src.infrastructure.plugins.v2.builtin_modules import (
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.tool_set import (
-    TOOL_CONTRIBUTION_MODULE_V2,
-    TOOL_SET_MODULE_V2,
-)
+from src.infrastructure.plugins.v2.tool_set import TOOL_SET_MODULE_V2
 
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -87,7 +84,6 @@ def _snapshot(*, generation: int, model_awareness_enabled: bool):
     selected_modules = {
         RUNTIME_BOUNDARY_MODULE_V2,
         TOOL_SET_MODULE_V2,
-        TOOL_CONTRIBUTION_MODULE_V2,
         AGENT_MODEL_AWARENESS_TOOLS_MODULE_V2,
     }
     entries = tuple(
@@ -133,15 +129,10 @@ def test_model_awareness_tools_are_an_explicit_profile_contribution() -> None:
         for entry in document.entries
         if entry.module_ref == AGENT_MODEL_AWARENESS_TOOLS_MODULE_V2
     ]
-    agent_owned = next(
-        entry for entry in document.entries if entry.module_ref == TOOL_CONTRIBUTION_MODULE_V2
-    )
-
     assert len(model_entries) == 1
     assert model_entries[0].enabled is True
     assert model_entries[0].config == {"source_id": AGENT_MODEL_AWARENESS_TOOLS_SOURCE_V2}
     assert model_entries[0].inject == {"catalog": "service:tool-set-catalog"}
-    assert set(_MODEL_AWARENESS_TOOLS).issubset(agent_owned.config["excluded_tools"])
 
 
 @pytest.mark.unit
@@ -161,7 +152,7 @@ async def test_disabling_model_awareness_contribution_removes_prepared_tools() -
     finally:
         await manager.close()
 
-    assert set(tools) == {"read"}
+    assert tools == {}
 
 
 @pytest.mark.unit
@@ -181,7 +172,7 @@ async def test_enabling_model_awareness_contribution_restores_exact_prepared_too
     finally:
         await manager.close()
 
-    assert set(tools) == {"read", *_MODEL_AWARENESS_TOOLS}
+    assert set(tools) == set(_MODEL_AWARENESS_TOOLS)
     assert {definition.name for definition in definitions} == set(tools)
     for name, tool in _MODEL_AWARENESS_TOOLS.items():
         assert tools[name] is tool

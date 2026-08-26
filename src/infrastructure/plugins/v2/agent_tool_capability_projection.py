@@ -17,7 +17,7 @@ from .channel_adapters import (
 )
 from .runtime import RuntimeGenerationV2
 from .runtime_context import FiberPhaseV2, RuntimeV2Error
-from .tool_set import TOOL_CONTRIBUTION_MODULE_V2
+from .tool_set import TOOL_SET_CATALOG_SERVICE_V2
 
 _ROOT_SCOPE_V2 = ScopeV2(kind=ScopeKindV2.ROOT)
 
@@ -69,7 +69,10 @@ def project_agent_tool_capabilities_v2(
         provided_services.update((item.service, item.version) for item in provided)
         service_provider_effects += int(bool(provided))
         hook_handlers += len(active_module.contract.events.handles)
-        tool_contributions += int(active_module.module_ref == TOOL_CONTRIBUTION_MODULE_V2)
+        required = active_module.contract.services.requires
+        tool_contributions += int(
+            any(item.service == TOOL_SET_CATALOG_SERVICE_V2 for item in required)
+        )
 
     resolver = generation.resolve(CHANNEL_ADAPTER_RESOLVER_SERVICE_V2, _ROOT_SCOPE_V2)
     if not isinstance(resolver, ChannelAdapterResolverProtocolV2):

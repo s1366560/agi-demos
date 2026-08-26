@@ -16,7 +16,6 @@ from .runtime import (
 )
 
 TOOL_SET_MODULE_V2 = "builtin://memstack/agent/tool-set"
-TOOL_CONTRIBUTION_MODULE_V2 = "builtin://memstack/agent/tool-contribution"
 TOOL_SET_CATALOG_SERVICE_V2 = "service:tool-set-catalog"
 TOOL_SET_RESOLVER_SERVICE_V2 = "service:tool-set-resolver"
 
@@ -205,57 +204,6 @@ def _apply_tool_set_resolver_v2(
     )
 
 
-def _agent_owned_tools_v2(
-    *,
-    agent: object,
-    selection_context: object | None,
-    excluded_tool_names: frozenset[str] = frozenset(),
-    excluded_tool_tags: frozenset[str] = frozenset(),
-) -> ToolSetV2:
-    get_current_tools = getattr(agent, "_get_current_tools", None)
-    if not callable(get_current_tools):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "agent-owned tool contribution requires callable _get_current_tools",
-        )
-    _ = selection_context
-    result: object = get_current_tools(selection_context=None)
-    if not isinstance(result, tuple) or len(result) != 2:
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "agent-owned tool contribution must return a two-item tuple",
-        )
-    raw_tools: object = result[0]
-    raw_definitions: object = result[1]
-    if (
-        not isinstance(raw_tools, Mapping)
-        or not isinstance(raw_definitions, Sequence)
-        or isinstance(raw_definitions, (str, bytes))
-    ):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "agent-owned tool contribution returned invalid tool collections",
-        )
-    tools = cast("Mapping[str, Any]", raw_tools)
-    definitions = raw_definitions
-    tag_excluded_names = {
-        name
-        for name, tool in tools.items()
-        if excluded_tool_tags.intersection(normalized_tool_tags_v2(tool))
-    }
-    excluded_names = excluded_tool_names | tag_excluded_names
-    filtered_tools = {name: tool for name, tool in tools.items() if name not in excluded_names}
-    filtered_definitions = tuple(
-        definition
-        for definition in definitions
-        if getattr(definition, "name", None) not in excluded_names
-    )
-    return ToolSetV2(
-        tools=MappingProxyType(filtered_tools),
-        definitions=filtered_definitions,
-    )
-
-
 def _select_complete_tool_set_v2(
     *,
     agent: object,
@@ -298,51 +246,6 @@ def _select_complete_tool_set_v2(
     return normalized_tools, list(convert_tools(normalized_tools))
 
 
-def _apply_tool_contribution_v2(
-    context: ContextV2,
-    config: Mapping[str, Any],
-) -> ToolContributionDisposerV2:
-    if config.get("strategy") != "agent-runtime-state":
-        raise ValueError("tool contribution requires strategy agent-runtime-state")
-    source_id = config.get("source_id")
-    if source_id != "agent-owned-tools":
-        raise ValueError("tool contribution requires source_id agent-owned-tools")
-    excluded_tools = config.get("excluded_tools")
-    if not isinstance(excluded_tools, Sequence) or isinstance(excluded_tools, (str, bytes)):
-        raise ValueError("agent-owned tool contribution requires excluded_tools")
-    excluded_tool_names = frozenset(
-        tool_name.strip()
-        for tool_name in excluded_tools
-        if isinstance(tool_name, str) and tool_name.strip()
-    )
-    if len(excluded_tool_names) != len(excluded_tools):
-        raise ValueError("agent-owned tool contribution has invalid excluded_tools")
-    excluded_tags = config.get("excluded_tags")
-    if not isinstance(excluded_tags, Sequence) or isinstance(excluded_tags, (str, bytes)):
-        raise ValueError("agent-owned tool contribution requires excluded_tags")
-    excluded_tool_tags = frozenset(
-        tag.strip() for tag in excluded_tags if isinstance(tag, str) and tag.strip()
-    )
-    if len(excluded_tool_tags) != len(excluded_tags):
-        raise ValueError("agent-owned tool contribution has invalid excluded_tags")
-    catalog = context.require("catalog")
-    if not isinstance(catalog, ToolSetCatalogProtocolV2):
-        raise RuntimeV2Error(
-            "invalid_service_implementation",
-            "tool-set catalog service has an invalid implementation",
-        )
-
-    def contribution(**kwargs: object) -> ToolSetV2:
-        return _agent_owned_tools_v2(
-            agent=kwargs["agent"],
-            selection_context=kwargs.get("selection_context"),
-            excluded_tool_names=excluded_tool_names,
-            excluded_tool_tags=excluded_tool_tags,
-        )
-
-    return catalog.register_tools(source_id, contribution)
-
-
 def builtin_tool_set_definition_v2() -> PluginDefinitionV2:
     return PluginDefinitionV2(
         module_ref=TOOL_SET_MODULE_V2,
@@ -351,16 +254,7 @@ def builtin_tool_set_definition_v2() -> PluginDefinitionV2:
     )
 
 
-def builtin_tool_contribution_definition_v2() -> PluginDefinitionV2:
-    return PluginDefinitionV2(
-        module_ref=TOOL_CONTRIBUTION_MODULE_V2,
-        contract_digest=generated_contract_digest_v2(TOOL_CONTRIBUTION_MODULE_V2),
-        apply=_apply_tool_contribution_v2,
-    )
-
-
 __all__ = [
-    "TOOL_CONTRIBUTION_MODULE_V2",
     "TOOL_SET_CATALOG_SERVICE_V2",
     "TOOL_SET_MODULE_V2",
     "TOOL_SET_RESOLVER_SERVICE_V2",
@@ -369,6 +263,5 @@ __all__ = [
     "ToolSetResolverProtocolV2",
     "ToolSetResolverV2",
     "ToolSetV2",
-    "builtin_tool_contribution_definition_v2",
     "builtin_tool_set_definition_v2",
 ]

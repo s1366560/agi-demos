@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:04736addead7e1607c868bcea815c0d837e037da1643077d775210ae0c426783",
+        "digest": "sha256:a9d1f75d9d0a62a772274b265b095f1394db5ee7fddf148071f15768537e49d0",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6781,50 +6781,7 @@
       },
       "contract_digest": "sha256:c45f9c8ba00b7d68570a0ca5a269f62d0ef202b389d0f689755bada1e4ba9608",
       "artifact": {
-        "digest": "sha256:d7fb416826192ef0367eea83e7d1d278f5e8357a7c62c0f8e9ca97aafc7225c2",
-        "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
-      }
-    },
-    {
-      "module_ref": "builtin://memstack/agent/tool-contribution",
-      "entrypoint": "src.infrastructure.plugins.v2.tool_set:_apply_tool_contribution_v2",
-      "targets": ["python"],
-      "contract": {
-        "services": {
-          "provides": [],
-          "requires": [
-            {
-              "alias": "catalog",
-              "service": "service:tool-set-catalog",
-              "version": "1.0.0"
-            }
-          ]
-        },
-        "events": { "emits": [], "handles": [] },
-        "config_schema": {
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["source_id", "strategy", "excluded_tools", "excluded_tags"],
-          "properties": {
-            "source_id": { "const": "agent-owned-tools", "type": "string" },
-            "strategy": { "const": "agent-runtime-state", "type": "string" },
-            "excluded_tools": {
-              "type": "array",
-              "items": { "type": "string", "minLength": 1 },
-              "uniqueItems": true
-            },
-            "excluded_tags": {
-              "type": "array",
-              "items": { "type": "string", "minLength": 1 },
-              "uniqueItems": true
-            }
-          }
-        }
-      },
-      "contract_digest": "sha256:98e2b14555c9d50d1f02beff5e28b170f4cbdfd4191dcbb46e833e919c27f520",
-      "artifact": {
-        "digest": "sha256:d7fb416826192ef0367eea83e7d1d278f5e8357a7c62c0f8e9ca97aafc7225c2",
+        "digest": "sha256:81f746719a265b258cec43a99bd54134fa73a6e748464cab53eec58c62efe9da",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
       }
     },

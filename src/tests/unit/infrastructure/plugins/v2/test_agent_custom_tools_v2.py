@@ -29,10 +29,7 @@ from src.infrastructure.plugins.v2.builtin_modules import (
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.tool_set import (
-    TOOL_CONTRIBUTION_MODULE_V2,
-    TOOL_SET_MODULE_V2,
-)
+from src.infrastructure.plugins.v2.tool_set import TOOL_SET_MODULE_V2
 
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -87,7 +84,6 @@ def _snapshot(*, generation: int, custom_enabled: bool):
     selected_modules = {
         RUNTIME_BOUNDARY_MODULE_V2,
         TOOL_SET_MODULE_V2,
-        TOOL_CONTRIBUTION_MODULE_V2,
         AGENT_CUSTOM_TOOLS_MODULE_V2,
     }
     entries = tuple(
@@ -124,10 +120,6 @@ def test_custom_tools_are_an_explicit_tagged_profile_contribution() -> None:
     custom_entries = [
         entry for entry in document.entries if entry.module_ref == AGENT_CUSTOM_TOOLS_MODULE_V2
     ]
-    agent_owned = next(
-        entry for entry in document.entries if entry.module_ref == TOOL_CONTRIBUTION_MODULE_V2
-    )
-
     assert len(custom_entries) == 1
     assert custom_entries[0].enabled is True
     assert custom_entries[0].config == {
@@ -136,7 +128,6 @@ def test_custom_tools_are_an_explicit_tagged_profile_contribution() -> None:
         "required_tool": custom_tools_status.name,
     }
     assert custom_entries[0].inject == {"catalog": "service:tool-set-catalog"}
-    assert CUSTOM_TOOL_SOURCE_TAG_V2 in agent_owned.config["excluded_tags"]
 
 
 @pytest.mark.unit
@@ -156,7 +147,7 @@ async def test_disabling_custom_contribution_removes_tagged_prepared_tools() -> 
     finally:
         await manager.close()
 
-    assert set(tools) == {"read"}
+    assert tools == {}
 
 
 @pytest.mark.unit
@@ -176,7 +167,7 @@ async def test_enabling_custom_contribution_restores_exact_tagged_tools() -> Non
     finally:
         await manager.close()
 
-    assert set(tools) == {"read", _CUSTOM_TOOL.name, custom_tools_status.name}
+    assert set(tools) == {_CUSTOM_TOOL.name, custom_tools_status.name}
     assert {definition.name for definition in definitions} == set(tools)
     assert tools[_CUSTOM_TOOL.name] is _CUSTOM_TOOL
     assert tools[custom_tools_status.name] is custom_tools_status

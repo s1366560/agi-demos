@@ -28,10 +28,7 @@ from src.infrastructure.plugins.v2.builtin_modules import (
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.tool_set import (
-    TOOL_CONTRIBUTION_MODULE_V2,
-    TOOL_SET_MODULE_V2,
-)
+from src.infrastructure.plugins.v2.tool_set import TOOL_SET_MODULE_V2
 
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -103,7 +100,6 @@ def _snapshot(
     *,
     generation: int,
     sandbox_mcp_enabled: bool,
-    include_agent_owned: bool = True,
 ):
     manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
     document = load_profile_document_v2(_PROFILE_PATH)
@@ -112,8 +108,6 @@ def _snapshot(
         TOOL_SET_MODULE_V2,
         AGENT_SANDBOX_MCP_TOOLS_MODULE_V2,
     }
-    if include_agent_owned:
-        selected_modules.add(TOOL_CONTRIBUTION_MODULE_V2)
     entries = tuple(
         replace(
             entry,
@@ -137,13 +131,11 @@ async def _manager(
     *,
     generation: int,
     sandbox_mcp_enabled: bool,
-    include_agent_owned: bool = True,
 ) -> GenerationManagerV2:
     runtime_generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(
         _snapshot(
             generation=generation,
             sandbox_mcp_enabled=sandbox_mcp_enabled,
-            include_agent_owned=include_agent_owned,
         )
     )
     manager = GenerationManagerV2()
@@ -157,10 +149,6 @@ def test_sandbox_mcp_tools_are_an_explicit_tagged_profile_contribution() -> None
     entries = [
         entry for entry in document.entries if entry.module_ref == AGENT_SANDBOX_MCP_TOOLS_MODULE_V2
     ]
-    agent_owned = next(
-        entry for entry in document.entries if entry.module_ref == TOOL_CONTRIBUTION_MODULE_V2
-    )
-
     assert len(entries) == 1
     assert entries[0].enabled is True
     assert entries[0].config == {
@@ -168,7 +156,6 @@ def test_sandbox_mcp_tools_are_an_explicit_tagged_profile_contribution() -> None
         "required_tags": sorted(SANDBOX_MCP_TOOL_REQUIRED_TAGS_V2),
     }
     assert entries[0].inject == {"catalog": "service:tool-set-catalog"}
-    assert "sandbox" in agent_owned.config["excluded_tags"]
 
 
 @pytest.mark.unit
@@ -188,7 +175,7 @@ async def test_disabling_sandbox_mcp_contribution_removes_tagged_prepared_tools(
     finally:
         await manager.close()
 
-    assert tools == {_UNTAGGED_TOOL.name: _UNTAGGED_TOOL}
+    assert tools == {}
 
 
 @pytest.mark.unit
@@ -208,11 +195,7 @@ async def test_enabling_sandbox_mcp_contribution_restores_exact_prepared_instanc
     finally:
         await manager.close()
 
-    assert set(tools) == {
-        _UNTAGGED_TOOL.name,
-        _BUILTIN_SANDBOX_MCP_TOOL.name,
-        _USER_SANDBOX_MCP_TOOL.name,
-    }
+    assert set(tools) == {_BUILTIN_SANDBOX_MCP_TOOL.name, _USER_SANDBOX_MCP_TOOL.name}
     assert {definition.name for definition in definitions} == set(tools)
     assert tools[_BUILTIN_SANDBOX_MCP_TOOL.name] is _BUILTIN_SANDBOX_MCP_TOOL
     assert tools[_USER_SANDBOX_MCP_TOOL.name] is _USER_SANDBOX_MCP_TOOL
@@ -236,8 +219,8 @@ async def test_empty_sandbox_mcp_tool_set_is_valid() -> None:
     finally:
         await manager.close()
 
-    assert tools == {_UNTAGGED_TOOL.name: _UNTAGGED_TOOL}
-    assert {definition.name for definition in definitions} == {_UNTAGGED_TOOL.name}
+    assert tools == {}
+    assert definitions == []
 
 
 @pytest.mark.unit
@@ -245,7 +228,6 @@ async def test_sandbox_mcp_config_rejects_wrong_tags_before_activation() -> None
     snapshot = _snapshot(
         generation=104,
         sandbox_mcp_enabled=True,
-        include_agent_owned=False,
     )
     sandbox_entry = next(
         entry for entry in snapshot.entries if entry.module_ref == AGENT_SANDBOX_MCP_TOOLS_MODULE_V2
@@ -276,7 +258,6 @@ async def test_sandbox_mcp_contribution_rejects_invalid_prepared_collections(
     manager = await _manager(
         generation=105,
         sandbox_mcp_enabled=True,
-        include_agent_owned=False,
     )
     agent = _ToolAgent(prepared_result=prepared_result)
     try:
