@@ -168,6 +168,7 @@
     "src/features/invitation-acceptance/InvitationAcceptancePage.tsx",
     "src/features/invitation-acceptance/locales/invitationAcceptanceMessages.ts",
     "src/hooks/useAgentSocket.ts",
+    "src/hooks/agentSocketGenerationLeaseV2.ts",
     "src/hooks/useTerminalProxy.ts",
     "src/features/session/sessionProjectionModel.ts",
     "src/features/session/sessionProjectionTypes.ts",

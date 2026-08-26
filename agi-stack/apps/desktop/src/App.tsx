@@ -932,6 +932,7 @@ export function App() {
     showRuntimeConfig && connection === 'ready',
     auth.context?.revision ?? null,
     scopedConversation?.id ?? null,
+    desktopRendererGenerationV2.actions.acquireOperationLease,
   );
   const invalidateWorkspaceCollaborationAuthority = useCallback(
     (trigger: WorkspaceAuthorityInvalidationTrigger) => {

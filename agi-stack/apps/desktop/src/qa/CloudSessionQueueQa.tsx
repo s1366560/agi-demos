@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import type {
+  AgentSocketGenerationLeaseFactoryV2,
+} from '../hooks/agentSocketGenerationLeaseV2';
 import { useAgentSocket } from '../hooks/useAgentSocket';
 import { DEFAULT_CONFIG, type DesktopRuntimeConfig } from '../types';
 
@@ -68,11 +71,25 @@ const config: DesktopRuntimeConfig = {
   workspaceRoot: '',
 };
 
+const QA_AGENT_SOCKET_GENERATION_LEASE_V2:
+  AgentSocketGenerationLeaseFactoryV2 = () =>
+  Object.freeze({
+    digest: 'sha256:qa-cloud-session-generation-v2',
+    kind: 'generation',
+    release: async () => undefined,
+  });
+
 function CloudSessionQueueQa() {
   const [, refresh] = useState(0);
   const [accepted, setAccepted] = useState(false);
   const [activeConfig, setActiveConfig] = useState(config);
-  const socket = useAgentSocket(activeConfig, true, 1, 'conversation-cloud');
+  const socket = useAgentSocket(
+    activeConfig,
+    true,
+    1,
+    'conversation-cloud',
+    QA_AGENT_SOCKET_GENERATION_LEASE_V2,
+  );
   const sentMessages = QaWebSocket.latest?.sent ?? [];
   const agentMessages = sentMessages.filter((message) => message.type === 'send_message');
   const latestAgentMessage = agentMessages[agentMessages.length - 1];

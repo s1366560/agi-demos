@@ -8,7 +8,17 @@ const source = readFileSync(
 );
 
 test('cloud session QA exercises the production socket queue before opening realtime', () => {
-  assert.match(source, /useAgentSocket\(activeConfig, true, 1, 'conversation-cloud'\)/);
+  assert.match(source, /QA_AGENT_SOCKET_GENERATION_LEASE_V2/u);
+  assert.match(source, /kind: 'generation'/u);
+  assert.match(source, /digest: 'sha256:qa-cloud-session-generation-v2'/u);
+  assert.match(
+    source,
+    new RegExp(
+      String.raw`useAgentSocket\([\s\S]+?'conversation-cloud',` +
+        String.raw`[\s\S]+?QA_AGENT_SOCKET_GENERATION_LEASE_V2[\s\S]+?\)`,
+      'u',
+    ),
+  );
   assert.match(source, /socket\.sendAgentMessage\(\{/);
   assert.match(source, /workspaceId: 'workspace-created-for-session'/);
   assert.match(source, /QaWebSocket\.latest\?\.open\(\)/);

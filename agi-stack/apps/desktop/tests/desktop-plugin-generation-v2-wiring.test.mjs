@@ -18,6 +18,8 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   const routeHost = source("src/features/navigation/desktopHashRouteHost.ts");
   const lifecycle = source("../../packages/plugin-runtime/src/rendererLifecycle.ts");
   const app = source("src/App.tsx");
+  const agentSocket = source("src/hooks/useAgentSocket.ts");
+  const agentSocketLease = source("src/hooks/agentSocketGenerationLeaseV2.ts");
   const artifactCatalog = source("src/plugins/desktopRendererArtifactCatalogV2.ts");
   const authority = source("src/plugins/desktopRendererAuthorityStateV2.ts");
   const main = source("src/main.tsx");
@@ -82,6 +84,38 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(app, /desktopRendererGenerationV2\.meta\.digest/u);
   assert.match(app, /desktopRendererGenerationV2\.meta\.status/u);
   assert.match(app, /desktopRendererGenerationV2\.meta\.target/u);
+  assert.match(
+    app,
+    new RegExp(
+      String.raw`useAgentSocket\([\s\S]+?` +
+        String.raw`desktopRendererGenerationV2\.actions\.acquireOperationLease[\s\S]+?\)`,
+      'u',
+    ),
+  );
+  assert.match(agentSocket, /AgentSocketGenerationLeaseFactoryV2/u);
+  assert.match(agentSocket, /acquireAgentSocketGenerationLeaseV2\(acquireGenerationLease\)/u);
+  assert.match(agentSocket, /generationLease\.constructSocket\(\(\) =>/u);
+  const socketLeaseIndex = agentSocket.indexOf(
+    'acquireAgentSocketGenerationLeaseV2(acquireGenerationLease)',
+  );
+  const socketConnectIndex = agentSocket.indexOf('const connect = () =>', socketLeaseIndex);
+  assert.ok(socketLeaseIndex >= 0 && socketConnectIndex > socketLeaseIndex);
+  assert.match(
+    agentSocket,
+    /\[\s*acquireGenerationLease,[\s\S]+?socketAuthenticationAvailable,[\s\S]+?\]\);/u,
+  );
+  const socketCleanupSequence = [
+    String.raw`socket\.onopen = null;`,
+    String.raw`socket\.onerror = null;`,
+    String.raw`socket\.onmessage = null;`,
+    String.raw`socket\.onclose = null;`,
+    String.raw`socket\.close\(\);`,
+    String.raw`generationLease\.release\(\)`,
+  ].join(String.raw`[\s\S]+?`);
+  assert.match(agentSocket, new RegExp(socketCleanupSequence, 'u'));
+  assert.match(agentSocketLease, /lease\.kind !== 'generation'/u);
+  assert.match(agentSocketLease, /lease\.digest\?\.trim\(\)/u);
+  assert.match(agentSocketLease, /releasePromise/u);
   assert.doesNotMatch(app, /useDesktopPluginGenerationV2/u);
   assert.doesNotMatch(app, /resolveDesktopRendererAuthorityStateV2/u);
   assert.doesNotMatch(app, /projectDesktopRouteRegistryV2/u);

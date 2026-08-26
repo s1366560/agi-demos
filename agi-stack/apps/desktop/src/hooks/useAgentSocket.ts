@@ -13,6 +13,10 @@ import type {
   HitlResponseSubmission,
   WorkspacePermissionMode,
 } from "../types";
+import {
+  acquireAgentSocketGenerationLeaseV2,
+  type AgentSocketGenerationLeaseFactoryV2,
+} from "./agentSocketGenerationLeaseV2";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const WATCHDOG_INTERVAL_MS = 10_000;
@@ -480,6 +484,7 @@ export function useAgentSocket(
   enabled: boolean,
   contextRevision: number | null,
   activeConversationId: string | null,
+  acquireGenerationLease: AgentSocketGenerationLeaseFactoryV2,
 ): AgentSocketState {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -700,6 +705,14 @@ export function useAgentSocket(
       return;
     }
 
+    const generationLease =
+      acquireAgentSocketGenerationLeaseV2(acquireGenerationLease);
+    if (generationLease.status === "rejected") {
+      setConnected(false);
+      setError(generationLease.reasonCode);
+      return;
+    }
+
     let disposed = false;
     let reconnectAttempt = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -771,7 +784,7 @@ export function useAgentSocket(
       let socket: WebSocket;
       try {
         const url = client.agentWsUrl(`desktop-${Date.now()}`);
-        socket =
+        socket = generationLease.constructSocket(() =>
           config.mode === "cloud" && cloudSocketTransport
             ? (createCloudSocketBridge(
                 {
@@ -786,7 +799,8 @@ export function useAgentSocket(
                 },
                 cloudSocketTransport,
               ) as unknown as WebSocket)
-            : new WebSocket(url, client.agentWsProtocols());
+            : new WebSocket(url, client.agentWsProtocols()),
+        );
         socketRef.current = socket;
       } catch (caught) {
         setError(String(caught));
@@ -926,11 +940,16 @@ export function useAgentSocket(
       const socket = socketRef.current;
       socketRef.current = null;
       if (socket) {
+        socket.onopen = null;
+        socket.onerror = null;
+        socket.onmessage = null;
         socket.onclose = null;
         socket.close();
       }
+      void generationLease.release();
     };
   }, [
+    acquireGenerationLease,
     client,
     cloudSocketTransport,
     config.apiKey,
