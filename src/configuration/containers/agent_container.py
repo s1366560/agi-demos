@@ -97,9 +97,10 @@ class AgentContainer:
         self._skill_service_instance: SkillService | None = None
         self._agent_session_registry_instance: AgentSessionRegistry | None = None
         self._spawn_manager_instance: Any | None = None
+        self._spawn_manager_run_registry_instance: Any | None = None
         self._agent_orchestrator_instance: Any | None = None
-        self._subagent_run_registry_instance: Any | None = None
         self._spawn_validator_instance: Any | None = None
+        self._spawn_validator_run_registry_instance: Any | None = None
         self._control_channel_instance: Any | None = None
         self._graph_orchestrator_instance: Any | None = None
         self._span_service_instance: Any | None = None
@@ -243,58 +244,25 @@ class AgentContainer:
 
     def spawn_manager(self) -> Any:
         """Get SpawnManager singleton (in-memory, no DB dependency)."""
-        if self._spawn_manager_instance is not None:
-            return self._spawn_manager_instance
         from src.infrastructure.agent.orchestration.spawn_manager import (
             SpawnManager,
         )
+        from src.infrastructure.plugins.v2.subagent_run_registry_projection import (
+            current_subagent_run_registry_v2,
+        )
 
+        run_registry = current_subagent_run_registry_v2()
+        if (
+            self._spawn_manager_instance is not None
+            and self._spawn_manager_run_registry_instance is run_registry
+        ):
+            return self._spawn_manager_instance
         self._spawn_manager_instance = SpawnManager(
             session_registry=self.agent_session_registry(),
-            run_registry=self.subagent_run_registry(),
+            run_registry=run_registry,
         )
+        self._spawn_manager_run_registry_instance = run_registry
         return self._spawn_manager_instance
-
-    def subagent_run_registry(self) -> Any:
-        """Get shared SubAgentRunRegistry singleton for trace and runtime access."""
-        if self._subagent_run_registry_instance is not None:
-            return self._subagent_run_registry_instance
-        from src.infrastructure.agent.subagent.run_registry import (
-            get_shared_subagent_run_registry,
-        )
-
-        retention_seconds = (
-            self._settings.agent_subagent_terminal_retention_seconds if self._settings else 86400
-        )
-        self._subagent_run_registry_instance = get_shared_subagent_run_registry(
-            persistence_path=(
-                getattr(self._settings, "agent_subagent_run_registry_path", None)
-                if self._settings
-                else None
-            ),
-            postgres_persistence_dsn=(
-                getattr(self._settings, "agent_subagent_run_postgres_dsn", None)
-                if self._settings
-                else None
-            ),
-            sqlite_persistence_path=(
-                getattr(self._settings, "agent_subagent_run_sqlite_path", None)
-                if self._settings
-                else None
-            ),
-            redis_cache_url=(
-                getattr(self._settings, "agent_subagent_run_redis_cache_url", None)
-                if self._settings
-                else None
-            ),
-            redis_cache_ttl_seconds=(
-                getattr(self._settings, "agent_subagent_run_redis_cache_ttl_seconds", 60)
-                if self._settings
-                else 60
-            ),
-            terminal_retention_seconds=retention_seconds,
-        )
-        return self._subagent_run_registry_instance
 
     def spawn_policy(self) -> Any:
         """Create SpawnPolicy from application settings."""
@@ -304,14 +272,22 @@ class AgentContainer:
 
     def spawn_validator(self) -> Any:
         """Get SpawnValidator singleton."""
-        if self._spawn_validator_instance is not None:
-            return self._spawn_validator_instance
         from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
+        from src.infrastructure.plugins.v2.subagent_run_registry_projection import (
+            current_subagent_run_registry_v2,
+        )
 
+        run_registry = current_subagent_run_registry_v2()
+        if (
+            self._spawn_validator_instance is not None
+            and self._spawn_validator_run_registry_instance is run_registry
+        ):
+            return self._spawn_validator_instance
         self._spawn_validator_instance = SpawnValidator(
             policy=self.spawn_policy(),
-            run_registry=self.subagent_run_registry(),
+            run_registry=run_registry,
         )
+        self._spawn_validator_run_registry_instance = run_registry
         return self._spawn_validator_instance
 
     def control_channel(self) -> Any:

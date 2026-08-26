@@ -7,6 +7,7 @@ from typing import Any, cast
 
 import pytest
 
+from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
@@ -126,6 +127,86 @@ async def test_failed_registry_candidate_preserves_the_last_good_generation() ->
     registry.close()
 
 
+async def test_agent_container_coordination_factories_use_the_pinned_registry() -> None:
+    registry = SubAgentRunRegistry()
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            subagent_run_registry_factory=lambda _config: registry,
+        )
+    )
+    publication = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=185,
+        version=185,
+    )
+    assert publication.accepted is True
+
+    try:
+        container = AgentContainer()
+        async with pin_generation_v2(host):
+            spawn_manager = container.spawn_manager()
+            spawn_validator = container.spawn_validator()
+
+        assert spawn_manager._run_registry is registry
+        assert spawn_validator._registry is registry
+        with pytest.raises(RuntimeV2Error) as manager_error:
+            container.spawn_manager()
+        with pytest.raises(RuntimeV2Error) as validator_error:
+            container.spawn_validator()
+        assert manager_error.value.code == "generation_not_pinned"
+        assert validator_error.value.code == "generation_not_pinned"
+    finally:
+        await host.close()
+        registry.close()
+
+
+async def test_agent_container_rebuilds_coordination_for_a_new_registry_generation() -> None:
+    first_registry = SubAgentRunRegistry()
+    second_registry = SubAgentRunRegistry()
+    registries = iter((first_registry, second_registry))
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            subagent_run_registry_factory=lambda _config: next(registries),
+        )
+    )
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=186,
+        version=186,
+    )
+    assert first.accepted is True
+
+    try:
+        container = AgentContainer()
+        async with pin_generation_v2(host):
+            first_manager = container.spawn_manager()
+            first_validator = container.spawn_validator()
+
+        second = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=187,
+            version=187,
+        )
+        assert second.accepted is True
+        async with pin_generation_v2(host):
+            second_manager = container.spawn_manager()
+            second_validator = container.spawn_validator()
+
+        assert first_manager._run_registry is first_registry
+        assert first_validator._registry is first_registry
+        assert second_manager._run_registry is second_registry
+        assert second_validator._registry is second_registry
+        assert second_manager is not first_manager
+        assert second_validator is not first_validator
+    finally:
+        await host.close()
+        first_registry.close()
+        second_registry.close()
+
+
 def test_trace_production_path_and_top_level_di_have_no_static_registry_authority() -> None:
     source = (
         _ROOT / "src/infrastructure/adapters/primary/web/routers/agent/trace_router.py"
@@ -135,3 +216,10 @@ def test_trace_production_path_and_top_level_di_have_no_static_registry_authorit
     assert "get_container_with_db" not in source
     assert ".subagent_run_registry()" not in source
     assert "subagent_run_registry" not in vars(DIContainer)
+    assert "subagent_run_registry" not in vars(AgentContainer)
+
+    container_source = (_ROOT / "src/configuration/containers/agent_container.py").read_text(
+        encoding="utf-8"
+    )
+    assert "get_shared_subagent_run_registry" not in container_source
+    assert "_subagent_run_registry_instance" not in container_source
