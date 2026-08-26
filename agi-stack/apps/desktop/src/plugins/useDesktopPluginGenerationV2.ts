@@ -7,7 +7,9 @@ import {
   RendererPluginRuntimeV2,
   projectRendererPluginGenerationStateV2,
   startRendererGenerationPollingV2,
+  type GenerationLeaseV2,
   type RendererPluginGenerationStateV2,
+  type RuntimeGenerationV2,
 } from '@agistack/plugin-runtime';
 
 import { desktopApiCredential, desktopLaunchCapability } from '../api/client';
@@ -37,6 +39,12 @@ export function activateDesktopPluginGenerationRootV2(): void {
 
 export async function deactivateDesktopPluginGenerationRootV2(): Promise<void> {
   await desktopRendererLeaseStoreV2.deactivateRoot();
+}
+
+export function acquireDesktopPluginGenerationLeaseV2(
+  generation: RuntimeGenerationV2
+): GenerationLeaseV2 {
+  return desktopRendererLeaseStoreV2.acquireGeneration(generation);
 }
 
 export function useDesktopPluginGenerationV2(

@@ -28,8 +28,8 @@ export class RendererPluginRuntimeV2 {
   readonly getSnapshot = (): RuntimeGenerationV2 | undefined =>
     this.reconciler.manager.getSnapshot();
 
-  acquire(): GenerationLeaseV2 {
-    return this.reconciler.manager.acquire();
+  acquire(generation?: RuntimeGenerationV2): GenerationLeaseV2 {
+    return this.reconciler.manager.acquire(generation);
   }
 
   async bootstrap(value: unknown): Promise<void> {
@@ -87,6 +87,17 @@ export class RendererGenerationLeaseStoreV2 {
     this.assertRootActive();
     return this.snapshot;
   };
+
+  acquireGeneration(generation: RuntimeGenerationV2): GenerationLeaseV2 {
+    this.assertRootActive();
+    if (!this.leases.has(generation)) {
+      throw new RuntimeV2Error(
+        'renderer_generation_not_renderable',
+        'generation is not retained by the active renderer root'
+      );
+    }
+    return this.runtime.acquire(generation);
+  }
 
   async commit(snapshot: RendererGenerationLeaseSnapshotV2): Promise<void> {
     this.assertRootActive();

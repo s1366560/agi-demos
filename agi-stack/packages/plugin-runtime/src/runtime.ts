@@ -241,10 +241,12 @@ export class GenerationLeaseV2 {
 
 export class GenerationManagerV2 {
   current: RuntimeGenerationV2 | undefined;
+  private readonly managedGenerations = new WeakSet<RuntimeGenerationV2>();
   private readonly subscribers = new Set<() => void>();
 
   async publish(generation: RuntimeGenerationV2): Promise<void> {
     const previous = this.current;
+    this.managedGenerations.add(generation);
     this.current = generation;
     this.notify();
     if (previous) {
@@ -253,10 +255,21 @@ export class GenerationManagerV2 {
     }
   }
 
-  acquire(): GenerationLeaseV2 {
-    const generation = this.current;
+  acquire(generation: RuntimeGenerationV2 | undefined = this.current): GenerationLeaseV2 {
     if (!generation) {
       throw new RuntimeV2Error('generation_unavailable', 'no generation is published');
+    }
+    if (generation.disposed) {
+      throw new RuntimeV2Error('disposed_generation', 'generation is disposed');
+    }
+    if (
+      !this.managedGenerations.has(generation) ||
+      (generation !== this.current && (!generation.retired || generation.leaseCount === 0))
+    ) {
+      throw new RuntimeV2Error(
+        'generation_not_leased',
+        'generation is not managed here as current or retained by an active lease'
+      );
     }
     generation.leaseCount += 1;
     return new GenerationLeaseV2(generation, this);

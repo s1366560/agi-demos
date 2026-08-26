@@ -9,6 +9,8 @@ function source(relativePath) {
 test("desktop renderer owns a protocol-v2 generation host through the public fetch seam", () => {
   const hook = source("src/plugins/useDesktopPluginGenerationV2.ts");
   const host = source("src/plugins/DesktopRendererGenerationHostV2.tsx");
+  const routeBoundary = source("src/plugins/DesktopRendererProductionRouterV2.tsx");
+  const routeHost = source("src/features/navigation/desktopHashRouteHost.ts");
   const lifecycle = source("../../packages/plugin-runtime/src/rendererLifecycle.ts");
   const app = source("src/App.tsx");
   const artifactCatalog = source("src/plugins/desktopRendererArtifactCatalogV2.ts");
@@ -23,6 +25,7 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(hook, /projectRendererPluginGenerationStateV2/u);
   assert.match(hook, /useLayoutEffect/u);
   assert.match(hook, /desktopRendererLeaseStoreV2\.commit\(snapshot\)/u);
+  assert.match(hook, /desktopRendererLeaseStoreV2\.acquireGeneration\(generation\)/u);
   assert.match(hook, /return state/u);
   assert.match(hook, /if \(!enabled\) \{\s*scheduleClose\(\);\s*return;\s*\}/u);
   assert.doesNotMatch(hook, /if \(!enabled\) return \(\) => scheduleClose\(\)/u);
@@ -43,9 +46,22 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(host, /projectDesktopNavigationRegistryV2/u);
   assert.match(host, /DesktopRendererGenerationContextV2/u);
   assert.match(host, /DesktopRendererAuthorityContextV2/u);
+  assert.match(host, /const actions:[^=]+?=\s*Object\.freeze/su);
+  assert.match(host, /acquireOperationLease/u);
   assert.match(host, /children/u);
+  assert.match(routeBoundary, /useDesktopRendererGenerationV2\(\)/u);
+  assert.match(routeBoundary, /registry=\{state\.routeRegistry\}/u);
+  assert.match(routeBoundary, /acquireOperationLease=\{actions\.acquireOperationLease\}/u);
+  assert.match(
+    routeBoundary,
+    /Omit<[\s\S]+?'acquireOperationLease'\s*\|\s*'registry'[\s\S]+?>/u,
+  );
+  assert.match(routeHost, /acquireOperationLease/u);
+  assert.match(routeHost, /finally\s*\{\s*await operationLease\?\.release\(\)/u);
   assert.match(app, /useDesktopRendererGenerationHostV2\(/u);
   assert.match(app, /DesktopRendererGenerationProviderV2/u);
+  assert.match(app, /DesktopRendererProductionRouterV2/u);
+  assert.doesNotMatch(app, /<DesktopProductionRouter/u);
   assert.match(app, /desktopRendererGenerationV2\.meta\.digest/u);
   assert.match(app, /desktopRendererGenerationV2\.meta\.status/u);
   assert.match(app, /desktopRendererGenerationV2\.meta\.target/u);

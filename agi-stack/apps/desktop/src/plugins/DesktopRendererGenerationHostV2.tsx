@@ -13,7 +13,10 @@ import {
   projectDesktopRouteRegistryV2,
   type DesktopRendererAuthorityStateV2,
 } from './desktopRendererAuthorityStateV2';
-import { useDesktopPluginGenerationV2 } from './useDesktopPluginGenerationV2';
+import {
+  acquireDesktopPluginGenerationLeaseV2,
+  useDesktopPluginGenerationV2,
+} from './useDesktopPluginGenerationV2';
 
 const DESKTOP_RENDERER_TARGET_V2 = 'desktop-renderer' as const;
 
@@ -30,10 +33,27 @@ export interface DesktopRendererGenerationMetaV2 {
   readonly target: typeof DESKTOP_RENDERER_TARGET_V2;
 }
 
+export interface DesktopRendererOperationLeaseV2 {
+  readonly digest: string | undefined;
+  readonly kind: 'authentication-kernel' | 'generation';
+  readonly release: () => Promise<void>;
+}
+
+export interface DesktopRendererGenerationActionsV2 {
+  readonly acquireOperationLease: () => DesktopRendererOperationLeaseV2;
+}
+
 export interface DesktopRendererGenerationContextValueV2 {
+  readonly actions: DesktopRendererGenerationActionsV2;
   readonly meta: DesktopRendererGenerationMetaV2;
   readonly state: DesktopRendererGenerationStateV2;
 }
+
+const AUTHENTICATION_KERNEL_OPERATION_LEASE_V2: DesktopRendererOperationLeaseV2 = Object.freeze({
+  digest: undefined,
+  kind: 'authentication-kernel',
+  release: async () => undefined,
+});
 
 const DesktopRendererGenerationContextV2 =
   createContext<DesktopRendererGenerationContextValueV2 | null>(null);
@@ -79,7 +99,19 @@ export function useDesktopRendererGenerationHostV2(
     const authority = resolveDesktopRendererAuthorityStateV2(generation, enabled);
     const routeRegistry = projectDesktopRouteRegistryV2(routeRefs, authority);
     const navigationRegistry = projectDesktopNavigationRegistryV2(routeRegistry, authority);
+    const actions: DesktopRendererGenerationActionsV2 = Object.freeze({
+      acquireOperationLease: () => {
+        if (generation === undefined) return AUTHENTICATION_KERNEL_OPERATION_LEASE_V2;
+        const lease = acquireDesktopPluginGenerationLeaseV2(generation);
+        return Object.freeze({
+          digest: generation.snapshot.digest,
+          kind: 'generation' as const,
+          release: () => lease.release(),
+        });
+      },
+    });
     return Object.freeze({
+      actions,
       meta: Object.freeze({
         digest: generationDigest,
         error: generationError,

@@ -76,7 +76,12 @@ function hashLocation(initialHash) {
   };
 }
 
-function options({ registry, location, switchScope = async () => {} }) {
+function options({
+  registry,
+  location,
+  switchScope = async () => {},
+  acquireOperationLease,
+}) {
   return Object.freeze({
     registry,
     location,
@@ -84,6 +89,7 @@ function options({ registry, location, switchScope = async () => {} }) {
     permissions: new Set(['authenticated']),
     resolveCapability: (_id, context) => capability(context.tenantId),
     switchScope,
+    ...(acquireOperationLease ? { acquireOperationLease } : {}),
   });
 }
 
@@ -226,6 +232,101 @@ test('options recreation aborts the old host and stale work cannot replace the n
   assert.notEqual(oldAdapter.getSnapshot().status, 'ready');
   assert.equal(nextAdapter.getSnapshot().match.definition.id, 'tenant-next');
   nextAdapter.stop();
+});
+
+test('a route transition holds its operation lease until all asynchronous work settles', async () => {
+  const scope = deferred();
+  const scopeStarted = deferred();
+  const registry = createDesktopRouteRegistry([
+    route('tenant-leased', 'leased', async () => ({ default: 'Leased' })),
+  ]);
+  const location = hashLocation('#/tenant/tenant-1/leased');
+  let acquired = 0;
+  let released = 0;
+  const adapter = createDesktopHashRouteHostReactAdapter(
+    options({
+      registry,
+      location: location.port,
+      acquireOperationLease: () => {
+        acquired += 1;
+        return Object.freeze({
+          release: async () => {
+            released += 1;
+          },
+        });
+      },
+      switchScope: async () => {
+        scopeStarted.resolve();
+        await scope.promise;
+      },
+    }),
+  );
+
+  const start = adapter.start();
+  await scopeStarted.promise;
+  assert.equal(acquired, 1);
+  assert.equal(released, 0);
+
+  scope.resolve();
+  await start;
+  assert.equal(adapter.getSnapshot().status, 'ready');
+  assert.equal(released, 1);
+  adapter.stop();
+});
+
+test('an aborted stale route transition releases its operation lease exactly once', async () => {
+  const firstScope = deferred();
+  const firstScopeStarted = deferred();
+  const secondReleased = deferred();
+  const registry = createDesktopRouteRegistry([
+    route('tenant-first', 'first', async () => ({ default: 'First' })),
+    route('tenant-second', 'second', async () => ({ default: 'Second' })),
+  ]);
+  const location = hashLocation('#/tenant/tenant-1/first');
+  const releaseCounts = new Map();
+  let acquisition = 0;
+  let scopeAttempt = 0;
+  const adapter = createDesktopHashRouteHostReactAdapter(
+    options({
+      registry,
+      location: location.port,
+      acquireOperationLease: () => {
+        const leaseId = ++acquisition;
+        return Object.freeze({
+          release: async () => {
+            releaseCounts.set(leaseId, (releaseCounts.get(leaseId) ?? 0) + 1);
+            if (leaseId === 2) secondReleased.resolve();
+          },
+        });
+      },
+      switchScope: async (_context, signal) => {
+        scopeAttempt += 1;
+        if (scopeAttempt !== 1) return;
+        firstScopeStarted.resolve(signal);
+        await firstScope.promise;
+      },
+    }),
+  );
+
+  const firstStart = adapter.start();
+  const firstSignal = await firstScopeStarted.promise;
+  const secondReady = waitForState(
+    adapter,
+    (state) => state.status === 'ready' && state.match.definition.id === 'tenant-second',
+  );
+  location.navigate('#/tenant/tenant-1/second');
+  await secondReady;
+  await secondReleased.promise;
+
+  assert.equal(firstSignal.aborted, true);
+  assert.equal(releaseCounts.get(1), undefined);
+  assert.equal(releaseCounts.get(2), 1);
+
+  firstScope.resolve();
+  await firstStart;
+  assert.equal(releaseCounts.get(1), 1);
+  assert.equal(releaseCounts.get(2), 1);
+  adapter.stop();
 });
 
 test('retry delegates to the current host and unmount cleanup aborts active scope work', async () => {

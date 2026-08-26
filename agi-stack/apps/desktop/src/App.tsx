@@ -87,6 +87,7 @@ import {
   DesktopRendererGenerationProviderV2,
   useDesktopRendererGenerationHostV2,
 } from './plugins/DesktopRendererGenerationHostV2';
+import { DesktopRendererProductionRouterV2 } from './plugins/DesktopRendererProductionRouterV2';
 import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
 import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
 import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
@@ -232,7 +233,6 @@ import {
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
 import { AuxiliaryView } from './features/navigation/AuxiliaryView';
-import { DesktopProductionRouter } from './features/navigation/DesktopProductionRouter';
 import { DesktopSidebar } from './features/navigation/DesktopSidebar';
 import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcutsDialog';
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
@@ -6523,47 +6523,48 @@ export function App() {
       ? new Set([DEVICE_APPROVAL_ROUTE_ID])
       : AUTHENTICATION_PASSTHROUGH_ROUTE_IDS;
     return (
-      <Theme
-        appearance={themeAppearance}
-        accentColor="cyan"
-        grayColor="slate"
-        radius="medium"
-        scaling="95%"
-      >
-        <DesktopProductionRouter
-          authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
-          forceLegacyChildren={invitationSignInRequested}
-          location={desktopProductionRouteLocation}
-          mode={productionRouteRuntimeMode}
-          navigation={desktopProductionRouteNavigation}
-          permissions={productionRouteBasePermissions}
-          registry={desktopProductionRouteRegistry}
-          resolveCapability={resolveProductionRouteCapability}
-          resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
-          switchScope={switchProductionRouteScope}
+      <DesktopRendererGenerationProviderV2 value={desktopRendererGenerationV2}>
+        <Theme
+          appearance={themeAppearance}
+          accentColor="cyan"
+          grayColor="slate"
+          radius="medium"
+          scaling="95%"
         >
-          <LoginScreen
-            auth={auth}
-            mode={config.mode}
-            localReady={localRuntimeAuthorityReady}
-            localModeAvailable={runsInNativeDesktop}
-            email={loginEmail}
-            password={loginPassword}
-            onModeChange={changeLoginMode}
-            onEmailChange={setLoginEmail}
-            onPasswordChange={setLoginPassword}
-            onEmailLogin={(trustedDevice) => void login(trustedDevice)}
-            onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
-            onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
-            nativeOAuthProviders={nativeOAuthProviders}
-            nativeOAuthPendingProvider={nativeOAuthPendingProvider}
-            onNativeOAuth={beginNativeOAuth}
-            workspaceSso={workspaceSso}
-            onOpenWorkspaceSso={openCurrentWorkspaceSso}
-            onCancelWorkspaceSso={cancelWorkspaceSso}
-          />
-        </DesktopProductionRouter>
-      </Theme>
+          <DesktopRendererProductionRouterV2
+            authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
+            forceLegacyChildren={invitationSignInRequested}
+            location={desktopProductionRouteLocation}
+            mode={productionRouteRuntimeMode}
+            navigation={desktopProductionRouteNavigation}
+            permissions={productionRouteBasePermissions}
+            resolveCapability={resolveProductionRouteCapability}
+            resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
+            switchScope={switchProductionRouteScope}
+          >
+            <LoginScreen
+              auth={auth}
+              mode={config.mode}
+              localReady={localRuntimeAuthorityReady}
+              localModeAvailable={runsInNativeDesktop}
+              email={loginEmail}
+              password={loginPassword}
+              onModeChange={changeLoginMode}
+              onEmailChange={setLoginEmail}
+              onPasswordChange={setLoginPassword}
+              onEmailLogin={(trustedDevice) => void login(trustedDevice)}
+              onLocalSession={(trustedDevice) => void loginLocalSession(trustedDevice)}
+              onWorkspaceSso={(trustedDevice) => void loginWithWorkspaceSso(trustedDevice)}
+              nativeOAuthProviders={nativeOAuthProviders}
+              nativeOAuthPendingProvider={nativeOAuthPendingProvider}
+              onNativeOAuth={beginNativeOAuth}
+              workspaceSso={workspaceSso}
+              onOpenWorkspaceSso={openCurrentWorkspaceSso}
+              onCancelWorkspaceSso={cancelWorkspaceSso}
+            />
+          </DesktopRendererProductionRouterV2>
+        </Theme>
+      </DesktopRendererGenerationProviderV2>
     );
   }
 
@@ -6687,13 +6688,12 @@ export function App() {
               onClose={closeWorkbenchTab}
             />
             <div className="workbench-content">
-              <DesktopProductionRouter
+              <DesktopRendererProductionRouterV2
                 authenticationPassthroughRouteIds={AUTHENTICATION_PASSTHROUGH_ROUTE_IDS}
                 location={desktopProductionRouteLocation}
                 mode={productionRouteRuntimeMode}
                 navigation={desktopProductionRouteNavigation}
                 permissions={productionRouteBasePermissions}
-                registry={desktopProductionRouteRegistry}
                 resolveCapability={resolveProductionRouteCapability}
                 resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
                 switchScope={switchProductionRouteScope}
@@ -6760,7 +6760,7 @@ export function App() {
                     <section className={paneStageClassName}>{renderWorkbench()}</section>
                   </section>
                 )}
-              </DesktopProductionRouter>
+              </DesktopRendererProductionRouterV2>
             </div>
           </main>
 

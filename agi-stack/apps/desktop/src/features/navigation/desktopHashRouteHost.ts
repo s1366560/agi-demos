@@ -34,6 +34,12 @@ export type DesktopRouteScopeSwitcher = (
   signal: AbortSignal,
 ) => void | Promise<void>;
 
+export type DesktopRouteOperationLease = Readonly<{
+  release: () => void | Promise<void>;
+}>;
+
+export type DesktopRouteOperationLeaseFactory = () => DesktopRouteOperationLease;
+
 export type DesktopHashRouteHostOptions<TModule> = Readonly<{
   registry: DesktopRouteRegistry<TModule>;
   location: DesktopHashLocationPort;
@@ -43,6 +49,7 @@ export type DesktopHashRouteHostOptions<TModule> = Readonly<{
   resolvePermissionSnapshot?: DesktopRoutePermissionSnapshotResolver<TModule>;
   resolveCapability: DesktopRouteCapabilityResolver;
   switchScope: DesktopRouteScopeSwitcher;
+  acquireOperationLease?: DesktopRouteOperationLeaseFactory;
 }>;
 
 export type DesktopHashRouteHost<TModule> = Readonly<{
@@ -125,7 +132,7 @@ export function createDesktopHashRouteHost<TModule>(
     });
   };
 
-  const resolveCurrentHash = async () => {
+  const resolveCurrentHashWithLease = async () => {
     const location = options.location.readHash();
     const revision = ++transitionRevision;
     scopeController?.abort();
@@ -373,6 +380,15 @@ export function createDesktopHashRouteHost<TModule>(
       capability: settledAccess.capability,
       module: loadedModule,
     });
+  };
+
+  const resolveCurrentHash = async () => {
+    const operationLease = options.acquireOperationLease?.();
+    try {
+      await resolveCurrentHashWithLease();
+    } finally {
+      await operationLease?.release();
+    }
   };
 
   const onHashChange = () => {

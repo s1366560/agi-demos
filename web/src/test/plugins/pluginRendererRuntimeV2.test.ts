@@ -138,6 +138,72 @@ describe('RendererPluginRuntimeV2', () => {
     await runtime.close();
   });
 
+  it('keeps an exact rendered generation alive for an in-flight operation', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await runtime.apply(await distributionAt(1, 1));
+    const store = new RendererGenerationLeaseStoreV2(runtime);
+    store.activateRoot();
+    const unsubscribe = store.subscribe(vi.fn());
+    const renderedGeneration = store.getSnapshot().generation;
+    expect(renderedGeneration).toBeDefined();
+
+    const operationLease = store.acquireGeneration(renderedGeneration!);
+    await runtime.apply(await distributionAt(2, 2));
+    await store.commit(store.getSnapshot());
+
+    expect(renderedGeneration?.retired).toBe(true);
+    expect(renderedGeneration?.disposed).toBe(false);
+    expect(renderedGeneration?.leaseCount).toBe(1);
+    expect(operationLease.generation).toBe(renderedGeneration);
+
+    await operationLease.release();
+    expect(renderedGeneration?.disposed).toBe(true);
+
+    unsubscribe();
+    await store.deactivateRoot();
+    await runtime.close();
+  });
+
+  it('fails closed when an operation tries to reacquire a released render generation', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await runtime.apply(await distributionAt(1, 1));
+    const store = new RendererGenerationLeaseStoreV2(runtime);
+    store.activateRoot();
+    const releasedGeneration = store.getSnapshot().generation;
+    expect(releasedGeneration).toBeDefined();
+
+    await runtime.apply(await distributionAt(2, 2));
+    await store.commit(store.getSnapshot());
+
+    expect(releasedGeneration?.disposed).toBe(true);
+    expect(() => store.acquireGeneration(releasedGeneration!)).toThrowError(
+      expect.objectContaining({ code: 'renderer_generation_not_renderable' })
+    );
+
+    await store.deactivateRoot();
+    await runtime.close();
+  });
+
+  it('rejects a retained generation owned by another renderer runtime', async () => {
+    const owner = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    const foreign = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    await owner.apply(await distributionAt(1, 1));
+    await foreign.apply(await distributionAt(1, 1));
+    const retainedLease = owner.acquire();
+
+    await owner.apply(await distributionAt(2, 2));
+
+    expect(retainedLease.generation.retired).toBe(true);
+    expect(retainedLease.generation.leaseCount).toBe(1);
+    expect(() => foreign.acquire(retainedLease.generation)).toThrowError(
+      expect.objectContaining({ code: 'generation_not_leased' })
+    );
+
+    await retainedLease.release();
+    await owner.close();
+    await foreign.close();
+  });
+
   it('leases the initial render snapshot before React subscribes', async () => {
     const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
     await runtime.apply(await distributionAt(1, 1));
