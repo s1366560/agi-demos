@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:ce0729746263ef2edcba705a670e46000d1eb7ba440e110bcbf559d1f1e442d8",
+        "digest": "sha256:70644285a08ea15c158a63808af0b2a2ec1beec732bceb4e41eeacda68f0f0bd",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6901,6 +6901,146 @@
       "artifact": {
         "digest": "sha256:92bd84c33e76f70539a0b06036e08e1f28db1718396acbdad72e40d0efc2aa7a",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_custom_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/todo",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_task_session_tools:_apply_agent_todo_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-todo-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c7f342838f75dd6bee53fd5c61cc830829457ed01ca6cfa6500fde3bf38d7faf",
+      "artifact": {
+        "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/peer-session",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_task_session_tools:_apply_agent_peer_session_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-peer-session-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:d1f02208a75b0805a735716f763a321664e9956162d84f6ed2f602a0f56e4d65",
+      "artifact": {
+        "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/session-status",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_task_session_tools:_apply_agent_session_status_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-session-status-tool",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:ae723500afbb5b55019d73549550c3673094928ffca4d89eaaf35ec205986a94",
+      "artifact": {
+        "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/cron",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_task_session_tools:_apply_agent_cron_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-cron-tool",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:3c2c2c6fc501462d25895dbf5220a0cec33e98c18256c1e811aec7954eb454d6",
+      "artifact": {
+        "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
       }
     },
     {

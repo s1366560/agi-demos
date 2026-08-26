@@ -2644,6 +2644,13 @@ profile:
           - canvas_create_interactive
           - canvas_delete
           - canvas_update
+          - todoread
+          - todowrite
+          - peer_sessions_list
+          - peer_sessions_history
+          - peer_sessions_send
+          - session_status
+          - cron
         excluded_tags:
           - custom
       inject:
@@ -2738,6 +2745,66 @@ profile:
         source_id: builtin-agent-custom-tools
         source_tag: custom
         required_tool: custom_tools_status
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-todo-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/todo
+      enabled: true
+      config:
+        source_id: builtin-agent-todo-tools
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-peer-session-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/peer-session
+      enabled: true
+      config:
+        source_id: builtin-agent-peer-session-tools
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-session-status-tool
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/session-status
+      enabled: true
+      config:
+        source_id: builtin-agent-session-status-tool
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-cron-tool
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/cron
+      enabled: true
+      config:
+        source_id: builtin-agent-cron-tool
       inject:
         catalog: service:tool-set-catalog
       isolate: {}

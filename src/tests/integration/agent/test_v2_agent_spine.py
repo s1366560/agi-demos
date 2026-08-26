@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,6 +28,7 @@ from src.infrastructure.agent.processor.factory import ProcessorFactory
 from src.infrastructure.agent.processor.processor import ProcessorConfig
 from src.infrastructure.agent.processor.run_context import RunContext
 from src.infrastructure.agent.tools.clarification import make_clarification_tool
+from src.infrastructure.agent.tools.cron_tool import make_cron_tool
 from src.infrastructure.agent.tools.custom_tool_status import custom_tools_status
 from src.infrastructure.agent.tools.decision import make_decision_tool
 from src.infrastructure.agent.tools.memory_tools import (
@@ -36,7 +39,10 @@ from src.infrastructure.agent.tools.memory_tools import (
     memory_update_tool,
 )
 from src.infrastructure.agent.tools.model_availability_tool import make_model_awareness_tools
+from src.infrastructure.agent.tools.session_comm_tools import make_session_comm_tools
+from src.infrastructure.agent.tools.session_status import make_session_status_tool
 from src.infrastructure.agent.tools.system_api import make_system_api_tool
+from src.infrastructure.agent.tools.todo_tools import make_todo_tools
 from src.infrastructure.plugins.v2 import session_event_log_store as store_module
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -218,8 +224,22 @@ _SYSTEM_API_TOOL = make_system_api_tool(
 _CANVAS_TOOLS = make_canvas_tools(manager=CanvasManager())
 
 
+@asynccontextmanager
+async def _unused_session_factory() -> AsyncIterator[object]:
+    """Provide an I/O-free dependency for prepared tools that are not executed here."""
+    yield object()
+
+
+_TASK_SESSION_TOOLS = {
+    **make_todo_tools(session_factory=_unused_session_factory),
+    **make_session_comm_tools(session_factory=_unused_session_factory),
+}
+_SESSION_STATUS_TOOL = make_session_status_tool(session_factory=_unused_session_factory)
+_CRON_TOOL = make_cron_tool(session_factory=_unused_session_factory)
+
+
 @pytest.mark.integration
-async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
+async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: PLR0915
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _MemorySessionEventLogStore()
@@ -312,6 +332,9 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                     _SYSTEM_API_TOOL.name: _SYSTEM_API_TOOL,
                     **_CANVAS_TOOLS,
                     custom_tools_status.name: custom_tools_status,
+                    **_TASK_SESSION_TOOLS,
+                    _SESSION_STATUS_TOOL.name: _SESSION_STATUS_TOOL,
+                    _CRON_TOOL.name: _CRON_TOOL,
                 },
                 skills=[_skill()],
                 subagents=[_subagent()],
@@ -347,6 +370,11 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                 raw_tools["memory_search"] is memory_search_tool
                 and raw_tools[_SYSTEM_API_TOOL.name] is _SYSTEM_API_TOOL
                 and raw_tools[custom_tools_status.name] is custom_tools_status
+            )
+            assert all(raw_tools[name] is tool for name, tool in _TASK_SESSION_TOOLS.items())
+            assert (
+                raw_tools[_SESSION_STATUS_TOOL.name] is _SESSION_STATUS_TOOL
+                and raw_tools[_CRON_TOOL.name] is _CRON_TOOL
             )
             assert "agent_spawn" in raw_tools
             assert "workspace_report_complete" in raw_tools
