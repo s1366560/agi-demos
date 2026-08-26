@@ -200,7 +200,8 @@ function componentMountEdges(source, repositoryRoot, sourceEntry, mountPath, reg
       const pathAttribute = jsxAttribute(node, 'path');
       const isIndex = booleanAttribute(jsxAttribute(node, 'index'), sourceFile, 'index');
       if (!pathAttribute && !isIndex) {
-        throw new Error(`Route must declare path or index in ${sourceFile.fileName}`);
+        ts.forEachChild(node, (child) => visit(child, parentRoutePath));
+        return;
       }
       const pathPattern = isIndex
         ? parentRoutePath || '/'

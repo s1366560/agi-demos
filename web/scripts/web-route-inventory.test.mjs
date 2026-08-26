@@ -224,6 +224,39 @@ test('extracts canonical targets, route registrations, and routed source entries
   );
 });
 
+test('treats pathless layout routes as transparent mount boundaries', () => {
+  const layoutRouterSource = `
+import { Route, Routes } from 'react-router-dom';
+import { TenantOverview } from './pages/TenantOverview';
+
+function AuthenticatedShell({ children }) {
+  return children;
+}
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/tenant">
+        <Route element={<AuthenticatedShell />}>
+          <Route path=":tenantId" element={<TenantOverview />} />
+        </Route>
+      </Route>
+    </Routes>
+  );
+}
+`;
+
+  const inventory = buildWebRouteInventoryFromSources({
+    navigationSource,
+    routerSource: layoutRouterSource,
+  });
+
+  assert.deepEqual(
+    inventory.production_routes.map(({ path_pattern }) => path_pattern),
+    ['/tenant', '/tenant/:tenantId']
+  );
+});
+
 test('stale guard rejects added, removed, or modified production route/source structure', () => {
   const inventory = buildWebRouteInventoryFromSources({
     navigationSource,

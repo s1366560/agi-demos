@@ -682,7 +682,8 @@ export function extractProductionRoutes(
       const pathAttribute = jsxAttribute(node, 'path');
       const isIndex = jsxBooleanAttribute(jsxAttribute(node, 'index'), sourceFile, 'index');
       if (!pathAttribute && !isIndex) {
-        throw new Error(`Route must declare path or index in ${sourceFile.fileName}`);
+        ts.forEachChild(node, (child) => visit(child, parentRoutePath));
+        return;
       }
 
       const routePath = pathAttribute
