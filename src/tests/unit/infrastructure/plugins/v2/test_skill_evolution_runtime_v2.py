@@ -221,6 +221,9 @@ def test_skill_evolution_contract_and_static_authority_retirement_are_explicit()
     routes_source = (_ROOT / "src/infrastructure/adapters/primary/web/routers/skills.py").read_text(
         encoding="utf-8"
     )
+    worker_source = (_ROOT / "src/infrastructure/agent/state/agent_worker_state.py").read_text(
+        encoding="utf-8"
+    )
 
     assert runtime_entry.inject == {
         SKILL_EVOLUTION_LLM_CLIENTS_INJECT_V2: "service:llm.tenant-client-factory",
@@ -233,3 +236,4 @@ def test_skill_evolution_contract_and_static_authority_retirement_are_explicit()
     assert "app.state.skill_evolution_plugin" not in main_source
     assert "def skill_evolution_plugin(" not in container_source
     assert "container.skill_evolution_plugin()" not in routes_source
+    assert "configure_skill_evolution_capture" not in worker_source

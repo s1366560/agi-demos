@@ -167,7 +167,6 @@ async def test_complete_worker_tool_set_is_cached_by_generation(
         "_add_system_api_tool",
         "_add_hitl_tools",
         "_add_todo_tools",
-        "_configure_skill_evolution_capture",
         "_add_model_awareness_tools",
         "_add_register_mcp_server_tool",
         "_add_session_comm_tools",

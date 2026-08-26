@@ -47,7 +47,6 @@ async def test_get_or_create_tools_does_not_expose_legacy_workspace_plan_tools(
         "_add_system_api_tool",
         "_add_hitl_tools",
         "_add_todo_tools",
-        "_configure_skill_evolution_capture",
         "_add_model_awareness_tools",
         "_add_register_mcp_server_tool",
         "_add_memory_tools",
