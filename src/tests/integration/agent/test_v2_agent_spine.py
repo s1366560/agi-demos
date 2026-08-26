@@ -31,6 +31,7 @@ from src.infrastructure.agent.tools.clarification import make_clarification_tool
 from src.infrastructure.agent.tools.cron_tool import make_cron_tool
 from src.infrastructure.agent.tools.custom_tool_status import custom_tools_status
 from src.infrastructure.agent.tools.decision import make_decision_tool
+from src.infrastructure.agent.tools.env_var_tools import make_env_var_tools
 from src.infrastructure.agent.tools.memory_tools import (
     memory_create_tool,
     memory_delete_tool,
@@ -39,10 +40,19 @@ from src.infrastructure.agent.tools.memory_tools import (
     memory_update_tool,
 )
 from src.infrastructure.agent.tools.model_availability_tool import make_model_awareness_tools
+from src.infrastructure.agent.tools.register_mcp_server import register_mcp_server_tool
+from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+    make_register_mcp_server_tool,
+)
 from src.infrastructure.agent.tools.session_comm_tools import make_session_comm_tools
 from src.infrastructure.agent.tools.session_status import make_session_status_tool
+from src.infrastructure.agent.tools.skill_installer import make_skill_installer_tool
+from src.infrastructure.agent.tools.skill_loader import make_skill_loader_tool
+from src.infrastructure.agent.tools.skill_sync import make_skill_sync_tool
 from src.infrastructure.agent.tools.system_api import make_system_api_tool
 from src.infrastructure.agent.tools.todo_tools import make_todo_tools
+from src.infrastructure.agent.tools.web_scrape import web_scrape_tool
+from src.infrastructure.agent.tools.web_search import make_web_search_tool
 from src.infrastructure.plugins.v2 import session_event_log_store as store_module
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -230,6 +240,39 @@ async def _unused_session_factory() -> AsyncIterator[object]:
     yield object()
 
 
+_WEB_TOOLS = {
+    "web_search": make_web_search_tool(redis_client=None),
+    "web_scrape": web_scrape_tool,
+}
+_SKILL_LOADER_TOOL = make_skill_loader_tool(
+    skill_service=object(),
+    tenant_id="tenant-a",
+    project_id="project-a",
+)
+_SKILL_MANAGEMENT_TOOLS = {
+    _SKILL_LOADER_TOOL.name: _SKILL_LOADER_TOOL,
+    "skill_installer": make_skill_installer_tool(
+        project_path=_ROOT,
+        tenant_id="tenant-a",
+        project_id="project-a",
+    ),
+    "skill_sync": make_skill_sync_tool(
+        tenant_id="tenant-a",
+        project_id="project-a",
+        session_factory=_unused_session_factory,
+        skill_loader_tool=_SKILL_LOADER_TOOL,
+    ),
+}
+_ENV_VAR_TOOLS = make_env_var_tools(
+    encryption_service=object(),
+    session_factory=_unused_session_factory,
+)
+_MCP_REGISTRATION_TOOL = make_register_mcp_server_tool(
+    template=register_mcp_server_tool,
+    session_factory=_unused_session_factory,
+    tenant_id="tenant-a",
+    project_id="project-a",
+)
 _TASK_SESSION_TOOLS = {
     **make_todo_tools(session_factory=_unused_session_factory),
     **make_session_comm_tools(session_factory=_unused_session_factory),
@@ -335,6 +378,10 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
                     **_TASK_SESSION_TOOLS,
                     _SESSION_STATUS_TOOL.name: _SESSION_STATUS_TOOL,
                     _CRON_TOOL.name: _CRON_TOOL,
+                    **_WEB_TOOLS,
+                    **_SKILL_MANAGEMENT_TOOLS,
+                    **_ENV_VAR_TOOLS,
+                    _MCP_REGISTRATION_TOOL.name: _MCP_REGISTRATION_TOOL,
                 },
                 skills=[_skill()],
                 subagents=[_subagent()],
@@ -376,6 +423,10 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
                 raw_tools[_SESSION_STATUS_TOOL.name] is _SESSION_STATUS_TOOL
                 and raw_tools[_CRON_TOOL.name] is _CRON_TOOL
             )
+            assert all(raw_tools[name] is tool for name, tool in _WEB_TOOLS.items())
+            assert all(raw_tools[name] is tool for name, tool in _SKILL_MANAGEMENT_TOOLS.items())
+            assert all(raw_tools[name] is tool for name, tool in _ENV_VAR_TOOLS.items())
+            assert raw_tools[_MCP_REGISTRATION_TOOL.name] is _MCP_REGISTRATION_TOOL
             assert "agent_spawn" in raw_tools
             assert "workspace_report_complete" in raw_tools
             assert [skill.name for skill in capabilities.skills] == ["echo-skill"]

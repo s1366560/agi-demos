@@ -2651,6 +2651,15 @@ profile:
           - peer_sessions_send
           - session_status
           - cron
+          - web_search
+          - web_scrape
+          - skill_loader
+          - skill_installer
+          - skill_sync
+          - get_env_var
+          - request_env_var
+          - check_env_vars
+          - register_mcp_server
         excluded_tags:
           - custom
       inject:
@@ -2805,6 +2814,66 @@ profile:
       enabled: true
       config:
         source_id: builtin-agent-cron-tool
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-web-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/web
+      enabled: true
+      config:
+        source_id: builtin-agent-web-tools
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-skill-management-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/skill-management
+      enabled: true
+      config:
+        source_id: builtin-agent-skill-management-tools
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-env-var-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/env-var
+      enabled: true
+      config:
+        source_id: builtin-agent-env-var-tools
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-mcp-registration-tool
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/mcp-registration
+      enabled: true
+      config:
+        source_id: builtin-agent-mcp-registration-tool
       inject:
         catalog: service:tool-set-catalog
       isolate: {}

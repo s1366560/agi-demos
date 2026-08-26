@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:70644285a08ea15c158a63808af0b2a2ec1beec732bceb4e41eeacda68f0f0bd",
+        "digest": "sha256:d173b53ac5c925b5a5bc1266359acd5689c683a105ea4219fa031c90244847b1",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -7041,6 +7041,146 @@
       "artifact": {
         "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/web",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_runtime_utility_tools:_apply_agent_web_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-web-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:9df8c6d2f1105f11301e861410149bcf2ca7e8d8bf3290d7fb0bf86c569a4db0",
+      "artifact": {
+        "digest": "sha256:a6b7507159ff2b39711bfeccb890ab1defaf7f6ab5769a307f413c75b433e77a",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/skill-management",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_runtime_utility_tools:_apply_agent_skill_management_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-skill-management-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c1c0ed37855da0ac3d57a1c882a3887a8f50f86e4cf43bee0425010446c57556",
+      "artifact": {
+        "digest": "sha256:a6b7507159ff2b39711bfeccb890ab1defaf7f6ab5769a307f413c75b433e77a",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/env-var",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_runtime_utility_tools:_apply_agent_env_var_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-env-var-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:419fe8ca2c47ce089c983a79a3b057a50fb48c45c3659718a27f80af93d1f7be",
+      "artifact": {
+        "digest": "sha256:a6b7507159ff2b39711bfeccb890ab1defaf7f6ab5769a307f413c75b433e77a",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/mcp-registration",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_runtime_utility_tools:_apply_agent_mcp_registration_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-mcp-registration-tool",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:70ad9b343b81405a671ab0b1cf48a5024fb895d0f7951475f6e2f73aa10d02e1",
+      "artifact": {
+        "digest": "sha256:a6b7507159ff2b39711bfeccb890ab1defaf7f6ab5769a307f413c75b433e77a",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
       }
     },
     {
