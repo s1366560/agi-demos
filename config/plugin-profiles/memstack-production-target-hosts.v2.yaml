@@ -58,6 +58,27 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-web-authenticated-shell-surface
+      parent_entry_id: builtin-web-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/web/renderer-contribution
+      enabled: true
+      config:
+        id: web.authenticated-shell-surface
+        kind: ui-slot
+        order: 80
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - web.ui-slots.authenticated-shell-surface.v1
+      inject:
+        registry: service:web.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-web-default-routes
       parent_entry_id: builtin-web-renderer-contribution-registry
       plugin_ref: memstack-renderer-contributions

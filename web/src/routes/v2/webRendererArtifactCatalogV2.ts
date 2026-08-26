@@ -22,6 +22,20 @@ import type { UiSlotDefinition } from '../../types/pluginSlots';
 export const WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2 = 'web.routes.default-business.v1';
 export const WEB_DEFAULT_NAVIGATION_ARTIFACT_ID_V2 = 'web.navigation.default.v1';
 export const WEB_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'web.ui-slots.default.v1';
+export const WEB_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2 =
+  'web.ui-slots.authenticated-shell-surface.v1';
+
+const AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'authenticated_shell_surface',
+    id: 'authenticated-shell',
+    contract: 'ui-builtin:web-authenticated-shell-surface',
+    moduleRef: 'builtin:web-authenticated-shell-surface',
+    permission: 'ui.authenticated-shell',
+    sandbox: true,
+  }),
+]);
 
 interface WebRendererArtifactBaseV2 {
   readonly id: string;
@@ -53,6 +67,13 @@ export type WebRendererArtifactV2 =
   | WebUiSlotArtifactV2;
 
 const WEB_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, WebRendererArtifactV2>([
+  [
+    WEB_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
+    defineWebUiSlotArtifactV2(
+      WEB_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
+      AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2
+    ),
+  ],
   [
     WEB_DEFAULT_ROUTE_ARTIFACT_ID_V2,
     defineWebRouteArtifactV2(

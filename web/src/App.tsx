@@ -6,6 +6,8 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import './i18n/config';
 import { Login } from './pages/Login';
 import { WebPluginGenerationHostV2 } from './plugins/WebPluginGenerationHostV2';
+import { createWebRendererAppCompositionPortV2 } from './plugins/webRendererAppCompositionV2';
+import { WebRendererAuthenticatedShellV2 } from './plugins/WebRendererAuthenticatedShellV2';
 import { LoginRedirect, RedirectToLogin } from './routes/v2/webCoreRouteRedirectsV2';
 import { WebNavigationAuthorityProviderV2 } from './routes/v2/WebNavigationAuthorityV2';
 import { WebRouteAuthorityProviderV2 } from './routes/v2/WebRouteAuthorityV2';
@@ -14,6 +16,8 @@ import { WebUiSlotAuthorityProviderV2 } from './routes/v2/WebUiSlotAuthorityV2';
 import { useAuthStore } from './stores/auth';
 import { ThemeProvider } from './theme';
 import './App.css';
+
+const WEB_RENDERER_APP_COMPOSITION_V2 = createWebRendererAppCompositionPortV2();
 
 // ============================================================================
 // CODE SPLITTING - Lazy load route components for better performance
@@ -45,7 +49,10 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <Suspense fallback={<PageLoader />}>
-          <WebPluginGenerationHostV2 enabled={isAuthenticated}>
+          <WebPluginGenerationHostV2
+            composition={WEB_RENDERER_APP_COMPOSITION_V2}
+            enabled={isAuthenticated}
+          >
             <WebRouteAuthorityProviderV2 enabled={isAuthenticated}>
               {({ routeArtifacts, status }) => (
                 <WebNavigationAuthorityProviderV2 enabled={isAuthenticated}>
@@ -113,11 +120,15 @@ function App() {
                         }
                       />
 
-                      {status === 'ready'
-                        ? routeArtifacts.map((artifact) => (
-                            <Fragment key={artifact.id}>{artifact.createRouteElements()}</Fragment>
-                          ))
-                        : null}
+                      <Route element={<WebRendererAuthenticatedShellV2 />}>
+                        {status === 'ready'
+                          ? routeArtifacts.map((artifact) => (
+                              <Fragment key={artifact.id}>
+                                {artifact.createRouteElements()}
+                              </Fragment>
+                            ))
+                          : null}
+                      </Route>
 
                       {/* Fallback */}
                       <Route

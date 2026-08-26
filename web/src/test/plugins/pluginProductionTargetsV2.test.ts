@@ -29,8 +29,27 @@ describe('production protocol-v2 renderer target catalogs', () => {
           kind: 'root',
         })
         .list()
-    ).toHaveLength(3);
-    expect(generation.fibers).toHaveLength(5);
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'web.authenticated-shell-surface',
+          kind: 'ui-slot',
+          order: 80,
+          payload: {
+            artifact_refs: ['web.ui-slots.authenticated-shell-surface.v1'],
+            schema_version: 1,
+          },
+        }),
+      ])
+    );
+    expect(
+      generation
+        .resolve<RendererContributionRegistryV2>(WEB_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2, {
+          kind: 'root',
+        })
+        .list()
+    ).toHaveLength(4);
+    expect(generation.fibers).toHaveLength(6);
     await generation.dispose();
   });
 
@@ -52,8 +71,8 @@ describe('production protocol-v2 renderer target catalogs', () => {
           { kind: 'root' }
         )
         .list()
-    ).toHaveLength(24);
-    expect(generation.fibers).toHaveLength(26);
+    ).toHaveLength(26);
+    expect(generation.fibers).toHaveLength(28);
     await generation.dispose();
   });
 

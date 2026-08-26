@@ -16,6 +16,7 @@ import {
 import bootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
 
 const WEB_ARTIFACT_REFS = {
+  authenticatedShell: 'web.ui-slots.authenticated-shell-surface.v1',
   navigation: 'web.navigation.default.v1',
   route: 'web.routes.default-business.v1',
   'ui-slot': 'web.ui-slots.default.v1',
@@ -120,6 +121,28 @@ describe('web renderer artifact catalog v2', () => {
     if (!artifact || artifact.kind !== 'ui-slot')
       throw new Error('default UI slot artifact is missing');
     expect(artifact.slotDefinitions).toEqual([]);
+  });
+
+  it('exposes the authenticated application shell as an exact code-owned UI slot', () => {
+    const [artifact] = resolveWebRendererArtifactsV2([
+      contribution('web.authenticated-shell', 'ui-slot', [WEB_ARTIFACT_REFS.authenticatedShell]),
+    ]);
+
+    expect(artifact?.kind).toBe('ui-slot');
+    if (!artifact || artifact.kind !== 'ui-slot') {
+      throw new Error('authenticated shell artifact is missing');
+    }
+    expect(artifact.slotDefinitions).toEqual([
+      {
+        pluginId: 'builtin-shell',
+        slot: 'authenticated_shell_surface',
+        id: 'authenticated-shell',
+        contract: 'ui-builtin:web-authenticated-shell-surface',
+        moduleRef: 'builtin:web-authenticated-shell-surface',
+        permission: 'ui.authenticated-shell',
+        sandbox: true,
+      },
+    ]);
   });
 
   it.each([

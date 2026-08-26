@@ -26,11 +26,12 @@ const TOOL_RESULT_SLOT = Object.freeze({
   sandbox: true,
 });
 
-async function generationWithUiSlotsEnabledV2(enabled: boolean) {
+async function generationWithUiSlotsEnabledV2(
+  enabled: boolean,
+  entryId = 'builtin-web-default-ui-slots'
+) {
   const snapshot = structuredClone(bootstrapProfile);
-  const entry = snapshot.entries.find(
-    ({ entry_id }) => entry_id === 'builtin-web-default-ui-slots'
-  );
+  const entry = snapshot.entries.find(({ entry_id }) => entry_id === entryId);
   if (!entry) throw new Error('web UI slot contribution fixture is missing');
   entry.enabled = enabled;
   snapshot.generation += 1;
@@ -67,9 +68,19 @@ describe('WebUiSlotAuthorityV2', () => {
     const { generation, runtime } = await generationWithUiSlotsEnabledV2(true);
 
     expect(projectWebUiSlotAuthorityV2(generation)).toMatchObject({
-      slotDefinitions: [],
+      slotDefinitions: [
+        {
+          pluginId: 'builtin-shell',
+          slot: 'authenticated_shell_surface',
+          id: 'authenticated-shell',
+          contract: 'ui-builtin:web-authenticated-shell-surface',
+          moduleRef: 'builtin:web-authenticated-shell-surface',
+          permission: 'ui.authenticated-shell',
+          sandbox: true,
+        },
+      ],
       status: 'ready',
-      uiSlotArtifactIds: ['web.ui-slots.default.v1'],
+      uiSlotArtifactIds: ['web.ui-slots.authenticated-shell-surface.v1', 'web.ui-slots.default.v1'],
     });
     await runtime.close();
   });
@@ -78,9 +89,28 @@ describe('WebUiSlotAuthorityV2', () => {
     const { generation, runtime } = await generationWithUiSlotsEnabledV2(false);
 
     expect(projectWebUiSlotAuthorityV2(generation)).toMatchObject({
+      slotDefinitions: [
+        expect.objectContaining({
+          id: 'authenticated-shell',
+          slot: 'authenticated_shell_surface',
+        }),
+      ],
+      status: 'ready',
+      uiSlotArtifactIds: ['web.ui-slots.authenticated-shell-surface.v1'],
+    });
+    await runtime.close();
+  });
+
+  it('removes the required shell authority when its independent profile effect is disabled', async () => {
+    const { generation, runtime } = await generationWithUiSlotsEnabledV2(
+      false,
+      'builtin-web-authenticated-shell-surface'
+    );
+
+    expect(projectWebUiSlotAuthorityV2(generation)).toMatchObject({
       slotDefinitions: [],
       status: 'ready',
-      uiSlotArtifactIds: [],
+      uiSlotArtifactIds: ['web.ui-slots.default.v1'],
     });
     await runtime.close();
   });

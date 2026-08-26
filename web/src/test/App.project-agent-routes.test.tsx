@@ -12,10 +12,21 @@ import {
 } from '@/plugins/webPluginGenerationV2';
 import { createDefaultBusinessRouteElementsV2 } from '@/routes/v2/webDefaultBusinessRouteElementsV2';
 
-const authState = {
+type AuthState = {
+  isAuthenticated: boolean;
+  user: {
+    user_id: string;
+    email: string;
+    must_change_password: boolean;
+  } | null;
+};
+
+const authState: AuthState = {
   isAuthenticated: true,
   user: { user_id: 'user-1', email: 'user@example.com', must_change_password: false },
 };
+
+const authenticatedShellRender = vi.hoisted(() => vi.fn());
 
 type RouteAuthorityTestState = {
   routeArtifacts: Array<{
@@ -44,6 +55,17 @@ vi.mock('@/components/common/ErrorBoundary', () => ({
 
 vi.mock('@/components/common/OrgSetupGuard', () => ({
   OrgSetupGuard: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('@/plugins/WebRendererAuthenticatedShellV2', () => ({
+  WebRendererAuthenticatedShellV2: () => {
+    authenticatedShellRender();
+    return <Outlet />;
+  },
+}));
+
+vi.mock('@/pages/Login', () => ({
+  Login: () => <div data-testid="login-route">login</div>,
 }));
 
 vi.mock('@/layouts/TenantLayout', () => ({
@@ -92,6 +114,13 @@ function renderAppAt(entry: string) {
 
 describe('App project Agent production routes', () => {
   beforeEach(() => {
+    authenticatedShellRender.mockClear();
+    authState.isAuthenticated = true;
+    authState.user = {
+      user_id: 'user-1',
+      email: 'user@example.com',
+      must_change_password: false,
+    };
     routeAuthority.state = {
       routeArtifacts: [
         {
@@ -127,6 +156,23 @@ describe('App project Agent production routes', () => {
 
     expect(await screen.findByTestId('not-found-route')).toBeInTheDocument();
     expect(screen.queryByTestId('project-agent-route')).not.toBeInTheDocument();
+  });
+
+  it('mounts contributed business routes only behind the authenticated shell outlet', async () => {
+    renderAppAt('/tenant/tenant-1/project/project-1/agent');
+
+    expect(await screen.findByTestId('project-agent-route')).toBeInTheDocument();
+    expect(authenticatedShellRender).toHaveBeenCalled();
+  });
+
+  it('keeps the unauthenticated login route outside the contributed shell boundary', async () => {
+    authState.isAuthenticated = false;
+    authState.user = null;
+
+    renderAppAt('/login');
+
+    expect(await screen.findByTestId('login-route')).toBeInTheDocument();
+    expect(authenticatedShellRender).not.toHaveBeenCalled();
   });
 
   it('shows the generation loader for an authenticated business URL during bootstrap', async () => {

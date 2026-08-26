@@ -62,6 +62,16 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
             )
 
     entries = payload["entries"]
+    web_shell_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-web-authenticated-shell-surface"
+    )
+    web_routes_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-web-default-routes"
+    )
     shell_index = next(
         index
         for index, entry in enumerate(entries)
@@ -72,7 +82,17 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-workbench-surface"
     )
-    assert len(entries) == 257
+    assert len(entries) == 258
+    assert web_shell_index < web_routes_index
+    assert entries[web_shell_index]["config"] == {
+        "id": "web.authenticated-shell-surface",
+        "kind": "ui-slot",
+        "order": 80,
+        "payload": {
+            "artifact_refs": ["web.ui-slots.authenticated-shell-surface.v1"],
+            "schema_version": 1,
+        },
+    }
     assert shell_index < workbench_index
     assert entries[shell_index]["config"] == {
         "id": "desktop.authenticated-shell-surface",
