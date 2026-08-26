@@ -6,21 +6,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.application.services.artifact_content_authority_service import (
     ArtifactContentAuthorityService,
 )
-from src.infrastructure.adapters.secondary.persistence.artifact_content_commit_reconciler import (
-    ArtifactContentCommitReconciler,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_artifact_content_authority import (
-    SqlArtifactContentAuthorityRepository,
-)
 
-from .artifact_content_gc_runtime import (
-    AsyncSessionFactoryServiceV2,
-    ObjectStorageServiceV2,
+from .artifact_content_gc_runtime import ObjectStorageServiceV2
+from .artifact_content_persistence import (
+    ArtifactContentCommitReconcilerProtocolV2,
+    ArtifactContentPersistenceFactoryProtocolV2,
+    artifact_content_persistence_provider_definition_v2,
 )
 from .runtime import (
     ContextV2,
@@ -32,9 +26,8 @@ from .runtime import (
 
 ARTIFACT_CONTENT_APPLICATION_MODULE_V2 = "builtin://memstack/application/artifact-content-services"
 ARTIFACT_CONTENT_APPLICATION_SERVICE_V2 = "service:application.artifact-content-services"
-ARTIFACT_CONTENT_SESSIONS_INJECT_V2 = "sessions"
+ARTIFACT_CONTENT_PROVIDER_INJECT_V2 = "provider"
 ARTIFACT_CONTENT_STORAGE_INJECT_V2 = "storage"
-_OPERATION_DB_SESSION_SERVICE_V2 = "service:operation.db-session"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -42,7 +35,7 @@ class ArtifactContentApplicationServicesV2:
     """Operation-owned content authority plus fresh-session reconciler."""
 
     content: ArtifactContentAuthorityService
-    reconciler: ArtifactContentCommitReconciler
+    reconciler: ArtifactContentCommitReconcilerProtocolV2
 
 
 @runtime_checkable
@@ -54,29 +47,23 @@ class ArtifactContentApplicationResolverProtocolV2(Protocol):
 
 @dataclass(frozen=True, kw_only=True)
 class ArtifactContentApplicationResolverV2:
-    """Bind declared session/storage Providers to the operation session."""
+    """Bind the Profile-selected persistence and storage Providers."""
 
-    sessions: AsyncSessionFactoryServiceV2
+    provider: ArtifactContentPersistenceFactoryProtocolV2
     storage: ObjectStorageServiceV2
 
     def resolve(self, operation: OperationContextV2) -> ArtifactContentApplicationServicesV2:
-        db = operation.require(_OPERATION_DB_SESSION_SERVICE_V2)
-        if not isinstance(db, AsyncSession):
-            raise RuntimeV2Error(
-                "invalid_operation_db_session",
-                "Artifact content services require an AsyncSession operation service",
-            )
-        reconciler = ArtifactContentCommitReconciler(
-            session_factory=self.sessions.factory,
-            storage_service=self.storage.storage_service,
+        persistence = self.provider.build(
+            operation,
+            storage=self.storage.storage_service,
         )
         return ArtifactContentApplicationServicesV2(
             content=ArtifactContentAuthorityService(
-                repository=SqlArtifactContentAuthorityRepository(db),
+                repository=persistence.repository,
                 storage_service=self.storage.storage_service,
-                orphan_recorder=reconciler.record_pending,
+                orphan_recorder=persistence.reconciler.record_pending,
             ),
-            reconciler=reconciler,
+            reconciler=persistence.reconciler,
         )
 
 
@@ -88,11 +75,11 @@ def artifact_content_application_definition_v2() -> PluginDefinitionV2:
             raise ValueError(
                 "Artifact content application resolver requires strategy operation-scoped-provider"
             )
-        sessions = context.require(ARTIFACT_CONTENT_SESSIONS_INJECT_V2)
-        if not isinstance(sessions, AsyncSessionFactoryServiceV2):
+        provider = context.require(ARTIFACT_CONTENT_PROVIDER_INJECT_V2)
+        if not isinstance(provider, ArtifactContentPersistenceFactoryProtocolV2):
             raise RuntimeV2Error(
-                "invalid_artifact_content_sessions",
-                "Artifact content sessions inject has an invalid implementation",
+                "invalid_artifact_content_provider",
+                "Artifact content provider inject has an invalid implementation",
             )
         storage = context.require(ARTIFACT_CONTENT_STORAGE_INJECT_V2)
         if not isinstance(storage, ObjectStorageServiceV2):
@@ -102,7 +89,7 @@ def artifact_content_application_definition_v2() -> PluginDefinitionV2:
             )
         _ = context.provide(
             ARTIFACT_CONTENT_APPLICATION_SERVICE_V2,
-            ArtifactContentApplicationResolverV2(sessions=sessions, storage=storage),
+            ArtifactContentApplicationResolverV2(provider=provider, storage=storage),
             label="artifact-content-application",
         )
 
@@ -113,13 +100,22 @@ def artifact_content_application_definition_v2() -> PluginDefinitionV2:
     )
 
 
+def artifact_content_service_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
+    """Return the persistence Provider before its application Consumer."""
+    return (
+        artifact_content_persistence_provider_definition_v2(),
+        artifact_content_application_definition_v2(),
+    )
+
+
 __all__ = [
     "ARTIFACT_CONTENT_APPLICATION_MODULE_V2",
     "ARTIFACT_CONTENT_APPLICATION_SERVICE_V2",
-    "ARTIFACT_CONTENT_SESSIONS_INJECT_V2",
+    "ARTIFACT_CONTENT_PROVIDER_INJECT_V2",
     "ARTIFACT_CONTENT_STORAGE_INJECT_V2",
     "ArtifactContentApplicationResolverProtocolV2",
     "ArtifactContentApplicationResolverV2",
     "ArtifactContentApplicationServicesV2",
     "artifact_content_application_definition_v2",
+    "artifact_content_service_definitions_v2",
 ]

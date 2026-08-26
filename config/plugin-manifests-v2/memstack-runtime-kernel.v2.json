@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:bed8bac9d4db64f1676162336e078b6927efb7a035c68949d724f4436bcdef14",
+        "digest": "sha256:15c77dc487ac44e4bee30e17c0952ceb78de2611f15f7e2dca758d3f85c9bb57",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -2157,6 +2157,43 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/persistence/artifact-content-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_content_persistence:artifact_content_persistence_provider_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.artifact-content-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-and-fresh-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:cd2633d2882b2eb2ce6b5f1d77a4db62f272009cb2ab5ff88dd1eb493c7b339e",
+      "artifact": {
+        "digest": "sha256:ae66ddeb4567266767f42c30ca5641b7647a75ab9d8de4fc887b58a096b698cb",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_persistence.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/application/artifact-content-services",
       "entrypoint": "src.infrastructure.plugins.v2.artifact_content_services:artifact_content_application_definition_v2",
       "targets": ["python"],
@@ -2170,8 +2207,8 @@
           ],
           "requires": [
             {
-              "alias": "sessions",
-              "service": "service:persistence.async-session-factory",
+              "alias": "provider",
+              "service": "service:persistence.artifact-content-provider",
               "version": "1.0.0"
             },
             {
@@ -2192,9 +2229,9 @@
           }
         }
       },
-      "contract_digest": "sha256:ee2d130d68957fabd0a2efbf24c857168e5cbad98c650eae45f9d1d6875f7ca9",
+      "contract_digest": "sha256:50d213eedf4f286b6c9e96433297ac4f40fff967b9a9a2c0f51892ce00f73867",
       "artifact": {
-        "digest": "sha256:37afa965ee98fc6cec4b3ce7bbd91b9de9d11ee481cc54010517a8cea2ad765a",
+        "digest": "sha256:7aab2550133b2a496b30ad919b9a72fb58f1345da5a204f48cbbdb0139eb6359",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_content_services.py"
       }
     },

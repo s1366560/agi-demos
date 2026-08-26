@@ -55,12 +55,12 @@ from src.infrastructure.adapters.primary.web.artifact_lifecycle_application_auth
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.artifact_content_commit_reconciler import (
-    ArtifactContentCommitReconciler,
-)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.artifact_content_persistence import (
+    ArtifactContentCommitReconcilerProtocolV2,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ async def _settle_artifact_side_effect(
 async def _commit_artifact_content_outcome(
     *,
     db: AsyncSession,
-    reconciler: ArtifactContentCommitReconciler,
+    reconciler: ArtifactContentCommitReconcilerProtocolV2,
     outcome: ArtifactContentSaveOutcome,
 ) -> None:
     """Commit once, reconcile only a definitive failure, and preserve cancellation."""
@@ -211,7 +211,7 @@ def get_artifact_content_commit_reconciler(
     artifact_content_application: ArtifactContentApplicationAuthorityV2 = Depends(
         artifact_content_application_authority_dependency_v2
     ),
-) -> ArtifactContentCommitReconciler:
+) -> ArtifactContentCommitReconcilerProtocolV2:
     """Resolve the fresh-session reconciler from the same operation authority."""
     return artifact_content_application.services.reconciler
 
@@ -627,7 +627,9 @@ async def update_artifact_content(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: ArtifactContentAuthorityService = Depends(get_artifact_content_authority_service),
-    reconciler: ArtifactContentCommitReconciler = Depends(get_artifact_content_commit_reconciler),
+    reconciler: ArtifactContentCommitReconcilerProtocolV2 = Depends(
+        get_artifact_content_commit_reconciler
+    ),
 ) -> UpdateContentResponse | JSONResponse:
     """
     Update the text content of an artifact (canvas save-back).

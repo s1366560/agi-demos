@@ -20,6 +20,9 @@ from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
     ARTIFACT_CONTENT_GC_MODULE_V2,
     ASYNC_SESSION_FACTORY_MODULE_V2,
 )
+from src.infrastructure.plugins.v2.artifact_content_persistence import (
+    ARTIFACT_CONTENT_PROVIDER_MODULE_V2,
+)
 from src.infrastructure.plugins.v2.artifact_content_services import (
     ARTIFACT_CONTENT_APPLICATION_MODULE_V2,
 )
@@ -223,6 +226,7 @@ async def test_llm_health_runtime_rejects_missing_sessions_without_fallback() ->
             in {
                 ARTIFACT_CONTENT_APPLICATION_MODULE_V2,
                 ARTIFACT_CONTENT_GC_MODULE_V2,
+                ARTIFACT_CONTENT_PROVIDER_MODULE_V2,
                 ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2,
                 ASYNC_SESSION_FACTORY_MODULE_V2,
                 DOCKER_EVENT_MONITOR_MODULE_V2,

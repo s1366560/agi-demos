@@ -14,6 +14,7 @@ from starlette.requests import Request
 
 from src.infrastructure.adapters.primary.web.artifact_content_application_authority_v2 import (
     ArtifactContentApplicationAuthorityV2,
+    _route_template,
     artifact_content_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.routers import artifacts
@@ -31,6 +32,7 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 pytestmark = pytest.mark.unit
 
 _ROOT = Path(__file__).resolve().parents[7]
+_ROUTER_PATH = _ROOT / "src/infrastructure/adapters/primary/web/routers/artifacts.py"
 
 
 def _request() -> Request:
@@ -43,10 +45,21 @@ def _request() -> Request:
             "path": "/api/v1/artifacts/artifact-a/content",
             "path_params": {"artifact_id": "artifact-a"},
             "query_string": b"",
+            "route": SimpleNamespace(path="/api/v1/artifacts/{artifact_id}/content"),
             "scheme": "http",
             "server": ("test", 80),
         }
     )
+
+
+def test_unresolved_route_template_never_records_raw_artifact_id() -> None:
+    request = _request()
+    request.scope.pop("route")
+
+    route_template = _route_template(request)
+
+    assert route_template == "-"
+    assert "artifact-a" not in route_template
 
 
 async def test_authority_uses_pinned_generation_and_operation_session() -> None:
@@ -82,7 +95,7 @@ async def test_authority_uses_pinned_generation_and_operation_session() -> None:
             assert authority.operation.require(OPERATION_METADATA_SERVICE_V2) == {
                 "kind": "http-authority",
                 "method": "GET",
-                "path": "/api/v1/artifacts/artifact-a/content",
+                "path": "/api/v1/artifacts/{artifact_id}/content",
             }
             await dependency.aclose()
 
@@ -136,3 +149,10 @@ def test_router_getters_delegate_only_to_the_v2_authority() -> None:
         }
         assert "request" not in parameters
         assert "db" not in parameters
+
+
+def test_router_uses_the_reconciler_protocol_instead_of_the_sql_implementation() -> None:
+    source = _ROUTER_PATH.read_text(encoding="utf-8")
+
+    assert "secondary.persistence.artifact_content_commit_reconciler" not in source
+    assert "ArtifactContentCommitReconcilerProtocolV2" in source

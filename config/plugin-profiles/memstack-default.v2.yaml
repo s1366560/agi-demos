@@ -822,6 +822,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: process-boundary
+    - entry_id: builtin-artifact-content-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/artifact-content-provider
+      enabled: true
+      config:
+        strategy: operation-and-fresh-session
+      inject:
+        sessions: service:persistence.async-session-factory
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-artifact-content-services
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -830,7 +845,7 @@ profile:
       config:
         strategy: operation-scoped-provider
       inject:
-        sessions: service:persistence.async-session-factory
+        provider: service:persistence.artifact-content-provider
         storage: service:storage.object-storage
       isolate: {}
       scope:

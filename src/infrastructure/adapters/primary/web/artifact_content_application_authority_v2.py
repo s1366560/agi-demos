@@ -37,6 +37,12 @@ class ArtifactContentApplicationAuthorityV2:
     services: ArtifactContentApplicationServicesV2
 
 
+def _route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None)
+    return route_path if isinstance(route_path, str) else "-"
+
+
 async def artifact_content_application_authority_dependency_v2(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -56,7 +62,11 @@ async def artifact_content_application_authority_dependency_v2(
         )
         _ = operation.provide(
             OPERATION_METADATA_SERVICE_V2,
-            {"kind": "http-authority", "method": request.method, "path": request.url.path},
+            {
+                "kind": "http-authority",
+                "method": request.method,
+                "path": _route_template(request),
+            },
         )
         resolver = operation.require(ARTIFACT_CONTENT_APPLICATION_SERVICE_V2)
         if not isinstance(resolver, ArtifactContentApplicationResolverProtocolV2):
