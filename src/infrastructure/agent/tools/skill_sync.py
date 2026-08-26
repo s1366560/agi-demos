@@ -38,8 +38,6 @@ TOOL_DESCRIPTION = (
 )
 
 
-
-
 @dataclass(frozen=True, kw_only=True, slots=True)
 class SkillSyncRuntime:
     """Dependencies captured by one generation's skill-sync contribution."""
@@ -50,6 +48,7 @@ class SkillSyncRuntime:
     sandbox_id: str | None
     session_factory: Callable[..., Any] | None
     skill_loader_tool: Any | None
+    generation_bound: bool
 
 
 _skill_sync_runtime: ContextVar[SkillSyncRuntime | None] = ContextVar(
@@ -99,6 +98,7 @@ def _current_skill_sync_runtime() -> SkillSyncRuntime:
         sandbox_id=_skill_sync_sandbox_id,
         session_factory=_skill_sync_session_factory,
         skill_loader_tool=_skill_sync_skill_loader_tool,
+        generation_bound=False,
     )
 
 
@@ -114,21 +114,30 @@ def _skill_sync_invalidate_caches(
         skill_loader_tool.refresh_skills()
         logger.info("SkillLoaderTool cache invalidated after skill sync")
 
-    try:
-        from src.infrastructure.agent.tools.skill_loader import (
-            get_available_skills,
-            set_available_skills,
-        )
+    from src.infrastructure.agent.tools.skill_loader import skill_availability_for_tool
 
-        available_skills = get_available_skills()
-        if skill_name not in available_skills:
-            set_available_skills([*available_skills, skill_name])
-            logger.info("Skill loader available skills cache updated after skill sync")
-    except Exception:
-        logger.warning(
-            "Failed to update skill loader available skills cache after skill sync",
-            exc_info=True,
+    availability = skill_availability_for_tool(skill_loader_tool)
+    if availability is not None:
+        changed = availability.include(skill_name)
+        availability_summary = {
+            "authority": "generation_bound",
+            "changed": changed,
+            "count": len(availability.snapshot()),
+            "revision": availability.revision,
+        }
+        logger.info(
+            "Generation-bound skill roster updated after skill sync: changed=%s revision=%d",
+            changed,
+            availability.revision,
         )
+    else:
+        availability_summary = {
+            "authority": "unavailable",
+            "changed": False,
+            "count": 0,
+            "revision": 0,
+        }
+        logger.info("No generation-bound skill roster was available after skill sync")
 
     from src.infrastructure.agent.tools.self_modifying_lifecycle import (
         SelfModifyingLifecycleOrchestrator,
@@ -141,6 +150,7 @@ def _skill_sync_invalidate_caches(
         clear_tool_definitions=False,
         metadata={"skill_name": skill_name},
     )
+    lifecycle_result["skill_availability"] = availability_summary
     logger.info(
         "Skill sync lifecycle completed for tenant=%s project=%s: %s",
         tenant_id,
@@ -240,6 +250,38 @@ async def _skill_sync_execute_sync(
     )
 
 
+def _skill_sync_prerequisite_error(runtime: SkillSyncRuntime) -> ToolResult | None:
+    """Return a structured error when a required runtime capability is absent."""
+    if runtime.generation_bound:
+        from src.infrastructure.agent.tools.skill_loader import skill_availability_for_tool
+
+        if skill_availability_for_tool(runtime.skill_loader_tool) is None:
+            return ToolResult(
+                output="Skill availability service is missing from the active generation.",
+                is_error=True,
+                metadata={
+                    "error": "skill_availability_service_missing",
+                    "service": "skill_loader",
+                },
+            )
+    if not runtime.sandbox_adapter:
+        return ToolResult(
+            output="No sandbox adapter available. Sandbox may not be initialized.",
+            is_error=True,
+        )
+    if not runtime.sandbox_id:
+        return ToolResult(
+            output="No sandbox ID available. Sandbox may not be attached.",
+            is_error=True,
+        )
+    if not runtime.session_factory:
+        return ToolResult(
+            output="Database session factory not available.",
+            is_error=True,
+        )
+    return None
+
+
 @tool_define(
     name=TOOL_NAME,
     description=TOOL_DESCRIPTION,
@@ -283,22 +325,9 @@ async def skill_sync_tool(
             is_error=True,
         )
 
-    # Validate prerequisites
-    if not runtime.sandbox_adapter:
-        return ToolResult(
-            output="No sandbox adapter available. Sandbox may not be initialized.",
-            is_error=True,
-        )
-    if not runtime.sandbox_id:
-        return ToolResult(
-            output="No sandbox ID available. Sandbox may not be attached.",
-            is_error=True,
-        )
-    if not runtime.session_factory:
-        return ToolResult(
-            output="Database session factory not available.",
-            is_error=True,
-        )
+    prerequisite_error = _skill_sync_prerequisite_error(runtime)
+    if prerequisite_error is not None:
+        return prerequisite_error
 
     try:
         return await _skill_sync_execute_sync(
@@ -351,6 +380,7 @@ def make_skill_sync_tool(
         sandbox_id=sandbox_id,
         session_factory=session_factory,
         skill_loader_tool=skill_loader_tool,
+        generation_bound=True,
     )
     return replace(
         skill_sync_tool,

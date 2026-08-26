@@ -346,6 +346,14 @@ def test_worker_skill_loader_builder_has_no_global_registry_or_configurator() ->
 
 
 @pytest.mark.unit
+def test_worker_skill_loader_builder_has_no_process_global_availability_cache() -> None:
+    source = inspect.getsource(agent_worker_state.get_or_create_skill_loader_tool)
+
+    assert "get_available_skills" not in source
+    assert "set_available_skills" not in source
+
+
+@pytest.mark.unit
 async def test_worker_skill_loader_binds_sandbox_without_global_mutation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

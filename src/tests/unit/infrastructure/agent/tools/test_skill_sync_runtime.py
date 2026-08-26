@@ -9,6 +9,7 @@ import pytest
 
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.agent.tools.skill_loader import make_skill_loader_tool
 from src.infrastructure.agent.tools.skill_sync import make_skill_sync_tool
 
 
@@ -19,6 +20,15 @@ def _context(label: str) -> ToolContext:
         call_id=f"call-{label}",
         agent_name=f"agent-{label}",
         conversation_id=f"conversation-{label}",
+    )
+
+
+def _skill_loader(label: str) -> object:
+    return make_skill_loader_tool(
+        skill_service=object(),
+        tenant_id=f"tenant-{label}",
+        project_id=f"project-{label}",
+        available_skill_names=(f"skill-{label}",),
     )
 
 
@@ -54,7 +64,7 @@ async def test_bound_skill_sync_runtimes_are_isolated_during_interleaved_awaits(
         sandbox_adapter=object(),
         sandbox_id="sandbox-a",
         session_factory=lambda: None,
-        skill_loader_tool=object(),
+        skill_loader_tool=_skill_loader("a"),
     )
     second_tool = make_skill_sync_tool(
         tenant_id="tenant-b",
@@ -62,12 +72,10 @@ async def test_bound_skill_sync_runtimes_are_isolated_during_interleaved_awaits(
         sandbox_adapter=object(),
         sandbox_id="sandbox-b",
         session_factory=lambda: None,
-        skill_loader_tool=object(),
+        skill_loader_tool=_skill_loader("b"),
     )
 
-    first_task = asyncio.create_task(
-        first_tool.execute(_context("a"), skill_name="shared-skill")
-    )
+    first_task = asyncio.create_task(first_tool.execute(_context("a"), skill_name="shared-skill"))
     await first_entered.wait()
     second_result = await second_tool.execute(_context("b"), skill_name="shared-skill")
     first_result = await first_task
@@ -84,7 +92,7 @@ async def test_bound_skill_sync_passes_exact_runtime_dependencies(
 
     captured: dict[str, Any] = {}
     sandbox_adapter = object()
-    skill_loader_tool = object()
+    skill_loader_tool = _skill_loader("exact")
 
     class _Session:
         async def __aenter__(self) -> _Session:
@@ -116,8 +124,7 @@ async def test_bound_skill_sync_passes_exact_runtime_dependencies(
         _SkillReverseSync,
     )
     monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository."
-        "SqlSkillRepository",
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
         lambda session: ("skill-repo", session),
     )
     monkeypatch.setattr(
@@ -172,4 +179,106 @@ async def test_bound_skill_sync_passes_exact_runtime_dependencies(
         "tenant_id": "tenant-exact",
         "project_id": "project-exact",
         "skill_loader_tool": skill_loader_tool,
+    }
+
+
+@pytest.mark.unit
+def test_skill_sync_updates_only_the_bound_generation_skill_roster(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infrastructure.agent.tools import (
+        skill_loader as skill_loader_module,
+        skill_sync as skill_sync_module,
+    )
+    from src.infrastructure.agent.tools.self_modifying_lifecycle import (
+        SelfModifyingLifecycleOrchestrator,
+    )
+    from src.infrastructure.agent.tools.skill_loader import (
+        make_skill_loader_tool,
+        skill_availability_for_tool,
+    )
+
+    def _legacy_cache_forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("bound skill sync must not use the process-global skill roster")
+
+    monkeypatch.setattr(
+        skill_loader_module,
+        "get_available_skills",
+        _legacy_cache_forbidden,
+    )
+    monkeypatch.setattr(
+        skill_loader_module,
+        "set_available_skills",
+        _legacy_cache_forbidden,
+    )
+    monkeypatch.setattr(
+        SelfModifyingLifecycleOrchestrator,
+        "run_post_change",
+        staticmethod(
+            lambda **_kwargs: {
+                "cache_invalidation": {"skill_loader": "invalidated:tenant-a"},
+                "probe": {"status": "skipped"},
+            }
+        ),
+    )
+
+    loader_a = make_skill_loader_tool(
+        skill_service=object(),
+        tenant_id="tenant-a",
+        project_id="project-a",
+        available_skill_names=("skill-a",),
+    )
+    loader_b = make_skill_loader_tool(
+        skill_service=object(),
+        tenant_id="tenant-b",
+        project_id="project-b",
+        available_skill_names=("skill-b",),
+    )
+
+    lifecycle = skill_sync_module._skill_sync_invalidate_caches(
+        skill_name="synced-a",
+        tenant_id="tenant-a",
+        project_id="project-a",
+        skill_loader_tool=loader_a,
+    )
+
+    availability_a = skill_availability_for_tool(loader_a)
+    availability_b = skill_availability_for_tool(loader_b)
+    assert availability_a is not None
+    assert availability_b is not None
+    assert availability_a.snapshot() == ("skill-a", "synced-a")
+    assert availability_b.snapshot() == ("skill-b",)
+    assert lifecycle["skill_availability"] == {
+        "authority": "generation_bound",
+        "changed": True,
+        "count": 2,
+        "revision": 1,
+    }
+
+
+@pytest.mark.unit
+async def test_bound_skill_sync_fails_closed_without_skill_loader_contribution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infrastructure.agent.tools import skill_sync as skill_sync_module
+
+    async def _execute_forbidden(*_args: object, **_kwargs: object) -> ToolResult:
+        raise AssertionError("missing generation service must fail before persistence")
+
+    monkeypatch.setattr(skill_sync_module, "_skill_sync_execute_sync", _execute_forbidden)
+    tool = make_skill_sync_tool(
+        tenant_id="tenant-a",
+        project_id="project-a",
+        sandbox_adapter=object(),
+        sandbox_id="sandbox-a",
+        session_factory=lambda: None,
+        skill_loader_tool=None,
+    )
+
+    result = await tool.execute(_context("missing-loader"), skill_name="new-skill")
+
+    assert result.is_error is True
+    assert result.metadata == {
+        "error": "skill_availability_service_missing",
+        "service": "skill_loader",
     }

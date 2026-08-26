@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from pathlib import Path
+from threading import Lock
 from typing import Any, cast
 
 from src.domain.model.agent.skill import Skill
@@ -30,10 +31,12 @@ from src.infrastructure.agent.tools.result import ToolResult
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "SkillAvailabilityV2",
     "configure_skill_loader_tool",
     "get_available_skills",
     "make_skill_loader_tool",
     "set_sandbox_id",
+    "skill_availability_for_tool",
     "skill_loader_tool",
 ]
 
@@ -44,6 +47,46 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Module-level state
 # ---------------------------------------------------------------------------
+
+
+class SkillAvailabilityV2:
+    """Generation-bound roster exposed by one skill-loader contribution."""
+
+    __slots__ = ("_lock", "_names", "_revision")
+
+    def __init__(self, names: Sequence[str] = ()) -> None:
+        self._lock = Lock()
+        self._names: list[str] = []
+        self._revision = 0
+        seen: set[str] = set()
+        for raw_name in names:
+            name = raw_name.strip()
+            if name and name not in seen:
+                self._names.append(name)
+                seen.add(name)
+
+    @property
+    def revision(self) -> int:
+        """Return the roster revision for refresh diagnostics."""
+        with self._lock:
+            return self._revision
+
+    def snapshot(self) -> tuple[str, ...]:
+        """Return an immutable roster snapshot in declaration order."""
+        with self._lock:
+            return tuple(self._names)
+
+    def include(self, skill_name: str) -> bool:
+        """Add one skill to this generation and report whether it changed."""
+        normalized = skill_name.strip()
+        if not normalized:
+            return False
+        with self._lock:
+            if normalized in self._names:
+                return False
+            self._names.append(normalized)
+            self._revision += 1
+            return True
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -59,7 +102,7 @@ class _SkillLoaderDeps:
     skill_sync_service: Any = None
     sandbox_id: str = ""
     skip_database: bool = True
-    available_skill_names: tuple[str, ...] = ()
+    skill_availability: SkillAvailabilityV2 | None = None
 
 
 _skill_loader_deps: _SkillLoaderDeps | None = None
@@ -116,6 +159,7 @@ def set_sandbox_id(sandbox_id: str) -> None:
         skill_sync_service=_skill_loader_deps.skill_sync_service,
         sandbox_id=sandbox_id,
         skip_database=_skill_loader_deps.skip_database,
+        skill_availability=_skill_loader_deps.skill_availability,
     )
 
 
@@ -296,8 +340,8 @@ async def skill_loader_tool(  # noqa: C901
 
         if not content:
             runtime_names = (
-                deps.available_skill_names
-                if _skill_loader_runtime.get() is not None
+                deps.skill_availability.snapshot()
+                if _skill_loader_runtime.get() is not None and deps.skill_availability is not None
                 else tuple(_available_skill_names)
             )
             available = sorted({s.name for s in skills_cache} | set(runtime_names))
@@ -376,6 +420,16 @@ class _BoundSkillLoaderExecutor:
             _skill_loader_runtime.reset(token)
 
 
+def skill_availability_for_tool(tool: Any) -> SkillAvailabilityV2 | None:
+    """Resolve the generation-bound roster carried by a loader contribution."""
+    tool_instance = getattr(tool, "_tool_instance", None)
+    candidate = tool_instance if tool_instance is not None else tool
+    executor = getattr(candidate, "execute", None)
+    if isinstance(executor, _BoundSkillLoaderExecutor):
+        return executor.runtime.skill_availability
+    return None
+
+
 def make_skill_loader_tool(
     *,
     skill_service: Any,
@@ -400,7 +454,7 @@ def make_skill_loader_tool(
         skill_sync_service=skill_sync_service,
         sandbox_id=sandbox_id,
         skip_database=skip_database,
-        available_skill_names=tuple(available_skill_names),
+        skill_availability=SkillAvailabilityV2(available_skill_names),
     )
     return replace(
         skill_loader_tool,

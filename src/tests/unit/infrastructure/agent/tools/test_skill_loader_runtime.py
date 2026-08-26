@@ -178,3 +178,40 @@ async def test_bound_skill_loader_available_names_do_not_use_legacy_global_cache
     assert "only-b" in result_b.output
     assert "only-a" not in result_b.output
     assert "legacy-leak" not in result_b.output
+
+
+@pytest.mark.unit
+def test_bound_skill_loader_availability_updates_are_generation_isolated() -> None:
+    from src.infrastructure.agent.tools.skill_loader import (
+        make_skill_loader_tool,
+        skill_availability_for_tool,
+    )
+
+    service = object()
+    tool_a = make_skill_loader_tool(
+        skill_service=service,
+        tenant_id="tenant-a",
+        project_id="project-a",
+        available_skill_names=("skill-a",),
+    )
+    tool_b = make_skill_loader_tool(
+        skill_service=service,
+        tenant_id="tenant-b",
+        project_id="project-b",
+        available_skill_names=("skill-b",),
+    )
+
+    availability_a = skill_availability_for_tool(tool_a)
+    availability_b = skill_availability_for_tool(tool_b)
+
+    assert availability_a is not None
+    assert availability_b is not None
+    assert availability_a.snapshot() == ("skill-a",)
+    assert availability_b.snapshot() == ("skill-b",)
+
+    assert availability_a.include("synced-a") is True
+    assert availability_a.include("synced-a") is False
+    assert availability_a.snapshot() == ("skill-a", "synced-a")
+    assert availability_b.snapshot() == ("skill-b",)
+    assert availability_a.revision == 1
+    assert availability_b.revision == 0

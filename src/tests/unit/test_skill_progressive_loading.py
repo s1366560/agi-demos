@@ -773,9 +773,7 @@ class TestSkillLoaderTool:
         )
 
         ctx = self._make_ctx()
-        result = await skill_loader_tool.execute(
-            ctx, name="nonexistent"
-        )
+        result = await skill_loader_tool.execute(ctx, name="nonexistent")
 
         assert result.is_error
         assert "not found" in result.output.lower()
@@ -844,7 +842,7 @@ Use fallback loader.
     def test_skill_sync_invalidation_adds_synced_skill_to_available_cache(
         self, monkeypatch: pytest.MonkeyPatch
     ):
-        """Skill sync must update the module-level loader cache after legacy refresh removal."""
+        """Skill sync must not mutate the legacy process-global roster."""
         from src.infrastructure.agent.tools import skill_sync
         from src.infrastructure.agent.tools.self_modifying_lifecycle import (
             SelfModifyingLifecycleOrchestrator,
@@ -873,5 +871,11 @@ Use fallback loader.
             skill_loader_tool=None,
         )
 
-        assert get_available_skills() == ["existing-skill", "new-skill"]
+        assert get_available_skills() == ["existing-skill"]
+        assert result["skill_availability"] == {
+            "authority": "unavailable",
+            "changed": False,
+            "count": 0,
+            "revision": 0,
+        }
         assert result["cache_invalidation"]["skill_loader"] == "invalidated:test-tenant"

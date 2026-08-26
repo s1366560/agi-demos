@@ -2234,17 +2234,16 @@ class SessionProcessor:
 
     def _build_command_context(self) -> dict[str, Any]:
         """Build context dict for command handlers."""
-        # Prefer live skills from module-level cache (dynamically updated)
-        # over stale self.config.skill_names (set once at init time).
+        # A bound loader roster is authoritative even when it is empty: an
+        # explicit empty contribution must not fall back to stale config.
         skills: list[str] = list(self.config.skill_names)
-        if self.tools.get("skill_loader") is not None:
-            from src.infrastructure.agent.tools.skill_loader import (
-                get_available_skills,
-            )
+        skill_loader = self.tools.get("skill_loader")
+        if skill_loader is not None:
+            from src.infrastructure.agent.tools.skill_loader import skill_availability_for_tool
 
-            live_skills = get_available_skills()
-            if live_skills:
-                skills = live_skills
+            availability = skill_availability_for_tool(skill_loader)
+            if availability is not None:
+                skills = list(availability.snapshot())
         allowed_skills = self.config.runtime_context.get("allowed_skills")
         if isinstance(allowed_skills, list) and allowed_skills:
             normalized_allowed = {

@@ -2930,11 +2930,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
     from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
         SqlSkillRepository,
     )
-    from src.infrastructure.agent.tools.skill_loader import (
-        get_available_skills,
-        make_skill_loader_tool,
-        set_available_skills,
-    )
+    from src.infrastructure.agent.tools.skill_loader import make_skill_loader_tool
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
     class SessionSkillRepository(SkillRepositoryPort):
@@ -3078,7 +3074,6 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 or agent_mode in getattr(skill, "agent_modes", [])
             ]
             available_skill_names = tuple(s.name for s in filtered_skills)
-            set_available_skills(list(available_skill_names))
             tool_info = make_skill_loader_tool(
                 skill_service=skill_service,
                 tenant_id=tenant_id,
@@ -3093,7 +3088,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 _skill_loader_cache[cache_key] = tool_info
             logger.info(
                 f"Agent Worker: SkillLoaderTool loaded for {cache_label}, "
-                f"skills in description: {len(get_available_skills())}"
+                f"skills in description: {len(available_skill_names)}"
             )
             return tool_info
 
