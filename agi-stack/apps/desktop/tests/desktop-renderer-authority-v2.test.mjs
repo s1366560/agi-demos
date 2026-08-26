@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 require.extensions[".css"] = () => {};
 
 const {
+  DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
@@ -261,6 +262,12 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       297,
     ),
     contribution(
+      "desktop.authenticated-shell-surface",
+      "ui-slot",
+      [DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2],
+      298,
+    ),
+    contribution(
       "desktop.workbench-surface",
       "ui-slot",
       [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2],
@@ -300,6 +307,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_TENANT_AGENT_BUILDING_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
+      [DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
@@ -606,6 +614,17 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
   assert.deepEqual(artifacts[23].slotDefinitions, [
     {
       pluginId: "builtin-shell",
+      slot: "authenticated_shell_surface",
+      id: "authenticated-shell",
+      contract: "ui-builtin:desktop-authenticated-shell-surface",
+      moduleRef: "builtin:desktop-authenticated-shell-surface",
+      permission: "ui.authenticated-shell",
+      sandbox: true,
+    },
+  ]);
+  assert.deepEqual(artifacts[24].slotDefinitions, [
+    {
+      pluginId: "builtin-shell",
       slot: "workbench_surface",
       id: "workbench",
       contract: "ui-builtin:desktop-workbench-surface",
@@ -614,9 +633,9 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.equal(artifacts[24].slotDefinitions.length, 2);
+  assert.equal(artifacts[25].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[24].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[25].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

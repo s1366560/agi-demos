@@ -37,6 +37,10 @@ const {
   DesktopRendererProductionRouterV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopRendererProductionRouterV2.js");
 const {
+  DesktopRendererAuthenticatedShellV2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopRendererAuthenticatedShellV2.js");
+const {
+  DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererCompositionPortV2.js");
 
@@ -116,6 +120,19 @@ const capability = Object.freeze({
   },
   authority_revision: 4,
 });
+const shellMarkers = [
+  "desktop-titlebar",
+  "desktop-sidebar",
+  "workbench-tab-bar",
+  "desktop-right-sidebar",
+  "desktop-status-bar",
+  "command-palette",
+  "keyboard-shortcuts-dialog",
+  "new-task-flow",
+  "workspace-create-dialog",
+  "workspace-settings-dialog",
+  "settings-window",
+];
 
 test("production router delegates to the React host and keeps legacy children mounted", () => {
   const location = hashLocation("");
@@ -165,6 +182,65 @@ test("production V2 router admits empty-hash workbench children only through its
   });
   assert.match(authenticationKernel, /data-business-workbench="true"/u);
   assert.doesNotMatch(authenticationKernel, /desktop_renderer_workbench_contribution_missing/u);
+});
+
+test("missing authenticated shell contribution prevents every authenticated child from mounting", () => {
+  const markup = renderAuthenticatedShell(
+    authenticatedShellGeneration({ authenticatedShell: false }),
+  );
+
+  for (const marker of shellMarkers) {
+    assert.doesNotMatch(markup, new RegExp(`data-shell-component="${marker}"`, "u"));
+  }
+  assert.match(
+    markup,
+    /data-reason-code="desktop_renderer_authenticated_shell_contribution_missing"/u,
+  );
+});
+
+test("ready authenticated shell contribution owns the complete shell child tree", () => {
+  const markup = renderAuthenticatedShell(authenticatedShellGeneration());
+
+  assert.match(markup, /data-authenticated-shell-contribution="true"/u);
+  for (const marker of shellMarkers) {
+    assert.match(markup, new RegExp(`data-shell-component="${marker}"`, "u"));
+  }
+});
+
+test("authenticated shell can mount while its nested workbench remains fail closed", () => {
+  const value = authenticatedShellGeneration({ workbench: false });
+  const markup = renderWithGeneration(
+    value,
+    React.createElement(
+      DesktopRendererAuthenticatedShellV2,
+      null,
+      rendererRouter(
+        React.createElement("main", { "data-business-workbench": true }),
+        { permissions: new Set(["authenticated"]) },
+      ),
+    ),
+  );
+
+  assert.match(markup, /data-authenticated-shell-contribution="true"/u);
+  assert.doesNotMatch(markup, /data-business-workbench="true"/u);
+  assert.match(markup, /data-reason-code="desktop_renderer_workbench_contribution_missing"/u);
+});
+
+test("authentication kernel remains independent from the authenticated shell contribution", () => {
+  const value = authenticatedShellGeneration({
+    authenticatedShell: false,
+    workbench: false,
+  });
+  const markup = renderWithGeneration(
+    value,
+    rendererRouter(
+      React.createElement("main", { "data-authentication-kernel": true }),
+      { childrenAuthority: "authentication-kernel", permissions: new Set() },
+    ),
+  );
+
+  assert.match(markup, /data-authentication-kernel="true"/u);
+  assert.doesNotMatch(markup, /desktop_renderer_authenticated_shell_contribution_missing/u);
 });
 
 test("ready and degraded states render the exact module Surface and route context", () => {
@@ -583,48 +659,75 @@ function renderRendererRouter({
   childrenAuthority = "workbench-contribution",
   workbenchContributed,
 }) {
-  function WorkbenchSurface({ children }) {
-    return React.createElement(
-      "section",
-      { "data-workbench-contribution": true },
-      children,
-    );
+  return renderWithGeneration(
+    authenticatedShellGeneration({
+      authenticatedShell: false,
+      workbench: workbenchContributed,
+    }),
+    rendererRouter(
+      React.createElement("article", { "data-business-workbench": true }),
+      { childrenAuthority },
+    ),
+  );
+}
+
+function renderAuthenticatedShell(value) {
+  return renderWithGeneration(
+    value,
+    React.createElement(
+      DesktopRendererAuthenticatedShellV2,
+      null,
+      React.createElement(
+        React.Fragment,
+        null,
+        ...shellMarkers.map((marker) =>
+          React.createElement("output", {
+            "data-shell-component": marker,
+            key: marker,
+          }),
+        ),
+      ),
+    ),
+  );
+}
+
+function authenticatedShellGeneration({ authenticatedShell = true, workbench = true } = {}) {
+  const slotDefinitions = [];
+  if (authenticatedShell) {
+    slotDefinitions.push({
+      pluginId: "builtin-shell",
+      slot: "authenticated_shell_surface",
+      id: "authenticated-shell",
+      contract: "ui-builtin:desktop-authenticated-shell-surface",
+      moduleRef: DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
+      permission: "ui.authenticated-shell",
+      sandbox: true,
+    });
   }
-  const slotDefinitions = workbenchContributed
-    ? [
-        {
-          pluginId: "builtin-shell",
-          slot: "workbench_surface",
-          id: "workbench",
-          contract: "ui-builtin:desktop-workbench-surface",
-          moduleRef: DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
-          permission: "ui.workbench",
-          sandbox: true,
-        },
-      ]
-    : [];
-  const authority = Object.freeze({
-    navigationArtifactIds: [],
-    navigationDiscoveryRouteIds: [],
-    navigationRouteIds: [],
-    routeArtifactIds: [],
-    routeArtifacts: [],
-    routeIds: [],
-    slotDefinitions,
-    status: "ready",
-    uiSlotArtifactIds: [],
-  });
-  const generation = Object.freeze({
+  if (workbench) {
+    slotDefinitions.push({
+      pluginId: "builtin-shell",
+      slot: "workbench_surface",
+      id: "workbench",
+      contract: "ui-builtin:desktop-workbench-surface",
+      moduleRef: DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
+      permission: "ui.workbench",
+      sandbox: true,
+    });
+  }
+  return Object.freeze({
     actions: Object.freeze({
       acquireOperationLease: () => ({ release: async () => undefined }),
     }),
     composition: Object.freeze({
       createAuthenticationRouteRegistry: () => registry,
       createRouteRegistry: () => registry,
-      resolveWorkbenchSurface: ({ moduleRef }) =>
-        moduleRef === DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2
-          ? WorkbenchSurface
+      resolveAuthenticatedShellSurface: ({ moduleRef }) =>
+        moduleRef === DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2
+          ? AuthenticatedShellSurface
           : null,
+      resolveWorkbenchSurface: ({ moduleRef }) =>
+        moduleRef === DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2 ? WorkbenchSurface : null,
     }),
     meta: Object.freeze({
       digest: "sha256:test-generation",
@@ -633,29 +736,54 @@ function renderRendererRouter({
       target: "desktop-renderer",
     }),
     state: Object.freeze({
-      authority,
+      authority: Object.freeze({
+        navigationArtifactIds: [],
+        navigationDiscoveryRouteIds: [],
+        navigationRouteIds: [],
+        routeArtifactIds: [],
+        routeArtifacts: [],
+        routeIds: [],
+        slotDefinitions,
+        status: "ready",
+        uiSlotArtifactIds: [],
+      }),
       navigationRegistry: createDesktopRouteRegistry([]),
       routeRegistry: registry,
     }),
   });
+}
+
+function AuthenticatedShellSurface({ children }) {
+  return React.createElement(
+    "section",
+    { "data-authenticated-shell-contribution": true },
+    children,
+  );
+}
+
+function WorkbenchSurface({ children }) {
+  return React.createElement("section", { "data-workbench-contribution": true }, children);
+}
+
+function renderWithGeneration(value, element) {
   return render(
-    React.createElement(
-      DesktopRendererGenerationProviderV2,
-      { value: generation },
-      React.createElement(
-        DesktopRendererProductionRouterV2,
-        {
-          childrenAuthority,
-          location: hashLocation("").port,
-          mode: "cloud",
-          navigation: { clearHash() {} },
-          permissions: new Set(["authenticated", "project_member"]),
-          resolveCapability: () => capability,
-          switchScope: async () => undefined,
-        },
-        React.createElement("article", { "data-business-workbench": true }),
-      ),
-    ),
+    React.createElement(DesktopRendererGenerationProviderV2, { value }, element),
+  );
+}
+
+function rendererRouter(children, overrides = {}) {
+  return React.createElement(
+    DesktopRendererProductionRouterV2,
+    {
+      location: hashLocation("").port,
+      mode: "cloud",
+      navigation: { clearHash() {} },
+      permissions: new Set(["authenticated", "project_member"]),
+      resolveCapability: () => capability,
+      switchScope: async () => undefined,
+      ...overrides,
+    },
+    children,
   );
 }
 

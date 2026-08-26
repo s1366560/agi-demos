@@ -112,6 +112,8 @@ export const DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2 =
 export const DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2 =
   'desktop.navigation.tenant-governance.v1';
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
+export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.authenticated-shell-surface.v1';
 export const DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.workbench-surface.v1';
 
@@ -304,6 +306,17 @@ const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freez
     contract: 'ui-builtin:structured-tool-result',
     moduleRef: 'builtin:structured-tool-result',
     permission: 'ui.render',
+    sandbox: true,
+  }),
+]);
+const AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'authenticated_shell_surface',
+    id: 'authenticated-shell',
+    contract: 'ui-builtin:desktop-authenticated-shell-surface',
+    moduleRef: 'builtin:desktop-authenticated-shell-surface',
+    permission: 'ui.authenticated-shell',
     sandbox: true,
   }),
 ]);
@@ -538,6 +551,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
       kind: 'navigation',
       routeIds: TENANT_GOVERNANCE_NAVIGATION_ROUTE_IDS_V2,
     }),
+  ],
+  [
+    DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
+      AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2,
+    ),
   ],
   [
     DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2,

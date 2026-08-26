@@ -84,6 +84,7 @@ import {
 import { PlatformPluginConversationSlots } from './features/chat/PlatformPluginConversationSlots';
 import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuthorityStateV2';
 import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRendererAppCompositionV2';
+import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
 import {
   DesktopRendererGenerationProviderV2,
   useDesktopRendererGenerationHostV2,
@@ -6590,6 +6591,7 @@ export function App() {
         radius="medium"
         scaling="95%"
       >
+      <DesktopRendererAuthenticatedShellV2>
       <div
         ref={appShellRef}
         data-plugin-generation-v2={
@@ -6895,6 +6897,7 @@ export function App() {
           onSignOut={() => void logout()}
         />
       </div>
+      </DesktopRendererAuthenticatedShellV2>
       </Theme>
     </DesktopRendererGenerationProviderV2>
   );

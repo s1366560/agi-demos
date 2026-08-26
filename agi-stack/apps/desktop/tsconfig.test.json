@@ -39,6 +39,7 @@
     "electron/main/rendererProtocol.ts",
     "electron/main/sidecarSupervisor.ts",
     "electron/main/updatePolicy.ts",
+    "src/plugins/DesktopRendererAuthenticatedShellV2.tsx",
     "src/plugins/DesktopRendererProductionRouterV2.tsx",
     "src/plugins/desktopRendererAppCompositionV2.tsx",
     "src/plugins/uiSlotRegistry.ts",

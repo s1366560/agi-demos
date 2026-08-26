@@ -10,6 +10,9 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   const hook = source("src/plugins/useDesktopPluginGenerationV2.ts");
   const host = source("src/plugins/DesktopRendererGenerationHostV2.tsx");
   const context = source("src/plugins/desktopRendererGenerationContextV2.tsx");
+  const authenticatedShellBoundary = source(
+    "src/plugins/DesktopRendererAuthenticatedShellV2.tsx",
+  );
   const routeBoundary = source("src/plugins/DesktopRendererProductionRouterV2.tsx");
   const composition = source("src/plugins/desktopRendererAppCompositionV2.tsx");
   const routeHost = source("src/features/navigation/desktopHashRouteHost.ts");
@@ -56,6 +59,10 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(context, /children/u);
   assert.match(routeBoundary, /useDesktopRendererGenerationV2\(\)/u);
   assert.match(routeBoundary, /projectDesktopWorkbenchCompositionV2/u);
+  assert.match(authenticatedShellBoundary, /useDesktopRendererGenerationV2\(\)/u);
+  assert.match(authenticatedShellBoundary, /projectDesktopAuthenticatedShellCompositionV2/u);
+  assert.match(authenticatedShellBoundary, /readonly children:\s*ReactNode/u);
+  assert.doesNotMatch(authenticatedShellBoundary, /render[A-Z][A-Za-z]+\??:/u);
   assert.match(routeBoundary, /childrenAuthority/u);
   assert.match(routeBoundary, /workbench-contribution/u);
   assert.match(routeBoundary, /registry=\{state\.routeRegistry\}/u);
@@ -69,6 +76,7 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(app, /useDesktopRendererGenerationHostV2\(/u);
   assert.match(app, /createDesktopRendererAppCompositionPortV2/u);
   assert.match(app, /DesktopRendererGenerationProviderV2/u);
+  assert.match(app, /DesktopRendererAuthenticatedShellV2/u);
   assert.match(app, /DesktopRendererProductionRouterV2/u);
   assert.doesNotMatch(app, /<DesktopProductionRouter/u);
   assert.match(app, /desktopRendererGenerationV2\.meta\.digest/u);
@@ -90,10 +98,55 @@ test("desktop renderer owns a protocol-v2 generation host through the public fet
   assert.doesNotMatch(authority, /AppRouteRegistryRefs/u);
   assert.match(composition, /createAppAuthenticationRouteRegistry/u);
   assert.match(composition, /createAppTenantCreationRouteRegistry/u);
+  assert.match(composition, /DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2/u);
+  assert.match(composition, /resolveAuthenticatedShellSurface/u);
   assert.match(composition, /DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2/u);
   assert.match(main, /activateDesktopPluginGenerationRootV2\(\)/u);
   assert.match(main, /root\.unmount\(\)/u);
   assert.match(main, /deactivateDesktopPluginGenerationRootV2\(\)/u);
+});
+
+test("desktop authenticated shell is an explicit ordered production contribution", () => {
+  const profile = readFileSync(
+    new URL(
+      "../../../../config/plugin-profiles/memstack-production-target-hosts.v2.yaml",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const bootstrap = JSON.parse(
+    readFileSync(
+      new URL("../../../../shared/profiles/memstack-default-bootstrap.v2.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const shellEntryId = "builtin-desktop-authenticated-shell-surface";
+  const workbenchEntryId = "builtin-desktop-workbench-surface";
+  const shellProfileIndex = profile.indexOf(`entry_id: ${shellEntryId}`);
+  const workbenchProfileIndex = profile.indexOf(`entry_id: ${workbenchEntryId}`);
+  const shellProfile = profile.slice(shellProfileIndex, workbenchProfileIndex);
+
+  assert.ok(shellProfileIndex >= 0);
+  assert.ok(workbenchProfileIndex > shellProfileIndex);
+  assert.match(shellProfile, /id:\s*desktop\.authenticated-shell-surface/u);
+  assert.match(shellProfile, /order:\s*80/u);
+  assert.match(shellProfile, /desktop\.ui-slots\.authenticated-shell-surface\.v1/u);
+
+  const shellBootstrapIndex = bootstrap.entries.findIndex(
+    ({ entry_id: entryId }) => entryId === shellEntryId,
+  );
+  const workbenchBootstrapIndex = bootstrap.entries.findIndex(
+    ({ entry_id: entryId }) => entryId === workbenchEntryId,
+  );
+  const shellBootstrap = bootstrap.entries[shellBootstrapIndex];
+
+  assert.ok(shellBootstrapIndex >= 0);
+  assert.ok(workbenchBootstrapIndex > shellBootstrapIndex);
+  assert.equal(shellBootstrap.config.id, "desktop.authenticated-shell-surface");
+  assert.equal(shellBootstrap.config.order, 80);
+  assert.deepEqual(shellBootstrap.config.payload.artifact_refs, [
+    "desktop.ui-slots.authenticated-shell-surface.v1",
+  ]);
 });
 
 test("desktop UI slot consumers use the pinned V2 authority without V1 fallback", () => {

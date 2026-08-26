@@ -10,6 +10,7 @@ export type UiSlotKind =
   | 'tool_result_renderer'
   | 'composer_action'
   | 'mcp_canvas'
+  | 'authenticated_shell_surface'
   | 'workbench_surface';
 
 export interface UiSlotDefinition {

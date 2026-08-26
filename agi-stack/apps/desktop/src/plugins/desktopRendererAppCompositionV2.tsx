@@ -33,7 +33,10 @@ import {
   DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
 } from './desktopRendererArtifactCatalogV2';
 import {
+  DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
+  type DesktopRendererAuthenticatedShellSurfacePropsV2,
+  type DesktopRendererAuthenticatedShellSurfaceV2,
   type DesktopRendererCompositionPortV2,
   type DesktopRendererWorkbenchSurfacePropsV2,
   type DesktopRendererWorkbenchSurfaceV2,
@@ -80,14 +83,32 @@ export function createDesktopRendererAppCompositionPortV2(
       }
       return factory(refs);
     },
+    resolveAuthenticatedShellSurface: (definition: UiSlotDefinition) =>
+      validAuthenticatedShellDefinitionV2(definition) ? DesktopAuthenticatedShellSurfaceV2 : null,
     resolveWorkbenchSurface: (definition: UiSlotDefinition) =>
       validWorkbenchDefinitionV2(definition) ? DesktopWorkbenchSurfaceV2 : null,
   });
 }
 
+const DesktopAuthenticatedShellSurfaceV2: ComponentType<
+  DesktopRendererAuthenticatedShellSurfacePropsV2
+> = ({ children }) => <Fragment>{children}</Fragment>;
+
 const DesktopWorkbenchSurfaceV2: ComponentType<DesktopRendererWorkbenchSurfacePropsV2> = ({
   children,
 }) => <Fragment>{children}</Fragment>;
+
+function validAuthenticatedShellDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'authenticated_shell_surface' &&
+    definition.id === 'authenticated-shell' &&
+    definition.contract === 'ui-builtin:desktop-authenticated-shell-surface' &&
+    definition.moduleRef === DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.authenticated-shell' &&
+    definition.sandbox
+  );
+}
 
 function validWorkbenchDefinitionV2(definition: UiSlotDefinition): boolean {
   return (

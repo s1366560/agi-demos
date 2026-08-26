@@ -11,6 +11,10 @@ const rendererAppCompositionSource = readFileSync(
   new URL('../src/plugins/desktopRendererAppCompositionV2.tsx', import.meta.url),
   'utf8',
 );
+const authenticatedShellSource = readFileSync(
+  new URL('../src/plugins/DesktopRendererAuthenticatedShellV2.tsx', import.meta.url),
+  'utf8',
+);
 const routerSource = readFileSync(
   new URL('../src/features/navigation/DesktopProductionRouter.tsx', import.meta.url),
   'utf8',
@@ -610,6 +614,40 @@ test('production routing wraps the existing workbench tree without keying or rem
   assert.match(appSource, /const socket = useAgentSocket\(/u);
 });
 
+test('authenticated shell contribution owns the complete signed-in app shell', () => {
+  const authenticatedStart = appSource.indexOf('\n  const activeTenantName =');
+  const shellStart = appSource.indexOf('<DesktopRendererAuthenticatedShellV2>', authenticatedStart);
+  const shellEnd = appSource.indexOf('</DesktopRendererAuthenticatedShellV2>', shellStart);
+  const shellSource =
+    shellStart >= 0 && shellEnd > shellStart ? appSource.slice(shellStart, shellEnd) : '';
+
+  assert.ok(authenticatedStart >= 0);
+  assert.ok(shellStart > authenticatedStart);
+  assert.match(shellSource, /<div[\s\S]*className=\{`app-shell/u);
+  for (const component of [
+    'DesktopTitlebar',
+    'DesktopSidebar',
+    'WorkbenchTabBar',
+    'DesktopRendererProductionRouterV2',
+    'DesktopRightSidebar',
+    'DesktopStatusBar',
+    'CommandPalette',
+    'KeyboardShortcutsDialog',
+    'NewTaskFlow',
+    'WorkspaceCreateDialog',
+    'WorkspaceSettingsDialog',
+    'SettingsWindow',
+  ]) {
+    assert.match(shellSource, new RegExp(`<${component}\\b`, 'u'));
+  }
+  assert.doesNotMatch(
+    authenticatedShellSource,
+    /\b(?:enabled|mode|variant|workbench|authenticated)\??:\s*boolean/u,
+  );
+  assert.match(authenticatedShellSource, /readonly children:\s*ReactNode/u);
+  assert.doesNotMatch(shellSource.slice(0, shellSource.indexOf('>') + 1), /\bkey=/u);
+});
+
 test('workbench selections release an active native production route before changing sections', () => {
   const workspaceSelectionStart = appSource.indexOf('const selectWorkspace =');
   const workspaceSelectionEnd = appSource.indexOf(
@@ -652,6 +690,7 @@ test('anonymous unknown routes are handled natively before the login gate', () =
     anonymousSource,
     /<DesktopRendererProductionRouterV2[\s\S]*<LoginScreen[\s\S]*<\/DesktopRendererProductionRouterV2>/u,
   );
+  assert.doesNotMatch(anonymousSource, /DesktopRendererAuthenticatedShellV2/u);
   assert.match(
     anonymousSource,
     /location=\{desktopProductionRouteLocation\}[\s\S]*mode=\{productionRouteRuntimeMode\}[\s\S]*navigation=\{desktopProductionRouteNavigation\}/u,

@@ -46,7 +46,8 @@ def test_generated_catalog_has_exact_production_modules_per_non_python_target() 
 
 @pytest.mark.unit
 def test_generated_bootstrap_profile_projects_every_production_target() -> None:
-    snapshot = parse_profile_snapshot_v2(json.loads(_BOOTSTRAP.read_text(encoding="utf-8")))
+    payload = json.loads(_BOOTSTRAP.read_text(encoding="utf-8"))
+    snapshot = parse_profile_snapshot_v2(payload)
     modules = {
         module.module_ref: set(module.targets)
         for manifest in snapshot.manifests
@@ -59,3 +60,26 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
             assert any(
                 entry.module_ref == module_ref and entry.enabled for entry in snapshot.entries
             )
+
+    entries = payload["entries"]
+    shell_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-authenticated-shell-surface"
+    )
+    workbench_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-workbench-surface"
+    )
+    assert len(entries) == 257
+    assert shell_index < workbench_index
+    assert entries[shell_index]["config"] == {
+        "id": "desktop.authenticated-shell-surface",
+        "kind": "ui-slot",
+        "order": 80,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.authenticated-shell-surface.v1"],
+            "schema_version": 1,
+        },
+    }
