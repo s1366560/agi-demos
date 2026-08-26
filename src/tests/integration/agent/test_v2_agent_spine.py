@@ -23,6 +23,13 @@ from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionCon
 from src.infrastructure.agent.processor.factory import ProcessorFactory
 from src.infrastructure.agent.processor.processor import ProcessorConfig
 from src.infrastructure.agent.processor.run_context import RunContext
+from src.infrastructure.agent.tools.memory_tools import (
+    memory_create_tool,
+    memory_delete_tool,
+    memory_get_tool,
+    memory_search_tool,
+    memory_update_tool,
+)
 from src.infrastructure.plugins.v2 import session_event_log_store as store_module
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -256,7 +263,14 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
             agent = ReActAgent(
                 model="test-model",
                 provider_id="test-provider",
-                tools={"echo": echo},
+                tools={
+                    "echo": echo,
+                    memory_search_tool.name: memory_search_tool,
+                    memory_get_tool.name: memory_get_tool,
+                    memory_create_tool.name: memory_create_tool,
+                    memory_update_tool.name: memory_update_tool,
+                    memory_delete_tool.name: memory_delete_tool,
+                },
                 skills=[_skill()],
                 subagents=[_subagent()],
             )
@@ -280,6 +294,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
             )
 
             assert raw_tools["echo"] is echo
+            assert raw_tools["memory_search"] is memory_search_tool
             assert "agent_spawn" in raw_tools
             assert "workspace_report_complete" in raw_tools
             assert [skill.name for skill in capabilities.skills] == ["echo-skill"]

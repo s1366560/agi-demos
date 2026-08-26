@@ -201,6 +201,7 @@ def _agent_owned_tools_v2(
     *,
     agent: object,
     selection_context: object | None,
+    excluded_tool_names: frozenset[str] = frozenset(),
 ) -> ToolSetV2:
     get_current_tools = getattr(agent, "_get_current_tools", None)
     if not callable(get_current_tools):
@@ -228,7 +229,16 @@ def _agent_owned_tools_v2(
         )
     tools = cast("Mapping[str, Any]", raw_tools)
     definitions = raw_definitions
-    return ToolSetV2(tools=tools, definitions=tuple(definitions))
+    filtered_tools = {name: tool for name, tool in tools.items() if name not in excluded_tool_names}
+    filtered_definitions = tuple(
+        definition
+        for definition in definitions
+        if getattr(definition, "name", None) not in excluded_tool_names
+    )
+    return ToolSetV2(
+        tools=MappingProxyType(filtered_tools),
+        definitions=filtered_definitions,
+    )
 
 
 def _select_complete_tool_set_v2(
@@ -282,13 +292,31 @@ def _apply_tool_contribution_v2(
     source_id = config.get("source_id")
     if source_id != "agent-owned-tools":
         raise ValueError("tool contribution requires source_id agent-owned-tools")
+    excluded_tools = config.get("excluded_tools")
+    if not isinstance(excluded_tools, Sequence) or isinstance(excluded_tools, (str, bytes)):
+        raise ValueError("agent-owned tool contribution requires excluded_tools")
+    excluded_tool_names = frozenset(
+        tool_name.strip()
+        for tool_name in excluded_tools
+        if isinstance(tool_name, str) and tool_name.strip()
+    )
+    if len(excluded_tool_names) != len(excluded_tools):
+        raise ValueError("agent-owned tool contribution has invalid excluded_tools")
     catalog = context.require("catalog")
     if not isinstance(catalog, ToolSetCatalogProtocolV2):
         raise RuntimeV2Error(
             "invalid_service_implementation",
             "tool-set catalog service has an invalid implementation",
         )
-    return catalog.register_tools(source_id, _agent_owned_tools_v2)
+
+    def contribution(**kwargs: object) -> ToolSetV2:
+        return _agent_owned_tools_v2(
+            agent=kwargs["agent"],
+            selection_context=kwargs.get("selection_context"),
+            excluded_tool_names=excluded_tool_names,
+        )
+
+    return catalog.register_tools(source_id, contribution)
 
 
 def builtin_tool_set_definition_v2() -> PluginDefinitionV2:
