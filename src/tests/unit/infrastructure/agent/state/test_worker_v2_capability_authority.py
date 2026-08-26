@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import inspect
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -337,11 +338,65 @@ async def test_builtin_web_search_runtime_isolated_between_generations(
 
 
 @pytest.mark.unit
+def test_worker_skill_loader_builder_has_no_global_registry_or_configurator() -> None:
+    source = inspect.getsource(agent_worker_state.get_or_create_skill_loader_tool)
+
+    assert "get_registered_tools" not in source
+    assert "configure_skill_loader_tool" not in source
+    assert "make_skill_loader_tool" in source
+
+
+@pytest.mark.unit
+async def test_worker_skill_loader_binds_sandbox_without_global_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker = object()
+    captured: dict[str, object] = {}
+
+    async def _get_skill_loader(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return marker
+
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker skill loader must not mutate module-level sandbox state")
+
+    monkeypatch.setattr(
+        agent_worker_state,
+        "get_or_create_skill_loader_tool",
+        _get_skill_loader,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.skill_loader.set_sandbox_id",
+        _forbidden,
+    )
+
+    tools: dict[str, object] = {"bash": SimpleNamespace(sandbox_id="sandbox-a")}
+    await agent_worker_state._add_skill_loader_tool(
+        tools,
+        tenant_id="tenant-a",
+        project_id="project-a",
+        agent_mode="react",
+        generation_descriptor=_descriptor(),
+    )
+
+    assert tools["skill_loader"] is marker
+    assert captured == {
+        "tenant_id": "tenant-a",
+        "project_id": "project-a",
+        "agent_mode": "react",
+        "generation_descriptor": _descriptor(),
+        "sandbox_id": "sandbox-a",
+    }
+
+
+@pytest.mark.unit
 def test_worker_hitl_tools_use_declared_tool_infos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def _forbidden(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("worker HITL tools must not use global configuration or registry lookup")
+        raise AssertionError(
+            "worker HITL tools must not use global configuration or registry lookup"
+        )
 
     monkeypatch.setattr(
         "src.infrastructure.agent.tools.clarification.configure_clarification",

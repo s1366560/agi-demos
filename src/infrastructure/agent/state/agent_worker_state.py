@@ -605,18 +605,14 @@ async def _add_skill_loader_tool(
 ) -> None:
     """Add SkillLoaderTool initialized with skill list in description."""
     try:
-        from src.infrastructure.agent.tools.skill_loader import set_sandbox_id
-
+        sandbox_id = _find_sandbox_id(tools, project_id=project_id) or ""
         skill_loader_info = await get_or_create_skill_loader_tool(
             tenant_id=tenant_id,
             project_id=project_id,
             agent_mode=agent_mode,
             generation_descriptor=generation_descriptor,
+            sandbox_id=sandbox_id,
         )
-        # Set sandbox_id from loaded sandbox tools for resource sync
-        sandbox_id = _find_sandbox_id(tools)
-        if sandbox_id:
-            set_sandbox_id(sandbox_id)
         tools["skill_loader"] = skill_loader_info
         logger.info(
             f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, agent_mode={agent_mode}"
@@ -2993,6 +2989,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
     project_id: str | None = None,
     agent_mode: str = "default",
     generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+    sandbox_id: str = "",
 ) -> Any:
     """Get or create a cached and initialized SkillLoaderTool.
 
@@ -3008,6 +3005,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
         project_id: Optional project ID for filtering
         agent_mode: Agent mode for filtering skills (e.g., "default", "plan")
         generation_descriptor: Explicit generation identity; defaults to the pinned boundary
+        sandbox_id: Sandbox identity captured by the bound tool and its cache namespace
 
     Returns:
         Initialized SkillLoaderTool instance with dynamic description
@@ -3021,10 +3019,9 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
     from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
         SqlSkillRepository,
     )
-    from src.infrastructure.agent.tools.define import get_registered_tools
     from src.infrastructure.agent.tools.skill_loader import (
-        configure_skill_loader_tool,
         get_available_skills,
+        make_skill_loader_tool,
         set_available_skills,
     )
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
@@ -3116,12 +3113,14 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 )
 
     generation_descriptor = resolve_generation_cache_descriptor_v2(generation_descriptor)
-    base_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}"
+    sandbox_cache_key = sandbox_id or "no-sandbox"
+    base_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}:{sandbox_cache_key}"
     cache_key = (
         generation_cache_key_v2(
             tenant_id,
             project_id or "global",
             agent_mode,
+            sandbox_cache_key,
             generation_descriptor=generation_descriptor,
         )
         if generation_descriptor is not None
@@ -3155,15 +3154,6 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 filesystem_loader=fs_loader,
             )
 
-            # Configure the @tool_define skill_loader with deps
-            configure_skill_loader_tool(
-                skill_service=skill_service,
-                tenant_id=tenant_id,
-                project_id=project_id or "",
-                agent_mode=agent_mode,
-                skip_database=False,
-            )
-
             # Initialize from cached skills to avoid double filesystem scan
             cached_skills = await get_or_create_skills(
                 tenant_id=tenant_id,
@@ -3176,13 +3166,17 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 if "*" in getattr(skill, "agent_modes", ["*"])
                 or agent_mode in getattr(skill, "agent_modes", [])
             ]
-            set_available_skills([s.name for s in filtered_skills])
-
-            # Get ToolInfo from registry
-            registry = get_registered_tools()
-            tool_info = registry.get("skill_loader")
-            if tool_info is None:
-                tool_info = get_registered_tools()["skill_loader"]
+            available_skill_names = tuple(s.name for s in filtered_skills)
+            set_available_skills(list(available_skill_names))
+            tool_info = make_skill_loader_tool(
+                skill_service=skill_service,
+                tenant_id=tenant_id,
+                project_id=project_id or "",
+                agent_mode=agent_mode,
+                sandbox_id=sandbox_id,
+                skip_database=False,
+                available_skill_names=available_skill_names,
+            )
 
             if cache_key is not None:
                 _skill_loader_cache[cache_key] = tool_info

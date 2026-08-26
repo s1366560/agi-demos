@@ -16,13 +16,15 @@ Features:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from collections.abc import Sequence
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
 from src.domain.model.agent.skill import Skill
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -30,10 +32,10 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "configure_skill_loader_tool",
     "get_available_skills",
+    "make_skill_loader_tool",
     "set_sandbox_id",
     "skill_loader_tool",
 ]
-
 
 
 # === New @tool_define based implementation ===
@@ -44,7 +46,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True, slots=True)
 class _SkillLoaderDeps:
     """Dependencies for the skill_loader_tool function."""
 
@@ -57,8 +59,14 @@ class _SkillLoaderDeps:
     skill_sync_service: Any = None
     sandbox_id: str = ""
     skip_database: bool = True
+    available_skill_names: tuple[str, ...] = ()
+
 
 _skill_loader_deps: _SkillLoaderDeps | None = None
+_skill_loader_runtime: ContextVar[_SkillLoaderDeps | None] = ContextVar(
+    f"{__name__}.skill_loader_runtime",
+    default=None,
+)
 
 # Module-level skill name cache (replaces legacy SkillLoaderTool.get_available_skills)
 _available_skill_names: list[str] = []
@@ -83,6 +91,11 @@ def set_available_skills(names: list[str]) -> None:
     _available_skill_names = list(names)
 
 
+def _current_skill_loader_deps() -> _SkillLoaderDeps | None:
+    runtime = _skill_loader_runtime.get()
+    return runtime if runtime is not None else _skill_loader_deps
+
+
 def set_sandbox_id(sandbox_id: str) -> None:
     """Update the sandbox_id in the module-level deps.
 
@@ -104,6 +117,7 @@ def set_sandbox_id(sandbox_id: str) -> None:
         sandbox_id=sandbox_id,
         skip_database=_skill_loader_deps.skip_database,
     )
+
 
 def configure_skill_loader_tool(
     skill_service: Any,
@@ -236,13 +250,13 @@ async def skill_loader_tool(  # noqa: C901
     name: str,
 ) -> ToolResult:
     """Load full skill content by name."""
-    if _skill_loader_deps is None:
+    deps = _current_skill_loader_deps()
+    if deps is None:
         return ToolResult(
             output=("Skill loader not configured. No skill service available."),
             is_error=True,
         )
 
-    deps = _skill_loader_deps
     skill_name = name.strip()
 
     if not skill_name:
@@ -281,7 +295,12 @@ async def skill_loader_tool(  # noqa: C901
                     resolved_file_path = fallback_file_path
 
         if not content:
-            available = sorted({s.name for s in skills_cache} | set(_available_skill_names))
+            runtime_names = (
+                deps.available_skill_names
+                if _skill_loader_runtime.get() is not None
+                else tuple(_available_skill_names)
+            )
+            available = sorted({s.name for s in skills_cache} | set(runtime_names))
             avail_str = ", ".join(available) if available else "none"
             return ToolResult(
                 output=(f"Skill '{skill_name}' not found. Available skills: {avail_str}"),
@@ -342,3 +361,49 @@ async def skill_loader_tool(  # noqa: C901
             output=f"Error loading skill: {exc!s}",
             is_error=True,
         )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundSkillLoaderExecutor:
+    template: ToolInfo
+    runtime: _SkillLoaderDeps
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _skill_loader_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _skill_loader_runtime.reset(token)
+
+
+def make_skill_loader_tool(
+    *,
+    skill_service: Any,
+    tenant_id: str,
+    project_id: str,
+    agent_mode: str = "react",
+    permission_manager: Any = None,
+    session_id: str = "",
+    skill_sync_service: Any = None,
+    sandbox_id: str = "",
+    skip_database: bool = True,
+    available_skill_names: Sequence[str] = (),
+) -> ToolInfo:
+    """Return a SkillLoader ToolInfo bound to one generation dependency set."""
+    runtime = _SkillLoaderDeps(
+        skill_service=skill_service,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        agent_mode=agent_mode,
+        permission_manager=permission_manager,
+        session_id=session_id,
+        skill_sync_service=skill_sync_service,
+        sandbox_id=sandbox_id,
+        skip_database=skip_database,
+        available_skill_names=tuple(available_skill_names),
+    )
+    return replace(
+        skill_loader_tool,
+        execute=_BoundSkillLoaderExecutor(template=skill_loader_tool, runtime=runtime),
+        sandbox_id=sandbox_id or None,
+    )
