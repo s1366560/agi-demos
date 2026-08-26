@@ -6,14 +6,16 @@ import json
 import logging
 import os
 import re
-from functools import lru_cache
+from collections.abc import Callable
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,35 @@ _SENSITIVE_KEYS = {
     "password",
     "secret",
 }
+
+type OpenApiSchemaProvider = Callable[[], dict[str, Any]]
+type HttpClientFactory = Callable[..., Any]
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SystemApiToolRuntime:
+    """Dependencies captured by one generation's system API tool."""
+
+    openapi_schema_provider: OpenApiSchemaProvider
+    base_url: str
+    client_factory: HttpClientFactory
+
+
+_system_api_tool_runtime: ContextVar[SystemApiToolRuntime | None] = ContextVar(
+    f"{__name__}.system_api_tool_runtime",
+    default=None,
+)
+
+
+def _current_system_api_tool_runtime() -> SystemApiToolRuntime:
+    runtime = _system_api_tool_runtime.get()
+    if runtime is not None:
+        return runtime
+    return SystemApiToolRuntime(
+        openapi_schema_provider=_get_openapi_schema,
+        base_url=_base_url(),
+        client_factory=httpx.AsyncClient,
+    )
 
 
 def _json(data: Any) -> str:
@@ -60,7 +91,6 @@ def _redact_value(value: Any) -> Any:
     return value
 
 
-@lru_cache(maxsize=1)
 def _get_openapi_schema() -> dict[str, Any]:
     from src.infrastructure.adapters.primary.web.main import app
 
@@ -113,7 +143,7 @@ def _public_operation(entry: dict[str, Any], *, include_schema: bool = False) ->
 
 
 def _operation_catalog() -> list[dict[str, Any]]:
-    schema = _get_openapi_schema()
+    schema = _current_system_api_tool_runtime().openapi_schema_provider()
     paths = schema.get("paths", {})
     if not isinstance(paths, dict):
         return []
@@ -129,10 +159,7 @@ def _operation_catalog() -> list[dict[str, Any]]:
             method_name = str(method).lower()
             if method_name not in _HTTP_METHODS or not isinstance(operation, dict):
                 continue
-            operation_id = str(
-                operation.get("operationId")
-                or f"{method_name}:{path_template}"
-            )
+            operation_id = str(operation.get("operationId") or f"{method_name}:{path_template}")
             catalog.append(
                 {
                     "operation_id": operation_id,
@@ -149,9 +176,11 @@ def _operation_catalog() -> list[dict[str, Any]]:
     return catalog
 
 
-def _catalog_by_operation() -> dict[str, dict[str, Any]]:
+def _catalog_by_operation(
+    catalog: list[dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
     by_id: dict[str, dict[str, Any]] = {}
-    for entry in _operation_catalog():
+    for entry in catalog if catalog is not None else _operation_catalog():
         by_id.setdefault(str(entry["operation_id"]), entry)
     return by_id
 
@@ -167,12 +196,13 @@ def _filter_operations(
     search: str | None,
     tag: str | None,
     limit: int | None,
+    catalog: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     query = (search or "").strip().lower()
     tag_query = (tag or "").strip().lower()
     filtered: list[dict[str, Any]] = []
 
-    for entry in _operation_catalog():
+    for entry in catalog if catalog is not None else _operation_catalog():
         tags = [str(item).lower() for item in entry["tags"]]
         if tag_query and tag_query not in tags:
             continue
@@ -194,9 +224,7 @@ def _filter_operations(
 
 def _base_url() -> str:
     configured = (
-        os.getenv("MEMSTACK_INTERNAL_API_BASE_URL")
-        or os.getenv("MEMSTACK_API_BASE_URL")
-        or ""
+        os.getenv("MEMSTACK_INTERNAL_API_BASE_URL") or os.getenv("MEMSTACK_API_BASE_URL") or ""
     ).strip()
     if configured:
         return configured.rstrip("/")
@@ -208,7 +236,7 @@ def _base_url() -> str:
 
 
 def _build_url(path: str) -> str:
-    base = _base_url().rstrip("/")
+    base = _current_system_api_tool_runtime().base_url.rstrip("/")
     parsed = urlsplit(base)
     base_path = parsed.path.rstrip("/")
     request_path = path if path.startswith("/") else f"/{path}"
@@ -288,6 +316,7 @@ async def _request_operation(
     body: Any,
     timeout_seconds: float | None,
 ) -> ToolResult:
+    runtime = _current_system_api_tool_runtime()
     operation = _catalog_by_operation().get(operation_id)
     if operation is None:
         return ToolResult(
@@ -322,7 +351,7 @@ async def _request_operation(
         "Accept": "application/json",
     }
     try:
-        async with httpx.AsyncClient(
+        async with runtime.client_factory(
             timeout=request_timeout,
             follow_redirects=False,
         ) as client:
@@ -445,9 +474,15 @@ async def system_api_tool(  # noqa: PLR0911
 ) -> ToolResult:
     """List, describe, or invoke a MemStack API operation."""
     if action == "list":
-        operations = _filter_operations(search=search, tag=tag, limit=limit)
+        catalog = _operation_catalog()
+        operations = _filter_operations(
+            search=search,
+            tag=tag,
+            limit=limit,
+            catalog=catalog,
+        )
         payload = {
-            "total_operations": len(_operation_catalog()),
+            "total_operations": len(catalog),
             "returned_operations": len(operations),
             "operations": operations,
         }
@@ -499,4 +534,35 @@ async def system_api_tool(  # noqa: PLR0911
         ),
         title="System API failed",
         is_error=True,
+    )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundSystemApiToolExecutor:
+    template: ToolInfo
+    runtime: SystemApiToolRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _system_api_tool_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _system_api_tool_runtime.reset(token)
+
+
+def make_system_api_tool(
+    *,
+    openapi_schema_provider: OpenApiSchemaProvider | None = None,
+    base_url: str | None = None,
+    client_factory: HttpClientFactory | None = None,
+) -> ToolInfo:
+    """Return a system API ToolInfo bound to one generation's runtime dependencies."""
+    runtime = SystemApiToolRuntime(
+        openapi_schema_provider=openapi_schema_provider or _get_openapi_schema,
+        base_url=(base_url if base_url is not None else _base_url()).rstrip("/"),
+        client_factory=client_factory or httpx.AsyncClient,
+    )
+    return replace(
+        system_api_tool,
+        execute=_BoundSystemApiToolExecutor(template=system_api_tool, runtime=runtime),
     )

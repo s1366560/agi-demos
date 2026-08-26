@@ -701,9 +701,9 @@ def _add_system_api_tool(
 ) -> None:
     """Register the system_api tool for current-user API calls."""
     try:
-        from src.infrastructure.agent.tools.system_api import system_api_tool
+        from src.infrastructure.agent.tools.system_api import make_system_api_tool
 
-        tools["system_api"] = system_api_tool
+        tools["system_api"] = make_system_api_tool()
         logger.info(
             "Agent Worker: system_api tool configured for tenant %s, project %s",
             tenant_id,

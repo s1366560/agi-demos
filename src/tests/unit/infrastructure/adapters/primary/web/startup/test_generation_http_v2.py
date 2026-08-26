@@ -20,6 +20,7 @@ from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
 from src.infrastructure.plugins.v2.boundary import (
     PluginGenerationMiddlewareV2,
     current_generation_v2,
+    pin_generation_v2,
     pin_operation_context_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
@@ -139,6 +140,65 @@ async def test_kernel_precedes_dispatcher_and_dispatcher_precedes_legacy_fallbac
     assert plugin_response.json() == {"source": "generation"}
     assert dynamic_response.json() == {"source": "dynamic-fallback"}
     assert app.openapi() == dict(publication.openapi.schema)
+    await host.close()
+
+
+@pytest.mark.unit
+async def test_openapi_uses_the_exact_pinned_generation_after_new_publication() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path="config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=("config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+    )
+    first_distribution = host.current_distribution
+    assert first_distribution is not None
+
+    def _table(path: str, *, name: str) -> RouteTableV2:
+        return RouteTableV2(
+            (
+                RouteDefinitionV2(
+                    owner_entry_id=name,
+                    path=path,
+                    methods=("GET",),
+                    endpoint=lambda: {"source": name},
+                    name=name,
+                ),
+            )
+        )
+
+    registry = RouteTableRegistryV2()
+    await registry.publish(
+        first_distribution.descriptor,
+        _table("/api/v1/generation-one", name="generation-one"),
+    )
+    app = FastAPI()
+    app.state.platform_plugin_route_registry_v2 = registry
+    mount_generation_http_dispatcher_v2(app)
+
+    async with pin_generation_v2(host):
+        await host.bootstrap(
+            profile_path="config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=("config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+            generation=2,
+            version=2,
+            nonce="openapi-generation-2",
+        )
+        second_distribution = host.current_distribution
+        assert second_distribution is not None
+        await registry.publish(
+            second_distribution.descriptor,
+            _table("/api/v1/generation-two", name="generation-two"),
+        )
+
+        pinned_paths = set(app.openapi()["paths"])
+
+    current_paths = set(app.openapi()["paths"])
+    assert "/api/v1/generation-one" in pinned_paths
+    assert "/api/v1/generation-two" not in pinned_paths
+    assert "/api/v1/generation-two" in current_paths
+    assert "/api/v1/generation-one" not in current_paths
     await host.close()
 
 

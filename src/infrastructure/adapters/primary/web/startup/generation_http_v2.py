@@ -74,7 +74,17 @@ def mount_generation_http_dispatcher_v2(app: FastAPI) -> None:
     def generation_openapi() -> dict[str, Any]:
         registry = getattr(app.state, "platform_plugin_route_registry_v2", None)
         if isinstance(registry, RouteTableRegistryV2) and registry.current is not None:
-            return dict(registry.current.openapi.schema)
+            from src.infrastructure.plugins.v2.boundary import current_generation_v2
+
+            try:
+                descriptor = current_generation_v2().descriptor
+            except RuntimeV2Error as error:
+                if error.code != "generation_not_pinned":
+                    raise
+                publication = registry.current
+            else:
+                publication = registry.resolve(descriptor)
+            return dict(publication.openapi.schema)
         return original_openapi()
 
     cast(Any, app).openapi = generation_openapi
