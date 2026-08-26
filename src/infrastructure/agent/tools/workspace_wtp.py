@@ -59,7 +59,6 @@ from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
 _FAILED_TEST_COUNT_RE = re.compile(
     r"\b([1-9]\d*)\s+(?:failed|failing|failure|failures)\b",
     re.IGNORECASE,
@@ -110,14 +109,13 @@ def _supervisor_only_terminal_path() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
-def configure_workspace_wtp(orchestrator: AgentOrchestrator) -> None:
-    """Inject the orchestrator used to emit WTP envelopes.
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
 
-    Called once per worker runtime at agent startup (see
-    ``_add_agent_tools`` in ``agent_worker_state``).
-    """
-    global _orchestrator
-    _orchestrator = orchestrator
+    return current_agent_orchestrator_v2()
 
 
 def _runtime_string(ctx: ToolContext, key: str) -> str:
@@ -420,11 +418,9 @@ async def _send_envelope(
             is_error=not supervisor_delivered,
         )
 
-    if _orchestrator is None:
-        return _deny("workspace WTP not configured (multi-agent disabled?)")
-
+    orchestrator = _current_agent_orchestrator_v2()
     try:
-        result = await _orchestrator.send_message(
+        result = await orchestrator.send_message(
             from_agent_id=sender_agent_ref,
             to_agent_id=to_agent_id,
             message=envelope.to_content(),
@@ -931,7 +927,6 @@ async def workspace_report_blocked_tool(
 
 
 __all__ = [
-    "configure_workspace_wtp",
     "workspace_report_blocked_tool",
     "workspace_report_complete_tool",
     "workspace_report_progress_tool",

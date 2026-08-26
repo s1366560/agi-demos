@@ -19,8 +19,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
-
 
 def _get_runtime_string(ctx: ToolContext, key: str) -> str:
     """Read a normalized string value from runtime_context."""
@@ -28,10 +26,13 @@ def _get_runtime_string(ctx: ToolContext, key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def configure_agent_spawn(orchestrator: AgentOrchestrator) -> None:
-    """Inject orchestrator at agent startup."""
-    global _orchestrator
-    _orchestrator = orchestrator
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
+
+    return current_agent_orchestrator_v2()
 
 
 @tool_define(
@@ -73,16 +74,12 @@ async def agent_spawn_tool(
     mode: str = "run",
 ) -> ToolResult:
     """Spawn a sub-agent to handle a delegated task."""
-    if _orchestrator is None:
-        return ToolResult(
-            output=json.dumps({"error": "Multi-agent not configured"}),
-            is_error=True,
-        )
+    orchestrator = _current_agent_orchestrator_v2()
     parent_agent_id = _get_runtime_string(ctx, "selected_agent_id") or ctx.agent_name
     trace_id = _get_runtime_string(ctx, "trace_id") or _get_runtime_string(ctx, "route_id")
     span_id = _get_runtime_string(ctx, "span_id")
     try:
-        spawn_result = await _orchestrator.spawn_agent(
+        spawn_result = await orchestrator.spawn_agent(
             parent_agent_id=parent_agent_id,
             target_agent_id=agent_id,
             message=message,

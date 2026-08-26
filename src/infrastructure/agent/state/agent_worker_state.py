@@ -472,9 +472,6 @@ async def get_or_create_tools(
     # 14. Add Canvas tools (A2UI)
     _add_canvas_tools(tools)
 
-    # 15. Add Multi-Agent tools (behind feature flag)
-    _add_agent_tools(tools, project_id)
-
     if cache_key is not None:
         async with _tools_cache_lock:
             _tools_cache[cache_key] = dict(tools)
@@ -797,84 +794,6 @@ def _configure_skill_evolution_capture() -> None:
         logger.info("Agent Worker: Skill evolution capture configured")
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to configure skill evolution capture: {e}")
-
-
-def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
-    try:
-        from src.configuration.config import get_settings
-
-        settings = get_settings()
-        if not settings.multi_agent_enabled:
-            return
-
-        from src.infrastructure.plugins.v2.agent_worker_runtime import (
-            current_agent_orchestrator_v2,
-        )
-
-        orchestrator = current_agent_orchestrator_v2()
-
-        from src.infrastructure.agent.tools.agent_definition_tool import (
-            configure_agent_definition_manage,
-        )
-        from src.infrastructure.agent.tools.agent_history import configure_agent_history
-        from src.infrastructure.agent.tools.agent_list import configure_agent_list
-        from src.infrastructure.agent.tools.agent_send import configure_agent_send
-        from src.infrastructure.agent.tools.agent_sessions import (
-            configure_agent_sessions,
-        )
-        from src.infrastructure.agent.tools.agent_spawn import configure_agent_spawn
-        from src.infrastructure.agent.tools.agent_stop import configure_agent_stop
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.workspace_clarification import (
-            configure_workspace_clarification,
-        )
-        from src.infrastructure.agent.tools.workspace_health_verdict import (
-            workspace_health_verdict_tool,
-        )
-        from src.infrastructure.agent.tools.workspace_leader_wtp import (
-            configure_workspace_leader_wtp,
-        )
-        from src.infrastructure.agent.tools.workspace_wtp import configure_workspace_wtp
-
-        configure_agent_spawn(orchestrator=orchestrator)
-        configure_agent_list(orchestrator=orchestrator)
-        configure_agent_send(orchestrator=orchestrator)
-        configure_agent_sessions(orchestrator=orchestrator)
-        configure_agent_history(orchestrator=orchestrator)
-        configure_agent_stop(orchestrator=orchestrator)
-        configure_agent_definition_manage(orchestrator=orchestrator)
-        configure_workspace_wtp(orchestrator=orchestrator)
-        configure_workspace_leader_wtp(orchestrator=orchestrator)
-        configure_workspace_clarification(orchestrator=orchestrator)
-        _ = workspace_health_verdict_tool
-
-        registry = get_registered_tools()
-        agent_tool_names = (
-            "agent_spawn",
-            "agent_list",
-            "agent_send",
-            "agent_sessions",
-            "agent_history",
-            "agent_stop",
-            "agent_definition_manage",
-            "workspace_report_progress",
-            "workspace_report_complete",
-            "workspace_report_blocked",
-            "workspace_request_clarification",
-            "workspace_respond_clarification",
-            "workspace_assign_task",
-            "workspace_cancel_task",
-            "workspace_health_verdict",
-        )
-        for name in agent_tool_names:
-            if name in registry:
-                tools[name] = registry[name]
-
-        logger.info(f"Agent Worker: Multi-agent tools configured for project {project_id}")
-    except RuntimeV2Error:
-        raise
-    except Exception as e:
-        logger.warning(f"Agent Worker: Failed to configure agent tools: {e}")
 
 
 def _add_model_awareness_tools(

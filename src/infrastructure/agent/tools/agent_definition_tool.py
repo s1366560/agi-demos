@@ -35,14 +35,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
 _UNSET = object()
 
 
-def configure_agent_definition_manage(orchestrator: AgentOrchestrator) -> None:
-    """Inject orchestrator at agent startup."""
-    global _orchestrator
-    _orchestrator = orchestrator
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
+
+    return current_agent_orchestrator_v2()
 
 
 def _parse_model(value: str | None) -> AgentModel:
@@ -143,6 +145,7 @@ def _delegate_config_from_payload(value: dict[str, Any] | None) -> DelegateConfi
 async def _handle_create(  # noqa: PLR0913
     ctx: ToolContext,
     *,
+    orchestrator: AgentOrchestrator,
     name: str | None,
     display_name: str | None,
     system_prompt: str | None,
@@ -171,8 +174,6 @@ async def _handle_create(  # noqa: PLR0913
     delegate_config: dict[str, Any] | None,
 ) -> ToolResult:
     """Handle the 'create' action."""
-    assert _orchestrator is not None
-
     if not name:
         return ToolResult(
             output=json.dumps({"error": "Parameter 'name' is required for create"}),
@@ -223,7 +224,7 @@ async def _handle_create(  # noqa: PLR0913
         delegate_config=_delegate_config_from_payload(delegate_config),
     )
 
-    created = await _orchestrator.create_agent(agent)
+    created = await orchestrator.create_agent(agent)
 
     await ctx.emit(
         {
@@ -360,6 +361,7 @@ def _apply_policy_updates(
 async def _handle_update(  # noqa: PLR0913
     ctx: ToolContext,
     *,
+    orchestrator: AgentOrchestrator,
     agent_id: str | None,
     name: str | None,
     display_name: str | None,
@@ -389,15 +391,13 @@ async def _handle_update(  # noqa: PLR0913
     delegate_config: dict[str, Any] | None | object,
 ) -> ToolResult:
     """Handle the 'update' action."""
-    assert _orchestrator is not None
-
     if not agent_id:
         return ToolResult(
             output=json.dumps({"error": "Parameter 'agent_id' is required for update"}),
             is_error=True,
         )
 
-    existing = await _orchestrator.get_agent(
+    existing = await orchestrator.get_agent(
         agent_id,
         tenant_id=ctx.tenant_id,
         project_id=ctx.project_id or None,
@@ -447,7 +447,7 @@ async def _handle_update(  # noqa: PLR0913
         trigger_examples=trigger_examples,
     )
 
-    updated = await _orchestrator.update_agent(
+    updated = await orchestrator.update_agent(
         existing,
         tenant_id=ctx.tenant_id,
         project_id=ctx.project_id or None,
@@ -470,18 +470,17 @@ async def _handle_update(  # noqa: PLR0913
 async def _handle_delete(
     ctx: ToolContext,
     *,
+    orchestrator: AgentOrchestrator,
     agent_id: str | None,
 ) -> ToolResult:
     """Handle the 'delete' action."""
-    assert _orchestrator is not None
-
     if not agent_id:
         return ToolResult(
             output=json.dumps({"error": "Parameter 'agent_id' is required for delete"}),
             is_error=True,
         )
 
-    existing = await _orchestrator.get_agent(
+    existing = await orchestrator.get_agent(
         agent_id,
         tenant_id=ctx.tenant_id,
         project_id=ctx.project_id or None,
@@ -500,7 +499,7 @@ async def _handle_delete(
             title=f"Agent definition already deleted: {agent_id}",
         )
 
-    deleted = await _orchestrator.delete_agent(
+    deleted = await orchestrator.delete_agent(
         agent_id,
         tenant_id=ctx.tenant_id,
         project_id=ctx.project_id or None,
@@ -524,18 +523,17 @@ async def _handle_delete(
 async def _handle_get(
     ctx: ToolContext,
     *,
+    orchestrator: AgentOrchestrator,
     agent_id: str | None,
 ) -> ToolResult:
     """Handle the 'get' action."""
-    assert _orchestrator is not None
-
     if not agent_id:
         return ToolResult(
             output=json.dumps({"error": "Parameter 'agent_id' is required for get"}),
             is_error=True,
         )
 
-    agent = await _orchestrator.get_agent(
+    agent = await orchestrator.get_agent(
         agent_id,
         tenant_id=ctx.tenant_id,
         project_id=ctx.project_id or None,
@@ -751,17 +749,14 @@ async def agent_definition_manage_tool(  # noqa: PLR0913
     delegate_config: dict[str, Any] | None | object = _UNSET,
 ) -> ToolResult:
     """Manage agent definitions: create, update, delete, or get."""
-    if _orchestrator is None:
-        return ToolResult(
-            output=json.dumps({"error": "Multi-agent not configured"}),
-            is_error=True,
-        )
+    orchestrator = _current_agent_orchestrator_v2()
 
     try:
         result: ToolResult
         if action == "create":
             result = await _handle_create(
                 ctx,
+                orchestrator=orchestrator,
                 name=name,
                 display_name=display_name,
                 system_prompt=system_prompt,
@@ -806,6 +801,7 @@ async def agent_definition_manage_tool(  # noqa: PLR0913
         elif action == "update":
             result = await _handle_update(
                 ctx,
+                orchestrator=orchestrator,
                 agent_id=agent_id,
                 name=name,
                 display_name=display_name,
@@ -843,9 +839,17 @@ async def agent_definition_manage_tool(  # noqa: PLR0913
                 delegate_config=delegate_config,
             )
         elif action == "delete":
-            result = await _handle_delete(ctx, agent_id=agent_id)
+            result = await _handle_delete(
+                ctx,
+                orchestrator=orchestrator,
+                agent_id=agent_id,
+            )
         elif action == "get":
-            result = await _handle_get(ctx, agent_id=agent_id)
+            result = await _handle_get(
+                ctx,
+                orchestrator=orchestrator,
+                agent_id=agent_id,
+            )
         else:
             result = ToolResult(
                 output=json.dumps(

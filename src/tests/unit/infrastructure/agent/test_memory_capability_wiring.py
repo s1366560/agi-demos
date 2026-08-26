@@ -136,10 +136,6 @@ class TestMemoryToolWiring:
                 "src.infrastructure.agent.state.agent_worker_state._add_canvas_tools",
                 MagicMock(),
             ),
-            patch(
-                "src.infrastructure.agent.state.agent_worker_state._add_agent_tools",
-                MagicMock(),
-            ),
         ):
             from src.infrastructure.agent.state.agent_worker_state import get_or_create_tools
 

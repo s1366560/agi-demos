@@ -17,13 +17,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
 
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
 
-def configure_agent_list(orchestrator: AgentOrchestrator) -> None:
-    """Inject orchestrator at agent startup."""
-    global _orchestrator
-    _orchestrator = orchestrator
+    return current_agent_orchestrator_v2()
 
 
 @tool_define(
@@ -52,13 +53,9 @@ async def agent_list_tool(
     discoverable_only: bool = True,
 ) -> ToolResult:
     """List available agents."""
-    if _orchestrator is None:
-        return ToolResult(
-            output=json.dumps({"error": "Multi-agent not configured"}),
-            is_error=True,
-        )
+    orchestrator = _current_agent_orchestrator_v2()
     try:
-        agents = await _orchestrator.list_agents(
+        agents = await orchestrator.list_agents(
             project_id=ctx.project_id,
             tenant_id=ctx.tenant_id,
             discoverable_only=discoverable_only,

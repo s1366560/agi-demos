@@ -56,7 +56,6 @@ async def test_get_or_create_tools_does_not_expose_legacy_workspace_plan_tools(
         "_add_session_status_tool",
         "_add_cron_tool",
         "_add_canvas_tools",
-        "_add_agent_tools",
     ):
         monkeypatch.setattr(agent_worker_state, name, _noop)
 

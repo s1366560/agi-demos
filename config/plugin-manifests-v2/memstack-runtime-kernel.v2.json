@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:17818241c4bfbad88ce4228f57af8caf00051cf810ca7b3249821f05e4267b22",
+        "digest": "sha256:2a2c038fd4661474069708e8d47c02fd7dbae1b5f7951e71a6e2bd746142edbe",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6816,6 +6816,41 @@
       "artifact": {
         "digest": "sha256:eb768f946cac64ff1585a884220c3f2fafb7713d162a4fe13c86ce5f4c4d99b6",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/orchestration",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_orchestration_tools:_apply_agent_orchestration_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-orchestration-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:487408b53999e8cdbf9ee329565c8e086903fbc005882480b9cadce7d46e62f3",
+      "artifact": {
+        "digest": "sha256:03d14ba3b7e2dcc20df71611e0926212df32bcf791970ddb6612b226debc8ccc",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_orchestration_tools.py"
       }
     },
     {

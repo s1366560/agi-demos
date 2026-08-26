@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -20,6 +20,7 @@ from src.infrastructure.agent.tools.agent_sessions import agent_sessions_tool
 from src.infrastructure.agent.tools.agent_spawn import agent_spawn_tool
 from src.infrastructure.agent.tools.agent_stop import agent_stop_tool
 from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 
 def _make_ctx(**overrides: Any) -> ToolContext:
@@ -38,6 +39,21 @@ def _make_ctx(**overrides: Any) -> ToolContext:
     return ToolContext(**defaults)
 
 
+def _patch_orchestrator(
+    monkeypatch: pytest.MonkeyPatch,
+    module: object,
+    orchestrator: object,
+) -> None:
+    monkeypatch.setattr(module, "_current_agent_orchestrator_v2", lambda: orchestrator)
+
+
+def _missing_orchestrator_v2() -> NoReturn:
+    raise RuntimeV2Error(
+        "operation_context_missing",
+        "Agent orchestration tools require a pinned V2 operation",
+    )
+
+
 @pytest.mark.unit
 class TestAgentListTool:
     """Test suite for agent_list tool."""
@@ -50,15 +66,13 @@ class TestAgentListTool:
 
     @pytest.mark.asyncio
     async def test_no_orchestrator(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Without orchestrator, returns error."""
+        """Without a pinned orchestrator service, fail structurally."""
         import src.infrastructure.agent.tools.agent_list as mod
 
-        monkeypatch.setattr(mod, "_orchestrator", None)
+        monkeypatch.setattr(mod, "_current_agent_orchestrator_v2", _missing_orchestrator_v2)
         ctx = _make_ctx()
-        result = await agent_list_tool.execute(ctx)
-        data = json.loads(result.output)
-        assert result.is_error is True
-        assert "Multi-agent not configured" in data["error"]
+        with pytest.raises(RuntimeV2Error, match="pinned V2 operation"):
+            await agent_list_tool.execute(ctx)
 
     @pytest.mark.asyncio
     async def test_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -77,7 +91,7 @@ class TestAgentListTool:
 
         orchestrator = Mock()
         orchestrator.list_agents = AsyncMock(return_value=[mock_agent])
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_list_tool.execute(ctx, discoverable_only=True)
@@ -95,7 +109,7 @@ class TestAgentListTool:
 
         orchestrator = Mock()
         orchestrator.list_agents = AsyncMock(side_effect=ValueError("Test error"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_list_tool.execute(ctx)
@@ -110,7 +124,7 @@ class TestAgentListTool:
 
         orchestrator = Mock()
         orchestrator.list_agents = AsyncMock(side_effect=RuntimeError("Unexpected"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_list_tool.execute(ctx)
@@ -131,17 +145,15 @@ class TestAgentSpawnTool:
 
     @pytest.mark.asyncio
     async def test_no_orchestrator(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Without orchestrator, returns error."""
+        """Without a pinned orchestrator service, fail structurally."""
         import src.infrastructure.agent.tools.agent_spawn as mod
 
-        monkeypatch.setattr(mod, "_orchestrator", None)
+        monkeypatch.setattr(mod, "_current_agent_orchestrator_v2", _missing_orchestrator_v2)
         ctx = _make_ctx()
-        result = await agent_spawn_tool.execute(
-            ctx, agent_id="target-agent", message="do task", mode="run"
-        )
-        data = json.loads(result.output)
-        assert result.is_error is True
-        assert "Multi-agent not configured" in data["error"]
+        with pytest.raises(RuntimeV2Error, match="pinned V2 operation"):
+            await agent_spawn_tool.execute(
+                ctx, agent_id="target-agent", message="do task", mode="run"
+            )
 
     @pytest.mark.asyncio
     async def test_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -166,7 +178,7 @@ class TestAgentSpawnTool:
 
         orchestrator = Mock()
         orchestrator.spawn_agent = AsyncMock(return_value=mock_result)
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_spawn_tool.execute(
@@ -211,7 +223,7 @@ class TestAgentSpawnTool:
 
         orchestrator = Mock()
         orchestrator.spawn_agent = AsyncMock(return_value=mock_result)
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx(
             runtime_context={
@@ -253,7 +265,7 @@ class TestAgentSpawnTool:
 
         orchestrator = Mock()
         orchestrator.spawn_agent = AsyncMock(side_effect=ValueError("Test error"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_spawn_tool.execute(
@@ -270,7 +282,7 @@ class TestAgentSpawnTool:
 
         orchestrator = Mock()
         orchestrator.spawn_agent = AsyncMock(side_effect=RuntimeError("Unexpected"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_spawn_tool.execute(
@@ -293,15 +305,13 @@ class TestAgentSendTool:
 
     @pytest.mark.asyncio
     async def test_no_orchestrator(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Without orchestrator, returns error."""
+        """Without a pinned orchestrator service, fail structurally."""
         import src.infrastructure.agent.tools.agent_send as mod
 
-        monkeypatch.setattr(mod, "_orchestrator", None)
+        monkeypatch.setattr(mod, "_current_agent_orchestrator_v2", _missing_orchestrator_v2)
         ctx = _make_ctx()
-        result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
-        data = json.loads(result.output)
-        assert result.is_error is True
-        assert "Multi-agent not configured" in data["error"]
+        with pytest.raises(RuntimeV2Error, match="pinned V2 operation"):
+            await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
 
     @pytest.mark.asyncio
     async def test_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -316,7 +326,7 @@ class TestAgentSendTool:
         )
         orchestrator = Mock()
         orchestrator.send_message = AsyncMock(return_value=send_result)
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
@@ -342,7 +352,7 @@ class TestAgentSendTool:
         )
         orchestrator = Mock()
         orchestrator.send_message = AsyncMock(return_value=send_result)
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx(
             agent_name="fallback-name",
@@ -375,7 +385,7 @@ class TestAgentSendTool:
 
         orchestrator = Mock()
         orchestrator.send_message = AsyncMock()
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx(runtime_context={"selected_agent_id": "agent-123"})
         result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="  ")
@@ -420,7 +430,7 @@ class TestAgentSendTool:
                 allowlist=["allowed-sender"],
             )
         )
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx(runtime_context={"selected_agent_id": "agent-123"})
         result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
@@ -458,7 +468,7 @@ class TestAgentSendTool:
                 allowlist=None,
             )
         )
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
@@ -476,7 +486,7 @@ class TestAgentSendTool:
 
         orchestrator = Mock()
         orchestrator.send_message = AsyncMock(side_effect=RuntimeError("Unexpected"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="hello")
@@ -497,15 +507,13 @@ class TestAgentHistoryTool:
 
     @pytest.mark.asyncio
     async def test_no_orchestrator(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Without orchestrator, returns error."""
+        """Without a pinned orchestrator service, fail structurally."""
         import src.infrastructure.agent.tools.agent_history as mod
 
-        monkeypatch.setattr(mod, "_orchestrator", None)
+        monkeypatch.setattr(mod, "_current_agent_orchestrator_v2", _missing_orchestrator_v2)
         ctx = _make_ctx()
-        result = await agent_history_tool.execute(ctx, session_id="sess-1")
-        data = json.loads(result.output)
-        assert result.is_error is True
-        assert "Multi-agent not configured" in data["error"]
+        with pytest.raises(RuntimeV2Error, match="pinned V2 operation"):
+            await agent_history_tool.execute(ctx, session_id="sess-1")
 
     @pytest.mark.asyncio
     async def test_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -522,7 +530,7 @@ class TestAgentHistoryTool:
 
         orchestrator = Mock()
         orchestrator.get_agent_history = AsyncMock(return_value=[mock_msg])
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_history_tool.execute(ctx, session_id="sess-1")
@@ -546,7 +554,7 @@ class TestAgentHistoryTool:
 
         orchestrator = Mock()
         orchestrator.get_agent_history = AsyncMock(return_value=[])
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_history_tool.execute(ctx, session_id="sess-1", limit=0)
@@ -566,7 +574,7 @@ class TestAgentHistoryTool:
 
         orchestrator = Mock()
         orchestrator.get_agent_history = AsyncMock(side_effect=ValueError("Test error"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_history_tool.execute(ctx, session_id="sess-1")
@@ -581,7 +589,7 @@ class TestAgentHistoryTool:
 
         orchestrator = Mock()
         orchestrator.get_agent_history = AsyncMock(side_effect=RuntimeError("Unexpected"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_history_tool.execute(ctx, session_id="sess-1")
@@ -602,15 +610,13 @@ class TestAgentStopTool:
 
     @pytest.mark.asyncio
     async def test_no_orchestrator(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Without orchestrator, returns error."""
+        """Without a pinned orchestrator service, fail structurally."""
         import src.infrastructure.agent.tools.agent_stop as mod
 
-        monkeypatch.setattr(mod, "_orchestrator", None)
+        monkeypatch.setattr(mod, "_current_agent_orchestrator_v2", _missing_orchestrator_v2)
         ctx = _make_ctx()
-        result = await agent_stop_tool.execute(ctx, session_id="sess-1")
-        data = json.loads(result.output)
-        assert result.is_error is True
-        assert "Multi-agent not configured" in data["error"]
+        with pytest.raises(RuntimeV2Error, match="pinned V2 operation"):
+            await agent_stop_tool.execute(ctx, session_id="sess-1")
 
     @pytest.mark.asyncio
     async def test_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -619,7 +625,7 @@ class TestAgentStopTool:
 
         orchestrator = Mock()
         orchestrator.stop_agent = AsyncMock(return_value=["sess-1", "sess-2"])
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_stop_tool.execute(ctx, session_id="sess-1")
@@ -635,7 +641,7 @@ class TestAgentStopTool:
 
         orchestrator = Mock()
         orchestrator.stop_agent = AsyncMock(side_effect=ValueError("Test error"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_stop_tool.execute(ctx, session_id="sess-1")
@@ -650,7 +656,7 @@ class TestAgentStopTool:
 
         orchestrator = Mock()
         orchestrator.stop_agent = AsyncMock(side_effect=RuntimeError("Unexpected"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_stop_tool.execute(ctx, session_id="sess-1")
@@ -671,15 +677,13 @@ class TestAgentSessionsTool:
 
     @pytest.mark.asyncio
     async def test_no_orchestrator(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Without orchestrator, returns error."""
+        """Without a pinned orchestrator service, fail structurally."""
         import src.infrastructure.agent.tools.agent_sessions as mod
 
-        monkeypatch.setattr(mod, "_orchestrator", None)
+        monkeypatch.setattr(mod, "_current_agent_orchestrator_v2", _missing_orchestrator_v2)
         ctx = _make_ctx()
-        result = await agent_sessions_tool.execute(ctx)
-        data = json.loads(result.output)
-        assert result.is_error is True
-        assert "Multi-agent not configured" in data["error"]
+        with pytest.raises(RuntimeV2Error, match="pinned V2 operation"):
+            await agent_sessions_tool.execute(ctx)
 
     @pytest.mark.asyncio
     async def test_happy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -697,7 +701,7 @@ class TestAgentSessionsTool:
         )
         orchestrator = Mock()
         orchestrator.get_agent_sessions = AsyncMock(return_value=[record])
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_sessions_tool.execute(ctx)
@@ -728,7 +732,7 @@ class TestAgentSessionsTool:
         )
         orchestrator = Mock()
         orchestrator.get_agent_sessions = AsyncMock(return_value=[record])
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         result = await agent_sessions_tool.execute(_make_ctx())
 
@@ -743,7 +747,7 @@ class TestAgentSessionsTool:
 
         orchestrator = Mock()
         orchestrator.get_agent_sessions = AsyncMock(side_effect=ValueError("Test error"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_sessions_tool.execute(ctx)
@@ -758,7 +762,7 @@ class TestAgentSessionsTool:
 
         orchestrator = Mock()
         orchestrator.get_agent_sessions = AsyncMock(side_effect=RuntimeError("Unexpected"))
-        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+        _patch_orchestrator(monkeypatch, mod, orchestrator)
 
         ctx = _make_ctx()
         result = await agent_sessions_tool.execute(ctx)

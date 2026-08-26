@@ -171,7 +171,6 @@ async def test_complete_worker_tool_set_is_cached_by_generation(
         "_add_session_status_tool",
         "_add_cron_tool",
         "_add_canvas_tools",
-        "_add_agent_tools",
     ):
         monkeypatch.setattr(agent_worker_state, name, _noop)
     monkeypatch.setattr(agent_worker_state, "_add_plugin_tools", _noop_async, raising=False)

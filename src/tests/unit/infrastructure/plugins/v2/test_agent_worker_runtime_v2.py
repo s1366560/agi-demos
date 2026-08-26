@@ -405,31 +405,11 @@ def test_agent_orchestrator_has_no_process_global_authority() -> None:
         getsource(execution._resolve_child_terminal_status),
         getsource(react_agent_profile._register_selected_agent_session),
         getsource(react_agent_prompt_mixin.PromptMixin._load_selected_agent_native),
-        getsource(agent_worker_state._add_agent_tools),
         getsource(project_agent_actor.ProjectAgentActor._ensure_agent_orchestrator_v2),
         getsource(AgentRuntimeBootstrapper._bootstrap_agent_orchestrator),
     ):
         assert "get_agent_orchestrator" not in source
         assert "set_agent_orchestrator" not in source
-
-
-def test_agent_tool_builder_propagates_generation_service_errors() -> None:
-    error = RuntimeV2Error("missing_service", "operation orchestrator is unavailable")
-
-    with (
-        patch(
-            "src.configuration.config.get_settings",
-            return_value=SimpleNamespace(multi_agent_enabled=True),
-        ),
-        patch(
-            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
-            side_effect=error,
-        ),
-        pytest.raises(RuntimeV2Error) as raised,
-    ):
-        agent_worker_state._add_agent_tools({}, "project-a")
-
-    assert raised.value is error
 
 
 def test_agent_worker_sandbox_factory_reports_docker_unavailability_as_optional(

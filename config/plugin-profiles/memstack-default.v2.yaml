@@ -2637,6 +2637,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-agent-orchestration-tools
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/tool/orchestration
+      enabled: true
+      config:
+        source_id: builtin-agent-orchestration-tools
+      inject:
+        catalog: service:tool-set-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-github-tool
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

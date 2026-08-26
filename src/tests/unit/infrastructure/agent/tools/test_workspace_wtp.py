@@ -18,6 +18,7 @@ from src.infrastructure.agent.orchestration.send_denied import (
 )
 from src.infrastructure.agent.tools import workspace_wtp as wtp_tools
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit
 
@@ -69,12 +70,11 @@ def leader_ctx() -> Any:
 
 
 @pytest.fixture
-def mock_orchestrator() -> MagicMock:
+def mock_orchestrator(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     orch = MagicMock()
     orch.send_message = AsyncMock()
-    wtp_tools.configure_workspace_wtp(orch)
+    monkeypatch.setattr(wtp_tools, "_current_agent_orchestrator_v2", lambda: orch)
     yield orch
-    wtp_tools._orchestrator = None  # type: ignore[attr-defined]
 
 
 def _ok_send(verb: str = "task.progress") -> SendResult:
@@ -762,17 +762,15 @@ class TestBlocked:
 
 
 class TestConfiguration:
-    async def test_tool_without_configured_orchestrator_fails_gracefully(self, ctx):
-        wtp_tools._orchestrator = None  # type: ignore[attr-defined]
-        result = await wtp_tools.workspace_report_progress_tool.execute(
-            ctx,
-            task_id="t",
-            attempt_id="a",
-            leader_agent_id="l",
-            summary="s",
-        )
-        assert result.is_error is True
-        assert "not configured" in json.loads(result.output)["error"]
+    async def test_tool_without_pinned_orchestrator_fails_structurally(self, ctx):
+        with pytest.raises(RuntimeV2Error):
+            await wtp_tools.workspace_report_progress_tool.execute(
+                ctx,
+                task_id="t",
+                attempt_id="a",
+                leader_agent_id="l",
+                summary="s",
+            )
 
 
 class TestVerbDefaultMessageType:

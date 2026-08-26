@@ -21,8 +21,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_orchestrator: AgentOrchestrator | None = None
-
 
 def _get_runtime_string(ctx: ToolContext, key: str) -> str:
     """Read a normalized string value from runtime_context."""
@@ -30,10 +28,13 @@ def _get_runtime_string(ctx: ToolContext, key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def configure_agent_send(orchestrator: AgentOrchestrator) -> None:
-    """Inject orchestrator at agent startup."""
-    global _orchestrator
-    _orchestrator = orchestrator
+def _current_agent_orchestrator_v2() -> AgentOrchestrator:
+    """Resolve the orchestrator owned by the pinned V2 operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_orchestrator_v2,
+    )
+
+    return current_agent_orchestrator_v2()
 
 
 @tool_define(
@@ -74,11 +75,7 @@ async def agent_send_tool(
     session_id: str | None = None,
 ) -> ToolResult:
     """Send a message to another agent."""
-    if _orchestrator is None:
-        return ToolResult(
-            output=json.dumps({"error": "Multi-agent not configured"}),
-            is_error=True,
-        )
+    orchestrator = _current_agent_orchestrator_v2()
     sender_agent_ref = _get_runtime_string(ctx, "selected_agent_id") or ctx.agent_name
     sender_agent_name = _get_runtime_string(ctx, "selected_agent_name") or ctx.agent_name
     if not message.strip():
@@ -103,7 +100,7 @@ async def agent_send_tool(
         )
 
     try:
-        result = await _orchestrator.send_message(
+        result = await orchestrator.send_message(
             from_agent_id=sender_agent_ref,
             to_agent_id=agent_id,
             message=message,

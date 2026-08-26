@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import src.infrastructure.agent.tools.agent_definition_tool as agent_definition_module
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.agent_source import AgentSource
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 from src.infrastructure.agent.tools.agent_definition_tool import (
     agent_definition_manage_tool,
-    configure_agent_definition_manage,
 )
 from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+_TEST_ORCHESTRATOR_V2: MagicMock | None = None
 
 
 def _make_ctx(**overrides: object) -> ToolContext:
@@ -62,26 +66,45 @@ def _mock_orchestrator() -> MagicMock:
     return orch
 
 
+def _current_test_orchestrator_v2() -> MagicMock:
+    if _TEST_ORCHESTRATOR_V2 is None:
+        raise RuntimeV2Error(
+            "operation_context_missing",
+            "Agent definition tool requires a pinned V2 operation",
+        )
+    return _TEST_ORCHESTRATOR_V2
+
+
+def _set_test_orchestrator_v2(orchestrator: MagicMock) -> None:
+    global _TEST_ORCHESTRATOR_V2
+    _TEST_ORCHESTRATOR_V2 = orchestrator
+
+
+@pytest.fixture(autouse=True)
+def _patch_agent_orchestrator_v2(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    global _TEST_ORCHESTRATOR_V2
+    _TEST_ORCHESTRATOR_V2 = None
+    monkeypatch.setattr(
+        agent_definition_module,
+        "_current_agent_orchestrator_v2",
+        _current_test_orchestrator_v2,
+    )
+    yield
+    _TEST_ORCHESTRATOR_V2 = None
+
+
 @pytest.mark.unit
 class TestAgentDefinitionManageTool:
     """Tests for agent_definition_manage tool."""
 
-    async def test_not_configured_returns_error(self) -> None:
-        import src.infrastructure.agent.tools.agent_definition_tool as mod
-
-        original = mod._orchestrator
-        mod._orchestrator = None
-        try:
-            ctx = _make_ctx()
-            result = await agent_definition_manage_tool.execute(ctx, action="create")
-            assert result.is_error is True
-            assert "not configured" in json.loads(result.output)["error"]
-        finally:
-            mod._orchestrator = original
+    async def test_missing_operation_fails_structurally(self) -> None:
+        ctx = _make_ctx()
+        with pytest.raises(RuntimeV2Error, match="pinned V2 operation"):
+            await agent_definition_manage_tool.execute(ctx, action="create")
 
     async def test_unknown_action_returns_error(self) -> None:
         orch = _mock_orchestrator()
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(ctx, action="invalid")
@@ -92,7 +115,7 @@ class TestAgentDefinitionManageTool:
         orch = _mock_orchestrator()
         agent = _make_agent()
         orch.create_agent.return_value = agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -120,7 +143,7 @@ class TestAgentDefinitionManageTool:
             return agent
 
         orch.create_agent.side_effect = create_agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -140,7 +163,7 @@ class TestAgentDefinitionManageTool:
 
     async def test_create_missing_name_returns_error(self) -> None:
         orch = _mock_orchestrator()
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -153,7 +176,7 @@ class TestAgentDefinitionManageTool:
 
     async def test_create_missing_system_prompt_returns_error(self) -> None:
         orch = _mock_orchestrator()
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -167,7 +190,7 @@ class TestAgentDefinitionManageTool:
     async def test_create_duplicate_name_returns_error(self) -> None:
         orch = _mock_orchestrator()
         orch.create_agent.side_effect = ValueError("already exists")
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -183,7 +206,7 @@ class TestAgentDefinitionManageTool:
         orch = _mock_orchestrator()
         agent = _make_agent()
         orch.get_agent.return_value = agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -205,7 +228,7 @@ class TestAgentDefinitionManageTool:
     async def test_get_not_found_returns_error(self) -> None:
         orch = _mock_orchestrator()
         orch.get_agent.return_value = None
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -218,7 +241,7 @@ class TestAgentDefinitionManageTool:
 
     async def test_get_missing_agent_id_returns_error(self) -> None:
         orch = _mock_orchestrator()
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(ctx, action="get")
@@ -231,7 +254,7 @@ class TestAgentDefinitionManageTool:
         orch.get_agent.return_value = agent
         updated_agent = _make_agent(display_name="Updated Agent")
         orch.update_agent.return_value = updated_agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -261,7 +284,7 @@ class TestAgentDefinitionManageTool:
     async def test_update_not_found_returns_error(self) -> None:
         orch = _mock_orchestrator()
         orch.get_agent.return_value = None
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -275,7 +298,7 @@ class TestAgentDefinitionManageTool:
 
     async def test_update_missing_agent_id_returns_error(self) -> None:
         orch = _mock_orchestrator()
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -291,7 +314,7 @@ class TestAgentDefinitionManageTool:
         agent = _make_agent()
         orch.get_agent.return_value = agent
         orch.delete_agent.return_value = True
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -321,7 +344,7 @@ class TestAgentDefinitionManageTool:
     async def test_delete_not_found_returns_idempotent_response(self) -> None:
         orch = _mock_orchestrator()
         orch.get_agent.return_value = None
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -342,7 +365,7 @@ class TestAgentDefinitionManageTool:
 
     async def test_delete_missing_agent_id_returns_error(self) -> None:
         orch = _mock_orchestrator()
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(ctx, action="delete")
@@ -353,7 +376,7 @@ class TestAgentDefinitionManageTool:
         orch = _mock_orchestrator()
         agent = _make_agent(model=AgentModel.GPT4O)
         orch.create_agent.return_value = agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -374,7 +397,7 @@ class TestAgentDefinitionManageTool:
             agent_to_agent_allowlist=["sender-1", "sender-2"],
         )
         orch.create_agent.return_value = agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -398,7 +421,7 @@ class TestAgentDefinitionManageTool:
             agent_to_agent_allowlist=["builtin:sisyphus", "sisyphus"],
         )
         orch.create_agent.return_value = agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -416,7 +439,7 @@ class TestAgentDefinitionManageTool:
     async def test_create_with_full_capability_policy_fields(self) -> None:
         orch = _mock_orchestrator()
         orch.create_agent.return_value = _make_agent()
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -474,7 +497,7 @@ class TestAgentDefinitionManageTool:
         agent = _make_agent()
         orch.get_agent.return_value = agent
         orch.update_agent.return_value = agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -494,7 +517,7 @@ class TestAgentDefinitionManageTool:
         agent = _make_agent(agent_to_agent_enabled=True, agent_to_agent_allowlist=["old-sender"])
         orch.get_agent.return_value = agent
         orch.update_agent.return_value = agent
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -515,7 +538,7 @@ class TestAgentDefinitionManageTool:
         existing = _make_agent()
         orch.get_agent.return_value = existing
         orch.update_agent.return_value = existing
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -577,7 +600,7 @@ class TestAgentDefinitionManageTool:
         )
         orch.get_agent.return_value = existing
         orch.update_agent.return_value = existing
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
@@ -609,7 +632,7 @@ class TestAgentDefinitionManageTool:
         )
         orch.get_agent.return_value = existing
         orch.update_agent.return_value = existing
-        configure_agent_definition_manage(orch)
+        _set_test_orchestrator_v2(orch)
 
         ctx = _make_ctx()
         result = await agent_definition_manage_tool.execute(
