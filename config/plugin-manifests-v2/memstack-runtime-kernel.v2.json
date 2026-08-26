@@ -2268,8 +2268,45 @@
       },
       "contract_digest": "sha256:fe937d04efb3364419e75cd4d6b565f449ccb2beca152bc138be58999beab685",
       "artifact": {
-        "digest": "sha256:357ab38a115ecec3a375c20ab74af75dcc73534ace34622c715ada34925e99b5",
+        "digest": "sha256:d772e86b8f792eb3e06d58dc0d7d041651490a987c6bfde5cf2aca094ba982ba",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_lifecycle_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/artifact-lifecycle-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.artifact_lifecycle_persistence:artifact_lifecycle_persistence_provider_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.artifact-lifecycle-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "sqlalchemy-async-sessionmaker", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:57a335d5a0edf8f63e922421e98056c92f12c81e2f63522b72773df791eaa763",
+      "artifact": {
+        "digest": "sha256:8a17ab1bfd95868e5a976a1648a9aaf5eb67466336a93b8fb70de54a388eacbb",
+        "source": "repo+python://src/infrastructure/plugins/v2/artifact_lifecycle_persistence.py"
       }
     },
     {
@@ -2286,8 +2323,8 @@
           ],
           "requires": [
             {
-              "alias": "sessions",
-              "service": "service:persistence.async-session-factory",
+              "alias": "provider",
+              "service": "service:persistence.artifact-lifecycle-provider",
               "version": "1.0.0"
             },
             {
@@ -2315,9 +2352,9 @@
           }
         }
       },
-      "contract_digest": "sha256:02067b17c9d73b469696b6b0901252903f6944a4c3b4655ba8d8a0f870edd276",
+      "contract_digest": "sha256:9d80add3b4e3eb34a3e48af543ffe2bee03f1dd9ebc38a72dae25861f5d4ccf2",
       "artifact": {
-        "digest": "sha256:357ab38a115ecec3a375c20ab74af75dcc73534ace34622c715ada34925e99b5",
+        "digest": "sha256:d772e86b8f792eb3e06d58dc0d7d041651490a987c6bfde5cf2aca094ba982ba",
         "source": "repo+python://src/infrastructure/plugins/v2/artifact_lifecycle_services.py"
       }
     },

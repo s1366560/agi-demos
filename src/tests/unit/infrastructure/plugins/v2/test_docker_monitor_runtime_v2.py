@@ -20,6 +20,9 @@ from src.infrastructure.plugins.v2.artifact_content_persistence import (
 from src.infrastructure.plugins.v2.artifact_content_services import (
     ARTIFACT_CONTENT_APPLICATION_MODULE_V2,
 )
+from src.infrastructure.plugins.v2.artifact_lifecycle_persistence import (
+    ARTIFACT_LIFECYCLE_PROVIDER_MODULE_V2,
+)
 from src.infrastructure.plugins.v2.artifact_lifecycle_services import (
     ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2,
 )
@@ -205,6 +208,7 @@ async def test_docker_monitor_rejects_missing_sessions_without_fallback() -> Non
                 ARTIFACT_CONTENT_GC_MODULE_V2,
                 ARTIFACT_CONTENT_PROVIDER_MODULE_V2,
                 ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2,
+                ARTIFACT_LIFECYCLE_PROVIDER_MODULE_V2,
                 ASYNC_SESSION_FACTORY_MODULE_V2,
                 TENANT_AGENT_CONFIG_APPLICATION_MODULE_V2,
                 TENANT_AGENT_CONFIG_PROVIDER_MODULE_V2,

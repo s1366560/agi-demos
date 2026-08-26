@@ -868,6 +868,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-artifact-lifecycle-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/artifact-lifecycle-provider
+      enabled: true
+      config:
+        strategy: sqlalchemy-async-sessionmaker
+      inject:
+        sessions: service:persistence.async-session-factory
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-artifact-lifecycle-services
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -878,7 +893,7 @@ profile:
         bucket_prefix: artifacts
         url_expiration_seconds: 604800
       inject:
-        sessions: service:persistence.async-session-factory
+        provider: service:persistence.artifact-lifecycle-provider
         storage: service:storage.object-storage
         events: service:events.artifact-publisher
       isolate: {}

@@ -8,13 +8,11 @@ from typing import Any, Protocol, runtime_checkable
 
 from src.application.services.artifact_service import ArtifactService
 from src.domain.events.agent_events import AgentDomainEvent
-from src.infrastructure.adapters.secondary.persistence.sql_artifact_repository import (
-    SqlArtifactRepository,
-)
 
-from .artifact_content_gc_runtime import (
-    AsyncSessionFactoryServiceV2,
-    ObjectStorageServiceV2,
+from .artifact_content_gc_runtime import ObjectStorageServiceV2
+from .artifact_lifecycle_persistence import (
+    ArtifactLifecyclePersistenceFactoryProtocolV2,
+    artifact_lifecycle_persistence_provider_definition_v2,
 )
 from .runtime import (
     ContextV2,
@@ -31,7 +29,7 @@ ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2 = (
     "builtin://memstack/application/artifact-lifecycle-services"
 )
 ARTIFACT_LIFECYCLE_APPLICATION_SERVICE_V2 = "service:application.artifact-lifecycle-services"
-ARTIFACT_LIFECYCLE_SESSIONS_INJECT_V2 = "sessions"
+ARTIFACT_LIFECYCLE_PROVIDER_INJECT_V2 = "provider"
 ARTIFACT_LIFECYCLE_STORAGE_INJECT_V2 = "storage"
 ARTIFACT_LIFECYCLE_EVENTS_INJECT_V2 = "events"
 
@@ -109,11 +107,11 @@ def _apply_artifact_lifecycle_application_v2(
     if type(url_expiration_seconds) is not int or url_expiration_seconds <= 0:
         raise ValueError("Artifact lifecycle service requires positive url_expiration_seconds")
 
-    sessions = context.require(ARTIFACT_LIFECYCLE_SESSIONS_INJECT_V2)
-    if not isinstance(sessions, AsyncSessionFactoryServiceV2):
+    provider = context.require(ARTIFACT_LIFECYCLE_PROVIDER_INJECT_V2)
+    if not isinstance(provider, ArtifactLifecyclePersistenceFactoryProtocolV2):
         raise RuntimeV2Error(
-            "invalid_artifact_lifecycle_sessions",
-            "Artifact lifecycle sessions inject has an invalid implementation",
+            "invalid_artifact_lifecycle_provider",
+            "Artifact lifecycle provider inject has an invalid implementation",
         )
     storage = context.require(ARTIFACT_LIFECYCLE_STORAGE_INJECT_V2)
     if not isinstance(storage, ObjectStorageServiceV2):
@@ -134,7 +132,7 @@ def _apply_artifact_lifecycle_application_v2(
             artifact=ArtifactService(
                 storage_service=storage.storage_service,
                 event_publisher=events.publish,
-                artifact_repository=SqlArtifactRepository(sessions.factory),
+                artifact_repository=provider.build(),
                 bucket_prefix=bucket_prefix,
                 url_expiration_seconds=url_expiration_seconds,
             )
@@ -144,13 +142,14 @@ def _apply_artifact_lifecycle_application_v2(
 
 
 def artifact_lifecycle_service_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
-    """Return the event Provider and Artifact lifecycle Consumer definitions."""
+    """Return both Providers before the Artifact lifecycle Consumer."""
     return (
         PluginDefinitionV2(
             module_ref=ARTIFACT_EVENT_PUBLISHER_MODULE_V2,
             contract_digest=generated_contract_digest_v2(ARTIFACT_EVENT_PUBLISHER_MODULE_V2),
             apply=_apply_artifact_event_publisher_v2,
         ),
+        artifact_lifecycle_persistence_provider_definition_v2(),
         PluginDefinitionV2(
             module_ref=ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2,
             contract_digest=generated_contract_digest_v2(ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2),
@@ -166,7 +165,7 @@ __all__ = [
     "ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2",
     "ARTIFACT_LIFECYCLE_APPLICATION_SERVICE_V2",
     "ARTIFACT_LIFECYCLE_EVENTS_INJECT_V2",
-    "ARTIFACT_LIFECYCLE_SESSIONS_INJECT_V2",
+    "ARTIFACT_LIFECYCLE_PROVIDER_INJECT_V2",
     "ARTIFACT_LIFECYCLE_STORAGE_INJECT_V2",
     "ArtifactEventPublisherProtocolV2",
     "ArtifactLifecycleApplicationServiceV2",
