@@ -19,6 +19,9 @@ from src.domain.model.channels.message import ChannelAdapter, ChatType, Message,
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
+    current_artifact_lifecycle_application_service_v2,
+)
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -216,15 +219,7 @@ class ChannelMessageRouter:
     async def _do_media_import(self, message: Message, conversation_id: str) -> None:
         """Execute media import into sandbox workspace."""
         try:
-            from src.infrastructure.adapters.primary.web.startup.container import (
-                get_app_container,
-            )
-
             async with with_session() as db_session:
-                app_container = get_app_container()
-                if not app_container:
-                    raise RuntimeError("Application container not initialized")
-
                 tenant_id = message.raw_data.get("tenant_id", "") if message.raw_data else ""
                 project_id = message.project_id or ""
                 async with pin_operation_context_v2(
@@ -245,7 +240,7 @@ class ChannelMessageRouter:
                         },
                     },
                 ):
-                    artifact_service = app_container.artifact_service()
+                    artifact_service = current_artifact_lifecycle_application_service_v2().artifact
                     mcp_adapter = current_sandbox_application_services_v2().adapter
 
                     logger.info(

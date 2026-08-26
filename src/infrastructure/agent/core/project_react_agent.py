@@ -51,6 +51,9 @@ from src.infrastructure.plugins.v2.agent_loop import (
     AGENT_LOOP_RESOLVER_SERVICE_V2,
     AgentLoopResolverProtocolV2,
 )
+from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
+    current_artifact_lifecycle_application_service_v2,
+)
 from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
@@ -335,7 +338,6 @@ class ProjectReActAgent:
         Returns:
             Tuple of (graph_service, redis_client, artifact_service, provider_config, llm_client)
         """
-        from src.configuration.di_container import DIContainer as Container
         from src.infrastructure.agent.state.agent_worker_state import (
             get_or_create_agent_graph_service,
             get_or_create_llm_client,
@@ -362,12 +364,7 @@ class ProjectReActAgent:
             logger.warning(f"Could not initialize agent message bus: {e}")
             self._message_bus = None
 
-        try:
-            container = Container(redis_client=redis_client)
-            artifact_service = container.artifact_service()
-        except Exception as e:
-            logger.warning(f"Could not initialize artifact service: {e}")
-            artifact_service = None
+        artifact_service = current_artifact_lifecycle_application_service_v2().artifact
 
         provider_config = await get_or_create_provider_config(
             tenant_id=self.config.tenant_id, force_refresh=force_refresh

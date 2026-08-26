@@ -203,32 +203,6 @@ class AgentContainer:
             channel_router=ChannelRouter(),
         )
 
-    def artifact_service(self) -> Any:
-        """Get ArtifactService for managing tool output artifacts."""
-        from src.application.services.artifact_service import ArtifactService
-        from src.infrastructure.adapters.secondary.persistence.sql_artifact_repository import (
-            SqlArtifactRepository,
-        )
-
-        storage_service = self._storage_service_factory() if self._storage_service_factory else None
-        if self._session_factory is None:
-            raise RuntimeError("ArtifactService requires a durable SQL session factory")
-
-        from src.infrastructure.plugins.v2.sandbox_projection import (
-            current_sandbox_application_services_v2,
-        )
-
-        sandbox_event_pub = current_sandbox_application_services_v2().event_publisher
-
-        assert storage_service is not None
-        return ArtifactService(
-            storage_service=storage_service,
-            event_publisher=sandbox_event_pub.publish_domain_event,
-            artifact_repository=SqlArtifactRepository(self._session_factory),
-            bucket_prefix="artifacts",
-            url_expiration_seconds=7 * 24 * 3600,
-        )
-
     # === Skill Service ===
 
     def skill_service(self) -> SkillService:

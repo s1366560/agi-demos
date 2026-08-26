@@ -154,6 +154,17 @@ def mock_session_context():
     return ctx
 
 
+@pytest.fixture(autouse=True)
+def mock_artifact_lifecycle_projection():
+    """Keep lifecycle tests focused while production resolution stays V2-only."""
+    with patch(
+        "src.infrastructure.agent.core.project_react_agent."
+        "current_artifact_lifecycle_application_service_v2",
+        return_value=MagicMock(artifact=MagicMock()),
+    ):
+        yield
+
+
 class TestProjectReActAgentLifecycleNotifications:
     """
     Test suite for ProjectReActAgent generation-owned lifecycle notifications.

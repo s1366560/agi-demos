@@ -865,9 +865,7 @@ async def test_do_media_import_start_log_omits_message_identifier(
     session_ctx.__aenter__.return_value = session
     session_ctx.__aexit__.return_value = None
     mcp_adapter = SimpleNamespace()
-    app_container = SimpleNamespace(
-        artifact_service=MagicMock(return_value=object()),
-    )
+    artifact_service = object()
     caplog.set_level(
         logging.INFO,
         logger="src.application.services.channels.channel_message_router",
@@ -878,9 +876,10 @@ async def test_do_media_import_start_log_omits_message_identifier(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             return_value=session_ctx,
         ),
-        patch(
-            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
-            return_value=app_container,
+        patch.object(
+            channel_message_router_module,
+            "current_artifact_lifecycle_application_service_v2",
+            return_value=SimpleNamespace(artifact=artifact_service),
         ),
         patch.object(
             channel_message_router_module,
@@ -901,6 +900,10 @@ async def test_do_media_import_start_log_omits_message_identifier(
         await router._do_media_import(message, "conv-1")
 
     media_import_service.import_media_to_workspace.assert_awaited_once()
+    assert (
+        media_import_service.import_media_to_workspace.await_args.kwargs["artifact_service"]
+        is artifact_service
+    )
     router._handle_media_import_failure.assert_awaited_once_with(message)
     assert "secret-domain-message-id" not in caplog.text
     assert "secret-file-key" not in caplog.text
@@ -938,9 +941,7 @@ async def test_do_media_import_failure_omits_exception_text_from_log_and_reply(
     session_ctx.__aenter__.return_value = session
     session_ctx.__aexit__.return_value = None
     mcp_adapter = SimpleNamespace()
-    app_container = SimpleNamespace(
-        artifact_service=MagicMock(return_value=object()),
-    )
+    artifact_service = object()
     caplog.set_level(
         logging.ERROR,
         logger="src.application.services.channels.channel_message_router",
@@ -951,9 +952,10 @@ async def test_do_media_import_failure_omits_exception_text_from_log_and_reply(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             return_value=session_ctx,
         ),
-        patch(
-            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
-            return_value=app_container,
+        patch.object(
+            channel_message_router_module,
+            "current_artifact_lifecycle_application_service_v2",
+            return_value=SimpleNamespace(artifact=artifact_service),
         ),
         patch.object(
             channel_message_router_module,

@@ -146,9 +146,6 @@ class DIContainer:
     def binding_router(self) -> Any:
         return self._agent.binding_router()
 
-    def artifact_service(self) -> Any:
-        return self._agent.artifact_service()
-
     def subagent_run_registry(self) -> Any:
         return self._agent.subagent_run_registry()
 

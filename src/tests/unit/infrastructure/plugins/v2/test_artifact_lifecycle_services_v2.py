@@ -10,6 +10,8 @@ from typing import Any, cast
 
 import pytest
 
+from src.configuration.containers.agent_container import AgentContainer
+from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.repositories.artifact_repository import ArtifactRepositoryPort
 from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
@@ -372,10 +374,10 @@ def test_lifecycle_consumer_does_not_select_sql_persistence() -> None:
     assert "SqlArtifactRepository" not in source
 
 
-def test_legacy_container_delegates_event_fanout_to_the_public_publisher_seam() -> None:
+def test_static_artifact_container_facades_are_retired() -> None:
     source = (_ROOT / "src/configuration/containers/agent_container.py").read_text(encoding="utf-8")
 
-    assert "sandbox_event_pub._event_bus" not in source
-    assert "sandbox_event_pub._publish" not in source
-    assert "_publish_to_agent_stream" not in source
-    assert "event_publisher=sandbox_event_pub.publish_domain_event" in source
+    assert "artifact_service" not in vars(AgentContainer)
+    assert "artifact_service" not in vars(DIContainer)
+    assert "SqlArtifactRepository" not in source
+    assert "ArtifactService(" not in source
