@@ -560,7 +560,7 @@
       },
       "contract_digest": "sha256:918bb424c49603e328fbb2c436905d8bbd2192dfe0b4d825daecb5743fd27d96",
       "artifact": {
-        "digest": "sha256:5e647e4f2ccb44bec9c31506de7f00ee82b53b8b3a29ddee07df0a41c6eb2756",
+        "digest": "sha256:8c2b34e1aac40ce3da353440189e7853e3cc53284da8a30d6ea7d3e2bbfed8b7",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },

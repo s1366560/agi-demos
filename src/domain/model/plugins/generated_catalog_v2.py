@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:3699fdff20be91a0b9d58452aa2c1a1b327b33b4db5cb1c06fdbbfd7689443'
-    '4a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:23dbf8a1b0440ec34c83b0260f7bf7c5a001723da57bc55185fba17cf0f603'
+    '9c","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -416,8 +416,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'e329565c8e086903fbc005882480b9cadce7d46e62f3","entrypoint":"src.infrastructure.plugins.v'
     '2.agent_orchestration_tools:_apply_agent_orchestration_tool_contribution_v2","module_ref'
     '":"builtin://memstack/agent/tool/orchestration","plugin_id":"memstack-runtime-kernel","p'
-    'lugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:5e647e4f2ccb44be'
-    'c9c31506de7f00ee82b53b8b3a29ddee07df0a41c6eb2756","artifact_source":"repo+python://src/i'
+    'lugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:8c2b34e1aac40ce3'
+    'da353440189e7853e3cc53284da8a30d6ea7d3e2bbfed8b7","artifact_source":"repo+python://src/i'
     'nfrastructure/plugins/v2/agent_worker_runtime.py","contract":{"config_schema":{"$schema"'
     ':"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties'
     '":{"strategy":{"const":"generation-sandbox-runtime","type":"string"}},"required":["strat'
@@ -2617,7 +2617,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'n":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:3699fdff20be91a0b9d58452aa2c1a1b327b33b4db5cb1c06fdbbfd76894434a"
+    "sha256:23dbf8a1b0440ec34c83b0260f7bf7c5a001723da57bc55185fba17cf0f6039c"
 )
 # fmt: on
 

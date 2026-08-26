@@ -549,6 +549,56 @@ def test_worker_cron_uses_bound_factory(
 
 
 @pytest.mark.unit
+def test_worker_canvas_uses_v2_manager_and_bound_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = object()
+    bound_tools = {
+        "canvas_create": object(),
+        "canvas_create_interactive": object(),
+        "canvas_update": object(),
+        "canvas_delete": object(),
+    }
+    captured: dict[str, object] = {}
+
+    def _make_canvas_tools(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return bound_tools
+
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker canvas must not use process-global manager authority")
+
+    monkeypatch.setattr(
+        "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_canvas_manager_v2",
+        lambda: manager,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.canvas.tools.make_canvas_tools",
+        _make_canvas_tools,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.canvas.tools.configure_canvas",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.canvas.tools.get_canvas_manager",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.canvas.manager.CanvasManager",
+        _forbidden,
+    )
+
+    tools: dict[str, object] = {}
+    agent_worker_state._add_canvas_tools(tools)
+
+    assert tools == bound_tools
+    assert captured == {"manager": manager}
+
+
+@pytest.mark.unit
 def test_worker_hitl_tools_use_declared_tool_infos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

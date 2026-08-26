@@ -1159,37 +1159,14 @@ def _add_cron_tool(
 
 
 def _add_canvas_tools(tools: dict[str, Any]) -> None:
-    """Add Canvas/A2UI tools (create, update, delete canvas blocks).
+    """Add Canvas/A2UI tools bound to the active V2 runtime host."""
+    from src.infrastructure.agent.canvas.tools import make_canvas_tools
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_canvas_manager_v2,
+    )
 
-    Reuses the existing CanvasManager singleton if already configured,
-    so that blocks created during HITL flows survive across tool rebuilds.
-    """
-    try:
-        from src.infrastructure.agent.canvas.manager import CanvasManager
-        from src.infrastructure.agent.canvas.tools import (
-            canvas_create,
-            canvas_create_interactive,
-            canvas_delete,
-            canvas_update,
-            configure_canvas,
-            get_canvas_manager,
-        )
-
-        # Reuse existing manager to preserve in-memory canvas blocks
-        # (e.g. blocks created by hitl_tool_handler during A2UI flows).
-        try:
-            manager = get_canvas_manager()
-        except RuntimeError:
-            manager = CanvasManager()
-            configure_canvas(manager)
-
-        tools[canvas_create.name] = canvas_create
-        tools[canvas_create_interactive.name] = canvas_create_interactive
-        tools[canvas_update.name] = canvas_update
-        tools[canvas_delete.name] = canvas_delete
-        logger.info("Agent Worker: Canvas tools added (incl. interactive)")
-    except Exception as e:
-        logger.warning("Agent Worker: Failed to add canvas tools: %s", e)
+    tools.update(make_canvas_tools(manager=current_agent_canvas_manager_v2()))
+    logger.info("Agent Worker: Canvas tools added (incl. interactive)")
 
 
 async def _load_project_sandbox_tools(

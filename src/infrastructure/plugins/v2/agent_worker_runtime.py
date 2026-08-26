@@ -10,6 +10,7 @@ from typing import Any, Protocol, runtime_checkable
 from src.configuration.config import get_settings
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.infrastructure.agent.canvas.manager import CanvasManager
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 
@@ -42,6 +43,7 @@ class AgentWorkerRuntimeServicesV2:
     """Runtime capabilities resolved from one exact generation."""
 
     sandbox_adapter: MCPSandboxAdapter | None
+    canvas_manager: CanvasManager
     subagent_run_registry: SubAgentRunRegistry
     orchestration_runtime: AgentOrchestrationRuntimeProtocolV2
     unavailable_code: str | None = None
@@ -59,6 +61,7 @@ class AgentWorkerRuntimeResolverV2:
     """Project generation-owned sandbox state into an Agent Worker operation."""
 
     sandbox_runtime: SandboxRuntimeServiceV2
+    canvas_manager: CanvasManager
     subagent_run_registry: SubAgentRunRegistry
     orchestration_runtime: AgentOrchestrationRuntimeProtocolV2
 
@@ -68,6 +71,7 @@ class AgentWorkerRuntimeResolverV2:
         if sandbox_services is None:
             return AgentWorkerRuntimeServicesV2(
                 sandbox_adapter=None,
+                canvas_manager=self.canvas_manager,
                 subagent_run_registry=self.subagent_run_registry,
                 orchestration_runtime=self.orchestration_runtime,
                 unavailable_code=(
@@ -76,6 +80,7 @@ class AgentWorkerRuntimeResolverV2:
             )
         return AgentWorkerRuntimeServicesV2(
             sandbox_adapter=sandbox_services.adapter,
+            canvas_manager=self.canvas_manager,
             subagent_run_registry=self.subagent_run_registry,
             orchestration_runtime=self.orchestration_runtime,
         )
@@ -99,6 +104,17 @@ def current_agent_worker_runtime_services_v2() -> AgentWorkerRuntimeServicesV2:
             "agent worker runtime resolver returned invalid services",
         )
     return services
+
+
+def current_agent_canvas_manager_v2() -> CanvasManager:
+    """Resolve the Canvas manager owned by the active V2 runtime host."""
+    manager = current_agent_worker_runtime_services_v2().canvas_manager
+    if not isinstance(manager, CanvasManager):
+        raise RuntimeV2Error(
+            "invalid_agent_canvas_runtime",
+            "agent worker runtime resolved an invalid Canvas manager",
+        )
+    return manager
 
 
 async def bind_current_agent_orchestrator_v2(
@@ -170,8 +186,12 @@ def agent_worker_sandbox_runtime_factory_v2() -> MCPSandboxAdapter | None:
         return None
 
 
-def agent_worker_runtime_definition_v2() -> PluginDefinitionV2:
+def agent_worker_runtime_definition_v2(
+    *,
+    canvas_manager: CanvasManager | None = None,
+) -> PluginDefinitionV2:
     """Build the explicit Agent Worker runtime Consumer definition."""
+    host_canvas_manager = canvas_manager if canvas_manager is not None else CanvasManager()
 
     def apply(context: ContextV2, config: Mapping[str, Any]) -> None:
         if config.get("strategy") != "generation-sandbox-runtime":
@@ -198,6 +218,7 @@ def agent_worker_runtime_definition_v2() -> PluginDefinitionV2:
             AGENT_WORKER_RUNTIME_SERVICE_V2,
             AgentWorkerRuntimeResolverV2(
                 sandbox_runtime=sandbox_runtime,
+                canvas_manager=host_canvas_manager,
                 subagent_run_registry=subagent_run_registry,
                 orchestration_runtime=orchestration_runtime,
             ),
@@ -224,6 +245,7 @@ __all__ = [
     "agent_worker_runtime_definition_v2",
     "agent_worker_sandbox_runtime_factory_v2",
     "bind_current_agent_orchestrator_v2",
+    "current_agent_canvas_manager_v2",
     "current_agent_orchestrator_v2",
     "current_agent_worker_runtime_services_v2",
 ]

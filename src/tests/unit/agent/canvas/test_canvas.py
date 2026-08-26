@@ -5,6 +5,7 @@ Covers: models, manager, events, and tools with 80%+ coverage target.
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -388,6 +389,43 @@ class TestCanvasTools:
         with pytest.raises(RuntimeError, match="Canvas not configured"):
             get_canvas_manager()
 
+    async def test_bound_canvas_tools_ignore_legacy_manager_changes(self) -> None:
+        from src.infrastructure.agent.canvas.tools import make_canvas_tools
+
+        manager_a = CanvasManager()
+        manager_b = CanvasManager()
+        legacy_manager = CanvasManager()
+        tool_a = make_canvas_tools(manager=manager_a)["canvas_create"]
+        tool_b = make_canvas_tools(manager=manager_b)["canvas_create"]
+        configure_canvas(legacy_manager)
+
+        ctx_a = ToolContext(
+            session_id="session-a",
+            message_id="message-a",
+            call_id="call-a",
+            agent_name="agent-a",
+            conversation_id="conversation-a",
+        )
+        ctx_b = ToolContext(
+            session_id="session-b",
+            message_id="message-b",
+            call_id="call-b",
+            agent_name="agent-b",
+            conversation_id="conversation-b",
+        )
+        result_a, result_b = await asyncio.gather(
+            tool_a.execute(ctx_a, block_type="markdown", title="A", content="alpha"),
+            tool_b.execute(ctx_b, block_type="markdown", title="B", content="beta"),
+        )
+
+        assert result_a.is_error is False
+        assert result_b.is_error is False
+        assert [block.title for block in manager_a.get_blocks("conversation-a")] == ["A"]
+        assert [block.title for block in manager_b.get_blocks("conversation-b")] == ["B"]
+        assert legacy_manager.get_blocks("conversation-a") == []
+        assert legacy_manager.get_blocks("conversation-b") == []
+        configure_canvas(None)
+
     async def test_canvas_create_success(self, ctx: ToolContext) -> None:
         mgr = CanvasManager()
         configure_canvas(mgr)
@@ -500,7 +538,9 @@ class TestCanvasTools:
         title = str(case["title"])
         updated_title = str(case.get("updatedTitle", f"Updated {title}"))
         initial_content = serialize_native_block_content(case["content"])
-        updated_content = serialize_native_block_content(case.get("updatedContent", case["content"]))
+        updated_content = serialize_native_block_content(
+            case.get("updatedContent", case["content"])
+        )
 
         create_result = await canvas_create.execute(
             ctx,
@@ -1137,7 +1177,10 @@ class TestCanvasTools:
         assert '"root": "alert-settings__root"' in stored_content
         assert '"id": "alert-settings__root"' in stored_content
         assert '"Column"' in stored_content
-        assert '"explicitList": ["title-text", "enable-checkbox", "priority-select", "confirm-btn"]' in stored_content
+        assert (
+            '"explicitList": ["title-text", "enable-checkbox", "priority-select", "confirm-btn"]'
+            in stored_content
+        )
 
         configure_canvas(None)  # reset global
 

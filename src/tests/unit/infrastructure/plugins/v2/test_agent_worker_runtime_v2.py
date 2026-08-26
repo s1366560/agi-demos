@@ -16,6 +16,8 @@ from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.agent.actor import execution, local_chat_worker, project_agent_actor
+from src.infrastructure.agent.canvas.manager import CanvasManager
+from src.infrastructure.agent.canvas.tools import configure_canvas, get_canvas_manager
 from src.infrastructure.agent.core import react_agent_profile, react_agent_prompt_mixin
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.state import agent_worker_state
@@ -104,12 +106,77 @@ async def test_agent_worker_runtime_resolves_adapter_from_exact_generation() -> 
                 services.orchestration_runtime,
                 AgentOrchestrationRuntimeProtocolV2,
             )
+            assert isinstance(services.canvas_manager, CanvasManager)
             assert services.unavailable_code is None
     finally:
         await host.close()
         run_registry.close()
 
     assert adapter.close_calls == 1
+
+
+async def test_agent_canvas_manager_is_host_owned_and_survives_generation_reload() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    other_host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    legacy_manager = CanvasManager()
+    configure_canvas(legacy_manager)
+    first_manager: CanvasManager | None = None
+
+    try:
+        for generation_number in (106, 107):
+            publication = await host.bootstrap(
+                profile_path=_PROFILE_PATH,
+                manifest_paths=(_MANIFEST_PATH,),
+                generation=generation_number,
+                version=generation_number,
+            )
+            assert publication.accepted is True
+
+            async with pin_operation_context_v2(
+                host,
+                operation_id=f"agent-canvas:{generation_number}",
+                scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            ) as operation:
+                resolver = operation.require(AGENT_WORKER_RUNTIME_SERVICE_V2)
+                assert isinstance(resolver, AgentWorkerRuntimeResolverProtocolV2)
+                manager = resolver.resolve(operation).canvas_manager
+                assert get_canvas_manager() is manager
+                assert manager is not legacy_manager
+                if first_manager is None:
+                    first_manager = manager
+                    _ = manager.create_block(
+                        conversation_id="conversation-a",
+                        block_type="markdown",
+                        title="Persistent",
+                        content="state",
+                    )
+                else:
+                    assert manager is first_manager
+                    assert [block.title for block in manager.get_blocks("conversation-a")] == [
+                        "Persistent"
+                    ]
+
+        publication = await other_host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=108,
+            version=108,
+        )
+        assert publication.accepted is True
+        async with pin_operation_context_v2(
+            other_host,
+            operation_id="agent-canvas:other-host",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ) as operation:
+            resolver = operation.require(AGENT_WORKER_RUNTIME_SERVICE_V2)
+            assert isinstance(resolver, AgentWorkerRuntimeResolverProtocolV2)
+            other_manager = resolver.resolve(operation).canvas_manager
+            assert other_manager is not first_manager
+            assert other_manager.get_blocks("conversation-a") == []
+    finally:
+        configure_canvas(None)
+        await other_host.close()
+        await host.close()
 
 
 async def test_agent_orchestrator_binding_is_published_to_current_operation() -> None:

@@ -1,8 +1,8 @@
 """Integration tests for _add_session_comm_tools and _add_canvas_tools wiring.
 
 Verifies that agent_worker_state helper functions correctly register
-session comm and canvas tools into the tool dictionary, and degrade
-gracefully on import/setup failures.
+session comm and canvas tools into the tool dictionary, and fail closed
+when required V2 runtime services are unavailable.
 """
 
 from __future__ import annotations
@@ -329,90 +329,51 @@ class TestCanvasToolsWiring:
     """Tests for _add_canvas_tools adding tools to the dict."""
 
     async def test_canvas_tools_added(self) -> None:
-        """Canvas tools are added to the dict after configure_canvas.
+        """Canvas tools are bound to the manager from the active V2 runtime.
 
-        Arrange: Patch canvas imports to provide mock objects.
+        Arrange: Patch the V2 manager projection and bound tool factory.
         Act: Call _add_canvas_tools.
-        Assert: Three canvas tool keys present in tools dict.
+        Assert: All four bound Canvas tools are present.
         """
-        # Arrange
-        mock_manager_cls = MagicMock()
-        mock_manager = MagicMock()
-        mock_manager_cls.return_value = mock_manager
-
-        mock_create = MagicMock()
-        mock_create.name = "canvas_create"
-        mock_update = MagicMock()
-        mock_update.name = "canvas_update"
-        mock_delete = MagicMock()
-        mock_delete.name = "canvas_delete"
-        mock_create_interactive = MagicMock()
-        mock_create_interactive.name = "canvas_create_interactive"
-        mock_configure = MagicMock()
-
+        manager = MagicMock()
+        bound_tools = {
+            "canvas_create": MagicMock(),
+            "canvas_create_interactive": MagicMock(),
+            "canvas_update": MagicMock(),
+            "canvas_delete": MagicMock(),
+        }
+        make_canvas_tools = MagicMock(return_value=bound_tools)
         tools: dict[str, Any] = {}
 
         with (
             patch(
-                "src.infrastructure.agent.canvas.manager.CanvasManager",
-                mock_manager_cls,
+                "src.infrastructure.plugins.v2.agent_worker_runtime."
+                "current_agent_canvas_manager_v2",
+                return_value=manager,
             ),
             patch(
-                "src.infrastructure.agent.canvas.tools.canvas_create",
-                mock_create,
-            ),
-            patch(
-                "src.infrastructure.agent.canvas.tools.canvas_update",
-                mock_update,
-            ),
-            patch(
-                "src.infrastructure.agent.canvas.tools.canvas_delete",
-                mock_delete,
-            ),
-            patch(
-                "src.infrastructure.agent.canvas.tools.canvas_create_interactive",
-                mock_create_interactive,
-            ),
-            patch(
-                "src.infrastructure.agent.canvas.tools.configure_canvas",
-                mock_configure,
+                "src.infrastructure.agent.canvas.tools.make_canvas_tools",
+                make_canvas_tools,
             ),
         ):
             from src.infrastructure.agent.state.agent_worker_state import (
                 _add_canvas_tools,
             )
 
-            # Act
             _add_canvas_tools(tools)
 
-        # Assert
-        assert "canvas_create" in tools
-        assert "canvas_create_interactive" in tools
-        assert "canvas_update" in tools
-        assert "canvas_delete" in tools
-        assert len(tools) == 4
-        mock_configure.assert_called_once_with(mock_manager)
+        assert tools == bound_tools
+        make_canvas_tools.assert_called_once_with(manager=manager)
 
-    async def test_canvas_tools_graceful_failure(self) -> None:
-        """Import failure is caught silently; tools dict unchanged.
+    async def test_canvas_tools_missing_v2_operation_fails_closed(self) -> None:
+        """Canvas cannot silently fall back when no V2 operation is pinned."""
+        from src.infrastructure.agent.state.agent_worker_state import _add_canvas_tools
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
-        Arrange: Patch sys.modules to make canvas import fail.
-        Act: Call _add_canvas_tools.
-        Assert: tools dict is empty, no exception raised.
-        """
-        # Arrange
         tools: dict[str, Any] = {}
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "src.infrastructure.agent.canvas.manager": None,
-            },
-        ):
-            import src.infrastructure.agent.state.agent_worker_state as mod
+        with pytest.raises(RuntimeV2Error) as error:
+            _add_canvas_tools(tools)
 
-            # Act
-            mod._add_canvas_tools(tools)
-
-        # Assert -- no error raised, tools still empty
-        assert len(tools) == 0
+        assert error.value.code == "operation_context_not_pinned"
+        assert tools == {}
