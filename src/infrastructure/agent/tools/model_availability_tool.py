@@ -5,12 +5,15 @@ from __future__ import annotations
 import difflib
 import json
 import logging
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from typing import Any
 
 from src.domain.llm_providers.models import OperationType, ProviderConfig
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.llm.model_catalog import get_model_catalog_service
 from src.infrastructure.persistence.llm_providers_repository import SQLAlchemyProviderRepository
@@ -20,6 +23,35 @@ logger = logging.getLogger(__name__)
 _PROVIDER_ALIASES: dict[str, str] = {
     "azure_openai": "openai",
 }
+
+type ProviderResolver = Callable[[str], Awaitable[list[ProviderConfig]]]
+type ModelOverridePersister = Callable[[str, str], Awaitable[None]]
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class ModelAvailabilityToolRuntime:
+    """Dependencies captured by one generation's model-awareness tools."""
+
+    provider_resolver: ProviderResolver
+    model_catalog: Any
+    persist_model_override: ModelOverridePersister
+
+
+_model_availability_tool_runtime: ContextVar[ModelAvailabilityToolRuntime | None] = ContextVar(
+    f"{__name__}.model_availability_tool_runtime",
+    default=None,
+)
+
+
+def _current_model_availability_tool_runtime() -> ModelAvailabilityToolRuntime:
+    runtime = _model_availability_tool_runtime.get()
+    if runtime is not None:
+        return runtime
+    return ModelAvailabilityToolRuntime(
+        provider_resolver=_resolve_candidate_providers,
+        model_catalog=get_model_catalog_service(),
+        persist_model_override=_persist_model_override,
+    )
 
 
 def _normalize_provider_for_catalog(provider_type: str) -> str:
@@ -53,9 +85,16 @@ def _build_model_metadata_payload(meta: Any) -> dict[str, Any]:
     }
 
 
-async def _resolve_candidate_providers(tenant_id: str) -> list[ProviderConfig]:
+async def _resolve_candidate_providers(
+    tenant_id: str,
+    *,
+    session_factory: Any = None,
+) -> list[ProviderConfig]:
     """Resolve active tenant providers (or global active providers as fallback)."""
-    async with async_session_factory() as session:
+    bound_session_factory = (
+        session_factory if session_factory is not None else async_session_factory
+    )
+    async with bound_session_factory() as session:
         repository = SQLAlchemyProviderRepository(session=session)
         tenant_mappings = await repository.get_tenant_providers(tenant_id, OperationType.LLM)
 
@@ -90,13 +129,21 @@ async def _resolve_candidate_providers(tenant_id: str) -> list[ProviderConfig]:
     return deduplicated
 
 
-async def _persist_model_override(conversation_id: str, model_name: str) -> None:
+async def _persist_model_override(
+    conversation_id: str,
+    model_name: str,
+    *,
+    session_factory: Any = None,
+) -> None:
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
             SqlConversationRepository,
         )
 
-        async with async_session_factory() as session:
+        bound_session_factory = (
+            session_factory if session_factory is not None else async_session_factory
+        )
+        async with bound_session_factory() as session:
             repo = SqlConversationRepository(session)
             conversation = await repo.find_by_id(conversation_id)
             if conversation:
@@ -115,14 +162,14 @@ def _collect_provider_models(
     provider: ProviderConfig,
     *,
     include_deprecated: bool,
+    model_catalog: Any,
 ) -> tuple[str, str, dict[str, Any | None]]:
     """Collect available model metadata for a single provider."""
     provider_type = _provider_type_value(provider.provider_type)
     catalog_provider = _normalize_provider_for_catalog(provider_type)
-    catalog = get_model_catalog_service()
     metadata_by_name: dict[str, Any | None] = {}
 
-    catalog_models = catalog.list_models(
+    catalog_models = model_catalog.list_models(
         provider=catalog_provider,
         include_deprecated=include_deprecated,
     )
@@ -134,7 +181,7 @@ def _collect_provider_models(
         normalized = (configured_model or "").strip()
         if not normalized:
             continue
-        canonical_meta = catalog.get_model_fuzzy(normalized)
+        canonical_meta = model_catalog.get_model_fuzzy(normalized)
         canonical_name = canonical_meta.name if canonical_meta is not None else normalized
         if not provider.is_model_allowed(canonical_name):
             continue
@@ -179,13 +226,13 @@ def _resolve_requested_model_name(
     requested_model: str,
     *,
     model_lookup: dict[str, tuple[str, ProviderConfig, str]],
+    model_catalog: Any,
 ) -> tuple[str, ProviderConfig, str] | None:
     """Resolve a requested model string to canonical model + provider tuple."""
     normalized_requested = requested_model.strip()
     if not normalized_requested:
         return None
 
-    catalog = get_model_catalog_service()
     candidates: list[str] = []
 
     def _add_candidate(value: str | None) -> None:
@@ -196,7 +243,7 @@ def _resolve_requested_model_name(
             candidates.append(normalized)
 
     _add_candidate(normalized_requested)
-    canonical_meta = catalog.get_model_fuzzy(normalized_requested)
+    canonical_meta = model_catalog.get_model_fuzzy(normalized_requested)
     _add_candidate(canonical_meta.name if canonical_meta is not None else None)
 
     if "/" in normalized_requested:
@@ -267,7 +314,8 @@ async def list_available_models_tool(
             is_error=True,
         )
 
-    providers = await _resolve_candidate_providers(tenant_id)
+    runtime = _current_model_availability_tool_runtime()
+    providers = await runtime.provider_resolver(tenant_id)
     if not providers:
         return ToolResult(
             output=json.dumps(
@@ -287,6 +335,7 @@ async def list_available_models_tool(
         provider_type, catalog_provider, provider_metadata = _collect_provider_models(
             provider,
             include_deprecated=include_deprecated,
+            model_catalog=runtime.model_catalog,
         )
         provider_model_names = sorted(provider_metadata.keys())
         providers_payload.append(
@@ -413,7 +462,8 @@ async def switch_model_next_turn_tool(
             is_error=True,
         )
 
-    providers = await _resolve_candidate_providers(tenant_id)
+    runtime = _current_model_availability_tool_runtime()
+    providers = await runtime.provider_resolver(tenant_id)
     if not providers:
         return ToolResult(
             output=json.dumps(
@@ -434,12 +484,17 @@ async def switch_model_next_turn_tool(
         provider_type, _catalog_provider, provider_metadata = _collect_provider_models(
             provider,
             include_deprecated=False,
+            model_catalog=runtime.model_catalog,
         )
         for model_name, model_meta in provider_metadata.items():
             metadata_by_name.setdefault(model_name, model_meta)
             model_lookup.setdefault(model_name.lower(), (model_name, provider, provider_type))
 
-    resolved_model = _resolve_requested_model_name(requested_model, model_lookup=model_lookup)
+    resolved_model = _resolve_requested_model_name(
+        requested_model,
+        model_lookup=model_lookup,
+        model_catalog=runtime.model_catalog,
+    )
     if resolved_model is None:
         available_models = sorted(metadata_by_name.keys())
         return ToolResult(
@@ -469,7 +524,7 @@ async def switch_model_next_turn_tool(
     }
     await ctx.emit({"type": "model_switch_requested", "data": event_payload})
 
-    await _persist_model_override(ctx.conversation_id, canonical_model_name)
+    await runtime.persist_model_override(ctx.conversation_id, canonical_model_name)
 
     return ToolResult(
         output=json.dumps(
@@ -481,3 +536,65 @@ async def switch_model_next_turn_tool(
             ensure_ascii=False,
         )
     )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundModelAvailabilityToolExecutor:
+    template: ToolInfo
+    runtime: ModelAvailabilityToolRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _model_availability_tool_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _model_availability_tool_runtime.reset(token)
+
+
+def make_model_awareness_tools(
+    *,
+    session_factory: Any = None,
+    model_catalog: Any = None,
+    provider_resolver: ProviderResolver | None = None,
+    persist_model_override: ModelOverridePersister | None = None,
+) -> dict[str, ToolInfo]:
+    """Return model-awareness ToolInfos bound to one generation's dependencies."""
+
+    bound_provider_resolver = provider_resolver
+    if bound_provider_resolver is None:
+
+        async def _resolve_bound_providers(tenant_id: str) -> list[ProviderConfig]:
+            return await _resolve_candidate_providers(
+                tenant_id,
+                session_factory=session_factory,
+            )
+
+        bound_provider_resolver = _resolve_bound_providers
+
+    bound_model_override_persister = persist_model_override
+    if bound_model_override_persister is None:
+
+        async def _persist_bound_model_override(
+            conversation_id: str,
+            model_name: str,
+        ) -> None:
+            await _persist_model_override(
+                conversation_id,
+                model_name,
+                session_factory=session_factory,
+            )
+
+        bound_model_override_persister = _persist_bound_model_override
+
+    runtime = ModelAvailabilityToolRuntime(
+        provider_resolver=bound_provider_resolver,
+        model_catalog=(model_catalog if model_catalog is not None else get_model_catalog_service()),
+        persist_model_override=bound_model_override_persister,
+    )
+    return {
+        template.name: replace(
+            template,
+            execute=_BoundModelAvailabilityToolExecutor(template=template, runtime=runtime),
+        )
+        for template in (list_available_models_tool, switch_model_next_turn_tool)
+    }

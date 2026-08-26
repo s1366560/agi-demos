@@ -644,12 +644,45 @@ def test_worker_hitl_tools_use_declared_tool_infos(
 def test_worker_model_awareness_tools_use_declared_tool_infos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    bound_tools = {
+        "list_available_models": object(),
+        "switch_model_next_turn": object(),
+    }
+    captured: dict[str, object] = {}
+
+    def _make_model_awareness_tools(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return bound_tools
+
     def _forbidden(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("worker model tools must not use global registry lookup")
+        raise AssertionError("worker model tools must not use global runtime authority")
 
     monkeypatch.setattr(
         "src.infrastructure.agent.tools.define.get_registered_tools",
         _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.model_availability_tool.make_model_awareness_tools",
+        _make_model_awareness_tools,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.model_availability_tool.list_available_models_tool",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.model_availability_tool.switch_model_next_turn_tool",
+        _forbidden,
+    )
+    session_factory = object()
+    model_catalog = object()
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        session_factory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.llm.model_catalog.get_model_catalog_service",
+        lambda: model_catalog,
     )
 
     tools: dict[str, object] = {}
@@ -659,14 +692,10 @@ def test_worker_model_awareness_tools_use_declared_tool_infos(
         project_id="project-a",
     )
 
-    from src.infrastructure.agent.tools.model_availability_tool import (
-        list_available_models_tool,
-        switch_model_next_turn_tool,
-    )
-
-    assert tools == {
-        "list_available_models": list_available_models_tool,
-        "switch_model_next_turn": switch_model_next_turn_tool,
+    assert tools == bound_tools
+    assert captured == {
+        "session_factory": session_factory,
+        "model_catalog": model_catalog,
     }
 
 

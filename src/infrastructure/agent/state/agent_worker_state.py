@@ -750,13 +750,20 @@ def _add_model_awareness_tools(
 ) -> None:
     """Configure model-awareness tool for listing currently usable chat models."""
     try:
-        from src.infrastructure.agent.tools.model_availability_tool import (
-            list_available_models_tool,
-            switch_model_next_turn_tool,
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
         )
+        from src.infrastructure.agent.tools.model_availability_tool import (
+            make_model_awareness_tools,
+        )
+        from src.infrastructure.llm.model_catalog import get_model_catalog_service
 
-        tools["list_available_models"] = list_available_models_tool
-        tools["switch_model_next_turn"] = switch_model_next_turn_tool
+        tools.update(
+            make_model_awareness_tools(
+                session_factory=async_session_factory,
+                model_catalog=get_model_catalog_service(),
+            )
+        )
         logger.info(
             "Agent Worker: model awareness tools configured for tenant %s, project %s",
             tenant_id,
