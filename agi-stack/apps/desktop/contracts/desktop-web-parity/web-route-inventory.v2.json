@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "da26451f3b3b4782e39d54b3fc45e36646edee28",
+  "source_revision": "c6314bd8a191226c432b4c50639fce94ba402d99",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 702,
+    "audited_sources": 706,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1890,
-    "production_dependency_ownership": 701,
-    "production_dependency_sources": 701,
+    "production_dependency_edges": 1898,
+    "production_dependency_ownership": 705,
+    "production_dependency_sources": 705,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 5
@@ -57,7 +57,7 @@
       "roles": [
         "production_router"
       ],
-      "sha256": "sha256:df41259e05f8d2393ad22d1bf90faf562f1486afb2907e538b7fba4be7fdce5e"
+      "sha256": "sha256:0d5cdf3282f8c7646775da5ae558d56adc6178caf89ad918d5b4124287cf8fa5"
     },
     {
       "source_entry": "web/src/components/agent/AgentBindingModal.tsx",
@@ -3316,11 +3316,25 @@
       "sha256": "sha256:60d7c996a7731fa97d0f6c48f9b5e308731a61e4782082d4c1b51e2e1e828a0a"
     },
     {
+      "source_entry": "web/src/plugins/WebAuthenticatedShellSurfaceV2.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:d872fe49bb3e500e7cecfb9674f7e29cb30f01e2a2877751dd6c39259b67484d"
+    },
+    {
       "source_entry": "web/src/plugins/WebPluginGenerationHostV2.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:86befd04f8b59bbf949aa46f17c352527fb381586e36a7beee7434e9e0f1cf31"
+      "sha256": "sha256:23753b28c8395c2f50b97eccbe3f86f4eb45abb5b5c13ca163777a624465780b"
+    },
+    {
+      "source_entry": "web/src/plugins/WebRendererAuthenticatedShellV2.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:b70ea05592b6221bf36cfec6182dbec7755525b8c20ebe385990e09949f0a215"
     },
     {
       "source_entry": "web/src/plugins/webPluginGenerationV2.ts",
@@ -3328,6 +3342,20 @@
         "production_dependency"
       ],
       "sha256": "sha256:d53e4a15fe74056f1b1c7d9b66c3b365c38eb58a57fc73c4ad489892755ac079"
+    },
+    {
+      "source_entry": "web/src/plugins/webRendererAppCompositionV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:22e6b8d32398472ce6562926d8fcefcb337ba122e780fc47cbda001b4100c6b1"
+    },
+    {
+      "source_entry": "web/src/plugins/webRendererCompositionPortV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:f5b6b9d7cb6b05e4a0dc7cb4bcbdd807c7efc242ea636abf14224854cd9a0ded"
     },
     {
       "source_entry": "web/src/routes/v2/WebNavigationAuthorityV2.tsx",
@@ -3404,7 +3432,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:24dab59c697ae71d6e5d377561061da16aa926a8deea406d5775706ad11ff36f"
+      "sha256": "sha256:53a19c7d58e16a55c226dd1471a68d90a9f8264b6acce819714c993ea893a542"
     },
     {
       "source_entry": "web/src/routes/v2/webRouteAuthorityStateV2.ts",
@@ -9541,6 +9569,16 @@
       "from_source_entry": "web/src/App.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/plugins/WebPluginGenerationHostV2.tsx"
+    },
+    {
+      "from_source_entry": "web/src/App.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/WebRendererAuthenticatedShellV2.tsx"
+    },
+    {
+      "from_source_entry": "web/src/App.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webRendererAppCompositionV2.ts"
     },
     {
       "from_source_entry": "web/src/App.tsx",
@@ -16573,6 +16611,26 @@
       "to_source_entry": "web/src/plugins/webPluginGenerationV2.ts"
     },
     {
+      "from_source_entry": "web/src/plugins/WebPluginGenerationHostV2.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webRendererCompositionPortV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/plugins/WebRendererAuthenticatedShellV2.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webRendererCompositionPortV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/plugins/WebRendererAuthenticatedShellV2.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/routes/v2/WebRoutePageLoaderV2.tsx"
+    },
+    {
+      "from_source_entry": "web/src/plugins/WebRendererAuthenticatedShellV2.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/routes/v2/webUiSlotAuthorityStateV2.ts"
+    },
+    {
       "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/routes/v2/webRendererArtifactCatalogV2.ts"
@@ -16591,6 +16649,16 @@
       "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/logger.ts"
+    },
+    {
+      "from_source_entry": "web/src/plugins/webRendererAppCompositionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/WebAuthenticatedShellSurfaceV2.tsx"
+    },
+    {
+      "from_source_entry": "web/src/plugins/webRendererAppCompositionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webRendererCompositionPortV2.ts"
     },
     {
       "from_source_entry": "web/src/routes/v2/WebNavigationAuthorityV2.tsx",
@@ -23716,6 +23784,14 @@
         "web/index.html"
       ],
       "reason_code": "production_entry_shared_runtime",
+      "source_entry": "web/src/plugins/WebAuthenticatedShellSurfaceV2.tsx"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/index.html"
+      ],
+      "reason_code": "production_entry_shared_runtime",
       "source_entry": "web/src/plugins/WebPluginGenerationHostV2.tsx"
     },
     {
@@ -23724,7 +23800,31 @@
         "web/index.html"
       ],
       "reason_code": "production_entry_shared_runtime",
+      "source_entry": "web/src/plugins/WebRendererAuthenticatedShellV2.tsx"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/index.html"
+      ],
+      "reason_code": "production_entry_shared_runtime",
       "source_entry": "web/src/plugins/webPluginGenerationV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/index.html"
+      ],
+      "reason_code": "production_entry_shared_runtime",
+      "source_entry": "web/src/plugins/webRendererAppCompositionV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/index.html"
+      ],
+      "reason_code": "production_entry_shared_runtime",
+      "source_entry": "web/src/plugins/webRendererCompositionPortV2.ts"
     },
     {
       "classification": "shared",
@@ -27058,8 +27158,12 @@
     "web/src/pages/tenant/utils/geneFormUtils.ts",
     "web/src/pages/tenant/utils/instanceUtils.ts",
     "web/src/pages/tenant/workspaceSettingsModel.ts",
+    "web/src/plugins/WebAuthenticatedShellSurfaceV2.tsx",
     "web/src/plugins/WebPluginGenerationHostV2.tsx",
+    "web/src/plugins/WebRendererAuthenticatedShellV2.tsx",
     "web/src/plugins/webPluginGenerationV2.ts",
+    "web/src/plugins/webRendererAppCompositionV2.ts",
+    "web/src/plugins/webRendererCompositionPortV2.ts",
     "web/src/routes/v2/WebNavigationAuthorityV2.tsx",
     "web/src/routes/v2/WebRouteAuthorityV2.tsx",
     "web/src/routes/v2/WebRoutePageLoaderV2.tsx",
