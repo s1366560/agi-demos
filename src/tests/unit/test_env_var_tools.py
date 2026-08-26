@@ -7,6 +7,7 @@ NOTE: RequestEnvVarTool is now tested via HITL strategy tests.
 See src/tests/unit/agent/test_temporal_hitl_handler.py for HITL-related tests.
 """
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -23,6 +24,7 @@ from src.infrastructure.agent.tools.env_var_tools import (
     check_env_vars_tool,
     configure_env_var_tools,
     get_env_var_tool,
+    make_env_var_tools,
     request_env_var_tool,
 )
 from src.infrastructure.agent.tools.result import ToolResult
@@ -83,6 +85,66 @@ class TestGetEnvVarTool:
         """Test tool is initialized with correct name and description."""
         assert get_env_var_tool.name == "get_env_var"
         assert "environment variable" in get_env_var_tool.description.lower()
+
+    async def test_bound_runtimes_are_isolated_during_interleaved_reads(
+        self,
+        tool_ctx: ToolContext,
+    ) -> None:
+        first_entered = asyncio.Event()
+        release_first = asyncio.Event()
+
+        class _Repository:
+            def __init__(self, marker: str, *, wait: bool) -> None:
+                self._marker = marker
+                self._wait = wait
+
+            async def get(self, **kwargs: object) -> ToolEnvironmentVariable:
+                if self._wait:
+                    first_entered.set()
+                    await release_first.wait()
+                else:
+                    await first_entered.wait()
+                    release_first.set()
+                return ToolEnvironmentVariable(
+                    tenant_id=str(kwargs["tenant_id"]),
+                    project_id=str(kwargs["project_id"]),
+                    tool_name=str(kwargs["tool_name"]),
+                    variable_name=str(kwargs["variable_name"]),
+                    encrypted_value=self._marker,
+                    is_secret=True,
+                    scope=EnvVarScope.PROJECT,
+                )
+
+        class _EncryptionService:
+            @staticmethod
+            def decrypt(value: str) -> str:
+                return f"value-{value}"
+
+        first_tools = make_env_var_tools(
+            repository=_Repository("generation-a", wait=True),
+            encryption_service=_EncryptionService(),
+        )
+        second_tools = make_env_var_tools(
+            repository=_Repository("generation-b", wait=False),
+            encryption_service=_EncryptionService(),
+        )
+        first_task = asyncio.create_task(
+            first_tools["get_env_var"].execute(
+                tool_ctx,
+                tool_name="runtime_test",
+                variable_name="RUNTIME_VALUE",
+            )
+        )
+        await first_entered.wait()
+        second_result = await second_tools["get_env_var"].execute(
+            tool_ctx,
+            tool_name="runtime_test",
+            variable_name="RUNTIME_VALUE",
+        )
+        first_result = await first_task
+
+        assert json.loads(first_result.output)["value"] == "value-generation-a"
+        assert json.loads(second_result.output)["value"] == "value-generation-b"
 
     async def test_missing_tenant_returns_error(
         self, tool_ctx, mock_repository, mock_encryption_service

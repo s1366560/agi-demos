@@ -453,3 +453,58 @@ def test_worker_skill_sync_uses_bound_tool_factory(
         "session_factory": session_factory,
         "skill_loader_tool": skill_loader_tool,
     }
+
+
+@pytest.mark.unit
+def test_worker_env_var_tools_use_bound_tool_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bound_tools = {
+        "get_env_var": object(),
+        "request_env_var": object(),
+        "check_env_vars": object(),
+    }
+    captured: dict[str, object] = {}
+
+    def _make_env_var_tools(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return bound_tools
+
+    def _forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("worker env-var tools must not use global configuration or registry")
+
+    session_factory = object()
+    encryption_service = object()
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        session_factory,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.env_var_tools.make_env_var_tools",
+        _make_env_var_tools,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.env_var_tools.configure_env_var_tools",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.tools.define.get_registered_tools",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.security.encryption_service.get_encryption_service",
+        lambda: encryption_service,
+    )
+
+    tools: dict[str, object] = {}
+    agent_worker_state._add_env_var_tools(
+        tools,
+        tenant_id="tenant-a",
+        project_id="project-a",
+    )
+
+    assert tools == bound_tools
+    assert captured == {
+        "encryption_service": encryption_service,
+        "session_factory": session_factory,
+    }

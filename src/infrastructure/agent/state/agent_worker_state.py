@@ -682,22 +682,17 @@ def _add_env_var_tools(
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
         )
-        from src.infrastructure.agent.tools.define import get_registered_tools
-        from src.infrastructure.agent.tools.env_var_tools import configure_env_var_tools
+        from src.infrastructure.agent.tools.env_var_tools import make_env_var_tools
         from src.infrastructure.security.encryption_service import get_encryption_service
 
         encryption_service = get_encryption_service()
 
-        configure_env_var_tools(
-            encryption_service=encryption_service,
-            session_factory=async_session_factory,
-            tenant_id=tenant_id,
-            project_id=project_id,
+        tools.update(
+            make_env_var_tools(
+                encryption_service=encryption_service,
+                session_factory=async_session_factory,
+            )
         )
-        registry = get_registered_tools()
-        tools["get_env_var"] = registry["get_env_var"]
-        tools["request_env_var"] = registry["request_env_var"]
-        tools["check_env_vars"] = registry["check_env_vars"]
         logger.info(
             f"Agent Worker: Environment variable tools added for tenant {tenant_id}, "
             f"project {project_id}"

@@ -20,7 +20,8 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -43,7 +44,7 @@ from src.infrastructure.agent.hitl.utils import (
     sanitize_env_var_text as _shared_sanitize_env_var_text,
 )
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.define import tool_define
+from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.security.encryption_service import (
     EncryptionService,
@@ -56,6 +57,7 @@ __all__ = [
     "check_env_vars_tool",
     "configure_env_var_tools",
     "get_env_var_tool",
+    "make_env_var_tools",
     "request_env_var_tool",
 ]
 
@@ -70,6 +72,17 @@ class PreparedEnvVarRequest:
     request_context: dict[str, Any]
     requested_names: list[str]
     scope_label: str
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class EnvVarToolRuntime:
+    """Non-scope dependencies captured by one generation's env-var tools."""
+
+    repository: ToolEnvironmentVariableRepositoryPort | None
+    encryption_service: EncryptionService | None
+    hitl_handler: RayHITLHandler | None
+    session_factory: Any
+    event_publisher: Callable[[dict[str, Any]], None] | None
 
 
 # ===========================================================================
@@ -91,6 +104,10 @@ _session_factory_ref: Any = None
 _tenant_id_ref: str | None = None
 _project_id_ref: str | None = None
 _event_publisher_ref: Callable[[dict[str, Any]], None] | None = None
+_env_var_tool_runtime: ContextVar[EnvVarToolRuntime | None] = ContextVar(
+    f"{__name__}.env_var_tool_runtime",
+    default=None,
+)
 _TOOL_NAME_MAX_LEN = 100
 _TOOL_NAME_RE = re.compile(rf"^[A-Za-z][A-Za-z0-9_-]{{0,{_TOOL_NAME_MAX_LEN - 1}}}$")
 
@@ -121,6 +138,19 @@ def configure_env_var_tools(
     _tenant_id_ref = tenant_id
     _project_id_ref = project_id
     _event_publisher_ref = event_publisher
+
+
+def _current_env_var_tool_runtime() -> EnvVarToolRuntime:
+    runtime = _env_var_tool_runtime.get()
+    if runtime is not None:
+        return runtime
+    return EnvVarToolRuntime(
+        repository=_env_var_repo,
+        encryption_service=_encryption_svc,
+        hitl_handler=_hitl_handler_ref,
+        session_factory=_session_factory_ref,
+        event_publisher=_event_publisher_ref,
+    )
 
 
 def _normalize_env_var_name(value: object) -> str:
@@ -621,10 +651,11 @@ async def get_env_var_tool(
     variable_name: str,
 ) -> ToolResult:
     """Load an environment variable value for a tool."""
+    runtime = _current_env_var_tool_runtime()
     tenant_id, project_id = _resolve_tool_scope(ctx)
-    session_factory = _session_factory_ref
-    repository = _env_var_repo
-    encryption_service = _encryption_svc
+    session_factory = runtime.session_factory
+    repository = runtime.repository
+    encryption_service = runtime.encryption_service
     if not tenant_id:
         return ToolResult(
             output=json.dumps(
@@ -804,13 +835,14 @@ async def request_env_var_tool(
     timeout: float = 600.0,
 ) -> ToolResult:
     """Request environment variables from the user via HITL."""
+    runtime = _current_env_var_tool_runtime()
     tenant_id, current_project_id = _resolve_tool_scope(ctx)
     save_project_id = current_project_id if save_to_project else None
-    session_factory = _session_factory_ref
-    repository = _env_var_repo
-    encryption_service = _encryption_svc
+    session_factory = runtime.session_factory
+    repository = runtime.repository
+    encryption_service = runtime.encryption_service
     hitl_handler = _scope_env_var_hitl_handler(
-        _hitl_handler_ref,
+        runtime.hitl_handler,
         tenant_id=tenant_id or "",
         project_id=current_project_id,
         conversation_id=ctx.conversation_id,
@@ -1118,9 +1150,10 @@ async def check_env_vars_tool(
     required_vars: list[str],
 ) -> ToolResult:
     """Check if required environment variables are available for a tool."""
+    runtime = _current_env_var_tool_runtime()
     tenant_id, project_id = _resolve_tool_scope(ctx)
-    session_factory = _session_factory_ref
-    repository = _env_var_repo
+    session_factory = runtime.session_factory
+    repository = runtime.repository
     if not tenant_id:
         return ToolResult(
             output=json.dumps(
@@ -1196,3 +1229,41 @@ async def check_env_vars_tool(
             output=json.dumps({"status": "error", "message": str(exc)}),
             is_error=True,
         )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _BoundEnvVarToolExecutor:
+    template: ToolInfo
+    runtime: EnvVarToolRuntime
+
+    async def __call__(self, ctx: ToolContext, **kwargs: Any) -> Any:
+        token = _env_var_tool_runtime.set(self.runtime)
+        try:
+            return await self.template.execute(ctx, **kwargs)
+        finally:
+            _env_var_tool_runtime.reset(token)
+
+
+def make_env_var_tools(
+    *,
+    repository: ToolEnvironmentVariableRepositoryPort | None = None,
+    encryption_service: EncryptionService | None = None,
+    hitl_handler: RayHITLHandler | None = None,
+    session_factory: Any = None,
+    event_publisher: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, ToolInfo]:
+    """Return env-var ToolInfos bound without capturing tenant or project scope."""
+    runtime = EnvVarToolRuntime(
+        repository=repository,
+        encryption_service=encryption_service or get_encryption_service(),
+        hitl_handler=hitl_handler,
+        session_factory=session_factory,
+        event_publisher=event_publisher,
+    )
+    return {
+        template.name: replace(
+            template,
+            execute=_BoundEnvVarToolExecutor(template=template, runtime=runtime),
+        )
+        for template in (get_env_var_tool, request_env_var_tool, check_env_vars_tool)
+    }
