@@ -4,11 +4,12 @@ from datetime import UTC, datetime
 from typing import override
 from uuid import uuid4
 
-from sqlalchemy import and_, case, func, select, text
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.workspace_context import (
     WorkspaceContextAccess,
+    WorkspaceContextCandidate,
     WorkspaceContextError,
     WorkspaceContextErrorCode,
     WorkspaceContextSnapshot,
@@ -31,7 +32,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 
 _CONTEXT_LOCK_SEED = 0x41_47_49_43
 _MAX_REVISION = (1 << 63) - 1
-_DEFAULT_PROJECT_NAMES = ("Default project", "默认项目")
 
 
 class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
@@ -42,12 +42,68 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
         self._session = session
 
     @override
-    async def get_or_initialize(
+    async def get_accessible(self, user_id: str) -> WorkspaceContextAccess | None:
+        self._validate_user_id(user_id)
+        current = await self._read_context(user_id)
+        if current is None:
+            return None
+        membership_role = await self._accessible_membership_role(
+            user_id,
+            current.tenant_id,
+            current.project_id,
+        )
+        if membership_role is None:
+            return None
+        return WorkspaceContextAccess(
+            context=self._snapshot_from_context(current),
+            membership_role=membership_role,
+        )
+
+    @override
+    async def get_current(self, user_id: str) -> WorkspaceContextSnapshot | None:
+        self._validate_user_id(user_id)
+        current = await self._read_context(user_id)
+        return None if current is None else self._snapshot_from_context(current)
+
+    @override
+    async def list_candidates(self, user_id: str) -> tuple[WorkspaceContextCandidate, ...]:
+        self._validate_user_id(user_id)
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(Project.tenant_id, Project.id, UserTenant.role)
+                .select_from(UserTenant)
+                .join(Project, Project.tenant_id == UserTenant.tenant_id)
+                .join(
+                    UserProject,
+                    and_(
+                        UserProject.project_id == Project.id,
+                        UserProject.user_id == UserTenant.user_id,
+                    ),
+                )
+                .where(UserTenant.user_id == user_id)
+                .order_by(Project.tenant_id.asc(), Project.id.asc())
+            )
+        )
+        return tuple(
+            WorkspaceContextCandidate(
+                tenant_id=str(row[0]),
+                project_id=str(row[1]),
+                membership_role=str(row[2] or "member"),
+            )
+            for row in result.all()
+        )
+
+    @override
+    async def initialize(
         self,
         user_id: str,
+        *,
+        candidate: WorkspaceContextCandidate,
         observed_at: datetime,
     ) -> WorkspaceContextAccess:
         self._validate_user_id(user_id)
+        if not candidate.tenant_id.strip() or not candidate.project_id.strip():
+            raise WorkspaceContextError(WorkspaceContextErrorCode.INVALID_INPUT)
         await self._lock_context(user_id)
         current = await self._load_context(user_id)
         if current is not None:
@@ -62,17 +118,25 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
                     membership_role=membership_role,
                 )
 
-        candidate = await self._load_default_scope(user_id)
-        if candidate is None:
-            raise WorkspaceContextError(WorkspaceContextErrorCode.UNAVAILABLE)
-        tenant_id, project_id, membership_role = candidate
+        membership_role = await self._accessible_membership_role(
+            user_id,
+            candidate.tenant_id,
+            candidate.project_id,
+        )
+        if membership_role is None:
+            error_code = (
+                WorkspaceContextErrorCode.UNAVAILABLE
+                if not await self.list_candidates(user_id)
+                else WorkspaceContextErrorCode.PROJECT_UNAVAILABLE
+            )
+            raise WorkspaceContextError(error_code)
 
         if current is not None:
             revision = self._next_revision(current.revision)
             previous_tenant_id = current.tenant_id
             previous_project_id = current.project_id
-            current.tenant_id = tenant_id
-            current.project_id = project_id
+            current.tenant_id = candidate.tenant_id
+            current.project_id = candidate.project_id
             current.revision = revision
             current.updated_at = observed_at
             await self._add_event(
@@ -80,8 +144,8 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
                 actor_api_key_id=None,
                 from_tenant_id=previous_tenant_id,
                 from_project_id=previous_project_id,
-                to_tenant_id=tenant_id,
-                to_project_id=project_id,
+                to_tenant_id=candidate.tenant_id,
+                to_project_id=candidate.project_id,
                 revision=revision,
                 idempotency_key=f"system:workspace-context-repair:{revision}",
                 observed_at=observed_at,
@@ -92,8 +156,8 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
             self._session.add(
                 DesktopWorkspaceContext(
                     user_id=user_id,
-                    tenant_id=tenant_id,
-                    project_id=project_id,
+                    tenant_id=candidate.tenant_id,
+                    project_id=candidate.project_id,
                     revision=revision,
                     updated_at=observed_at,
                 )
@@ -104,8 +168,8 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
                     actor_api_key_id=None,
                     from_tenant_id=None,
                     from_project_id=None,
-                    to_tenant_id=tenant_id,
-                    to_project_id=project_id,
+                    to_tenant_id=candidate.tenant_id,
+                    to_project_id=candidate.project_id,
                     revision=revision,
                     idempotency_key=f"system:workspace-context-repair:{revision}",
                     observed_at=observed_at,
@@ -114,8 +178,8 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
         await self._session.flush()
         return WorkspaceContextAccess(
             context=WorkspaceContextSnapshot(
-                tenant_id=tenant_id,
-                project_id=project_id,
+                tenant_id=candidate.tenant_id,
+                project_id=candidate.project_id,
                 revision=revision,
                 updated_at=observed_at,
             ),
@@ -220,37 +284,13 @@ class SqlDesktopWorkspaceContextRepository(WorkspaceContextRepository):
         )
         return result.scalar_one_or_none()
 
-    async def _load_default_scope(self, user_id: str) -> tuple[str, str, str] | None:
-        default_project_rank = case(
-            (Project.name.in_(_DEFAULT_PROJECT_NAMES), 0),
-            else_=1,
-        )
+    async def _read_context(self, user_id: str) -> DesktopWorkspaceContext | None:
         result = await self._session.execute(
             refresh_select_statement(
-                select(Project.tenant_id, Project.id, UserTenant.role)
-                .select_from(UserTenant)
-                .join(Project, Project.tenant_id == UserTenant.tenant_id)
-                .join(
-                    UserProject,
-                    and_(
-                        UserProject.project_id == Project.id,
-                        UserProject.user_id == UserTenant.user_id,
-                    ),
-                )
-                .where(UserTenant.user_id == user_id)
-                .order_by(
-                    UserTenant.created_at.asc(),
-                    UserTenant.id.asc(),
-                    Project.tenant_id.asc(),
-                    default_project_rank.asc(),
-                    Project.created_at.desc(),
-                    Project.id.asc(),
-                )
-                .limit(1)
+                select(DesktopWorkspaceContext).where(DesktopWorkspaceContext.user_id == user_id)
             )
         )
-        row = result.one_or_none()
-        return None if row is None else (str(row[0]), str(row[1]), str(row[2] or "member"))
+        return result.scalar_one_or_none()
 
     async def _accessible_membership_role(
         self,

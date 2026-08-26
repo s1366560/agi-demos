@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:a53b97fb1a32a4312ac6cf410e7f3d4e2176e6f22df945f24a8509379bc37c06",
+        "digest": "sha256:addd60d6b386b374e6cfaa3ffd6c2461c696cef0f0a9dfa64ffe87508c54143e",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -1480,6 +1480,113 @@
       "artifact": {
         "digest": "sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a",
         "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/workspace-context-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.workspace_context_services:_apply_workspace_context_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.workspace-context-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:02af02e8cb294884c9a2f0b39dfaf9afb2ff06b2042790bf2d9d3ebdea665b8d",
+      "artifact": {
+        "digest": "sha256:f90b55406df90e09ac88050063514e80298c785457a6393c93ec97339ef81365",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_context_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/judgment/workspace-context-selector",
+      "entrypoint": "src.infrastructure.plugins.v2.workspace_context_services:_apply_workspace_context_judge_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:judgment.workspace-context-selector",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "agent-structured-tool", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:e339dcb6ac062dac12a16dec5ccf6f2e30958d08e122facd339fa4da3ef81427",
+      "artifact": {
+        "digest": "sha256:f90b55406df90e09ac88050063514e80298c785457a6393c93ec97339ef81365",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_context_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/workspace-context-services",
+      "entrypoint": "src.infrastructure.plugins.v2.workspace_context_services:_apply_workspace_context_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.workspace-context-services",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.workspace-context-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "judge",
+              "service": "service:judgment.workspace-context-selector",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": {
+              "const": "operation-scoped-provider-and-judge",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:1269c35c50de273ec2b74b650ddb855c27f9ccf2be368c09e01dda99851a9048",
+      "artifact": {
+        "digest": "sha256:f90b55406df90e09ac88050063514e80298c785457a6393c93ec97339ef81365",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_context_services.py"
       }
     },
     {
@@ -3625,7 +3732,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:f3a878088bcaf753252d57898d3decc6e3b61b150f2f8a6d4c9b65b409b3aa58",
+        "digest": "sha256:cc45b666e557d531a5f9e04e4a2338bb7c597eea48668300a751e4cca7e69e48",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_workspace_core_static_http_routes.py"
       }
     },

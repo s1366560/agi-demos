@@ -11,6 +11,7 @@ from fastapi.routing import APIRoute
 from src.configuration.workspace_core import get_workspace_core_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.primary.web.workspace_core_routes import (
+    WorkspaceCoreProxyRoute,
     register_workspace_core_static_routes,
 )
 from src.infrastructure.plugins.v2 import builtin_workspace_core_static_http_routes as subject
@@ -122,11 +123,18 @@ def test_workspace_core_static_row_is_a_complete_explicit_v2_contribution() -> N
         key = definition.methods[0], definition.path
         legacy_route = legacy[key]
         claimed_route = claimed[key]
-        assert claimed_route.endpoint.__module__ == legacy_route.endpoint.__module__
-        assert claimed_route.endpoint.__name__ == legacy_route.endpoint.__name__
         assert claimed_route.response_model == legacy_route.response_model
         assert claimed_route.tags == legacy_route.tags
         assert claimed_route.description == legacy_route.description
+        if definition.name in {"get_workspace_context", "switch_workspace_context"}:
+            assert definition.route_class_override is None
+            assert not isinstance(claimed_route, WorkspaceCoreProxyRoute)
+            assert claimed_route.endpoint is definition.endpoint
+        else:
+            assert definition.route_class_override is WorkspaceCoreProxyRoute
+            assert isinstance(claimed_route, WorkspaceCoreProxyRoute)
+            assert claimed_route.endpoint.__module__ == legacy_route.endpoint.__module__
+            assert claimed_route.endpoint.__name__ == legacy_route.endpoint.__name__
     assert {definition.owner_entry_id for definition in definitions} == {
         subject.WORKSPACE_CORE_STATIC_HTTP_ROUTES_ENTRY_V2
     }
@@ -150,9 +158,7 @@ def test_workspace_core_static_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )

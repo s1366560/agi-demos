@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.workspace_context import (
+    WorkspaceContextCandidate,
     WorkspaceContextError,
     WorkspaceContextErrorCode,
     WorkspaceContextSwitchRequest,
@@ -95,16 +96,36 @@ async def test_workspace_context_initializes_default_and_switches_idempotently(
     repository = SqlDesktopWorkspaceContextRepository(db_session)
     observed_at = datetime.now(UTC)
 
-    initial = await repository.get_or_initialize(user.id, observed_at)
+    candidates = await repository.list_candidates(user.id)
+    selected = next(
+        candidate for candidate in candidates if candidate.project_id == other_project.id
+    )
+    initial = await repository.initialize(
+        user.id,
+        candidate=selected,
+        observed_at=observed_at,
+    )
 
     assert initial.context.tenant_id == tenant.id
-    assert initial.context.project_id == default_project.id
+    assert initial.context.project_id == other_project.id
     assert initial.context.revision == 0
     assert initial.membership_role == "admin"
+    assert candidates == (
+        WorkspaceContextCandidate(
+            tenant_id=tenant.id,
+            project_id=default_project.id,
+            membership_role="admin",
+        ),
+        WorkspaceContextCandidate(
+            tenant_id=tenant.id,
+            project_id=other_project.id,
+            membership_role="admin",
+        ),
+    )
 
     request = WorkspaceContextSwitchRequest(
         tenant_id=tenant.id,
-        project_id=other_project.id,
+        project_id=default_project.id,
         expected_revision=0,
         idempotency_key="desktop-context-switch-1",
     )
@@ -122,7 +143,7 @@ async def test_workspace_context_initializes_default_and_switches_idempotently(
     )
 
     assert switched.changed is True
-    assert switched.context.project_id == other_project.id
+    assert switched.context.project_id == default_project.id
     assert switched.context.revision == 1
     assert replayed.changed is False
     assert replayed.context == switched.context
@@ -143,12 +164,32 @@ async def test_workspace_context_reports_structured_unavailable_and_revision_err
     await db_session.flush()
     repository = SqlDesktopWorkspaceContextRepository(db_session)
 
+    assert await repository.get_accessible(inaccessible_user.id) is None
+    assert await repository.get_current(inaccessible_user.id) is None
+    assert await repository.list_candidates(inaccessible_user.id) == ()
     with pytest.raises(WorkspaceContextError) as unavailable:
-        await repository.get_or_initialize(inaccessible_user.id, datetime.now(UTC))
+        await repository.initialize(
+            inaccessible_user.id,
+            candidate=WorkspaceContextCandidate(
+                tenant_id="missing-tenant",
+                project_id="missing-project",
+                membership_role="member",
+            ),
+            observed_at=datetime.now(UTC),
+        )
     assert unavailable.value.code is WorkspaceContextErrorCode.UNAVAILABLE
 
     user, tenant, _default_project, other_project = await _seed_accessible_projects(db_session)
-    await repository.get_or_initialize(user.id, datetime.now(UTC))
+    candidate = next(
+        candidate
+        for candidate in await repository.list_candidates(user.id)
+        if candidate.project_id != other_project.id
+    )
+    await repository.initialize(
+        user.id,
+        candidate=candidate,
+        observed_at=datetime.now(UTC),
+    )
 
     with pytest.raises(WorkspaceContextError) as conflict:
         await repository.switch(

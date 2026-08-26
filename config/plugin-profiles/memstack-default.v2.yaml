@@ -538,6 +538,50 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-workspace-context-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/workspace-context-provider
+      enabled: true
+      config:
+        strategy: operation-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-workspace-context-judge
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/judgment/workspace-context-selector
+      enabled: true
+      config:
+        strategy: agent-structured-tool
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-workspace-context-services
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/workspace-context-services
+      enabled: true
+      config:
+        strategy: operation-scoped-provider-and-judge
+      inject:
+        provider: service:persistence.workspace-context-provider
+        judge: service:judgment.workspace-context-selector
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-shares-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

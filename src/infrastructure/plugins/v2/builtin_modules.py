@@ -91,6 +91,7 @@ from .tool_set import (
 from .tunnel_services import tunnel_service_definitions_v2
 from .workflow_pattern_services import workflow_pattern_service_definitions_v2
 from .workflow_runtime import WorkflowRuntimeFactoryV2, workflow_service_definitions_v2
+from .workspace_context_services import workspace_context_service_definitions_v2
 from .workspace_core_runtime import (
     WorkspaceCoreRuntimeFactoryV2,
     workspace_core_runtime_definition_v2,
@@ -295,6 +296,7 @@ def builtin_runtime_definitions_v2(
         *tunnel_service_definitions_v2(),
         *audit_service_definitions_v2(),
         *billing_service_definitions_v2(),
+        *workspace_context_service_definitions_v2(),
         *shares_service_definitions_v2(),
         *invitation_service_definitions_v2(),
         *smtp_config_service_definitions_v2(),

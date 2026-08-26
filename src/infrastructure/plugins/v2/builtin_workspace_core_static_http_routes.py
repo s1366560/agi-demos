@@ -29,7 +29,11 @@ WORKSPACE_CORE_STATIC_HTTP_ROUTES_MODULE_V2 = "builtin://memstack/http/workspace
 WORKSPACE_CORE_STATIC_HTTP_ROUTES_ROW_V2 = "workspace-core-static"
 
 
-def _workspace_core_static_route_v2(source: APIRoute) -> RouteDefinitionV2:
+def _workspace_core_static_route_v2(
+    source: APIRoute,
+    *,
+    proxy: bool,
+) -> RouteDefinitionV2:
     methods = tuple(sorted(source.methods or ()))
     if not methods:
         raise RuntimeV2Error(
@@ -60,7 +64,7 @@ def _workspace_core_static_route_v2(source: APIRoute) -> RouteDefinitionV2:
         response_model_exclude_unset=source.response_model_exclude_unset,
         response_model_exclude_defaults=source.response_model_exclude_defaults,
         response_model_exclude_none=source.response_model_exclude_none,
-        route_class_override=WorkspaceCoreProxyRoute,
+        route_class_override=WorkspaceCoreProxyRoute if proxy else None,
         include_in_schema=source.include_in_schema,
         replaces_builtin_row_id=WORKSPACE_CORE_STATIC_HTTP_ROUTES_ROW_V2,
     )
@@ -68,13 +72,17 @@ def _workspace_core_static_route_v2(source: APIRoute) -> RouteDefinitionV2:
 
 def workspace_core_static_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
     """Return the complete explicit ``workspace-core-static`` inventory row."""
-    source_routers = (workspace_context.router, workspace_agent_policy.legacy_router)
-    return tuple(
-        _workspace_core_static_route_v2(route)
-        for router in source_routers
-        for route in router.routes
+    direct = tuple(
+        _workspace_core_static_route_v2(route, proxy=False)
+        for route in workspace_context.router.routes
         if isinstance(route, APIRoute)
     )
+    proxied = tuple(
+        _workspace_core_static_route_v2(route, proxy=True)
+        for route in workspace_agent_policy.legacy_router.routes
+        if isinstance(route, APIRoute)
+    )
+    return (*direct, *proxied)
 
 
 def builtin_workspace_core_static_http_routes_definition_v2() -> PluginDefinitionV2:
