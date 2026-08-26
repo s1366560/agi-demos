@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:c7cc4065efc402938f6160e5e9652b2141b6c7ca0ab0a7b5642307e8b0b644fe",
+        "digest": "sha256:17818241c4bfbad88ce4228f57af8caf00051cf810ca7b3249821f05e4267b22",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -539,6 +539,11 @@
               "alias": "subagent_runs",
               "service": "service:agent.subagent-run-registry",
               "version": "1.0.0"
+            },
+            {
+              "alias": "orchestration_runtime",
+              "service": "service:agent.orchestration-runtime",
+              "version": "1.0.0"
             }
           ]
         },
@@ -553,9 +558,9 @@
           }
         }
       },
-      "contract_digest": "sha256:789bdc9698b1dd376e1ef9d0cb15b222898c6f89a4705942096b6e91c0ee852b",
+      "contract_digest": "sha256:918bb424c49603e328fbb2c436905d8bbd2192dfe0b4d825daecb5743fd27d96",
       "artifact": {
-        "digest": "sha256:7cdc101605b9af5c09e3589e6becffcf28837e535ff70954f0b795f1f48318b6",
+        "digest": "sha256:8343ade5cba66b12b3d7cf008d8b17d9c1e8662fa9091d0fa31b0ec34dc5bc07",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },
@@ -4472,6 +4477,43 @@
       "artifact": {
         "digest": "sha256:b239e3235054bf29359a999469c77f8e0e726ec46323f3f439d1dc5b84cd7199",
         "source": "repo+python://src/infrastructure/plugins/v2/subagent_run_registry_service.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/orchestration-runtime",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_orchestration_runtime:agent_orchestration_runtime_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:agent.orchestration-runtime",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "subagent_runs",
+              "service": "service:agent.subagent-run-registry",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-owned", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:c914c37b44d66cd1d9e5b399f752509063429a3b317ad2a2fb95b498f0c0a999",
+      "artifact": {
+        "digest": "sha256:0b19d8d38a052d61148ed70f4f4c87d9ae49d6d33dd926686a3f480f34afebbf",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_orchestration_runtime.py"
       }
     },
     {

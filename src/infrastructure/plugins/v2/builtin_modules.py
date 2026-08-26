@@ -22,6 +22,10 @@ from .agent_lifecycle_notifier import (
 )
 from .agent_lifecycle_runtime import agent_lifecycle_definitions_v2
 from .agent_loop import builtin_agent_loop_definition_v2
+from .agent_orchestration_runtime import (
+    AgentOrchestratorFactoryV2,
+    agent_orchestration_runtime_definition_v2,
+)
 from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
     PinnedAgentRuntimeDispatcherV2,
@@ -141,7 +145,7 @@ def _apply_runtime_boundary(
     )
 
 
-def builtin_runtime_definitions_v2(
+def builtin_runtime_definitions_v2(  # noqa: PLR0913
     *,
     agent_lifecycle_connection_manager: AgentLifecycleConnectionManagerV2 | None = None,
     agent_pool_runtime_factory: AgentPoolRuntimeFactoryV2 | None = None,
@@ -155,6 +159,7 @@ def builtin_runtime_definitions_v2(
     reflection_runtime_manager: ReflectionRuntimeManagerV2 | None = None,
     workspace_core_runtime_factory: WorkspaceCoreRuntimeFactoryV2 | None = None,
     subagent_run_registry_factory: SubAgentRunRegistryFactoryV2 | None = None,
+    agent_orchestrator_factory: AgentOrchestratorFactoryV2 | None = None,
 ) -> tuple[PluginDefinitionV2, ...]:
     """Return deterministic, repository-owned definitions allowed in-process."""
     from . import (
@@ -284,8 +289,9 @@ def builtin_runtime_definitions_v2(
         sandbox_http_service_registry_definition_v2(
             redis_client=sandbox_redis_client,
         ),
-        agent_worker_runtime_definition_v2(),
         subagent_run_registry_definition_v2(subagent_run_registry_factory),
+        agent_orchestration_runtime_definition_v2(agent_orchestrator_factory),
+        agent_worker_runtime_definition_v2(),
         agent_pool_runtime.agent_pool_runtime_definition_v2(agent_pool_runtime_factory),
         *sandbox_operation_service_definitions_v2(
             redis_client=sandbox_redis_client,
