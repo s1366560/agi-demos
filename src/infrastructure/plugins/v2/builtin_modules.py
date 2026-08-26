@@ -24,6 +24,9 @@ from .agent_lifecycle_notifier import (
 from .agent_lifecycle_runtime import agent_lifecycle_definitions_v2
 from .agent_loop import builtin_agent_loop_definition_v2
 from .agent_memory_tools import builtin_agent_memory_tool_contribution_definition_v2
+from .agent_model_awareness_tools import (
+    builtin_agent_model_awareness_tool_contribution_definition_v2,
+)
 from .agent_orchestration_runtime import (
     AgentOrchestratorFactoryV2,
     agent_orchestration_runtime_definition_v2,
@@ -424,6 +427,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_tool_contribution_definition_v2(),
         builtin_agent_hitl_tool_contribution_definition_v2(),
         builtin_agent_memory_tool_contribution_definition_v2(),
+        builtin_agent_model_awareness_tool_contribution_definition_v2(),
         builtin_agent_orchestration_tool_contribution_definition_v2(),
         builtin_agent_definition_v2(),
         builtin_agent_definition_contribution_v2(),

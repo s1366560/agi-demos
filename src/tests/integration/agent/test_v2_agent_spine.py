@@ -32,6 +32,7 @@ from src.infrastructure.agent.tools.memory_tools import (
     memory_search_tool,
     memory_update_tool,
 )
+from src.infrastructure.agent.tools.model_availability_tool import make_model_awareness_tools
 from src.infrastructure.plugins.v2 import session_event_log_store as store_module
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -186,6 +187,21 @@ def _subagent() -> SubAgent:
     )
 
 
+async def _empty_provider_resolver(_tenant_id: str) -> list[object]:
+    return []
+
+
+async def _ignore_model_override(_conversation_id: str, _model_name: str) -> None:
+    return None
+
+
+_MODEL_AWARENESS_TOOLS = make_model_awareness_tools(
+    model_catalog=object(),
+    provider_resolver=_empty_provider_resolver,
+    persist_model_override=_ignore_model_override,
+)
+
+
 @pytest.mark.integration
 async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
     monkeypatch: pytest.MonkeyPatch,
@@ -271,6 +287,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
                     "echo": echo,
                     clarification.name: clarification,
                     decision.name: decision,
+                    **_MODEL_AWARENESS_TOOLS,
                     memory_search_tool.name: memory_search_tool,
                     memory_get_tool.name: memory_get_tool,
                     memory_create_tool.name: memory_create_tool,
@@ -300,8 +317,11 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(
             )
 
             assert raw_tools["echo"] is echo
-            assert raw_tools["ask_clarification"] is clarification
-            assert raw_tools["request_decision"] is decision
+            assert (
+                raw_tools["ask_clarification"] is clarification
+                and raw_tools["request_decision"] is decision
+            )
+            assert all(raw_tools[name] is tool for name, tool in _MODEL_AWARENESS_TOOLS.items())
             assert raw_tools["memory_search"] is memory_search_tool
             assert "agent_spawn" in raw_tools
             assert "workspace_report_complete" in raw_tools

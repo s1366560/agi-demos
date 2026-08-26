@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:2b71401bdcc6690cad5abdb0c2af9f69ba4b318a8c585e7e1e6cf5b1ed9aa68f",
+        "digest": "sha256:cd5ddff80fbd100193d7327cd9d8d302f7e24abf0cf4762d77d1d82ad173b1dc",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6891,6 +6891,41 @@
       "artifact": {
         "digest": "sha256:f319f9c30e81dc36b1e0907bd2608984e574dd41cb2e281bc5a6b298dd7251de",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_memory_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/tool/model-awareness",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_model_awareness_tools:_apply_agent_model_awareness_tool_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:tool-set-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id"],
+          "properties": {
+            "source_id": {
+              "const": "builtin-agent-model-awareness-tools",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:56048baa10b5cc5e5de9128655b59053b1eef92912ed239240deb7abc6d06e96",
+      "artifact": {
+        "digest": "sha256:9b0f67f61575b295673bce554b12afc19a0a1a0fd86316a0059904aa1eaf92d0",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_model_awareness_tools.py"
       }
     },
     {
