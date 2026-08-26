@@ -221,13 +221,13 @@ async def test_actor_initializes_once_per_generation_and_refreshes_on_switch() -
 
 
 @pytest.mark.unit
-async def test_actor_orchestrator_uses_pinned_worker_registry() -> None:
+async def test_actor_orchestrator_binds_generation_owned_runtime() -> None:
     actor = _actor_instance()
-    run_registry = object()
-    current_services = MagicMock(return_value=SimpleNamespace(subagent_run_registry=run_registry))
+    orchestration_runtime = SimpleNamespace(bind=AsyncMock(return_value="agent-orchestrator"))
+    current_services = MagicMock(
+        return_value=SimpleNamespace(orchestration_runtime=orchestration_runtime)
+    )
     set_orchestrator = MagicMock()
-    spawn_manager = MagicMock(return_value="spawn-manager")
-    orchestrator = MagicMock(return_value="agent-orchestrator")
     descriptor = PluginGenerationDescriptorV2(
         profile_id="memstack-default-v2",
         generation=7,
@@ -254,42 +254,8 @@ async def test_actor_orchestrator_uses_pinned_worker_registry() -> None:
             current_services,
         ),
         patch(
-            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
-            return_value=None,
-        ),
-        patch(
             "src.infrastructure.agent.state.agent_worker_state.set_agent_orchestrator",
             set_orchestrator,
-        ),
-        patch(
-            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-            new=AsyncMock(return_value="redis-client"),
-        ),
-        patch(
-            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
-            return_value="db-session",
-        ),
-        patch(
-            "src.infrastructure.adapters.secondary.persistence.sql_agent_registry."
-            "SqlAgentRegistryRepository",
-            return_value="agent-registry",
-        ),
-        patch(
-            "src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus."
-            "RedisAgentMessageBusAdapter",
-            return_value="message-bus",
-        ),
-        patch(
-            "src.infrastructure.agent.orchestration.session_registry.AgentSessionRegistry",
-            return_value="session-registry",
-        ),
-        patch(
-            "src.infrastructure.agent.orchestration.spawn_manager.SpawnManager",
-            spawn_manager,
-        ),
-        patch(
-            "src.infrastructure.agent.orchestration.orchestrator.AgentOrchestrator",
-            orchestrator,
         ),
         patch(
             "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
@@ -299,12 +265,10 @@ async def test_actor_orchestrator_uses_pinned_worker_registry() -> None:
         await actor._ensure_agent_orchestrator_v2()
 
     current_services.assert_called_once_with()
-    spawn_manager.assert_called_once_with(
-        session_registry="session-registry",
-        run_registry=run_registry,
-    )
-    assert orchestrator.call_args.kwargs["spawn_executor"] is not None
-    assert orchestrator.call_args.kwargs["session_turn_executor"] is not None
+    orchestration_runtime.bind.assert_awaited_once()
+    assert orchestration_runtime.bind.await_args.kwargs["owner"] is actor
+    assert orchestration_runtime.bind.await_args.kwargs["spawn_executor"] is not None
+    assert orchestration_runtime.bind.await_args.kwargs["session_turn_executor"] is not None
     set_orchestrator.assert_called_once_with("agent-orchestrator")
 
     conversation = SimpleNamespace(
@@ -333,7 +297,7 @@ async def test_actor_orchestrator_uses_pinned_worker_registry() -> None:
             new=AsyncMock(return_value=SimpleNamespace(to_dict=lambda: {"mode": "test"})),
         ),
     ):
-        await orchestrator.call_args.kwargs["spawn_executor"](
+        await orchestration_runtime.bind.await_args.kwargs["spawn_executor"](
             SpawnExecutionRequest(
                 parent_agent_id="parent-agent",
                 child_agent_id="child-agent",
@@ -346,7 +310,7 @@ async def test_actor_orchestrator_uses_pinned_worker_registry() -> None:
                 message="spawn",
             )
         )
-        await orchestrator.call_args.kwargs["session_turn_executor"](
+        await orchestration_runtime.bind.await_args.kwargs["session_turn_executor"](
             SessionTurnExecutionRequest(
                 child_agent_id="child-agent",
                 child_session_id="child-session",
@@ -372,6 +336,7 @@ async def test_actor_orchestrator_uses_pinned_worker_registry() -> None:
 async def test_actor_orchestrator_propagates_runtime_v2_errors() -> None:
     actor = _actor_instance()
     error = RuntimeV2Error("missing_service", "worker runtime is unavailable")
+    orchestration_runtime = SimpleNamespace(bind=AsyncMock(side_effect=error))
 
     with (
         patch(
@@ -381,11 +346,12 @@ async def test_actor_orchestrator_propagates_runtime_v2_errors() -> None:
         patch(
             "src.infrastructure.plugins.v2.agent_worker_runtime."
             "current_agent_worker_runtime_services_v2",
-            side_effect=error,
+            return_value=SimpleNamespace(orchestration_runtime=orchestration_runtime),
         ),
         pytest.raises(RuntimeV2Error) as raised,
     ):
         await actor._ensure_agent_orchestrator_v2()
 
     assert raised.value is error
+    orchestration_runtime.bind.assert_awaited_once()
     await actor._plugin_admission_v2.close()

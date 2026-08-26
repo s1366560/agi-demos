@@ -216,6 +216,7 @@ def test_agent_worker_runtime_is_an_explicit_profile_entry() -> None:
 def test_local_runtime_bootstrap_occurs_inside_the_generation_admission() -> None:
     bootstrap_source = getsource(AgentRuntimeBootstrapper._bootstrap_agent_orchestrator)
     assert "current_agent_worker_runtime_services_v2" in bootstrap_source
+    assert "orchestration_runtime.bind" in bootstrap_source
     assert "get_shared_subagent_run_registry" not in bootstrap_source
     assert "except RuntimeV2Error:" in bootstrap_source
 
@@ -236,6 +237,7 @@ def test_ray_actor_orchestrator_bootstrap_occurs_inside_generation_admission() -
     assert "get_shared_subagent_run_registry" not in process_bootstrap_source
     assert "get_shared_subagent_run_registry" not in orchestrator_source
     assert "current_agent_worker_runtime_services_v2" in orchestrator_source
+    assert "orchestration_runtime.bind" in orchestrator_source
     assert "except RuntimeV2Error:" in orchestrator_source
 
     chat_source = getsource(project_agent_actor.ProjectAgentActor._run_chat)

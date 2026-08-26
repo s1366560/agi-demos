@@ -872,51 +872,19 @@ async def test_start_chat_actor_workspace_worker_forces_ray_when_runtime_is_auto
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_bootstrap_agent_orchestrator_wires_pinned_v2_run_registry(bootstrapper):
-    """Multi-agent bootstrap must consume the admitted generation's registry."""
-    sentinel_registry = object()
+async def test_bootstrap_agent_orchestrator_binds_generation_owned_runtime(bootstrapper):
+    """Multi-agent bootstrap must bind through the admitted generation runtime."""
     settings = SimpleNamespace(multi_agent_enabled=True)
+    orchestration_runtime = SimpleNamespace(bind=AsyncMock(return_value="agent-orchestrator"))
     current_worker_services_mock = MagicMock(
-        return_value=SimpleNamespace(subagent_run_registry=sentinel_registry)
+        return_value=SimpleNamespace(orchestration_runtime=orchestration_runtime)
     )
     get_settings_mock = MagicMock(return_value=settings)
-    get_agent_orchestrator_mock = MagicMock(return_value=None)
     set_agent_orchestrator_mock = MagicMock()
-    get_redis_client_mock = AsyncMock(return_value="redis-client")
-    async_session_factory_mock = MagicMock(return_value="db-session")
-    sql_agent_registry_ctor = MagicMock(return_value="agent-registry")
-    message_bus_ctor = MagicMock(return_value="message-bus")
-    session_registry_ctor = MagicMock(return_value="session-registry")
-    spawn_manager_ctor = MagicMock(return_value="spawn-manager")
-    agent_orchestrator_ctor = MagicMock(return_value="agent-orchestrator")
 
     fake_config_module = _build_fake_module(
         "src.configuration.config",
         get_settings=get_settings_mock,
-    )
-    fake_database_module = _build_fake_module(
-        "src.infrastructure.adapters.secondary.persistence.database",
-        async_session_factory=async_session_factory_mock,
-    )
-    fake_registry_module = _build_fake_module(
-        "src.infrastructure.adapters.secondary.persistence.sql_agent_registry",
-        SqlAgentRegistryRepository=sql_agent_registry_ctor,
-    )
-    fake_message_bus_module = _build_fake_module(
-        "src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus",
-        RedisAgentMessageBusAdapter=message_bus_ctor,
-    )
-    fake_orchestrator_module = _build_fake_module(
-        "src.infrastructure.agent.orchestration.orchestrator",
-        AgentOrchestrator=agent_orchestrator_ctor,
-    )
-    fake_session_registry_module = _build_fake_module(
-        "src.infrastructure.agent.orchestration.session_registry",
-        AgentSessionRegistry=session_registry_ctor,
-    )
-    fake_spawn_manager_module = _build_fake_module(
-        "src.infrastructure.agent.orchestration.spawn_manager",
-        SpawnManager=spawn_manager_ctor,
     )
     fake_agent_worker_runtime_module = _build_fake_module(
         "src.infrastructure.plugins.v2.agent_worker_runtime",
@@ -924,27 +892,13 @@ async def test_bootstrap_agent_orchestrator_wires_pinned_v2_run_registry(bootstr
     )
     fake_worker_state_module = _build_fake_module(
         "src.infrastructure.agent.state.agent_worker_state",
-        get_agent_orchestrator=get_agent_orchestrator_mock,
         set_agent_orchestrator=set_agent_orchestrator_mock,
-        get_redis_client=get_redis_client_mock,
     )
 
     with patch.dict(
         "sys.modules",
         {
             "src.configuration.config": fake_config_module,
-            "src.infrastructure.adapters.secondary.persistence.database": fake_database_module,
-            "src.infrastructure.adapters.secondary.persistence.sql_agent_registry": (
-                fake_registry_module
-            ),
-            "src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus": (
-                fake_message_bus_module
-            ),
-            "src.infrastructure.agent.orchestration.orchestrator": fake_orchestrator_module,
-            "src.infrastructure.agent.orchestration.session_registry": (
-                fake_session_registry_module
-            ),
-            "src.infrastructure.agent.orchestration.spawn_manager": fake_spawn_manager_module,
             "src.infrastructure.plugins.v2.agent_worker_runtime": (
                 fake_agent_worker_runtime_module
             ),
@@ -954,18 +908,41 @@ async def test_bootstrap_agent_orchestrator_wires_pinned_v2_run_registry(bootstr
         await bootstrapper._bootstrap_agent_orchestrator()
 
     current_worker_services_mock.assert_called_once_with()
-    spawn_manager_ctor.assert_called_once_with(
-        session_registry="session-registry",
-        run_registry=sentinel_registry,
-    )
-    agent_orchestrator_ctor.assert_called_once()
-    spawn_executor = agent_orchestrator_ctor.call_args.kwargs["spawn_executor"]
+    orchestration_runtime.bind.assert_awaited_once()
+    assert orchestration_runtime.bind.await_args.kwargs["owner"] is AgentRuntimeBootstrapper
+    spawn_executor = orchestration_runtime.bind.await_args.kwargs["spawn_executor"]
     assert getattr(spawn_executor, "__self__", None) is bootstrapper
     assert (
         getattr(spawn_executor, "__func__", None)
         is AgentRuntimeBootstrapper.launch_spawned_agent_session
     )
+    session_turn_executor = orchestration_runtime.bind.await_args.kwargs["session_turn_executor"]
+    assert getattr(session_turn_executor, "__self__", None) is bootstrapper
+    assert (
+        getattr(session_turn_executor, "__func__", None)
+        is AgentRuntimeBootstrapper.launch_agent_session_turn
+    )
     set_agent_orchestrator_mock.assert_called_once_with("agent-orchestrator")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_local_runtime_rebinds_orchestrator_for_every_admitted_generation(
+    bootstrapper,
+    monkeypatch,
+):
+    """Process bootstrap is once-only, while generation binding happens per admission."""
+    monkeypatch.setattr(AgentRuntimeBootstrapper, "_local_bootstrapped", True)
+
+    with patch.object(
+        bootstrapper,
+        "_bootstrap_agent_orchestrator",
+        new_callable=AsyncMock,
+    ) as bind_orchestrator:
+        await bootstrapper._ensure_local_runtime_bootstrapped()
+        await bootstrapper._ensure_local_runtime_bootstrapped()
+
+    assert bind_orchestrator.await_count == 2
 
 
 @pytest.mark.unit

@@ -617,8 +617,6 @@ class ProjectAgentActor:
             return
 
         from src.infrastructure.agent.state.agent_worker_state import (
-            get_agent_orchestrator,
-            get_redis_client,
             set_agent_orchestrator,
         )
         from src.infrastructure.plugins.v2.agent_worker_runtime import (
@@ -627,36 +625,14 @@ class ProjectAgentActor:
 
         try:
             async with self._bootstrap_lock:
-                run_registry = current_agent_worker_runtime_services_v2().subagent_run_registry
-                current_orchestrator = get_agent_orchestrator()
-                if (
-                    getattr(self, "_agent_orchestrator_run_registry_v2", None) is run_registry
-                    and getattr(self, "_agent_orchestrator_v2", None) is current_orchestrator
-                ):
-                    return
+                services = current_agent_worker_runtime_services_v2()
 
                 from src.application.services.agent.runtime_bootstrapper import (
                     AgentRuntimeBootstrapper,
                 )
-                from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
-                    RedisAgentMessageBusAdapter,
-                )
-                from src.infrastructure.adapters.secondary.persistence.database import (
-                    async_session_factory,
-                )
-                from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
-                    SqlAgentRegistryRepository,
-                )
                 from src.infrastructure.agent.orchestration.orchestrator import (
-                    AgentOrchestrator,
                     SessionTurnExecutionRequest,
                     SpawnExecutionRequest,
-                )
-                from src.infrastructure.agent.orchestration.session_registry import (
-                    AgentSessionRegistry,
-                )
-                from src.infrastructure.agent.orchestration.spawn_manager import (
-                    SpawnManager,
                 )
                 from src.infrastructure.plugins.v2.boundary import (
                     OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
@@ -743,23 +719,12 @@ class ProjectAgentActor:
                         )
                     )
 
-                db_session = async_session_factory()
-                redis = await get_redis_client()
-                session_registry = AgentSessionRegistry()
-                orchestrator = AgentOrchestrator(
-                    agent_registry=SqlAgentRegistryRepository(db_session),
-                    session_registry=session_registry,
-                    spawn_manager=SpawnManager(
-                        session_registry=session_registry,
-                        run_registry=run_registry,
-                    ),
-                    message_bus=RedisAgentMessageBusAdapter(redis),
-                    db_session=db_session,
+                orchestrator = await services.orchestration_runtime.bind(
+                    owner=self,
                     spawn_executor=_spawn_executor,
                     session_turn_executor=_session_turn_executor,
                 )
                 self._agent_orchestrator_v2 = orchestrator
-                self._agent_orchestrator_run_registry_v2 = run_registry
                 set_agent_orchestrator(orchestrator)
                 logger.info(
                     "[ProjectAgentActor] AgentOrchestrator bootstrapped for multi-agent tools"

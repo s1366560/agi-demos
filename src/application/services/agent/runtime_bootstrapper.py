@@ -1256,103 +1256,70 @@ class AgentRuntimeBootstrapper:
 
     async def _ensure_local_runtime_bootstrapped(self) -> None:
         """Bootstrap shared services for local (non-Ray) agent execution."""
-        if AgentRuntimeBootstrapper._local_bootstrapped:
-            return
-
-        async with AgentRuntimeBootstrapper._local_bootstrap_lock:
-            if AgentRuntimeBootstrapper._local_bootstrapped:
-                return  # type: ignore[unreachable]
-
-            from src.configuration.factories import create_native_graph_adapter
-            from src.domain.llm_providers.models import NoActiveProviderError
-            from src.infrastructure.agent.state.agent_worker_state import (
-                get_agent_graph_service,
-                set_agent_graph_service,
-            )
-            from src.infrastructure.llm.initializer import initialize_default_llm_providers
-
-            try:
-                await initialize_default_llm_providers()
-            except Exception as e:
-                logger.warning("[AgentService] LLM provider init failed: %s", e)
-
-            if not get_agent_graph_service():
-                try:
-                    graph_service = await create_native_graph_adapter()
-                    set_agent_graph_service(graph_service)
-                    logger.info("[AgentService] Graph service bootstrapped for local execution")
-                except NoActiveProviderError:
-                    logger.warning(
-                        "[AgentService] No active LLM provider configured "
-                        "-- graph service disabled for local execution. "
-                        "Agent will work without knowledge graph features."
+        if not AgentRuntimeBootstrapper._local_bootstrapped:
+            async with AgentRuntimeBootstrapper._local_bootstrap_lock:
+                if not AgentRuntimeBootstrapper._local_bootstrapped:
+                    from src.configuration.factories import create_native_graph_adapter
+                    from src.domain.llm_providers.models import NoActiveProviderError
+                    from src.infrastructure.agent.state.agent_worker_state import (
+                        get_agent_graph_service,
+                        set_agent_graph_service,
                     )
-                except Exception as e:
-                    logger.error("[AgentService] Graph service init failed: %s", e)
-                    raise
+                    from src.infrastructure.llm.initializer import (
+                        initialize_default_llm_providers,
+                    )
 
-            await self._bootstrap_agent_orchestrator()
+                    try:
+                        await initialize_default_llm_providers()
+                    except Exception as e:
+                        logger.warning("[AgentService] LLM provider init failed: %s", e)
 
-            AgentRuntimeBootstrapper._local_bootstrapped = True
+                    if not get_agent_graph_service():
+                        try:
+                            graph_service = await create_native_graph_adapter()
+                            set_agent_graph_service(graph_service)
+                            logger.info(
+                                "[AgentService] Graph service bootstrapped for local execution"
+                            )
+                        except NoActiveProviderError:
+                            logger.warning(
+                                "[AgentService] No active LLM provider configured "
+                                "-- graph service disabled for local execution. "
+                                "Agent will work without knowledge graph features."
+                            )
+                        except Exception as e:
+                            logger.error("[AgentService] Graph service init failed: %s", e)
+                            raise
+
+                    AgentRuntimeBootstrapper._local_bootstrapped = True
+
+        # Process services are initialized once, but every admitted generation owns
+        # a distinct orchestration runtime that must be bound before the turn starts.
+        await self._bootstrap_agent_orchestrator()
 
     async def _bootstrap_agent_orchestrator(self) -> None:
-        """Initialize AgentOrchestrator for multi-agent tools."""
+        """Bind AgentOrchestrator through the admitted generation runtime."""
         from src.infrastructure.agent.state.agent_worker_state import (
-            get_agent_orchestrator,
             set_agent_orchestrator,
         )
         from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-
-        if get_agent_orchestrator():
-            return
 
         try:
             from src.configuration.config import get_settings as _get_ma_settings
 
             _ma_settings = _get_ma_settings()
             if _ma_settings.multi_agent_enabled:
-                from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
-                    RedisAgentMessageBusAdapter,
-                )
-                from src.infrastructure.adapters.secondary.persistence.database import (
-                    async_session_factory,
-                )
-                from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
-                    SqlAgentRegistryRepository,
-                )
-                from src.infrastructure.agent.orchestration.orchestrator import (
-                    AgentOrchestrator,
-                )
-                from src.infrastructure.agent.orchestration.session_registry import (
-                    AgentSessionRegistry,
-                )
-                from src.infrastructure.agent.orchestration.spawn_manager import (
-                    SpawnManager,
-                )
-                from src.infrastructure.agent.state.agent_worker_state import (
-                    get_redis_client,
-                )
                 from src.infrastructure.plugins.v2.agent_worker_runtime import (
                     current_agent_worker_runtime_services_v2,
                 )
 
-                _db_session = async_session_factory()
-                _redis = await get_redis_client()
-                _session_registry = AgentSessionRegistry()
-                _run_registry = current_agent_worker_runtime_services_v2().subagent_run_registry
-                _orchestrator = AgentOrchestrator(
-                    agent_registry=SqlAgentRegistryRepository(_db_session),
-                    session_registry=_session_registry,
-                    spawn_manager=SpawnManager(
-                        session_registry=_session_registry,
-                        run_registry=_run_registry,
-                    ),
-                    message_bus=RedisAgentMessageBusAdapter(_redis),
-                    db_session=_db_session,
+                services = current_agent_worker_runtime_services_v2()
+                orchestrator = await services.orchestration_runtime.bind(
+                    owner=AgentRuntimeBootstrapper,
                     spawn_executor=self.launch_spawned_agent_session,
                     session_turn_executor=self.launch_agent_session_turn,
                 )
-                set_agent_orchestrator(_orchestrator)
+                set_agent_orchestrator(orchestrator)
                 logger.info("[AgentService] AgentOrchestrator bootstrapped for multi-agent tools")
         except RuntimeV2Error:
             raise
