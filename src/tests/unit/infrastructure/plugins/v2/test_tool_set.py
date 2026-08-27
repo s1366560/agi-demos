@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -13,7 +14,10 @@ from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.core.react_agent_stream_mixin import (
     _resolve_current_tools_from_runtime_v2,
 )
-from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
+from src.infrastructure.agent.plugins.selection_pipeline import (
+    ToolSelectionContext,
+    ToolSelectionTraceStep,
+)
 from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import (
     RUNTIME_BOUNDARY_MODULE_V2,
@@ -98,9 +102,13 @@ class _AlternativeToolSetResolver:
         *,
         agent: object,
         selection_context: object,
-    ) -> tuple[dict[str, object], list[object]]:
+    ) -> ToolSetV2:
         self.calls.append((agent, selection_context))
-        return {"alternative": object()}, [object()]
+        definition = SimpleNamespace(name="alternative", description="Alternative tool")
+        return ToolSetV2(
+            tools=MappingProxyType({"alternative": object()}),
+            definitions=(definition,),
+        )
 
 
 @pytest.mark.unit
@@ -167,12 +175,67 @@ def test_tool_set_accepts_structural_non_builtin_provider() -> None:
         "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
         return_value=operation,
     ):
-        raw_tools, definitions = _resolve_current_tools_from_runtime_v2(agent, selection)
+        tool_set = _resolve_current_tools_from_runtime_v2(agent, selection)
 
-    assert set(raw_tools) == {"alternative"}
-    assert len(definitions) == 1
+    assert set(tool_set.tools) == {"alternative"}
+    assert len(tool_set.definitions) == 1
     assert provider.calls == [(agent, selection)]
     assert agent.contexts == []
+
+
+@pytest.mark.unit
+def test_tool_set_snapshots_selection_trace_without_mutating_agent() -> None:
+    kept_tool = _Tool()
+    removed_tool = _Tool()
+    trace = (
+        ToolSelectionTraceStep(
+            stage="profile_filter",
+            before_count=2,
+            after_count=1,
+            removed_tools=("disabled",),
+        ),
+    )
+
+    class _SelectionPipeline:
+        @staticmethod
+        def select_with_trace(tools, _selection_context):
+            return SimpleNamespace(tools={"enabled": tools["enabled"]}, trace=trace)
+
+    agent = SimpleNamespace(
+        _tool_selection_pipeline=_SelectionPipeline(),
+        _last_tool_selection_trace=("sentinel",),
+    )
+    catalog = ToolSetCatalogV2()
+    _ = catalog.register_tools(
+        "profile-tools",
+        lambda **_kwargs: ToolSetV2(
+            tools=MappingProxyType(
+                {
+                    "disabled": removed_tool,
+                    "enabled": kept_tool,
+                }
+            ),
+            definitions=(
+                SimpleNamespace(name="disabled", description="Disabled tool"),
+                SimpleNamespace(name="enabled", description="Enabled tool"),
+            ),
+        ),
+    )
+
+    resolved = catalog.resolve(
+        agent=agent,
+        selection_context=ToolSelectionContext(
+            tenant_id="tenant-a",
+            project_id="project-a",
+        ),
+    )
+
+    assert resolved.tools == {"enabled": kept_tool}
+    assert [definition.name for definition in resolved.definitions] == ["enabled"]
+    assert resolved.selection_trace == trace
+    assert agent._last_tool_selection_trace == ("sentinel",)
+    with pytest.raises(TypeError):
+        resolved.tools["other"] = object()
 
 
 @pytest.mark.unit
@@ -256,10 +319,10 @@ async def test_runtime_consumer_resolves_tools_from_generation_provider() -> Non
                 operation.require(TOOL_SET_RESOLVER_SERVICE_V2),
                 ToolSetResolverV2,
             )
-            raw_tools, definitions = _resolve_current_tools_from_runtime_v2(agent, selection)
+            tool_set = _resolve_current_tools_from_runtime_v2(agent, selection)
     finally:
         await manager.close()
 
-    assert raw_tools == {}
-    assert definitions == []
+    assert tool_set.tools == {}
+    assert tool_set.definitions == ()
     assert agent.contexts == []

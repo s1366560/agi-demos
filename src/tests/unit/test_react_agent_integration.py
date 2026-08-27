@@ -5,7 +5,7 @@ and TemplateRegistry when graph_service is available.
 """
 
 import json
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,6 +13,7 @@ import pytest
 from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
+from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AgentRuntimeDispatchResultV2,
     PinnedAgentRuntimeDispatcherV2,
@@ -20,6 +21,16 @@ from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
 )
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+
+
+def _turn_tool_set(*names: str) -> ToolSetV2:
+    raw_tools = {name: object() for name in names}
+    definitions = tuple(ToolDefinition(name, "", {}, lambda **_: None) for name in names)
+    return ToolSetV2(
+        tools=MappingProxyType(raw_tools),
+        definitions=definitions,
+    )
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -647,6 +658,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -751,6 +767,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -880,6 +901,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -924,7 +950,6 @@ class TestReActAgentWorkspaceDelegation:
 
     async def test_leader_replan_runtime_context_restricts_tools_to_task_ledger(self):
         from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-        from src.infrastructure.agent.core.processor import ToolDefinition
         from src.infrastructure.agent.core.react_agent import AgentRuntimeProfile
         from src.infrastructure.agent.workspace.runtime_role_contract import (
             WORKSPACE_ROLE_LEADER,
@@ -958,17 +983,6 @@ class TestReActAgentWorkspaceDelegation:
             agent._stream_final_content = "done"
             agent._stream_success = True
             yield {"type": "complete", "data": {"content": "done"}}
-
-        def _prepare_tools(*args, **kwargs):
-            del args, kwargs
-            agent._stream_tools_to_use = [
-                ToolDefinition("bash", "", {}, lambda **_: None),
-                ToolDefinition("read", "", {}, lambda **_: None),
-                ToolDefinition("sessions_list", "", {}, lambda **_: None),
-                ToolDefinition("todoread", "", {}, lambda **_: None),
-                ToolDefinition("todowrite", "", {}, lambda **_: None),
-            ]
-            return []
 
         def _capture_processor(**kwargs):
             captured["config"] = kwargs["config"]
@@ -1031,7 +1045,18 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
-            patch.object(agent, "_stream_prepare_tools", side_effect=_prepare_tools),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(
+                    "bash",
+                    "read",
+                    "sessions_list",
+                    "todoread",
+                    "todowrite",
+                ),
+            ),
+            patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
             patch.object(agent, "_stream_record_skill_usage", return_value=None),
@@ -1146,6 +1171,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),
@@ -1233,6 +1263,11 @@ class TestReActAgentWorkspaceDelegation:
             patch.object(agent, "_build_primary_agent_prompt", return_value=""),
             patch.object(agent, "_build_system_prompt", new=AsyncMock(return_value="system")),
             patch.object(agent, "_stream_build_context", side_effect=_empty_async_gen),
+            patch(
+                "src.infrastructure.agent.core.react_agent_stream_mixin."
+                "_resolve_current_tools_from_runtime_v2",
+                return_value=_turn_tool_set(),
+            ),
             patch.object(agent, "_stream_prepare_tools", return_value=[]),
             patch.object(agent, "_stream_process_events", side_effect=_process_events),
             patch.object(agent, "_stream_post_process", side_effect=_empty_async_gen),

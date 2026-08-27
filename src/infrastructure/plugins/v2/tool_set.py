@@ -37,6 +37,7 @@ class ToolSetV2:
 
     tools: Mapping[str, Any]
     definitions: tuple[Any, ...]
+    selection_trace: tuple[Any, ...] = ()
 
 
 @runtime_checkable
@@ -143,7 +144,7 @@ class ToolSetCatalogV2:
                 source_by_name[normalized_tool_name] = source_id
                 resolved_tools[tool_name] = tool
             definitions.extend(contribution_definitions)
-        resolved_tools, definitions = _select_complete_tool_set_v2(
+        resolved_tools, definitions, selection_trace = _select_complete_tool_set_v2(
             agent=agent,
             selection_context=selection_context,
             tools=resolved_tools,
@@ -152,6 +153,7 @@ class ToolSetCatalogV2:
         return ToolSetV2(
             tools=MappingProxyType(resolved_tools),
             definitions=tuple(definitions),
+            selection_trace=selection_trace,
         )
 
 
@@ -164,7 +166,7 @@ class ToolSetResolverProtocolV2(Protocol):
         *,
         agent: object,
         selection_context: object | None,
-    ) -> tuple[dict[str, Any], list[Any]]: ...
+    ) -> ToolSetV2: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -179,9 +181,8 @@ class ToolSetResolverV2:
         *,
         agent: object,
         selection_context: object | None,
-    ) -> tuple[dict[str, Any], list[Any]]:
-        result = self.catalog.resolve(agent=agent, selection_context=selection_context)
-        return dict(result.tools), list(result.definitions)
+    ) -> ToolSetV2:
+        return self.catalog.resolve(agent=agent, selection_context=selection_context)
 
 
 def _apply_tool_set_resolver_v2(
@@ -210,13 +211,13 @@ def _select_complete_tool_set_v2(
     selection_context: object | None,
     tools: dict[str, Any],
     definitions: list[Any],
-) -> tuple[dict[str, Any], list[Any]]:
+) -> tuple[dict[str, Any], list[Any], tuple[Any, ...]]:
     """Run the agent-owned selector once after all V2 contributions are merged."""
     if selection_context is None:
-        return tools, definitions
+        return tools, definitions, ()
     pipeline = getattr(agent, "_tool_selection_pipeline", None)
     if pipeline is None:
-        return tools, definitions
+        return tools, definitions, ()
     select_with_trace = getattr(pipeline, "select_with_trace", None)
     if not callable(select_with_trace):
         raise RuntimeV2Error(
@@ -239,11 +240,46 @@ def _select_complete_tool_set_v2(
                 "agent tool-selection pipeline returned an unknown tool",
             )
         normalized_tools[name] = tool
-    cast("Any", agent)._last_tool_selection_trace = tuple(trace)
-
     from src.infrastructure.agent.core.tool_converter import convert_tools
 
-    return normalized_tools, list(convert_tools(normalized_tools))
+    return normalized_tools, list(convert_tools(normalized_tools)), tuple(trace)
+
+
+def restrict_tool_set_v2(
+    tool_set: ToolSetV2,
+    definitions: Sequence[Any],
+    *,
+    selection_trace: Sequence[Any] | None = None,
+) -> ToolSetV2:
+    """Return an immutable name-synchronized subset of one resolved ToolSet."""
+    normalized_definitions = tuple(definitions)
+    names: list[str] = []
+    for definition in normalized_definitions:
+        name = getattr(definition, "name", None)
+        if not isinstance(name, str) or not name.strip():
+            raise RuntimeV2Error(
+                "invalid_tool_definition",
+                "turn ToolSet contains a definition without a valid name",
+            )
+        normalized_name = name.strip()
+        if normalized_name in names:
+            raise RuntimeV2Error(
+                "duplicate_tool_definition",
+                f"turn ToolSet contains duplicate definition {normalized_name}",
+            )
+        if normalized_name not in tool_set.tools:
+            raise RuntimeV2Error(
+                "tool_definition_not_provided",
+                f"turn ToolSet definition {normalized_name} has no provided tool",
+            )
+        names.append(normalized_name)
+    return ToolSetV2(
+        tools=MappingProxyType({name: tool_set.tools[name] for name in names}),
+        definitions=normalized_definitions,
+        selection_trace=tuple(
+            tool_set.selection_trace if selection_trace is None else selection_trace
+        ),
+    )
 
 
 def builtin_tool_set_definition_v2() -> PluginDefinitionV2:
@@ -264,4 +300,5 @@ __all__ = [
     "ToolSetResolverV2",
     "ToolSetV2",
     "builtin_tool_set_definition_v2",
+    "restrict_tool_set_v2",
 ]

@@ -42,9 +42,10 @@ from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.plugins.v2.agent_capabilities import AgentCapabilitySetV2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2, restrict_tool_set_v2
 
 from ..i18n import directive_for, resolve_response_language
-from ..plugins.selection_pipeline import ToolSelectionContext
+from ..plugins.selection_pipeline import ToolSelectionContext, ToolSelectionTraceStep
 from ..routing import ExecutionPath, RoutingDecision
 from ..sisyphus.builtin_agent import DEFAULT_GENERAL_AGENT_ID
 from ..skill import SkillProtocol
@@ -66,6 +67,11 @@ from ..workspace.workspace_metadata_keys import (
 from .processor import ToolDefinition
 from .react_agent_profile import (
     _register_selected_agent_session,
+)
+from .react_agent_tool_policy import (
+    filter_non_workspace_conversation_tools,
+    filter_tools_by_name_policy,
+    filter_workspace_root_tools,
 )
 
 if TYPE_CHECKING:
@@ -190,7 +196,7 @@ async def _bind_processor_model_route(
 def _resolve_current_tools_from_runtime_v2(
     agent: object,
     selection_context: ToolSelectionContext,
-) -> tuple[dict[str, Any], list[Any]]:
+) -> ToolSetV2:
     """Resolve tools through the required service in the pinned v2 operation."""
     from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
     from src.infrastructure.plugins.v2.tool_set import (
@@ -202,7 +208,77 @@ def _resolve_current_tools_from_runtime_v2(
     resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
     if not isinstance(resolver, ToolSetResolverProtocolV2):
         raise RuntimeError("v2 tool-set resolver has an invalid implementation")
-    return resolver.resolve(agent=agent, selection_context=selection_context)
+    raw_tool_set: object = resolver.resolve(agent=agent, selection_context=selection_context)
+    if not isinstance(raw_tool_set, ToolSetV2):
+        raise RuntimeV2Error(
+            "invalid_tool_set",
+            "service:tool-set-resolver returned an invalid immutable ToolSet",
+        )
+    return raw_tool_set
+
+
+def _finalize_turn_tool_set_v2(
+    tool_set: ToolSetV2,
+    *,
+    is_forced: bool,
+    matched_skill: Skill | None,
+    workspace_root_task: object | None,
+    is_workspace_conversation: bool,
+    allow_tools: Sequence[str] | None,
+    deny_tools: Sequence[str] | None,
+) -> ToolSetV2:
+    """Apply objective turn-scope filters once before every model consumer."""
+    definitions = list(tool_set.definitions)
+    before_names = tuple(definition.name for definition in definitions)
+
+    if is_forced and matched_skill:
+        skill_tools: set[str] = {
+            name for name in matched_skill.tools if isinstance(name, str) and name
+        }
+        if skill_tools:
+            allowed = skill_tools | {"todowrite", "todoread"}
+            definitions = [definition for definition in definitions if definition.name in allowed]
+        else:
+            definitions = [
+                definition for definition in definitions if definition.name != "skill_loader"
+            ]
+
+    definitions = filter_workspace_root_tools(definitions, workspace_root_task)
+    definitions = filter_non_workspace_conversation_tools(
+        definitions,
+        is_workspace_conversation=is_workspace_conversation,
+    )
+    definitions = filter_tools_by_name_policy(
+        definitions,
+        allow_tools=allow_tools,
+        deny_tools=deny_tools,
+    )
+
+    after_names = tuple(definition.name for definition in definitions)
+    selection_trace = tool_set.selection_trace
+    if before_names != after_names:
+        before_set = set(before_names)
+        after_set = set(after_names)
+        selection_trace = (
+            *selection_trace,
+            ToolSelectionTraceStep(
+                stage="turn_scope_filter",
+                before_count=len(before_names),
+                after_count=len(after_names),
+                removed_tools=tuple(sorted(before_set - after_set)),
+                added_tools=tuple(sorted(after_set - before_set)),
+                explain={
+                    "forced_skill": bool(is_forced and matched_skill),
+                    "workspace_root": workspace_root_task is not None,
+                    "workspace_conversation": is_workspace_conversation,
+                },
+            ),
+        )
+    return restrict_tool_set_v2(
+        tool_set,
+        definitions,
+        selection_trace=selection_trace,
+    )
 
 
 async def _resolve_agent_capabilities_from_runtime_v2(
@@ -430,7 +506,7 @@ class _StreamAgent(Protocol):
         deny_tools: list[str] | None = ...,
     ) -> ToolSelectionContext: ...
 
-    def _extract_sandbox_id_from_tools(self) -> str | None: ...
+    def _extract_sandbox_id_from_tools(self, *, tool_set: ToolSetV2) -> str | None: ...
 
     def _convert_domain_event(
         self,
@@ -514,6 +590,7 @@ class _StreamAgent(Protocol):
         *,
         runtime_profile: Any,
         selection_context: ToolSelectionContext,
+        tool_set: ToolSetV2,
         available_subagents: Sequence[Any],
     ) -> str: ...
 
@@ -580,7 +657,12 @@ class _StreamAgent(Protocol):
 
     def _stream_match_skill(self, *args: Any, **kwargs: Any) -> Iterator[dict[str, Any]]: ...
 
-    async def _stream_sync_skill_resources(self, matched_skill: Skill) -> None: ...
+    async def _stream_sync_skill_resources(
+        self,
+        matched_skill: Skill,
+        *,
+        tool_set: ToolSetV2,
+    ) -> None: ...
 
     def _stream_resolve_mode(
         self, *args: Any, **kwargs: Any
@@ -724,11 +806,13 @@ class StreamMixin:
     async def _stream_sync_skill_resources(
         self: _StreamAgent,
         matched_skill: Skill,
+        *,
+        tool_set: ToolSetV2,
     ) -> None:
         """Sync skill resources to sandbox before prompt injection."""
         if not self._resource_sync_service:
             return
-        sandbox_id = self._extract_sandbox_id_from_tools()
+        sandbox_id = self._extract_sandbox_id_from_tools(tool_set=tool_set)
         if not sandbox_id:
             return
         try:
@@ -852,17 +936,14 @@ class StreamMixin:
         selection_context: ToolSelectionContext,
         is_forced: bool,
         matched_skill: Skill | None,
+        *,
+        tool_set: ToolSetV2,
     ) -> Iterator[dict[str, Any]]:
-        """Prepare tools with selection trace and policy filtering events.
-
-        Sets self._stream_tools_to_use.
-        """
-        _current_raw_tools, current_tool_definitions = _resolve_current_tools_from_runtime_v2(
-            self,
-            selection_context,
-        )
-        if self._last_tool_selection_trace:
-            removed_total = sum(len(step.removed_tools) for step in self._last_tool_selection_trace)
+        """Emit trace events for the already finalized immutable turn ToolSet."""
+        _ = (is_forced, matched_skill)
+        selection_trace = tool_set.selection_trace
+        if selection_trace:
+            removed_total = sum(len(step.removed_tools) for step in selection_trace)
             route_id = selection_context.metadata.get("route_id")
             trace_id = selection_context.metadata.get("trace_id", route_id)
             trace_data = [
@@ -874,7 +955,7 @@ class StreamMixin:
                     "duration_ms": step.duration_ms,
                     "explain": dict(step.explain),
                 }
-                for step in self._last_tool_selection_trace
+                for step in selection_trace
             ]
             semantic_stage = next(
                 (stage for stage in trace_data if stage["stage"] == "semantic_ranker_stage"),
@@ -921,44 +1002,15 @@ class StreamMixin:
                         budget_exceeded_stages=[str(s) for s in budget_exceeded_stages],
                     ).to_event_dict(),
                 )
-        tools_to_use = list(current_tool_definitions)
-
-        # When a forced skill is active, narrow the tool surface to what the
-        # skill explicitly declares plus a small set of always-allowed planning
-        # tools. ``skill_loader`` is removed unconditionally to prevent the
-        # agent from side-loading a different skill mid-execution.
-        if is_forced and matched_skill:
-            skill_tools = set(matched_skill.tools) if matched_skill.tools else set()
-            if skill_tools:
-                # Strict whitelist: only the skill's declared tools plus the
-                # two planning helpers the agent always needs to make progress.
-                allowed = skill_tools | {"todowrite", "todoread"}
-                before = len(tools_to_use)
-                tools_to_use = [t for t in tools_to_use if t.name in allowed]
-                logger.info(
-                    f"[ReActAgent] Forced skill '{matched_skill.name}' active: "
-                    f"whitelisted to skill tools {sorted(skill_tools)} + "
-                    f"{{todowrite, todoread}} "
-                    f"({before} -> {len(tools_to_use)})"
-                )
-            else:
-                # No declared tools — fall back to keeping everything except
-                # skill_loader so the agent has full freedom under the skill prompt.
-                tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
-                logger.info(
-                    f"[ReActAgent] Forced skill '{matched_skill.name}' active "
-                    f"with no declared tools: kept {len(tools_to_use)} tools "
-                    f"(skill_loader removed)"
-                )
-
-        self._stream_tools_to_use = tools_to_use
 
     def _stream_create_processor_config(
         self: _StreamAgent,
         config: ProcessorConfig,
         selection_context: ToolSelectionContext,
+        *,
+        tool_set: ToolSetV2,
     ) -> ProcessorConfig:
-        """Create request-scoped processor config, optionally with dynamic tool provider."""
+        """Create a request config pinned to the already resolved turn ToolSet."""
         from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
             AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
             AgentRuntimeDispatcherProtocolV2,
@@ -967,17 +1019,7 @@ class StreamMixin:
 
         from .processor import ProcessorConfig as _ProcessorConfig
 
-        tool_provider: Callable[[], list[ToolDefinition]] | None = config.tool_provider
-        if self._use_dynamic_tools and self._tool_provider is not None:
-
-            def _tool_provider_wrapper() -> list[ToolDefinition]:
-                _, tool_defs = _resolve_current_tools_from_runtime_v2(
-                    self,
-                    selection_context,
-                )
-                return list(tool_defs)
-
-            tool_provider = _tool_provider_wrapper
+        _ = (selection_context, tool_set)
 
         dispatcher = current_operation_context_v2().require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2)
         if not isinstance(dispatcher, AgentRuntimeDispatcherProtocolV2):
@@ -1010,7 +1052,7 @@ class StreamMixin:
             plugin_event_dispatcher=dispatcher,
             runtime_hook_overrides=[],
             runtime_context=dict(config.runtime_context),
-            tool_provider=tool_provider,
+            tool_provider=None,
             forced_skill_name=config.forced_skill_name,
             forced_skill_tools=(
                 list(config.forced_skill_tools) if config.forced_skill_tools else None
@@ -1023,10 +1065,6 @@ class StreamMixin:
             provider_id=config.provider_id,
             loop_resolver=config.loop_resolver,
         )
-        if tool_provider is not None:
-            logger.debug(
-                "[ReActAgent] Created processor config with tool_provider for dynamic tools"
-            )
         return new_config
 
     async def _stream_process_events(
@@ -1800,11 +1838,8 @@ class StreamMixin:
         is_forced: bool = cast(bool, skill_state["is_forced"])
         should_inject_prompt: bool = cast(bool, skill_state["should_inject_prompt"])
 
-        # Phase 5b: Sync skill resources
-        if should_inject_prompt and matched_skill:
-            await self._stream_sync_skill_resources(matched_skill)
-
-        # Phase 5c: Activate skill-embedded MCP servers
+        # Phase 5b: Activate skill-embedded MCP servers. These post-resolution
+        # additions are migrated to explicit V2 contributions in T2.
         self._skill_mcp_tools = []
         if matched_skill and matched_skill.metadata:
             mcp_servers_raw = matched_skill.metadata.get("mcp_servers")
@@ -1898,6 +1933,33 @@ class StreamMixin:
                 f"injecting into selection context for pipeline pinning"
             )
 
+        # Phase 6c: Resolve and finalize one immutable model-visible ToolSet.
+        # Every consumer below receives this exact value; no consumer may
+        # independently refresh native/static tools during the turn.
+        from src.infrastructure.agent.workspace.runtime_role_contract import (
+            is_workspace_conversation as _is_workspace_conversation,
+        )
+
+        workspace_conversation_flag = _is_workspace_conversation(workspace_runtime_payload)
+        turn_tool_set = _resolve_current_tools_from_runtime_v2(self, selection_context)
+        turn_tool_set = _finalize_turn_tool_set_v2(
+            turn_tool_set,
+            is_forced=is_forced,
+            matched_skill=matched_skill,
+            workspace_root_task=workspace_root_task,
+            is_workspace_conversation=workspace_conversation_flag,
+            allow_tools=runtime_profile.allow_tools,
+            deny_tools=runtime_profile.deny_tools,
+        )
+
+        # Phase 6d: Operational resource sync derives its sandbox identity
+        # from the same pinned ToolSet used by model-visible consumers.
+        if should_inject_prompt and matched_skill:
+            await self._stream_sync_skill_resources(
+                matched_skill,
+                tool_set=turn_tool_set,
+            )
+
         # Phase 7: Memory runtime prompt augmentation
         memory_context, hook_events = await self._apply_before_prompt_build_hook(
             processed_user_message=processed_user_message,
@@ -1924,15 +1986,11 @@ class StreamMixin:
         primary_agent_prompt = self._build_primary_agent_prompt(
             runtime_profile=runtime_profile,
             selection_context=selection_context,
+            tool_set=turn_tool_set,
             available_subagents=available_subagents,
         )
 
         # Phase 8: System prompt building
-        from src.infrastructure.agent.workspace.runtime_role_contract import (
-            is_workspace_conversation as _is_workspace_conversation,
-        )
-
-        workspace_conversation_flag = _is_workspace_conversation(workspace_runtime_payload)
         system_prompt = await self._build_system_prompt(
             processed_user_message,
             conversation_context,
@@ -1955,6 +2013,7 @@ class StreamMixin:
             workspace_manager=runtime_workspace_manager,
             selected_agent_name=selected_agent.name,
             is_workspace_conversation=workspace_conversation_flag,
+            tool_set=turn_tool_set,
         )
 
         # Phase 9: Context building
@@ -1973,16 +2032,14 @@ class StreamMixin:
         messages = self._stream_messages
 
         # Phase 10: Tool preparation
-        for event in self._stream_prepare_tools(selection_context, is_forced, matched_skill):
+        for event in self._stream_prepare_tools(
+            selection_context,
+            is_forced,
+            matched_skill,
+            tool_set=turn_tool_set,
+        ):
             yield event
-        tools_to_use = self._filter_workspace_root_tools(
-            self._stream_tools_to_use,
-            workspace_root_task,
-        )
-        from src.infrastructure.agent.core.react_agent_tool_policy import (
-            filter_non_workspace_conversation_tools,
-        )
-
+        tools_to_use = list(turn_tool_set.definitions)
         tools_to_use = filter_non_workspace_conversation_tools(
             tools_to_use,
             is_workspace_conversation=workspace_conversation_flag,
@@ -2020,7 +2077,11 @@ class StreamMixin:
         )
 
         # Phase 12: Processor creation
-        config = self._stream_create_processor_config(self.config, selection_context)
+        config = self._stream_create_processor_config(
+            self.config,
+            selection_context,
+            tool_set=turn_tool_set,
+        )
         config.run_id = canonical_run_id or message_id
         config.api_auth_token = api_auth_token
         previous_model_route = ModelRouteRef(
@@ -2211,7 +2272,7 @@ class StreamMixin:
             "tenant_id": tenant_id,
             "project_id": project_id,
             "message_id": message_id,
-            "sandbox_id": self._extract_sandbox_id_from_tools(),
+            "sandbox_id": self._extract_sandbox_id_from_tools(tool_set=turn_tool_set),
             "agent_name": selected_agent.name,
         }
 

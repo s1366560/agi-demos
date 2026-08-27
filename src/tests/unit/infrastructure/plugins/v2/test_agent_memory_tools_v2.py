@@ -137,10 +137,11 @@ async def test_disabling_memory_contribution_removes_prepared_memory_tools() -> 
             operation_id="memory-tools-disabled",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, _definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, _definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 
@@ -157,10 +158,11 @@ async def test_enabling_memory_contribution_restores_exact_prepared_tools() -> N
             operation_id="memory-tools-enabled",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 

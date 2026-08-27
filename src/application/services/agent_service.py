@@ -45,7 +45,10 @@ from src.domain.ports.repositories.agent_repository import (
 )
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
 from src.domain.ports.repositories.subagent_repository import SubAgentRepositoryPort
-from src.domain.ports.services.agent_service_port import AgentServicePort
+from src.domain.ports.services.agent_service_port import (
+    AgentServicePort,
+    ModelVisibleToolSetView,
+)
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.session_event_log import (
     SESSION_EVENT_LOG_SERVICE_V2,
@@ -1575,13 +1578,19 @@ class AgentService(AgentServicePort):
 
     @override
     async def get_available_tools(
-        self, project_id: str, tenant_id: str, agent_mode: str = "default"
+        self,
+        project_id: str,
+        tenant_id: str,
+        agent_mode: str = "default",
+        *,
+        tool_set: ModelVisibleToolSetView,
     ) -> list[dict[str, Any]]:
-        """Get list of available tools for the agent."""
+        """Project the exact ToolSet already resolved for the pinned turn."""
         return await self._tool_discovery.get_available_tools(
             project_id=project_id,
             tenant_id=tenant_id,
             agent_mode=agent_mode,
+            tool_set=tool_set,
         )
 
     @override

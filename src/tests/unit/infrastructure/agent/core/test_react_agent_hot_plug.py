@@ -4,7 +4,7 @@ Tests that tools can be added/removed dynamically at runtime
 without restarting the agent.
 """
 
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -13,6 +13,9 @@ import pytest
 import src.infrastructure.agent.core.react_agent as react_agent_module
 from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+
+_EMPTY_TOOL_SET = ToolSetV2(tools=MappingProxyType({}), definitions=())
 
 
 class MockTool:
@@ -324,6 +327,7 @@ class TestRequestScopedConfigSeamForwarding:
             new_config = agent._stream_create_processor_config(
                 agent.config,
                 ToolSelectionContext(),
+                tool_set=_EMPTY_TOOL_SET,
             )
 
         assert new_config.provider_id == "zai_coding"
@@ -348,6 +352,7 @@ class TestRequestScopedConfigSeamForwarding:
             new_config = agent._stream_create_processor_config(
                 agent.config,
                 ToolSelectionContext(),
+                tool_set=_EMPTY_TOOL_SET,
             )
 
         assert not hasattr(new_config, "plugin_registry")
@@ -365,6 +370,7 @@ class TestRequestScopedConfigSeamForwarding:
             agent._stream_create_processor_config(
                 agent.config,
                 ToolSelectionContext(),
+                tool_set=_EMPTY_TOOL_SET,
             )
 
         assert error.value.code == "operation_context_not_pinned"
@@ -386,6 +392,7 @@ class TestRequestScopedConfigSeamForwarding:
             agent._stream_create_processor_config(
                 agent.config,
                 ToolSelectionContext(),
+                tool_set=_EMPTY_TOOL_SET,
             )
 
         assert error.value.code == "invalid_agent_runtime_dispatcher"

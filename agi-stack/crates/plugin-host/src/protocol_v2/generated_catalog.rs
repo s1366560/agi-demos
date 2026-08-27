@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:8b1d693c2dbfcd8d4250c691955b8a146461d707624637e65a86b2052dff2a",
-    "db\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:1fe3fd9d694dd03231f712af7ae9e72177ebe082d582774b68c4161df06164",
+    "5e\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -331,7 +331,7 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "10fc644f008f1ae770febc7d5c0f8\",\"entrypoint\":\"src.infrastructure.plugins.v2.system_prompt",
     ":_apply_system_prompt_builder_v2\",\"module_ref\":\"builtin://memstack/agent/system-prompt\",",
     "\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"a",
-    "rtifact_digest\":\"sha256:81f746719a265b258cec43a99bd54134fa73a6e748464cab53eec58c62efe9da",
+    "rtifact_digest\":\"sha256:51ac7f4af7ab83d2eef692f639f89f2384e1a6fd0d7d0a71ca4e1b6669d62482",
     "\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/tool_set.py\",\"contract\"",
     ":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalP",
     "roperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-contributions\",\"type\":\"strin",
@@ -2786,4 +2786,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:8b1d693c2dbfcd8d4250c691955b8a146461d707624637e65a86b2052dff2adb";
+    "sha256:1fe3fd9d694dd03231f712af7ae9e72177ebe082d582774b68c4161df061645e";

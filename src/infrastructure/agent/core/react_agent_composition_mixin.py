@@ -38,6 +38,8 @@ from .react_agent_workspace_context import (
 )
 
 if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+
     from .processor import ToolDefinition
 
 logger = logging.getLogger(__name__)
@@ -273,10 +275,13 @@ class CompositionMixin:
         ):
             append_fn(td)
 
-    def _extract_sandbox_id_from_tools(self: _CompositionAgent) -> str | None:
-        """Extract sandbox_id from any available sandbox tool wrapper."""
-        current_tools, _ = self._get_current_tools()
-        for tool in current_tools.values():
+    def _extract_sandbox_id_from_tools(
+        self: _CompositionAgent,
+        *,
+        tool_set: ToolSetV2,
+    ) -> str | None:
+        """Extract sandbox_id only from the pinned turn ToolSet."""
+        for tool in tool_set.tools.values():
             if hasattr(tool, "sandbox_id") and tool.sandbox_id:
                 return cast(str | None, tool.sandbox_id)
         return None

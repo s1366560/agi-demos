@@ -140,12 +140,12 @@ async def test_orchestration_tool_contribution_resolves_exact_profile_set() -> N
         ) as operation:
             resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, ToolSetResolverProtocolV2)
-            tools, definitions = resolver.resolve(agent=object(), selection_context=None)
+            tool_set = resolver.resolve(agent=object(), selection_context=None)
     finally:
         await manager.close()
 
-    assert frozenset(tools) == _EXPECTED_TOOL_NAMES
-    assert {definition.name for definition in definitions} == _EXPECTED_TOOL_NAMES
+    assert frozenset(tool_set.tools) == _EXPECTED_TOOL_NAMES
+    assert {definition.name for definition in tool_set.definitions} == _EXPECTED_TOOL_NAMES
 
 
 @pytest.mark.unit
@@ -160,12 +160,12 @@ async def test_disabling_orchestration_tool_entry_removes_tools() -> None:
         ) as operation:
             resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, ToolSetResolverProtocolV2)
-            tools, definitions = resolver.resolve(agent=object(), selection_context=None)
+            tool_set = resolver.resolve(agent=object(), selection_context=None)
     finally:
         await manager.close()
 
-    assert tools == {}
-    assert definitions == []
+    assert tool_set.tools == {}
+    assert tool_set.definitions == ()
 
 
 @pytest.mark.unit
@@ -187,8 +187,8 @@ async def test_orchestration_tool_execution_resolves_pinned_operation_service() 
             )
             resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, ToolSetResolverProtocolV2)
-            tools, _definitions = resolver.resolve(agent=object(), selection_context=None)
-            result = await tools["agent_list"].execute(_tool_context())
+            tool_set = resolver.resolve(agent=object(), selection_context=None)
+            result = await tool_set.tools["agent_list"].execute(_tool_context())
     finally:
         await manager.close()
 
@@ -213,9 +213,9 @@ async def test_orchestration_tool_execution_rejects_missing_operation_service() 
         ) as operation:
             resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, ToolSetResolverProtocolV2)
-            tools, _definitions = resolver.resolve(agent=object(), selection_context=None)
+            tool_set = resolver.resolve(agent=object(), selection_context=None)
             with pytest.raises(RuntimeV2Error) as error:
-                await tools["agent_list"].execute(_tool_context())
+                await tool_set.tools["agent_list"].execute(_tool_context())
     finally:
         await manager.close()
 

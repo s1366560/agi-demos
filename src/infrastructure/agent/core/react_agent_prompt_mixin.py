@@ -29,6 +29,8 @@ from ..sisyphus.prompt_builder import SisyphusPromptBuilder, SisyphusPromptConte
 from .react_agent_profile import AgentRuntimeProfile
 
 if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+
     from .processor import ToolDefinition
 
 logger = logging.getLogger(__name__)
@@ -202,6 +204,8 @@ class PromptMixin:
         workspace_manager: Any | None = None,
         selected_agent_name: str | None = None,
         is_workspace_conversation: bool = False,
+        *,
+        tool_set: ToolSetV2,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -252,27 +256,13 @@ class PromptMixin:
                 "force_execution": force_execution,
             }
 
-        # Convert tool definitions to dict format - use current tools (hot-plug support)
-        _, current_tool_definitions = self._get_current_tools(selection_context=selection_context)
-        # Strip workspace-scoped tools from non-workspace conversations so the
-        # system prompt does not advertise tools that will be filtered out at
-        # execution time anyway.
-        if not is_workspace_conversation:
-            current_tool_definitions = [
-                t for t in current_tool_definitions if not t.name.startswith("workspace_")
-            ]
-        # When a forced skill is active, exclude skill_loader from tool list
-        # to prevent the LLM from calling it and loading a different skill.
-        if force_execution and matched_skill:
-            tool_defs = [
-                {"name": t.name, "description": t.description}
-                for t in current_tool_definitions
-                if t.name != "skill_loader"
-            ]
-        else:
-            tool_defs = [
-                {"name": t.name, "description": t.description} for t in current_tool_definitions
-            ]
+        # The turn owner resolves and scope-filters one immutable V2 ToolSet
+        # before any model-visible consumer runs. Prompt building must never
+        # refresh the native/static collection independently.
+        tool_defs = [
+            {"name": definition.name, "description": definition.description}
+            for definition in tool_set.definitions
+        ]
 
         # Convert SubAgents to dict format for PromptContext (SubAgent-as-Tool mode)
         subagents_data = None
@@ -530,18 +520,19 @@ class PromptMixin:
         *,
         runtime_profile: AgentRuntimeProfile,
         selection_context: ToolSelectionContext,
+        tool_set: ToolSetV2,
         available_subagents: Sequence[SubAgent] = (),
     ) -> str | None:
         """Build a dynamic primary prompt when the selected agent is built-in Sisyphus."""
         selected_agent = runtime_profile.selected_agent
         if selected_agent is None or selected_agent.id != BUILTIN_SISYPHUS_ID:
             return None
-        _, current_tool_definitions = self._get_current_tools(selection_context=selection_context)
+        _ = selection_context
         return self._sisyphus_prompt_builder.build(
             SisyphusPromptContext(
                 model_name=runtime_profile.effective_model,
                 max_steps=runtime_profile.effective_max_steps,
-                tools=current_tool_definitions,
+                tools=list(tool_set.definitions),
                 skills=runtime_profile.available_skills,
                 subagents=list(available_subagents),
             )

@@ -6781,7 +6781,7 @@
       },
       "contract_digest": "sha256:c45f9c8ba00b7d68570a0ca5a269f62d0ef202b389d0f689755bada1e4ba9608",
       "artifact": {
-        "digest": "sha256:81f746719a265b258cec43a99bd54134fa73a6e748464cab53eec58c62efe9da",
+        "digest": "sha256:51ac7f4af7ab83d2eef692f639f89f2384e1a6fd0d7d0a71ca4e1b6669d62482",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
       }
     },

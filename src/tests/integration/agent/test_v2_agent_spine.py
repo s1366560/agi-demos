@@ -387,10 +387,11 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
                 skills=[_skill()],
                 subagents=[_subagent()],
             )
-            raw_tools, tool_definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            raw_tools, tool_definitions = tool_set.tools, list(tool_set.definitions)
             capabilities = await _resolve_agent_capabilities_from_runtime_v2(
                 agent,
                 tenant_id="tenant-a",

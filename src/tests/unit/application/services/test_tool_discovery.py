@@ -1,47 +1,34 @@
-"""Tests for built-in tool discovery service."""
+"""Tests for pinned V2 ToolSet discovery projection."""
 
-import importlib
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 
 from src.application.services.agent.tool_discovery import ToolDiscoveryService
-from src.infrastructure.agent.tools.define import _TOOL_REGISTRY
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
 
 
-@pytest.fixture(autouse=True)
-def _ensure_tool_registry_populated():
-    """Other unit tests may call ``clear_registry()``; reload tool modules
-    so module-level ``@tool_define`` decorators repopulate the registry."""
-    if not _TOOL_REGISTRY:
-        for modname in (
-            "src.infrastructure.agent.tools.clarification",
-            "src.infrastructure.agent.tools.decision",
-            "src.infrastructure.agent.tools.model_availability_tool",
-            "src.infrastructure.agent.tools.multi_agent_action_tools",
-            "src.infrastructure.agent.tools.session_status",
-            "src.infrastructure.agent.tools.skill_installer",
-            "src.infrastructure.agent.tools.web_scrape",
-            "src.infrastructure.agent.tools.web_search",
-        ):
-            mod = importlib.import_module(modname)
-            importlib.reload(mod)
-    yield
-
-
-@pytest.mark.asyncio
-async def test_tool_discovery_includes_extended_builtin_tools():
-    """Discovery should expose the expanded built-in tool set."""
+@pytest.mark.unit
+async def test_tool_discovery_projects_only_the_explicit_turn_tool_set() -> None:
     service = ToolDiscoveryService()
+    names = (
+        "web_search",
+        "web_scrape",
+        "skill_installer",
+        "session_status",
+        "list_available_models",
+    )
+    tool_set = ToolSetV2(
+        tools=MappingProxyType({name: object() for name in names}),
+        definitions=tuple(
+            SimpleNamespace(name=name, description=f"{name} description") for name in names
+        ),
+    )
 
     tools = await service.get_available_tools(
         project_id="proj-test",
         tenant_id="tenant-test",
+        tool_set=tool_set,
     )
 
-    names = {tool["name"] for tool in tools}
-
-    assert "web_search" in names
-    assert "web_scrape" in names
-    assert "skill_installer" in names
-    assert "session_status" in names
-    assert "list_available_models" in names
+    assert [tool["name"] for tool in tools] == list(names)

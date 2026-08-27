@@ -140,10 +140,11 @@ async def test_disabling_custom_contribution_removes_tagged_prepared_tools() -> 
             operation_id="custom-tools-disabled",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, _definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, _definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 
@@ -160,10 +161,11 @@ async def test_enabling_custom_contribution_restores_exact_tagged_tools() -> Non
             operation_id="custom-tools-enabled",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 

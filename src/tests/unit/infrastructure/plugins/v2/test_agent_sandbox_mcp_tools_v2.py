@@ -168,10 +168,11 @@ async def test_disabling_sandbox_mcp_contribution_removes_tagged_prepared_tools(
             operation_id="sandbox-mcp-tools-disabled",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, _definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, _definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 
@@ -188,10 +189,11 @@ async def test_enabling_sandbox_mcp_contribution_restores_exact_prepared_instanc
             operation_id="sandbox-mcp-tools-enabled",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 
@@ -212,15 +214,16 @@ async def test_empty_sandbox_mcp_tool_set_is_valid() -> None:
             operation_id="sandbox-mcp-tools-empty",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 
     assert tools == {}
-    assert definitions == []
+    assert definitions == ()
 
 
 @pytest.mark.unit

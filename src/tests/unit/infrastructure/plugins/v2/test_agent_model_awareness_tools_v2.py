@@ -145,10 +145,11 @@ async def test_disabling_model_awareness_contribution_removes_prepared_tools() -
             operation_id="model-awareness-tools-disabled",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, _definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, _definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 
@@ -165,10 +166,11 @@ async def test_enabling_model_awareness_contribution_restores_exact_prepared_too
             operation_id="model-awareness-tools-enabled",
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
-            tools, definitions = _resolve_current_tools_from_runtime_v2(
+            tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
             )
+            tools, definitions = tool_set.tools, tool_set.definitions
     finally:
         await manager.close()
 
