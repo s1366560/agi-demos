@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:22484f41717a16c99896e6c05cce6098723ab8417e4e0fe5fce2b64d15e8b6f0",
+        "digest": "sha256:7acd23e22e4924a3c796fce41c19dec66aeaf8af280ae77c97465149502dbda4",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6783,6 +6783,70 @@
       "artifact": {
         "digest": "sha256:9817bb10c05244362fdbcfcd8d5edd6c93d06aefebead7f2f1b88bab8ede5fae",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/command-catalog",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_commands:_apply_agent_command_catalog_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:agent-command-catalog",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "ordered-contributions", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:423905c2cef6cea89ce36b16d40c519bd37a628dd912d612f997db02e3ed88c6",
+      "artifact": {
+        "digest": "sha256:c1a2647c6530f839a83c03b421f983e5415ea9de50b6914838fc6c7d3a5c4346",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_commands.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/command-contribution",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_commands:_apply_builtin_agent_command_contribution_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:agent-command-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_id", "strategy"],
+          "properties": {
+            "source_id": { "const": "builtin-agent-commands", "type": "string" },
+            "strategy": { "const": "builtin-commands", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:87ae0d9f7b64a35e0aa62511c74aab81898b7a0d4f7d9f7b3fc41ac86966b979",
+      "artifact": {
+        "digest": "sha256:c1a2647c6530f839a83c03b421f983e5415ea9de50b6914838fc6c7d3a5c4346",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_commands.py"
       }
     },
     {

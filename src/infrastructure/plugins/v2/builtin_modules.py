@@ -13,6 +13,10 @@ from .agent_capabilities import (
     builtin_skill_contribution_v2,
     builtin_subagent_contribution_v2,
 )
+from .agent_commands import (
+    builtin_agent_command_catalog_definition_v2,
+    builtin_agent_command_contribution_definition_v2,
+)
 from .agent_custom_tools import builtin_agent_custom_tool_contribution_definition_v2
 from .agent_definition import (
     builtin_agent_definition_contribution_v2,
@@ -434,6 +438,8 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),
+        builtin_agent_command_catalog_definition_v2(),
+        builtin_agent_command_contribution_definition_v2(),
         builtin_skill_mcp_manager_definition_v2(),
         builtin_agent_hitl_tool_contribution_definition_v2(),
         builtin_agent_memory_tool_contribution_definition_v2(),

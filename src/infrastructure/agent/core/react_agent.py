@@ -34,11 +34,9 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
+from src.infrastructure.plugins.v2.agent_commands import PinnedCommandInterceptorV2
 from src.infrastructure.plugins.v2.boundary import fork_current_agent_operation_v2
 
-from ..commands.builtins import register_builtin_commands
-from ..commands.interceptor import CommandInterceptor
-from ..commands.registry import CommandRegistry
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
 from ..events.converter import normalize_event_dict
@@ -205,7 +203,7 @@ class ReActAgent(
     # _intent_gate
     _intent_gate: IntentGate
 
-    def __init__(  # noqa: PLR0913, PLR0915
+    def __init__(  # noqa: PLR0913
         self,
         model: str,
         tools: dict[str, Any] | None = None,  # Tool name -> Tool instance (static)
@@ -436,17 +434,12 @@ class ReActAgent(
         )
         self._reset_stream_state()
 
-        # -- Create CommandRegistry and interceptor for slash commands --
-        command_registry = CommandRegistry()
-        register_builtin_commands(command_registry)
-        command_interceptor = CommandInterceptor(command_registry)
-
         # -- Create ProcessorFactory for shared processor creation --
         self._processor_factory = ProcessorFactory(
             llm_client=self._llm_client,
             permission_manager=self.permission_manager,
             artifact_service=self.artifact_service,
-            command_interceptor=command_interceptor,
+            command_interceptor=PinnedCommandInterceptorV2(),
             base_model=self.model,
             base_provider_id=self._provider_id,
             base_api_key=self.api_key,

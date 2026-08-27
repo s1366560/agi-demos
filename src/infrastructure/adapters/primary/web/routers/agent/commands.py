@@ -11,9 +11,10 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.agent.commands.builtins import register_builtin_commands
-from src.infrastructure.agent.commands.registry import CommandRegistry
 from src.infrastructure.agent.commands.types import CommandCategory, CommandScope
+from src.infrastructure.plugins.v2.agent_commands import (
+    current_generation_agent_command_catalog_v2,
+)
 
 from .schemas import (
     CommandArgInfo,
@@ -25,13 +26,6 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _get_command_registry() -> CommandRegistry:
-    """Build a CommandRegistry with builtin commands registered."""
-    registry = CommandRegistry()
-    register_builtin_commands(registry)
-    return registry
-
-
 @router.get("/commands", response_model=CommandsListResponse)
 async def list_commands(
     category: str | None = Query(None, description="Filter by command category"),
@@ -39,12 +33,12 @@ async def list_commands(
     current_user: User = Depends(get_current_user),
 ) -> CommandsListResponse:
     """List available slash commands."""
-    registry = _get_command_registry()
+    catalog = current_generation_agent_command_catalog_v2()
 
     cat_filter = CommandCategory(category) if category else None
     scope_filter = CommandScope(scope) if scope else None
 
-    commands = registry.list_commands(
+    commands = catalog.list_commands(
         category=cat_filter,
         scope=scope_filter,
         include_hidden=False,
