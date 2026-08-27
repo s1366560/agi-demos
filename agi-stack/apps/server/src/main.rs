@@ -68,6 +68,7 @@ mod instance_api;
 mod llm_providers_api;
 mod maintenance_api;
 mod notifications_api;
+mod plugin_generation_v2;
 mod prod_api;
 mod retrieval_stores_api;
 mod sandbox_api;
@@ -160,6 +161,7 @@ use crate::llm_providers_api::{
 use crate::notifications_api::{
     DevNotificationService, PgNotificationService, SharedNotifications,
 };
+use crate::plugin_generation_v2::RustServerGenerationAdmissionV2;
 use crate::retrieval_stores_api::{
     DevRetrievalStoreCatalogService, PgRetrievalStoreCatalogService, SharedRetrievalStores,
 };
@@ -332,7 +334,7 @@ pub(crate) struct AppState {
 
 type ServerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-async fn start_plugin_runtime_v2() -> ServerResult<GenerationManagerV2> {
+async fn start_plugin_runtime_v2() -> ServerResult<RustServerGenerationAdmissionV2> {
     let snapshot = parse_profile_snapshot_v2(include_str!(
         "../../../../shared/profiles/memstack-default-bootstrap.v2.json"
     ))?;
@@ -348,9 +350,9 @@ async fn start_plugin_runtime_v2() -> ServerResult<GenerationManagerV2> {
         )
         .into());
     }
-    let manager = GenerationManagerV2::new();
+    let manager = Arc::new(GenerationManagerV2::new());
     manager.publish(generation).await;
-    Ok(manager)
+    Ok(RustServerGenerationAdmissionV2::new(manager))
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -1100,17 +1102,18 @@ async fn main() -> ServerResult<()> {
         .cron_scheduler
         .as_ref()
         .and_then(|scheduler| Arc::clone(scheduler).spawn_if_enabled());
-    let app = demo_api::router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     let plugin_runtime_v2 = start_plugin_runtime_v2().await?;
+    let app = plugin_runtime_v2.bind(demo_api::router(state));
     println!("agistack-server listening on http://{addr}");
     let serve_result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await;
+    let plugin_shutdown_result = plugin_runtime_v2.shutdown().await;
     if let Some(runtime) = cron_scheduler_runtime {
         runtime.shutdown().await;
     }
-    plugin_runtime_v2.close().await;
+    plugin_shutdown_result?;
     serve_result?;
     Ok(())
 }
@@ -1127,10 +1130,13 @@ mod runtime_mode_tests {
 
     #[tokio::test]
     async fn rust_server_starts_a_non_empty_protocol_v2_generation() {
-        let manager = start_plugin_runtime_v2()
+        let runtime = start_plugin_runtime_v2()
             .await
             .expect("rust-server plugin runtime must start");
-        let lease = manager.acquire().expect("generation must be active");
+        let lease = runtime
+            .manager()
+            .acquire()
+            .expect("generation must be active");
         assert_eq!(
             lease
                 .generation()
@@ -1140,7 +1146,7 @@ mod runtime_mode_tests {
             1
         );
         lease.release().await.expect("lease must release");
-        manager.close().await;
+        runtime.shutdown().await.expect("runtime must shut down");
     }
 
     #[test]
