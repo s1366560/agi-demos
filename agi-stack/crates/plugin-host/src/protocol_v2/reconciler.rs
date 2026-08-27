@@ -52,6 +52,61 @@ impl PreparedSnapshotApplyV2<'_> {
         receipt
     }
 
+    /// Publish a prepared generation only when the caller's external authority is still current.
+    ///
+    /// A `false` result disposes the staged generation without advancing publication ordering.
+    /// This lets data planes invalidate an in-flight candidate without cancelling its activation
+    /// future or briefly exposing it through the shared generation manager.
+    pub async fn commit_if_with<F, Fut>(self, publish: F) -> Option<SnapshotApplyReceiptV2>
+    where
+        F: FnOnce(Arc<GenerationManagerV2>, Arc<RuntimeGenerationV2>) -> Fut,
+        Fut: Future<Output = bool>,
+    {
+        let receipt = self.receipt();
+        if publish(self.reconciler.manager(), Arc::clone(&self.generation)).await {
+            self.reconciler.applied_version = Some(self.distribution.envelope.version);
+            self.reconciler.applied_digest = Some(self.distribution.snapshot.digest.clone());
+            return Some(receipt);
+        }
+        self.generation.dispose().await;
+        None
+    }
+
+    /// Publish a prepared generation only when a fallible external durability boundary succeeds.
+    ///
+    /// Both a superseded (`Ok(false)`) candidate and a failed (`Err`) publication dispose the
+    /// staged generation without advancing publication ordering. The callback must return an error
+    /// before publishing the generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the callback error after disposing the staged generation.
+    pub async fn commit_try_if_with<F, Fut, E>(
+        self,
+        publish: F,
+    ) -> Result<Option<SnapshotApplyReceiptV2>, E>
+    where
+        F: FnOnce(Arc<GenerationManagerV2>, Arc<RuntimeGenerationV2>) -> Fut,
+        Fut: Future<Output = Result<bool, E>>,
+    {
+        let receipt = self.receipt();
+        match publish(self.reconciler.manager(), Arc::clone(&self.generation)).await {
+            Ok(true) => {
+                self.reconciler.applied_version = Some(self.distribution.envelope.version);
+                self.reconciler.applied_digest = Some(self.distribution.snapshot.digest.clone());
+                Ok(Some(receipt))
+            }
+            Ok(false) => {
+                self.generation.dispose().await;
+                Ok(None)
+            }
+            Err(error) => {
+                self.generation.dispose().await;
+                Err(error)
+            }
+        }
+    }
+
     pub async fn discard(self) {
         self.generation.dispose().await;
     }
@@ -103,6 +158,11 @@ impl PluginSnapshotReconcilerV2 {
         snapshot: ProfileSnapshotV2,
     ) -> Result<Arc<RuntimeGenerationV2>, RuntimeV2Error> {
         self.loader.stage(snapshot).await
+    }
+
+    /// Dispose a generation returned by [`Self::stage_snapshot`] before it is published.
+    pub async fn discard_staged_snapshot(&self, generation: Arc<RuntimeGenerationV2>) {
+        generation.dispose().await;
     }
 
     /// Start a new authority epoch while retaining the shared manager and its current generation.

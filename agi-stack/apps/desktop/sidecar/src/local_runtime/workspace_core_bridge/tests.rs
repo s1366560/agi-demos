@@ -2001,7 +2001,7 @@ async fn task_session_plugin_context_pins_generation_until_core_operation_finish
         .await
         .expect("Core request must arrive")
         .expect("Core request observation");
-    state.platform_plugin_authority_v2.clear();
+    state.platform_plugin_authority_v2.deactivate().await;
     reconciler.close().await;
     tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     assert_eq!(disposals.load(Ordering::SeqCst), 0);

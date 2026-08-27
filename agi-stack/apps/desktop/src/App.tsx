@@ -39,6 +39,7 @@ import {
   hasNativeTrustedSessionBroker,
   loadLocalTrustedSession,
   saveLocalTrustedSession,
+  selectPlatformPluginAuthorityV2,
 } from './api/trustedSession';
 import type { CloudSessionProjection } from './api/cloudSessionProjectionClient';
 import { ResizeHandle, useResizablePanelWidth } from './components/ResizeHandle';
@@ -5249,6 +5250,7 @@ export function App() {
         setConnection('loading');
         setError(null);
 
+        await selectPlatformPluginAuthorityV2(config.mode);
         if (config.mode === 'cloud') {
           const projection = await hydrateProjectedCloudSession(authAttemptRevision);
           if (

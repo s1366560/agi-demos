@@ -7,10 +7,11 @@ use std::{
 use agistack_plugin_host::protocol_v2::ProfileSnapshotV2;
 use agistack_plugin_host::{
     project_snapshot_entries_v2, ControlPlaneDistributionV2, DataPlaneTargetV2,
-    DesktopSidecarHttpRouteContributionV2, GenerationLeaseV2, GenerationManagerV2, ScopeKindV2,
-    ScopeV2, TargetHostDescriptorV2, DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2,
-    DESKTOP_SIDECAR_HOST_SERVICE_V2, DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
-    DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_VERSION_V2, DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2,
+    DesktopSidecarHttpRouteContributionV2, GenerationLeaseV2, GenerationManagerV2,
+    GenerationRetirementV2, ScopeKindV2, ScopeV2, TargetHostDescriptorV2,
+    DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
+    DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2, DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_VERSION_V2,
+    DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2,
 };
 use serde::Serialize;
 use tokio::sync::oneshot;
@@ -276,12 +277,9 @@ impl PlatformPluginAuthorityV2 {
         distribution: &ControlPlaneDistributionV2,
         generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     ) {
-        self.publish_snapshot(
-            &distribution.snapshot,
-            Some(distribution.envelope.version),
-            generation,
-        )
-        .await;
+        self.replace_distribution(distribution, generation)
+            .dispose()
+            .await;
     }
 
     pub(super) async fn publish_local_baseline(
@@ -289,31 +287,57 @@ impl PlatformPluginAuthorityV2 {
         snapshot: &ProfileSnapshotV2,
         generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     ) {
-        self.publish_snapshot(snapshot, None, generation).await;
+        self.replace_local_baseline(snapshot, generation)
+            .dispose()
+            .await;
     }
 
-    async fn publish_snapshot(
+    pub(super) fn replace_distribution(
+        &self,
+        distribution: &ControlPlaneDistributionV2,
+        generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
+    ) -> GenerationRetirementV2 {
+        self.replace_snapshot(
+            &distribution.snapshot,
+            Some(distribution.envelope.version),
+            generation,
+        )
+    }
+
+    pub(super) fn replace_local_baseline(
+        &self,
+        snapshot: &ProfileSnapshotV2,
+        generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
+    ) -> GenerationRetirementV2 {
+        self.replace_snapshot(snapshot, None, generation)
+    }
+
+    fn replace_snapshot(
         &self,
         snapshot: &ProfileSnapshotV2,
         publication_version: Option<u64>,
         generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
-    ) {
-        let retirement = {
-            let mut active_generation = write_lock(&self.active_generation);
-            let retirement = self.manager.replace_current(generation);
-            *active_generation = Some(Arc::new(PublishedPlatformPluginGenerationV2 {
-                projection: Arc::new(ActivePlatformPluginGenerationV2::from_snapshot(
-                    snapshot,
-                    publication_version,
-                )),
-            }));
-            retirement
-        };
-        retirement.dispose().await;
+    ) -> GenerationRetirementV2 {
+        let mut active_generation = write_lock(&self.active_generation);
+        let retirement = self.manager.replace_current(generation);
+        *active_generation = Some(Arc::new(PublishedPlatformPluginGenerationV2 {
+            projection: Arc::new(ActivePlatformPluginGenerationV2::from_snapshot(
+                snapshot,
+                publication_version,
+            )),
+        }));
+        retirement
     }
 
-    pub(super) fn clear(&self) {
-        write_lock(&self.active_generation).take();
+    pub(super) fn retire_current(&self) -> GenerationRetirementV2 {
+        let mut active_generation = write_lock(&self.active_generation);
+        let retirement = self.manager.clear_current();
+        active_generation.take();
+        retirement
+    }
+
+    pub(super) async fn deactivate(&self) {
+        self.retire_current().dispose().await;
     }
 
     pub(super) fn acquire_generation(
@@ -569,7 +593,7 @@ mod tests {
             Ok(())
         );
 
-        authority.clear();
+        authority.deactivate().await;
         assert_eq!(
             lease.http_routes().contribution_id,
             DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2

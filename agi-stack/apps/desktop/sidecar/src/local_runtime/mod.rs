@@ -99,7 +99,9 @@ mod parity_routes;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
 mod platform_plugin_sync_v2;
-pub(crate) use platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2;
+pub(crate) use platform_plugin_sync_v2::{
+    PlatformPluginAuthorityModeV2, PlatformPluginControlPlaneReconcilerV2,
+};
 mod provider_credentials;
 mod provider_management;
 mod provider_probe;

@@ -1257,6 +1257,104 @@ fn prepared_generation_is_invisible_until_commit_and_disposable_on_persistence_f
 }
 
 #[test]
+fn conditional_commit_discards_a_superseded_candidate_without_advancing_ordering() {
+    block_on(async {
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");
+        let raw: Value = serde_json::from_str(SNAPSHOT).expect("fixture JSON must parse");
+        let first = parse_control_plane_distribution_v2(&distribution(
+            raw.clone(),
+            1,
+            "superseded-candidate",
+        ))
+        .expect("first distribution must parse");
+        let second =
+            parse_control_plane_distribution_v2(&distribution(raw, 1, "replacement-candidate"))
+                .expect("replacement distribution must parse");
+        let disposed = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let mut reconciler = PluginSnapshotReconcilerV2::new(loader(
+            &snapshot,
+            7,
+            false,
+            Arc::clone(&disposed),
+            Arc::clone(&observed),
+        ));
+
+        let prepared = match reconciler.prepare(&first).await {
+            SnapshotPreparationV2::Ready(prepared) => prepared,
+            SnapshotPreparationV2::Receipt(receipt) => {
+                panic!("candidate must prepare: {receipt:?}")
+            }
+        };
+        assert!(prepared
+            .commit_if_with(|_, _| async { false })
+            .await
+            .is_none());
+        assert_eq!(*lock(&disposed), vec!["module", "listener"]);
+
+        let receipt = reconciler.apply(&second).await;
+        assert_eq!(receipt.status, ApplyStatusV2::Ack);
+        assert_eq!(receipt.applied_version, Some(1));
+        reconciler.close().await;
+        assert_eq!(
+            *lock(&disposed),
+            vec!["module", "listener", "module", "listener"]
+        );
+        assert_eq!(*lock(&observed), vec![7, 7]);
+    });
+}
+
+#[test]
+fn conditional_commit_discards_a_candidate_when_durable_publication_fails() {
+    block_on(async {
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");
+        let raw: Value = serde_json::from_str(SNAPSHOT).expect("fixture JSON must parse");
+        let first = parse_control_plane_distribution_v2(&distribution(
+            raw.clone(),
+            1,
+            "durable-publication-failed",
+        ))
+        .expect("first distribution must parse");
+        let second =
+            parse_control_plane_distribution_v2(&distribution(raw, 1, "retry-after-failure"))
+                .expect("replacement distribution must parse");
+        let disposed = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let mut reconciler = PluginSnapshotReconcilerV2::new(loader(
+            &snapshot,
+            7,
+            false,
+            Arc::clone(&disposed),
+            Arc::clone(&observed),
+        ));
+
+        let prepared = match reconciler.prepare(&first).await {
+            SnapshotPreparationV2::Ready(prepared) => prepared,
+            SnapshotPreparationV2::Receipt(receipt) => {
+                panic!("candidate must prepare: {receipt:?}")
+            }
+        };
+        let failed = prepared
+            .commit_try_if_with(|_, _| async {
+                Err::<bool, _>("durable publication failed".to_string())
+            })
+            .await;
+        assert_eq!(failed, Err("durable publication failed".to_string()));
+        assert_eq!(*lock(&disposed), vec!["module", "listener"]);
+
+        let receipt = reconciler.apply(&second).await;
+        assert_eq!(receipt.status, ApplyStatusV2::Ack);
+        assert_eq!(receipt.applied_version, Some(1));
+        reconciler.close().await;
+        assert_eq!(
+            *lock(&disposed),
+            vec!["module", "listener", "module", "listener"]
+        );
+        assert_eq!(*lock(&observed), vec![7, 7]);
+    });
+}
+
+#[test]
 fn loader_resolves_inject_and_disposes_effects_in_lifo_order() {
     block_on(async {
         let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");

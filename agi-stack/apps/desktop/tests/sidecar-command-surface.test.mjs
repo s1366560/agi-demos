@@ -10,12 +10,19 @@ const electronMainSource = readFileSync(
   new URL('../electron/main/index.ts', import.meta.url),
   'utf8',
 );
+const electronPreloadSource = readFileSync(
+  new URL('../electron/preload/index.ts', import.meta.url),
+  'utf8',
+);
 
 test('the private sidecar command surface exposes only local-runtime capabilities', () => {
   assert.match(controlSource, /local_runtime_status/u);
   assert.match(controlSource, /local_runtime_configure/u);
   assert.match(controlSource, /trusted_session_(?:save|load|clear)/u);
   assert.match(controlSource, /local_trusted_session_(?:save|load|clear)/u);
+  assert.match(controlSource, /platform_plugin_authority_select_v2/u);
+  assert.match(electronMainSource, /SIDECAR_COMMANDS[\s\S]*platform_plugin_authority_select_v2/u);
+  assert.match(electronPreloadSource, /allowedCommands[\s\S]*platform_plugin_authority_select_v2/u);
 
   assert.doesNotMatch(controlSource, /open_device_authorization_url/u);
   assert.doesNotMatch(controlSource, /pub struct DesktopCore/u);
