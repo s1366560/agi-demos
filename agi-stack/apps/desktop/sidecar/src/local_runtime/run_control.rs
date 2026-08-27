@@ -19,8 +19,9 @@ use super::{
     },
     ensure_active_project, ensure_checkpoint_control_authority, ensure_checkpoint_run_ownership,
     ensure_run_revision, execution_environment_error,
-    has_checkpoint_terminalization_recovery_error, local_store_error, now_iso, LocalJsonResult,
-    LocalRuntimeState,
+    has_checkpoint_terminalization_recovery_error, local_store_error, now_iso,
+    platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
+    LocalJsonResult, LocalRuntimeState,
 };
 
 #[derive(Deserialize)]
@@ -73,6 +74,7 @@ pub(super) async fn pause_run(
 pub(super) async fn resume_run(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(run_id): Path<String>,
     Json(body): Json<RunRevisionBody>,
 ) -> LocalJsonResult {
@@ -146,15 +148,18 @@ pub(super) async fn resume_run(
         let message = run.request_message;
         let message_id = run.message_id;
         let run_id = run.id;
+        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
         tokio::spawn(async move {
             runtime
-                .run_agent_message(
+                .run_agent_message_for_role_with_generation(
                     conversation_id,
                     project_id,
                     message,
                     message_id,
+                    None,
                     Some(run_id),
                     Some(control),
+                    plugin_generation,
                 )
                 .await;
         });
@@ -206,9 +211,17 @@ pub(super) async fn resume_run(
     });
     let goal = accepted.goal;
     let runtime = Arc::clone(&state);
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
     tokio::spawn(async move {
         runtime
-            .continue_after_hitl(conversation, message_id, goal, Some(running), control)
+            .continue_after_hitl_with_generation(
+                conversation,
+                message_id,
+                goal,
+                Some(running),
+                control,
+                plugin_generation,
+            )
             .await;
     });
     Ok(Json(response))
@@ -269,6 +282,7 @@ pub(super) fn rollback_created_recovery_fork(
 pub(super) async fn fork_recovery_run(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(run_id): Path<String>,
     Json(body): Json<ForkRecoveryRunBody>,
 ) -> LocalJsonResult {
@@ -586,14 +600,16 @@ pub(super) async fn fork_recovery_run(
     let runtime = Arc::clone(&state);
     let running_for_task = running.clone();
     let message_id = running.message_id.clone();
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
     tokio::spawn(async move {
         runtime
-            .continue_after_hitl(
+            .continue_after_hitl_with_generation(
                 conversation,
                 message_id,
                 goal,
                 Some(running_for_task),
                 control,
+                plugin_generation,
             )
             .await;
     });
@@ -750,6 +766,7 @@ pub(super) struct ReviewRunBody {
 pub(super) async fn review_run(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(run_id): Path<String>,
     Json(body): Json<ReviewRunBody>,
 ) -> LocalJsonResult {
@@ -876,9 +893,17 @@ pub(super) async fn review_run(
             let goal = accepted.goal;
             let message_id = running.message_id.clone();
             let runtime = Arc::clone(&state);
+            let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
             tokio::spawn(async move {
                 runtime
-                    .continue_after_hitl(conversation, message_id, goal, Some(running), control)
+                    .continue_after_hitl_with_generation(
+                        conversation,
+                        message_id,
+                        goal,
+                        Some(running),
+                        control,
+                        plugin_generation,
+                    )
                     .await;
             });
             Ok(Json(response))

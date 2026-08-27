@@ -194,8 +194,6 @@ impl PlatformPluginGenerationAcquireV2Error {
 
 pub(super) struct ActivePlatformPluginGenerationLeaseV2 {
     projection: Arc<ActivePlatformPluginGenerationV2>,
-    // The next router-authority batch will consume this pinned contribution in production.
-    #[cfg_attr(not(test), allow(dead_code))]
     http_routes: Arc<DesktopSidecarHttpRouteContributionV2>,
     _release_guard: GenerationReleaseGuardV2,
 }
@@ -214,8 +212,6 @@ impl ActivePlatformPluginGenerationLeaseV2 {
         self.projection.descriptor()
     }
 
-    // Keep the typed seam testable before production route authority moves off `local_router`.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(super) fn http_routes(&self) -> &DesktopSidecarHttpRouteContributionV2 {
         &self.http_routes
     }

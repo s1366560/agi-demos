@@ -98,6 +98,9 @@ mod mcp_supervisor_tests;
 mod parity_routes;
 mod platform_plugin_authority_v2;
 mod platform_plugin_marketplace_v2;
+mod platform_plugin_route_admission_v2;
+#[cfg(test)]
+mod platform_plugin_route_admission_v2_tests;
 mod platform_plugin_sync_v2;
 pub(crate) use platform_plugin_sync_v2::{
     PlatformPluginAuthorityModeV2, PlatformPluginControlPlaneReconcilerV2,
@@ -152,7 +155,9 @@ use conversation_llm_route::{normalized_conversation_llm_route, workload_role_fo
 use mcp_supervisor::{McpSupervisor, SupervisorLimits};
 use platform_plugin_authority_v2::{
     ActivePlatformPluginGenerationLeaseV2, PlatformPluginAvailabilityV2Error,
+    PlatformPluginGenerationAcquireV2Error,
 };
+use platform_plugin_route_admission_v2::PlatformPluginRouteAdmissionV2;
 #[cfg(test)]
 use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
@@ -1741,6 +1746,7 @@ impl LocalRuntimeState {
         }
     }
 
+    #[cfg(test)]
     async fn run_agent_message(
         self: Arc<Self>,
         conversation_id: String,
@@ -1762,6 +1768,30 @@ impl LocalRuntimeState {
         .await;
     }
 
+    #[cfg(test)]
+    async fn run_agent_message_on_generation(
+        self: Arc<Self>,
+        conversation_id: String,
+        project_id: String,
+        message: String,
+        message_id: String,
+        authoritative_run_id: Option<String>,
+        claimed_control: Option<Arc<LocalRunControl>>,
+        plugin_generation: Arc<ActivePlatformPluginGenerationLeaseV2>,
+    ) {
+        self.run_agent_message_for_role_with_generation(
+            conversation_id,
+            project_id,
+            message,
+            message_id,
+            None,
+            authoritative_run_id,
+            claimed_control,
+            Some(plugin_generation),
+        )
+        .await;
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn run_agent_message_for_role(
         self: Arc<Self>,
@@ -1773,6 +1803,47 @@ impl LocalRuntimeState {
         authoritative_run_id: Option<String>,
         claimed_control: Option<Arc<LocalRunControl>>,
     ) {
+        let plugin_generation = match self.acquire_agent_operation_generation_v2() {
+            Ok(plugin_generation) => plugin_generation,
+            Err(error) => {
+                self.reject_unpinned_agent_operation(
+                    &conversation_id,
+                    &message_id,
+                    claimed_control.as_ref(),
+                    &error,
+                );
+                return;
+            }
+        };
+        self.run_agent_message_for_role_with_generation(
+            conversation_id,
+            project_id,
+            message,
+            message_id,
+            workload_role,
+            authoritative_run_id,
+            claimed_control,
+            plugin_generation,
+        )
+        .await;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn run_agent_message_for_role_with_generation(
+        self: Arc<Self>,
+        conversation_id: String,
+        project_id: String,
+        message: String,
+        message_id: String,
+        workload_role: Option<LlmWorkloadRole>,
+        authoritative_run_id: Option<String>,
+        claimed_control: Option<Arc<LocalRunControl>>,
+        plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+    ) {
+        let generation_descriptor = plugin_generation
+            .as_ref()
+            .map(|generation| generation.descriptor().clone());
+        let _plugin_generation_lease = plugin_generation;
         let conversation = match self.session_store.conversation(&conversation_id) {
             Ok(Some(conversation)) => conversation,
             Ok(None) => {
@@ -1879,7 +1950,7 @@ impl LocalRuntimeState {
             Some(message_id.clone()),
             Some("user"),
             Some(message.clone()),
-            json!({}),
+            json!({ "plugin_generation": generation_descriptor }),
         );
         self.append_timeline(&conversation_id, user_item);
 
@@ -2028,6 +2099,54 @@ impl LocalRuntimeState {
             }
         }
         self.release_agent_run(&conversation_id);
+    }
+
+    fn acquire_agent_operation_generation_v2(
+        &self,
+    ) -> Result<
+        Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+        PlatformPluginGenerationAcquireV2Error,
+    > {
+        #[cfg(test)]
+        {
+            Ok(None)
+        }
+        #[cfg(not(test))]
+        {
+            self.platform_plugin_authority_v2
+                .acquire_generation()
+                .map(Arc::new)
+                .map(Some)
+        }
+    }
+
+    fn reject_unpinned_agent_operation(
+        &self,
+        conversation_id: &str,
+        message_id: &str,
+        claimed_control: Option<&Arc<LocalRunControl>>,
+        error: &PlatformPluginGenerationAcquireV2Error,
+    ) {
+        let reason = error.reason();
+        let item = self.timeline_item(
+            "error",
+            conversation_id.to_owned(),
+            Some(message_id.to_owned()),
+            None,
+            Some(reason.message().to_owned()),
+            json!({
+                "error": {
+                    "code": reason.code(),
+                    "message": reason.message(),
+                    "target": "desktop-sidecar",
+                    "generation": error.descriptor(),
+                }
+            }),
+        );
+        self.append_timeline(conversation_id, item);
+        if let Some(control) = claimed_control {
+            self.release_agent_run_if_control(conversation_id, control);
+        }
     }
 
     fn worktree_manager(&self) -> WorktreeManager {
@@ -2368,14 +2487,17 @@ impl LocalRuntimeState {
         Ok(Some(request))
     }
 
-    async fn continue_after_hitl(
+    #[allow(clippy::too_many_arguments)]
+    async fn continue_after_hitl_with_generation(
         self: Arc<Self>,
         conversation: LocalConversation,
         message_id: String,
         goal: String,
         authoritative_run: Option<DesktopRun>,
         control: Arc<LocalRunControl>,
+        plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
     ) {
+        let _plugin_generation_lease = plugin_generation;
         let conversation_id = conversation.id.clone();
         let profile = match self.execution_profile(&conversation) {
             Ok(profile) => profile,
@@ -2800,7 +2922,25 @@ fn bounded_identifier(value: &str) -> bool {
 }
 
 fn local_router(state: Arc<LocalRuntimeState>) -> Router {
-    let protected = Router::new()
+    #[cfg(test)]
+    {
+        let admission = PlatformPluginRouteAdmissionV2::optional_for_unit_tests(Arc::clone(&state));
+        return local_router_with_generation_admission(state, admission);
+    }
+    #[cfg(not(test))]
+    local_router_with_generation_required(state)
+}
+
+fn local_router_with_generation_required(state: Arc<LocalRuntimeState>) -> Router {
+    let admission = PlatformPluginRouteAdmissionV2::required(Arc::clone(&state));
+    local_router_with_generation_admission(state, admission)
+}
+
+fn local_router_with_generation_admission(
+    state: Arc<LocalRuntimeState>,
+    admission: PlatformPluginRouteAdmissionV2,
+) -> Router {
+    let kernel_protected = Router::new()
         .route("/api/v1/auth/me", get(auth_me))
         .route("/api/v1/tenants", get(list_tenants))
         .route("/api/v1/projects", get(list_projects))
@@ -2809,6 +2949,16 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             "/api/v1/workspace-context/switch",
             post(switch_workspace_context),
         )
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            require_active_scope,
+        ))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            require_user_session,
+        ));
+
+    let protected = Router::new()
         .route(
             "/api/v1/llm-providers/",
             get(list_llm_providers).post(create_llm_provider),
@@ -3044,6 +3194,10 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             workspace_core_bridge::proxy_workspace_if_authoritative,
         ))
         .layer(middleware::from_fn_with_state(
+            admission,
+            platform_plugin_route_admission_v2::require_generation_v2,
+        ))
+        .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             require_active_scope,
         ))
@@ -3059,6 +3213,7 @@ fn local_router(state: Arc<LocalRuntimeState>) -> Router {
             post(resume_local_session),
         )
         .route("/api/v1/auth/signout", post(sign_out))
+        .merge(kernel_protected)
         .merge(protected)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -6120,6 +6275,7 @@ fn client_turn_payload_hash(
 async fn run_conversation_message(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(conversation_id): Path<String>,
     Json(body): Json<RunConversationBody>,
 ) -> LocalJsonResult {
@@ -6191,9 +6347,10 @@ async fn run_conversation_message(
         .map_err(local_store_error)?;
     let run_state = Arc::clone(&state);
     let response_message_id = message_id.clone();
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
     tokio::spawn(async move {
         run_state
-            .run_agent_message_for_role(
+            .run_agent_message_for_role_with_generation(
                 conversation_id,
                 project_id,
                 body.message,
@@ -6201,6 +6358,7 @@ async fn run_conversation_message(
                 body.workload_role,
                 None,
                 None,
+                plugin_generation,
             )
             .await;
     });
@@ -6234,6 +6392,7 @@ struct ExecutionEnvironmentBody {
 async fn approve_plan_and_start(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Json(body): Json<ApprovePlanAndStartBody>,
 ) -> LocalJsonResult {
     if body.message.trim().is_empty()
@@ -6346,15 +6505,18 @@ async fn approve_plan_and_start(
         let message = outcome.run.request_message.clone();
         let message_id = outcome.run.message_id.clone();
         let run_id = outcome.run.id.clone();
+        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
         tokio::spawn(async move {
             run_state
-                .run_agent_message(
+                .run_agent_message_for_role_with_generation(
                     conversation_id,
                     project_id,
                     message,
                     message_id,
+                    None,
                     Some(run_id),
                     None,
+                    plugin_generation,
                 )
                 .await;
         });
@@ -6474,8 +6636,8 @@ fn validate_composer_context_authority(
     authenticated: &AuthenticatedContext,
     workspace_id: &str,
     items: &[ComposerContextItem],
-) -> Result<Option<ActivePlatformPluginGenerationLeaseV2>, (StatusCode, Json<Value>)> {
-    let mut plugin_generation = None;
+    plugin_generation: Option<&ActivePlatformPluginGenerationLeaseV2>,
+) -> Result<(), (StatusCode, Json<Value>)> {
     for item in items {
         let available = match item.kind {
             ComposerContextKind::Attachment => item.resource_id.starts_with("file:"),
@@ -6560,22 +6722,12 @@ fn validate_composer_context_authority(
                     })
             }
             ComposerContextKind::Plugin => {
-                if plugin_generation.is_none() {
-                    plugin_generation = Some(
-                        state
-                            .platform_plugin_authority_v2
-                            .acquire_generation()
-                            .map_err(|error| {
-                                unavailable_plugin_composer_context(
-                                    error.reason(),
-                                    error.descriptor(),
-                                )
-                            })?,
-                    );
-                }
-                let generation = plugin_generation
-                    .as_ref()
-                    .expect("plugin generation was initialized above");
+                let generation = plugin_generation.ok_or_else(|| {
+                    unavailable_plugin_composer_context(
+                        PlatformPluginAvailabilityV2Error::GenerationUnavailable,
+                        None,
+                    )
+                })?;
                 generation
                     .plugin_availability(
                         &item.resource_id,
@@ -6594,7 +6746,7 @@ fn validate_composer_context_authority(
             ));
         }
     }
-    Ok(plugin_generation)
+    Ok(())
 }
 
 async fn list_run_inputs(
@@ -6628,6 +6780,7 @@ async fn list_run_inputs(
 async fn create_run_input(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(run_id): Path<String>,
     Json(body): Json<CreateRunInputBody>,
 ) -> LocalJsonResult {
@@ -6668,6 +6821,9 @@ async fn create_run_input(
         &authenticated,
         run_workspace_id,
         &body.context_items,
+        plugin_generation
+            .as_ref()
+            .map(|Extension(generation)| generation.as_ref()),
     )?;
     if run.revision != body.expected_run_revision {
         return Err((
@@ -6776,6 +6932,7 @@ struct PromoteRunInputBody {
 async fn promote_run_input_to_plan(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(input_id): Path<String>,
     Json(body): Json<PromoteRunInputBody>,
 ) -> LocalJsonResult {
@@ -6866,15 +7023,18 @@ async fn promote_run_input_to_plan(
         let message = input.steering_content();
         let message_id = format!("promoted-{}", input.id);
         let control = claimed_control.expect("new promotion reserves the conversation");
+        let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
         tokio::spawn(async move {
             run_state
-                .run_agent_message(
+                .run_agent_message_for_role_with_generation(
                     conversation_id,
                     project_id,
                     message,
                     message_id,
                     None,
+                    None,
                     Some(control),
+                    plugin_generation,
                 )
                 .await;
         });
@@ -6959,6 +7119,7 @@ struct ReviewArtifactVersionBody {
 async fn review_artifact_version(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(artifact_version_id): Path<String>,
     Json(body): Json<ReviewArtifactVersionBody>,
 ) -> LocalJsonResult {
@@ -7113,14 +7274,16 @@ async fn review_artifact_version(
             let message_id = running.message_id.clone();
             let runtime = Arc::clone(&state);
             let running_for_task = running.clone();
+            let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
             tokio::spawn(async move {
                 runtime
-                    .continue_after_hitl(
+                    .continue_after_hitl_with_generation(
                         conversation,
                         message_id,
                         goal,
                         Some(running_for_task),
                         control,
+                        plugin_generation,
                     )
                     .await;
             });
@@ -7349,6 +7512,7 @@ struct HitlResponseBody {
 async fn respond_to_hitl(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Json(body): Json<HitlResponseBody>,
 ) -> LocalJsonResult {
     let expected_authority_revision = body
@@ -7858,9 +8022,17 @@ async fn respond_to_hitl(
         .map(|run| run.message_id.clone())
         .unwrap_or_else(|| format!("local-resume-{}", request.id));
     let run_state = Arc::clone(&state);
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
     tokio::spawn(async move {
         run_state
-            .continue_after_hitl(conversation, message_id, goal, authoritative_run, control)
+            .continue_after_hitl_with_generation(
+                conversation,
+                message_id,
+                goal,
+                authoritative_run,
+                control,
+                plugin_generation,
+            )
             .await;
     });
     Ok(Json(response))
@@ -8466,10 +8638,13 @@ async fn list_conversation_runs(
 async fn agent_ws(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    ws.protocols(["memstack.auth"])
-        .on_upgrade(move |socket| agent_socket_loop(socket, state, authenticated))
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
+    ws.protocols(["memstack.auth"]).on_upgrade(move |socket| {
+        agent_socket_loop(socket, state, authenticated, plugin_generation)
+    })
 }
 
 fn execution_selection_from_agent_message(
@@ -8495,6 +8670,7 @@ async fn agent_socket_loop(
     socket: WebSocket,
     state: Arc<LocalRuntimeState>,
     authenticated: AuthenticatedContext,
+    plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
 ) {
     let (mut sender, mut receiver) = socket.split();
     let mut events = state.events.subscribe();
@@ -8612,15 +8788,20 @@ async fn agent_socket_loop(
                     }
                     let run_state = Arc::clone(&state);
                     let project_id = conversation.project_id;
+                    // The socket owns one lease, and every derived operation clones it so closing
+                    // the socket cannot release the generation while a turn is still running.
+                    let operation_generation = plugin_generation.clone();
                     tokio::spawn(async move {
                         run_state
-                            .run_agent_message(
+                            .run_agent_message_for_role_with_generation(
                                 conversation_id,
                                 project_id,
                                 message,
                                 message_id,
                                 None,
                                 None,
+                                None,
+                                operation_generation,
                             )
                             .await;
                     });
@@ -10035,7 +10216,7 @@ mod tests {
         String::from_utf8(output.stdout).expect("git output must be UTF-8")
     }
 
-    fn test_state(token: &str) -> Arc<LocalRuntimeState> {
+    pub(super) fn test_state(token: &str) -> Arc<LocalRuntimeState> {
         let state = test_state_without_session(token);
         state
             .session_store
@@ -10147,7 +10328,7 @@ mod tests {
             .expect("authenticated JSON request")
     }
 
-    fn seed_plan_conversation(state: &LocalRuntimeState, conversation_id: &str) {
+    pub(super) fn seed_plan_conversation(state: &LocalRuntimeState, conversation_id: &str) {
         state
             .session_store
             .insert_conversation(&LocalConversation {

@@ -2013,6 +2013,10 @@ async fn task_session_plugin_context_pins_generation_until_core_operation_finish
         .expect("task-session request task")
         .expect("task-session response");
     assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(disposals.load(Ordering::SeqCst), 0);
+    to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("task-session response body");
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         while disposals.load(Ordering::SeqCst) == 0 {
             tokio::task::yield_now().await;

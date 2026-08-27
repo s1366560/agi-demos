@@ -552,6 +552,7 @@ fn composer_context_authority_scopes_structured_subagent_slots() {
             &authenticated,
             "local-workspace",
             &context(id),
+            None,
         )
         .is_ok());
     }
@@ -561,6 +562,7 @@ fn composer_context_authority_scopes_structured_subagent_slots() {
             &authenticated,
             "local-workspace",
             &context(id),
+            None,
         )
         .is_err());
     }
@@ -614,6 +616,7 @@ fn composer_context_authority_accepts_active_tenant_and_project_skills() {
         &authenticated,
         "local-workspace",
         &tenant_context,
+        None,
     )
     .is_ok());
 
@@ -628,6 +631,7 @@ fn composer_context_authority_accepts_active_tenant_and_project_skills() {
         &authenticated,
         "local-workspace",
         &disabled_project_context,
+        None,
     )
     .is_err());
 
@@ -642,6 +646,7 @@ fn composer_context_authority_accepts_active_tenant_and_project_skills() {
         &authenticated,
         "local-workspace",
         &project_context,
+        None,
     )
     .is_ok());
 }
@@ -677,9 +682,14 @@ fn composer_plugin_context_ignores_legacy_registry_without_active_v2_generation(
         metadata: Some(json!({ "execution_slot": "plugin" })),
     }];
 
-    let (status, Json(payload)) =
-        validate_composer_context_authority(&state, &authenticated, "local-workspace", &context)
-            .expect_err("legacy registry row must not restore plugin authority");
+    let (status, Json(payload)) = validate_composer_context_authority(
+        &state,
+        &authenticated,
+        "local-workspace",
+        &context,
+        None,
+    )
+    .expect_err("legacy registry row must not restore plugin authority");
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
@@ -691,7 +701,7 @@ fn composer_plugin_context_ignores_legacy_registry_without_active_v2_generation(
 }
 
 #[tokio::test]
-async fn composer_plugin_context_returns_the_pinned_runtime_generation() {
+async fn composer_plugin_context_consumes_the_request_pinned_runtime_generation() {
     const BOOTSTRAP: &str =
         include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
     let state = test_state("composer-plugin-runtime-v2-secret");
@@ -742,6 +752,13 @@ async fn composer_plugin_context_returns_the_pinned_runtime_generation() {
         .platform_plugin_authority_v2
         .publish(&distribution, generation)
         .await;
+    let lease = Arc::new(
+        state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .expect("request generation must be available"),
+    );
+    state.platform_plugin_authority_v2.deactivate().await;
     let context = [ComposerContextItem {
         kind: ComposerContextKind::Plugin,
         resource_id: "memstack-native-target-hosts@2.0.0".to_string(),
@@ -749,10 +766,14 @@ async fn composer_plugin_context_returns_the_pinned_runtime_generation() {
         metadata: Some(json!({ "execution_slot": "plugin" })),
     }];
 
-    let lease =
-        validate_composer_context_authority(&state, &authenticated, "local-workspace", &context)
-            .expect("plugin context must be active")
-            .expect("plugin context must retain a generation lease");
+    validate_composer_context_authority(
+        &state,
+        &authenticated,
+        "local-workspace",
+        &context,
+        Some(lease.as_ref()),
+    )
+    .expect("plugin context must use the request-pinned generation after authority retirement");
 
     assert_eq!(lease.descriptor().publication_version, Some(77));
     assert_eq!(lease.descriptor().digest, distribution.snapshot.digest);
