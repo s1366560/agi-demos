@@ -54,6 +54,7 @@ from ..routing import (
     IntentGate,
 )
 from ..sisyphus.prompt_builder import SisyphusPromptBuilder
+from .detached_subagent_task_supervisor import DetachedSubAgentTaskSupervisor
 from .processor import (
     ProcessorConfig,
     ProcessorFactory,
@@ -179,7 +180,8 @@ class ReActAgent(
     _subagent_lifecycle_hook_failures: list[int]
     # _init_subagent_router
     subagent_router: Any
-    _subagent_session_tasks: dict[str, asyncio.Task[Any]]
+    _detached_subagent_task_supervisor: DetachedSubAgentTaskSupervisor
+    _subagent_session_tasks: Mapping[str, asyncio.Task[Any]]
     # _init_orchestrators
     _event_converter: EventConverter
     # _init_background_services
@@ -233,6 +235,7 @@ class ReActAgent(
         subagent_announce_max_retries: int = 2,
         subagent_announce_retry_delay_ms: int = 200,
         subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None = None,
+        detached_subagent_task_supervisor: DetachedSubAgentTaskSupervisor | None = None,
         # Context window management
         context_window_config: ContextWindowConfig | None = None,
         max_context_tokens: int = 128000,
@@ -314,6 +317,7 @@ class ReActAgent(
             subagent_announce_max_retries: Max retries for completion announce metadata updates.
             subagent_announce_retry_delay_ms: Base retry delay in milliseconds.
             subagent_lifecycle_hook: Optional callback for detached subagent lifecycle events.
+            detached_subagent_task_supervisor: Project-lifetime owner for detached run tasks.
             context_window_config: Optional context window configuration
             max_context_tokens: Maximum context tokens (default: 128000)
             agent_mode: Agent mode for skill filtering (default: "default")
@@ -363,6 +367,9 @@ class ReActAgent(
             )
         self._plan_detector = plan_detector or PlanDetector()
         self._intent_gate = IntentGate()
+        self._detached_subagent_task_supervisor = (
+            detached_subagent_task_supervisor or DetachedSubAgentTaskSupervisor()
+        )
 
         self._init_tool_pipeline(
             tool_selection_pipeline,
@@ -463,7 +470,7 @@ class ReActAgent(
                 subagent_lane_semaphore=self._subagent_lane_semaphore,
                 subagent_lifecycle_hook=self._subagent_lifecycle_hook,
                 subagent_lifecycle_hook_failures=self._subagent_lifecycle_hook_failures,
-                subagent_session_tasks=self._subagent_session_tasks,
+                detached_subagent_task_supervisor=self._detached_subagent_task_supervisor,
                 model=self.model,
                 api_key=self.api_key,
                 base_url=self.base_url,

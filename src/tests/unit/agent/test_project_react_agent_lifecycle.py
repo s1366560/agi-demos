@@ -4,6 +4,7 @@ Unit tests for ProjectReActAgent V2 lifecycle-notifier integration.
 Tests TDD: RED phase - These tests should fail before implementation.
 """
 
+import asyncio
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -217,6 +218,125 @@ class TestProjectReActAgentLifecycleNotifications:
         constructor_args = react_agent.call_args.kwargs
         assert constructor_args["message_bus"] is message_bus
         assert isinstance(constructor_args["control_channel"], RedisControlChannel)
+        assert (
+            constructor_args["detached_subagent_task_supervisor"]
+            is agent._detached_subagent_task_supervisor
+        )
+
+    @pytest.mark.asyncio
+    async def test_refresh_reuses_project_supervisor_without_stopping_detached_tasks(
+        self,
+        agent_config,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        supervisor = agent._detached_subagent_task_supervisor
+
+        with (
+            patch.object(agent, "stop", new_callable=AsyncMock) as stop,
+            patch.object(
+                agent,
+                "initialize",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as initialize,
+        ):
+            refreshed = await agent.refresh()
+
+        assert refreshed is True
+        stop.assert_not_awaited()
+        initialize.assert_awaited_once_with(force_refresh=True)
+        assert agent._detached_subagent_task_supervisor is supervisor
+
+    @pytest.mark.asyncio
+    async def test_stop_awaits_project_supervisor_before_clearing_react_agent(
+        self,
+        agent_config,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+        react_agent = MagicMock()
+        agent._react_agent = react_agent
+
+        async def _shutdown() -> None:
+            assert agent._react_agent is react_agent
+
+        supervisor = MagicMock()
+        supervisor.shutdown = AsyncMock(side_effect=_shutdown)
+        agent._detached_subagent_task_supervisor = supervisor
+
+        with patch(
+            "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+            return_value=None,
+        ):
+            assert await agent.stop() is True
+
+        supervisor.shutdown.assert_awaited_once_with()
+        assert agent._react_agent is None
+
+    @pytest.mark.asyncio
+    async def test_stop_cancels_and_awaits_active_chat_before_detached_shutdown(
+        self,
+        agent_config,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+        stream_started = asyncio.Event()
+        stream_cleaned = asyncio.Event()
+
+        async def _stream(**_kwargs):
+            stream_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0)
+                stream_cleaned.set()
+            yield {"type": "complete", "data": {"content": "unexpected"}}
+
+        react_agent = MagicMock()
+        react_agent.stream = _stream
+        agent._react_agent = react_agent
+
+        async def _consume_chat() -> None:
+            async for _event in agent.execute_chat(
+                conversation_id="conversation-active",
+                user_message="wait",
+                user_id="user-1",
+            ):
+                pass
+
+        chat_task = asyncio.create_task(_consume_chat())
+        with (
+            patch.object(
+                agent,
+                "_check_and_refresh_sandbox_tools",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch.object(
+                agent,
+                "_check_and_refresh_mcp_tools",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                return_value=None,
+            ),
+        ):
+            await stream_started.wait()
+
+            async def _shutdown() -> None:
+                assert chat_task.done() is True
+                assert stream_cleaned.is_set() is True
+
+            supervisor = MagicMock()
+            supervisor.shutdown = AsyncMock(side_effect=_shutdown)
+            agent._detached_subagent_task_supervisor = supervisor
+            assert await agent.stop() is True
+
+        assert chat_task.cancelled() is True
+        assert agent.get_status().active_chats == 0
+        supervisor.shutdown.assert_awaited_once_with()
 
     @pytest.mark.asyncio
     async def test_initialize_sends_initializing_and_ready_notifications(

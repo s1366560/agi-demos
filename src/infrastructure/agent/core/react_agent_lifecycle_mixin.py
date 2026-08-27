@@ -82,6 +82,7 @@ class _LifecycleAgent(Protocol):
     _subagent_lane_semaphore: Any
     _subagent_lifecycle_hook: Any
     _subagent_lifecycle_hook_failures: Any
+    _detached_subagent_task_supervisor: Any
     _subagent_session_tasks: Any
     _event_converter: Any
     _background_executor: Any
@@ -282,7 +283,7 @@ class LifecycleMixin:
         self._subagent_lane_semaphore = asyncio.Semaphore(self._max_subagent_lane_concurrency)
         self._subagent_lifecycle_hook = subagent_lifecycle_hook
         self._subagent_lifecycle_hook_failures = [0]
-        self._subagent_session_tasks: dict[str, asyncio.Task[Any]] = {}
+        self._subagent_session_tasks = self._detached_subagent_task_supervisor.tasks
         self._span_service = span_service
         self._fork_merge_service = fork_merge_service
         self._init_subagent_router(subagents, execution_config, cached_subagent_router)

@@ -448,6 +448,151 @@ class TestSessionizedRuntime:
         assert failed is not None
         assert failed.status.value == "failed"
 
+    async def test_launch_session_releases_reservation_when_supervisor_is_closed(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-supervisor-closed",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2()
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+        await agent._detached_subagent_task_supervisor.shutdown()
+
+        with pytest.raises(RuntimeV2Error) as error:
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                available_subagents=agent.subagents,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+
+        assert error.value.code == "detached_subagent_supervisor_closed"
+        assert reservation.admitted is False
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        failed = registry.get_run("c1", run.run_id)
+        assert failed is not None
+        assert failed.status.value == "failed"
+
+    async def test_launch_session_cancelled_before_first_step_settles_admission(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-pre-start-cancel",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2()
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        supervisor = agent._detached_subagent_task_supervisor
+        create_task = supervisor.create_task
+
+        def create_cancelled_task(**kwargs):
+            task = create_task(**kwargs)
+            task.cancel()
+            return task
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+
+        with (
+            patch.object(supervisor, "create_task", side_effect=create_cancelled_task),
+            pytest.raises(RuntimeV2Error) as error,
+        ):
+            await asyncio.wait_for(
+                agent._launch_subagent_session(
+                    run_id=run.run_id,
+                    subagent=sa,
+                    available_subagents=agent.subagents,
+                    user_message="Task",
+                    conversation_id="c1",
+                    conversation_context=[],
+                    project_id="p1",
+                    tenant_id="t1",
+                ),
+                timeout=1,
+            )
+
+        assert error.value.code == "detached_subagent_launch_cancelled"
+        assert reservation.admitted is False
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        cancelled = registry.get_run("c1", run.run_id)
+        assert cancelled is not None
+        assert cancelled.status.value == "cancelled"
+
+    async def test_launch_session_reports_shutdown_during_launch_hook(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-launch-hook-shutdown",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2()
+        hook_started = asyncio.Event()
+        release_hook = asyncio.Event()
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        async def block_launch_hooks(**_kwargs) -> None:
+            hook_started.set()
+            await release_hook.wait()
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+        agent._session_runner.launch_emit_lifecycle_hooks = block_launch_hooks
+
+        launch = asyncio.create_task(
+            agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                available_subagents=agent.subagents,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+        )
+        await asyncio.wait_for(hook_started.wait(), timeout=1)
+
+        await asyncio.wait_for(agent._detached_subagent_task_supervisor.shutdown(), timeout=1)
+        release_hook.set()
+
+        with pytest.raises(RuntimeV2Error) as error:
+            await asyncio.wait_for(launch, timeout=1)
+
+        assert error.value.code == "detached_subagent_launch_cancelled"
+        assert reservation.admitted is True
+        assert reservation.exited is True
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        cancelled = registry.get_run("c1", run.run_id)
+        assert cancelled is not None
+        assert cancelled.status.value == "cancelled"
+
 
 @pytest.mark.unit
 class TestNestedSessionToolInjection:

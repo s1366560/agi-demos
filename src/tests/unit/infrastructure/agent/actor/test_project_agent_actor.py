@@ -335,3 +335,137 @@ async def test_actor_orchestrator_propagates_runtime_v2_errors() -> None:
     assert raised.value is error
     bind_orchestrator.assert_awaited_once()
     await actor._plugin_admission_v2.close()
+
+
+@pytest.mark.unit
+async def test_actor_shutdown_awaits_main_tasks_before_stopping_project_agent() -> None:
+    actor = _actor_instance()
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    async def _active_chat() -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            cleaned.set()
+
+    task = asyncio.create_task(_active_chat())
+    actor._tasks["message-1"] = task
+    actor._task_conversations["message-1"] = "conversation-1"
+    actor._abort_signals["message-1"] = asyncio.Event()
+    await started.wait()
+
+    agent = MagicMock()
+
+    async def _stop_agent() -> bool:
+        assert cleaned.is_set() is True
+        return True
+
+    agent.stop = AsyncMock(side_effect=_stop_agent)
+    actor._agent = agent
+
+    assert await actor.shutdown() is True
+
+    assert task.cancelled() is True
+    assert actor._tasks == {}
+    assert actor._task_conversations == {}
+    assert actor._abort_signals == {}
+    agent.stop.assert_awaited_once_with()
+
+
+@pytest.mark.unit
+async def test_actor_shutdown_snapshot_waits_for_inflight_chat_registration() -> None:
+    actor = _actor_instance()
+    config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
+    actor._config = config
+    bootstrap_started = asyncio.Event()
+    release_bootstrap = asyncio.Event()
+
+    async def _blocked_bootstrap() -> None:
+        bootstrap_started.set()
+        await release_bootstrap.wait()
+
+    agent = MagicMock()
+    agent.stop = AsyncMock(return_value=True)
+    request = ProjectChatRequest(
+        conversation_id="conversation-race",
+        message_id="message-race",
+        user_message="hello",
+        user_id="user-a",
+    )
+
+    with (
+        patch.object(actor, "_bootstrap_runtime", side_effect=_blocked_bootstrap),
+        patch(
+            "src.infrastructure.agent.actor.project_agent_actor.ProjectReActAgent",
+            return_value=agent,
+        ),
+        patch.object(actor, "_run_chat", side_effect=asyncio.Event().wait),
+    ):
+        chat = asyncio.create_task(actor.chat(request))
+        await asyncio.wait_for(bootstrap_started.wait(), timeout=1)
+
+        shutdown = asyncio.create_task(actor.shutdown())
+        await asyncio.sleep(0)
+        assert shutdown.done() is False
+
+        release_bootstrap.set()
+        assert await asyncio.wait_for(chat, timeout=1) == {
+            "status": "started",
+            "message_id": "message-race",
+        }
+        assert await asyncio.wait_for(shutdown, timeout=1) is True
+
+    assert actor._tasks == {}
+    assert actor._task_conversations == {}
+    assert actor._abort_signals == {}
+    agent.stop.assert_awaited_once_with()
+
+
+@pytest.mark.unit
+async def test_actor_rejects_registration_after_shutdown_gate_closes() -> None:
+    actor = _actor_instance()
+    config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
+    actor._config = config
+    cancelled = asyncio.Event()
+    release_cleanup = asyncio.Event()
+
+    async def _active_chat() -> None:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+            await release_cleanup.wait()
+
+    task = asyncio.create_task(_active_chat())
+    actor._tasks["message-active"] = task
+    actor._task_conversations["message-active"] = "conversation-active"
+    actor._abort_signals["message-active"] = asyncio.Event()
+    actor._agent = MagicMock()
+    actor._agent.stop = AsyncMock(return_value=True)
+
+    shutdown = asyncio.create_task(actor.shutdown())
+    await asyncio.wait_for(cancelled.wait(), timeout=1)
+
+    request = ProjectChatRequest(
+        conversation_id="conversation-late",
+        message_id="message-late",
+        user_message="too late",
+        user_id="user-a",
+    )
+    with pytest.raises(RuntimeV2Error) as chat_error:
+        await actor.chat(request)
+    with pytest.raises(RuntimeV2Error) as continue_error:
+        await actor.continue_chat("request-late", {})
+    with pytest.raises(RuntimeV2Error) as initialize_error:
+        await actor.initialize(config)
+
+    assert chat_error.value.code == "project_agent_actor_shutting_down"
+    assert continue_error.value.code == "project_agent_actor_shutting_down"
+    assert initialize_error.value.code == "project_agent_actor_shutting_down"
+
+    release_cleanup.set()
+    assert await asyncio.wait_for(shutdown, timeout=1) is True
+    assert actor._tasks == {}

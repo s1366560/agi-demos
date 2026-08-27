@@ -57,6 +57,8 @@ from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
 from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
+from .detached_subagent_task_supervisor import DetachedSubAgentTaskSupervisor
+
 logger = logging.getLogger(__name__)
 
 
@@ -213,9 +215,11 @@ class ProjectReActAgent:
         self._subagents: list[SubAgent] | None = None
         self._session_context: Any | None = None
         self._react_agent: Any | None = None
+        self._detached_subagent_task_supervisor = DetachedSubAgentTaskSupervisor()
 
         # Execution tracking
         self._execution_lock = asyncio.Lock()
+        self._active_chat_tasks: set[asyncio.Task[Any]] = set()
         self._is_shutting_down = False
         self._initialized = False
 
@@ -267,6 +271,10 @@ class ProjectReActAgent:
         if self._initialized and not force_refresh:
             logger.debug(f"ProjectReActAgent[{self.project_key}]: Already initialized")
             return True
+
+        if not self._initialized and self._detached_subagent_task_supervisor.is_closed:
+            self._detached_subagent_task_supervisor = DetachedSubAgentTaskSupervisor()
+            self._is_shutting_down = False
 
         start_time = time.time()
         notifier = get_websocket_notifier()
@@ -604,6 +612,7 @@ class ProjectReActAgent:
             workspace_manager=workspace_manager,
             message_bus=self._message_bus,
             control_channel=control_channel,
+            detached_subagent_task_supervisor=self._detached_subagent_task_supervisor,
         )
 
     def _build_context_window_config(
@@ -650,6 +659,7 @@ class ProjectReActAgent:
         total_skill_count = loaded_skill_count
 
         self._initialized = True
+        self._is_shutting_down = False
         self._status.is_initialized = True
         self._status.is_active = True
         self._status.tool_count = len(self._tools or {})
@@ -923,6 +933,9 @@ class ProjectReActAgent:
             return
 
         start_time = time.time()
+        current_chat_task = asyncio.current_task()
+        if current_chat_task is not None:
+            self._active_chat_tasks.add(current_chat_task)
         effective_tenant_id = tenant_id or self.config.tenant_id
         notifier = get_websocket_notifier()
 
@@ -1005,6 +1018,8 @@ class ProjectReActAgent:
             yield self._make_error_event(error_message, error_code)
 
         finally:
+            if current_chat_task is not None:
+                self._active_chat_tasks.discard(current_chat_task)
             self._status.active_chats -= 1
             self._status.is_executing = self._status.active_chats > 0
 
@@ -1083,55 +1098,53 @@ class ProjectReActAgent:
         Stop the agent and clean up resources.
 
         This method:
-        1. Sends 'shutting_down' lifecycle notification
-        2. Sets shutdown flag (prevents new chats)
-        3. Waits for current chats to complete (with timeout)
-        4. Clears caches
+        1. Sets the shutdown flag so new chats and detached runs are rejected
+        2. Cancels and awaits active chat tasks
+        3. Cancels and awaits all project-owned detached SubAgent tasks
+        4. Clears caches and runtime references after task cleanup
         5. Updates status
 
         Returns:
             True if stopped successfully
         """
-        if not self._initialized:
-            return True
-
-        logger.info(f"ProjectReActAgent[{self.project_key}]: Stopping...")
         self._is_shutting_down = True
+        was_initialized = self._initialized
+        if was_initialized:
+            logger.info(f"ProjectReActAgent[{self.project_key}]: Stopping...")
 
         # Notify shutting down state
-        notifier = get_websocket_notifier()
-        if notifier:
+        notifier = get_websocket_notifier() if was_initialized else None
+        if notifier is not None:
             _ = await notifier.notify_shutting_down(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
             )
 
-        # Wait for current executions to complete
-        wait_start = time.time()
-        timeout = 30.0  # 30 seconds timeout
+        current_task = asyncio.current_task()
+        active_chat_tasks = tuple(
+            task for task in self._active_chat_tasks if task is not current_task and not task.done()
+        )
+        for task in active_chat_tasks:
+            _ = task.cancel()
+        if active_chat_tasks:
+            _ = await asyncio.gather(*active_chat_tasks, return_exceptions=True)
 
-        while self._status.active_chats > 0 and (time.time() - wait_start) < timeout:
-            await asyncio.sleep(0.1)
-
-        if self._status.active_chats > 0:
-            logger.warning(
-                f"ProjectReActAgent[{self.project_key}]: Timeout waiting for "
-                f"{self._status.active_chats} active chats"
-            )
+        await self._detached_subagent_task_supervisor.shutdown()
 
         # Clear session cache
-        try:
-            from src.infrastructure.agent.state.agent_session_pool import (
-                invalidate_agent_session,
-            )
+        if was_initialized:
+            try:
+                from src.infrastructure.agent.state.agent_session_pool import (
+                    invalidate_agent_session,
+                )
 
-            invalidate_agent_session(
-                tenant_id=self.config.tenant_id,
-                project_id=self.config.project_id,
-                agent_mode=self.config.agent_mode,
-            )
-        except Exception as e:
-            logger.warning(f"ProjectReActAgent[{self.project_key}]: Failed to clear cache: {e}")
+                invalidate_agent_session(
+                    tenant_id=self.config.tenant_id,
+                    project_id=self.config.project_id,
+                    agent_mode=self.config.agent_mode,
+                )
+            except Exception as e:
+                logger.warning(f"ProjectReActAgent[{self.project_key}]: Failed to clear cache: {e}")
 
         # Update status
         self._initialized = False
@@ -1158,10 +1171,7 @@ class ProjectReActAgent:
         """
         logger.info(f"ProjectReActAgent[{self.project_key}]: Refreshing...")
 
-        # Stop current instance
-        await self.stop()
-
-        # Re-initialize with force refresh
+        # Rebuild the ReActAgent while retaining Project-owned detached tasks.
         return await self.initialize(force_refresh=True)
 
     def get_status(self) -> ProjectAgentStatus:

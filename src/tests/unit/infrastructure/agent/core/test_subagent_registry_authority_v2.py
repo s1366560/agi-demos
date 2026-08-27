@@ -335,6 +335,116 @@ async def test_detached_session_keeps_exact_generation_and_uses_a_new_db_session
         first_registry.close()
 
 
+async def test_supervisor_shutdown_waits_for_exact_generation_and_db_cleanup(  # noqa: PLR0915
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_registry = SubAgentRunRegistry()
+    second_registry = SubAgentRunRegistry()
+    registries = iter((first_registry, second_registry))
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            subagent_run_registry_factory=lambda _config: next(registries),
+        )
+    )
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=288,
+        version=288,
+        nonce="detached-supervisor-generation-288",
+    )
+    assert first.accepted is True
+    install_process_generation_host_v2(host)
+
+    child_db_closed = False
+
+    @asynccontextmanager
+    async def child_session() -> AsyncIterator[object]:
+        nonlocal child_db_closed
+        try:
+            yield object()
+        finally:
+            child_db_closed = True
+
+    agent = _agent(session_factory=child_session)
+    subagent = SubAgent.create(
+        tenant_id="tenant-1",
+        name="shutdown-worker",
+        display_name="Shutdown Worker",
+        system_prompt="Wait until shutdown.",
+        trigger_description="Exercises supervisor shutdown",
+        trigger_keywords=["shutdown"],
+    )
+    entered = asyncio.Event()
+    never_release = asyncio.Event()
+    observed_generation: list[object] = []
+
+    async def execute_subagent(*_args: Any, **_kwargs: Any) -> Any:
+        observed_generation.append(current_operation_context_v2().generation)
+        entered.set()
+        await never_release.wait()
+        yield {"type": "complete", "data": {"content": "unexpected"}}
+
+    monkeypatch.setattr(agent._session_runner, "execute_subagent", execute_subagent)
+
+    try:
+        async with pin_agent_turn_operation_v2(
+            operation_id="agent-turn:shutdown-parent",
+            tenant_id="tenant-1",
+            project_id="project-1",
+            session_id="conversation-shutdown",
+        ) as parent_operation:
+            run = first_registry.create_run(
+                conversation_id="conversation-shutdown",
+                subagent_name=subagent.name,
+                task="wait for supervisor shutdown",
+                run_id="run-supervisor-shutdown",
+            )
+            first_registry.mark_running("conversation-shutdown", run.run_id)
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=subagent,
+                available_subagents=[subagent],
+                user_message="wait for supervisor shutdown",
+                conversation_id="conversation-shutdown",
+                conversation_context=[],
+                project_id="project-1",
+                tenant_id="tenant-1",
+            )
+            task = agent._subagent_session_tasks[run.run_id]
+            await asyncio.wait_for(entered.wait(), timeout=1)
+            old_generation = parent_operation.generation
+
+            second = await host.bootstrap(
+                profile_path=_PROFILE_PATH,
+                manifest_paths=(_MANIFEST_PATH,),
+                generation=289,
+                version=289,
+                nonce="detached-supervisor-generation-289",
+            )
+            assert second.accepted is True
+
+        assert observed_generation == [old_generation]
+        assert old_generation._disposed is False
+        assert child_db_closed is False
+
+        await agent._detached_subagent_task_supervisor.shutdown()
+
+        assert task.cancelled() is True
+        assert child_db_closed is True
+        assert old_generation._disposed is True
+        assert run.run_id not in agent._subagent_session_tasks
+        cancelled = first_registry.get_run("conversation-shutdown", run.run_id)
+        assert cancelled is not None
+        assert cancelled.status.value == "cancelled"
+    finally:
+        never_release.set()
+        clear_process_generation_host_v2(host)
+        await host.close()
+        second_registry.close()
+        first_registry.close()
+
+
 def test_react_agent_fails_closed_without_a_pinned_operation() -> None:
     agent = _agent()
 

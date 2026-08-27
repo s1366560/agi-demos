@@ -40,6 +40,7 @@ from src.infrastructure.plugins.v2.boundary import (
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
+from .detached_subagent_task_supervisor import DetachedSubAgentTaskSupervisor
 from .processor import ProcessorConfig, ToolDefinition
 from .subagent_registry_authority import (
     SubAgentRunRegistryResolverV2,
@@ -82,8 +83,8 @@ class SubAgentRunnerDeps:
     subagent_lifecycle_hook_failures: list[int] = field(
         default_factory=lambda: [0],
     )
-    subagent_session_tasks: dict[str, asyncio.Task[Any]] = field(
-        default_factory=dict,
+    detached_subagent_task_supervisor: DetachedSubAgentTaskSupervisor = field(
+        default_factory=DetachedSubAgentTaskSupervisor,
     )
 
     # -- Model config --
@@ -836,7 +837,6 @@ class SubAgentSessionRunner:
                 "cleanup": normalized_cleanup,
             }
         )
-        self.deps.subagent_session_tasks.pop(run_id, None)
 
     async def _maybe_apply_workspace_task_report_from_run(
         self,
@@ -964,7 +964,10 @@ class SubAgentSessionRunner:
             SubAgentRunStatus.PENDING,
             SubAgentRunStatus.RUNNING,
         ]
-        if isinstance(error, asyncio.CancelledError):
+        launch_cancelled = isinstance(error, asyncio.CancelledError) or (
+            isinstance(error, RuntimeV2Error) and error.code == "detached_subagent_launch_cancelled"
+        )
+        if launch_cancelled:
             _ = registry.mark_cancelled(
                 conversation_id=conversation_id,
                 run_id=run_id,
@@ -1122,7 +1125,7 @@ class SubAgentSessionRunner:
         run_metadata: dict[str, str] | None = None,
     ) -> None:
         """Launch a detached SubAgent session tied to a run_id."""
-        if run_id in self.deps.subagent_session_tasks:
+        if self.deps.detached_subagent_task_supervisor.task_for(run_id) is not None:
             raise ValueError(f"Run {run_id} is already running")
 
         (
@@ -1193,23 +1196,11 @@ class SubAgentSessionRunner:
         admission: asyncio.Future[None] = asyncio.get_running_loop().create_future()
 
         async def _run_admitted_session() -> None:
-            await start_gate.wait()
             started_at = time.time()
             cancelled_by_control = False
-            (
-                resolved_model_override,
-                resolved_thinking_override,
-                configured_timeout,
-            ) = self.runner_resolve_overrides(
-                conversation_id=conversation_id,
-                run_id=run_id,
-                requested_model=requested_model_override,
-                requested_thinking=requested_thinking_override,
-                normalized_spawn_mode=normalized_spawn_mode,
-                thread_requested=thread_requested,
-                normalized_cleanup=normalized_cleanup,
-            )
-
+            resolved_model_override = requested_model_override
+            resolved_thinking_override = requested_thinking_override
+            configured_timeout = 0.0
             summary = ""
             tokens_used: int | None = None
             execution_time_ms: int | None = None
@@ -1217,6 +1208,20 @@ class SubAgentSessionRunner:
             result_error: str | None = None
 
             try:
+                await start_gate.wait()
+                (
+                    resolved_model_override,
+                    resolved_thinking_override,
+                    configured_timeout,
+                ) = self.runner_resolve_overrides(
+                    conversation_id=conversation_id,
+                    run_id=run_id,
+                    requested_model=requested_model_override,
+                    requested_thinking=requested_thinking_override,
+                    normalized_spawn_mode=normalized_spawn_mode,
+                    thread_requested=thread_requested,
+                    normalized_cleanup=normalized_cleanup,
+                )
                 queued_payload = dict(
                     SubAgentQueuedEvent(
                         subagent_id=subagent.id,
@@ -1361,19 +1366,36 @@ class SubAgentSessionRunner:
                 if not admission.done():
                     admission.set_exception(exc)
                 raise
-            finally:
-                current_task = asyncio.current_task()
-                if self.deps.subagent_session_tasks.get(run_id) is current_task:
-                    self.deps.subagent_session_tasks.pop(run_id, None)
+
+        def _settle_admission_from_task(completed: asyncio.Task[None]) -> None:
+            if admission.done():
+                return
+            if completed.cancelled():
+                admission.set_exception(
+                    RuntimeV2Error(
+                        "detached_subagent_launch_cancelled",
+                        "detached SubAgent task was cancelled before generation admission",
+                    )
+                )
+                return
+            error = completed.exception()
+            admission.set_exception(
+                error
+                or RuntimeV2Error(
+                    "detached_subagent_launch_terminated",
+                    "detached SubAgent task terminated before generation admission",
+                )
+            )
 
         task: asyncio.Task[None] | None = None
         try:
-            task = asyncio.create_task(
-                _runner(),
+            task = self.deps.detached_subagent_task_supervisor.create_task(
+                run_id=run_id,
+                coroutine=_runner(),
                 name=f"subagent-session-{run_id}",
                 context=detached_operation_task_context_v2(),
             )
-            self.deps.subagent_session_tasks[run_id] = task
+            task.add_done_callback(_settle_admission_from_task)
             await admission
             await self.launch_emit_lifecycle_hooks(
                 conversation_id=conversation_id,
@@ -1387,19 +1409,24 @@ class SubAgentSessionRunner:
                 requested_model_override=requested_model_override,
                 requested_thinking_override=requested_thinking_override,
             )
+            task_is_owned = self.deps.detached_subagent_task_supervisor.task_for(run_id) is task
+            if task.cancelled() or task.cancelling() or task.done() or not task_is_owned:
+                raise RuntimeV2Error(
+                    "detached_subagent_launch_cancelled",
+                    "detached SubAgent task stopped before its launch gate opened",
+                )
         except BaseException as exc:
-            if task is not None:
-                task.cancel()
-                _ = await asyncio.gather(task, return_exceptions=True)
-                if self.deps.subagent_session_tasks.get(run_id) is task:
-                    self.deps.subagent_session_tasks.pop(run_id, None)
-            await reservation.release()
             self._record_launch_failure(
                 session_registry,
                 conversation_id=conversation_id,
                 run_id=run_id,
                 error=exc,
             )
+            if task is not None:
+                _ = task.cancel()
+                _ = await asyncio.gather(task, return_exceptions=True)
+                self.deps.detached_subagent_task_supervisor.discard(run_id, task)
+            await reservation.release()
             raise
         start_gate.set()
 
@@ -1633,11 +1660,7 @@ class SubAgentSessionRunner:
 
     async def cancel_subagent_session(self, run_id: str) -> bool:
         """Cancel a detached SubAgent session by run_id."""
-        task = self.deps.subagent_session_tasks.get(run_id)
-        if task and not task.done():
-            task.cancel()
-            return True
-        return False
+        return self.deps.detached_subagent_task_supervisor.cancel(run_id)
 
     @staticmethod
     def topological_sort_subtasks(subtasks: list[Any]) -> list[Any]:

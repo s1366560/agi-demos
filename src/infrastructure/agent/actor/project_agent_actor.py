@@ -57,6 +57,9 @@ class ProjectAgentActor:
         self._bootstrapped = False
         self._bootstrap_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
+        self._lifecycle_lock = asyncio.Lock()
+        self._shutting_down = False
+        self._shutdown_task: asyncio.Task[None] | None = None
         self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
             builtin_runtime_definitions_v2(
                 sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
@@ -78,6 +81,17 @@ class ProjectAgentActor:
         self, config: ProjectAgentActorConfig, force_refresh: bool = False
     ) -> dict[str, Any]:
         """Initialize the ProjectReActAgent instance."""
+        async with self._lifecycle_lock:
+            self._require_task_registration_open()
+            return await self._initialize_locked(config, force_refresh=force_refresh)
+
+    async def _initialize_locked(
+        self,
+        config: ProjectAgentActorConfig,
+        *,
+        force_refresh: bool = False,
+    ) -> dict[str, Any]:
+        """Initialize while the actor lifecycle registration gate is held."""
         async with self._init_lock:
             await self._bootstrap_runtime()
             self._config = config
@@ -128,6 +142,13 @@ class ProjectAgentActor:
 
             return {"status": "initialized", "cached": False}
 
+    def _require_task_registration_open(self) -> None:
+        if self._shutting_down:
+            raise RuntimeV2Error(
+                "project_agent_actor_shutting_down",
+                "project agent actor is shutting down and no longer accepts work",
+            )
+
     async def _ensure_agent_initialized_v2(
         self,
         operation: OperationContextV2,
@@ -158,21 +179,23 @@ class ProjectAgentActor:
 
     async def chat(self, request: ProjectChatRequest) -> dict[str, Any]:
         """Start a chat execution in the background."""
-        if not self._agent:
-            if not self._config:
-                raise RuntimeError("Actor config not set")
-            await self.initialize(self._config)
+        async with self._lifecycle_lock:
+            self._require_task_registration_open()
+            if not self._agent:
+                if not self._config:
+                    raise RuntimeError("Actor config not set")
+                await self._initialize_locked(self._config)
 
-        abort_signal = asyncio.Event()
-        task = asyncio.create_task(self._run_chat(request, abort_signal))
-        self._tasks[request.message_id] = task
-        self._task_conversations[request.message_id] = request.conversation_id
-        self._abort_signals[request.message_id] = abort_signal
+            abort_signal = asyncio.Event()
+            task = asyncio.create_task(self._run_chat(request, abort_signal))
+            self._tasks[request.message_id] = task
+            self._task_conversations[request.message_id] = request.conversation_id
+            self._abort_signals[request.message_id] = abort_signal
 
-        # Add cleanup callback
-        task.add_done_callback(lambda t: self._cleanup_task(request.message_id))
+            # Add cleanup callback
+            task.add_done_callback(lambda _task: self._cleanup_task(request.message_id))
 
-        return {"status": "started", "message_id": request.message_id}
+            return {"status": "started", "message_id": request.message_id}
 
     async def continue_chat(
         self,
@@ -182,17 +205,19 @@ class ProjectAgentActor:
         message_id: str | None = None,
     ) -> dict[str, Any]:
         """Continue a paused chat after HITL response."""
-        if not self._agent:
-            if not self._config:
-                raise RuntimeError("Actor config not set")
-            await self.initialize(self._config)
+        async with self._lifecycle_lock:
+            self._require_task_registration_open()
+            if not self._agent:
+                if not self._config:
+                    raise RuntimeError("Actor config not set")
+                await self._initialize_locked(self._config)
 
-        task = asyncio.create_task(
-            self._run_continue(request_id, response_data, conversation_id, message_id)
-        )
-        self._tasks[request_id] = task
-        if conversation_id:
-            self._task_conversations[request_id] = conversation_id
+            task = asyncio.create_task(
+                self._run_continue(request_id, response_data, conversation_id, message_id)
+            )
+            self._tasks[request_id] = task
+            if conversation_id:
+                self._task_conversations[request_id] = conversation_id
 
         try:
             return await task
@@ -271,11 +296,32 @@ class ProjectAgentActor:
 
     async def shutdown(self) -> bool:
         """Stop the actor and cleanup resources."""
-        for task in self._tasks.values():
-            if not task.done():
-                task.cancel()
-        for abort_signal in self._abort_signals.values():
+        async with self._lifecycle_lock:
+            if self._shutdown_task is None:
+                self._shutting_down = True
+                tasks = tuple(self._tasks.values())
+                abort_signals = tuple(self._abort_signals.values())
+                self._shutdown_task = asyncio.create_task(
+                    self._shutdown_registered_tasks(tasks, abort_signals),
+                    name="project-agent-actor-shutdown",
+                )
+            shutdown_task = self._shutdown_task
+        await asyncio.shield(shutdown_task)
+        return True
+
+    async def _shutdown_registered_tasks(
+        self,
+        tasks: tuple[asyncio.Task[Any], ...],
+        abort_signals: tuple[asyncio.Event, ...],
+    ) -> None:
+        """Cancel the closed registration snapshot and then dispose actor resources."""
+        for abort_signal in abort_signals:
             abort_signal.set()
+        for task in tasks:
+            if not task.done():
+                _ = task.cancel()
+        if tasks:
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
         self._task_conversations.clear()
         self._abort_signals.clear()
@@ -284,7 +330,6 @@ class ProjectAgentActor:
             await self._agent.stop()
             self._agent = None
         await self._plugin_admission_v2.close()
-        return True
 
     def _admit_plugin_turn(
         self,
