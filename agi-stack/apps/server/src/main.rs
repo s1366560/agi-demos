@@ -114,9 +114,12 @@ use agistack_core::ports::{
 };
 use agistack_core::{MemoryService, ReActEngine};
 use agistack_plugin_host::{
-    parse_profile_snapshot_v2, rust_server_host_definition_v2, ControlPlane, DataPlaneReconciler,
-    DataPlaneTargetV2, GenerationManagerV2, HotPlugRegistry, LenTool, LoaderV2, PluginHost,
-    RuntimeV2Error, UpperTool,
+    parse_profile_snapshot_v2, rust_server_host_definition_v2,
+    rust_server_http_routes_definition_v2, ControlPlane, DataPlaneReconciler, DataPlaneTargetV2,
+    GenerationManagerV2, HotPlugRegistry, LenTool, LoaderV2, PluginHost, RuntimeV2Error,
+    RustServerHttpRouteContributionV2, ScopeKindV2, ScopeV2, UpperTool,
+    RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2, RUST_SERVER_HTTP_ROUTES_SERVICE_V2,
+    RUST_SERVER_HTTP_ROUTE_STRATEGY_V2,
 };
 
 use crate::admin_access::{build_admin_access, SharedAdminAccess};
@@ -334,13 +337,60 @@ pub(crate) struct AppState {
 
 type ServerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-async fn start_plugin_runtime_v2() -> ServerResult<RustServerGenerationAdmissionV2> {
+const RUST_SERVER_HTTP_ROUTES_SERVICE_VERSION_V2: &str = "1.0.0";
+
+struct RustServerPluginRuntimeV2 {
+    admission: RustServerGenerationAdmissionV2,
+    route_contribution: RustServerHttpRouteContributionV2,
+}
+
+impl RustServerPluginRuntimeV2 {
+    fn bind(&self, state: AppState) -> ServerResult<axum::Router> {
+        self.validate_route_contribution()?;
+        Ok(self.admission.bind(demo_api::router(state)))
+    }
+
+    async fn shutdown(&self) -> Result<(), RuntimeV2Error> {
+        self.admission.shutdown().await
+    }
+
+    fn validate_route_contribution(&self) -> Result<(), RuntimeV2Error> {
+        if self.route_contribution.contribution_id
+            != RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2
+        {
+            return Err(RuntimeV2Error::Module(
+                "rust-server V2 generation declares an unknown HTTP route contribution".to_owned(),
+            ));
+        }
+        if self.route_contribution.strategy != RUST_SERVER_HTTP_ROUTE_STRATEGY_V2 {
+            return Err(RuntimeV2Error::Module(
+                "rust-server V2 generation declares an incompatible HTTP route strategy".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn manager(&self) -> &GenerationManagerV2 {
+        self.admission.manager()
+    }
+
+    #[cfg(test)]
+    const fn route_contribution(&self) -> &RustServerHttpRouteContributionV2 {
+        &self.route_contribution
+    }
+}
+
+async fn start_plugin_runtime_v2() -> ServerResult<RustServerPluginRuntimeV2> {
     let snapshot = parse_profile_snapshot_v2(include_str!(
         "../../../../shared/profiles/memstack-default-bootstrap.v2.json"
     ))?;
     let generation = LoaderV2::for_target(
         DataPlaneTargetV2::RustServer,
-        [rust_server_host_definition_v2()],
+        [
+            rust_server_host_definition_v2(),
+            rust_server_http_routes_definition_v2(),
+        ],
     )
     .stage(snapshot)
     .await?;
@@ -350,9 +400,28 @@ async fn start_plugin_runtime_v2() -> ServerResult<RustServerGenerationAdmission
         )
         .into());
     }
+    let route_contribution = generation
+        .resolve_versioned::<RustServerHttpRouteContributionV2>(
+            RUST_SERVER_HTTP_ROUTES_SERVICE_V2,
+            RUST_SERVER_HTTP_ROUTES_SERVICE_VERSION_V2,
+            &ScopeV2 {
+                kind: ScopeKindV2::Root,
+                tenant_id: None,
+                project_id: None,
+                session_id: None,
+            },
+            None,
+        )?
+        .as_ref()
+        .clone();
     let manager = Arc::new(GenerationManagerV2::new());
     manager.publish(generation).await;
-    Ok(RustServerGenerationAdmissionV2::new(manager))
+    let runtime = RustServerPluginRuntimeV2 {
+        admission: RustServerGenerationAdmissionV2::new(manager),
+        route_contribution,
+    };
+    runtime.validate_route_contribution()?;
+    Ok(runtime)
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -1104,7 +1173,7 @@ async fn main() -> ServerResult<()> {
         .and_then(|scheduler| Arc::clone(scheduler).spawn_if_enabled());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     let plugin_runtime_v2 = start_plugin_runtime_v2().await?;
-    let app = plugin_runtime_v2.bind(demo_api::router(state));
+    let app = plugin_runtime_v2.bind(state)?;
     println!("agistack-server listening on http://{addr}");
     let serve_result = axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -1143,10 +1212,47 @@ mod runtime_mode_tests {
                 .expect("generation must remain leased")
                 .phases()
                 .len(),
-            1
+            2
+        );
+        assert_eq!(
+            runtime.route_contribution().contribution_id,
+            RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2
+        );
+        assert_eq!(
+            runtime.route_contribution().strategy,
+            RUST_SERVER_HTTP_ROUTE_STRATEGY_V2
         );
         lease.release().await.expect("lease must release");
         runtime.shutdown().await.expect("runtime must shut down");
+    }
+
+    #[tokio::test]
+    async fn rust_server_route_composition_has_no_unknown_or_static_fallback() {
+        let cases = [
+            ("unknown-routes", RUST_SERVER_HTTP_ROUTE_STRATEGY_V2),
+            (
+                RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2,
+                "static-router",
+            ),
+        ];
+
+        for (contribution_id, strategy) in cases {
+            let runtime = RustServerPluginRuntimeV2 {
+                admission: RustServerGenerationAdmissionV2::new(Arc::new(
+                    GenerationManagerV2::new(),
+                )),
+                route_contribution: RustServerHttpRouteContributionV2 {
+                    contribution_id: contribution_id.to_owned(),
+                    strategy: strategy.to_owned(),
+                },
+            };
+
+            assert!(matches!(
+                runtime.validate_route_contribution(),
+                Err(RuntimeV2Error::Module(_))
+            ));
+            runtime.shutdown().await.expect("runtime must shut down");
+        }
     }
 
     #[test]

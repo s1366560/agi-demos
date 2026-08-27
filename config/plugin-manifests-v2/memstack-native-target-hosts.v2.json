@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/rust-server/generation-host",
       "entrypoint": "RustServerHostModuleV2::apply",
       "artifact": {
-        "digest": "sha256:705a627a625180c962112ebfa772ef5c489e4f4fc0004a69bf1c6b88a21a4df4",
+        "digest": "sha256:882ee8661d61be7e1234e0750c9ad82ee6a0ff2fedf86c49f8bb8c764edd4b45",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": ["rust-server"],
@@ -34,10 +34,45 @@
       "contract_digest": "sha256:8848f378b02460e0ba80ef8708a65e2f30f789033c7eb3ccf7d25e5460fa6e7e"
     },
     {
+      "module_ref": "builtin://memstack/rust-server/http-routes",
+      "entrypoint": "RustServerHttpRoutesModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:882ee8661d61be7e1234e0750c9ad82ee6a0ff2fedf86c49f8bb8c764edd4b45",
+        "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
+      },
+      "targets": ["rust-server"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:rust-server.http-route-contribution",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contribution_id", "strategy"],
+          "properties": {
+            "contribution_id": {
+              "const": "memstack-rust-default-api.v1",
+              "type": "string"
+            },
+            "strategy": { "const": "axum-host-router", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:75443a63ac79d996d7bcba1a2015ab84320702e0157897cbd62970669a79d2b2"
+    },
+    {
       "module_ref": "builtin://memstack/desktop-sidecar/local-capability",
       "entrypoint": "DesktopSidecarHostModuleV2::apply",
       "artifact": {
-        "digest": "sha256:705a627a625180c962112ebfa772ef5c489e4f4fc0004a69bf1c6b88a21a4df4",
+        "digest": "sha256:882ee8661d61be7e1234e0750c9ad82ee6a0ff2fedf86c49f8bb8c764edd4b45",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": ["desktop-sidecar"],

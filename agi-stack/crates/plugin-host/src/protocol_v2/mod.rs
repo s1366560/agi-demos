@@ -22,14 +22,17 @@ pub use runtime::{
     GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeGenerationV2,
     RuntimeV2Error,
 };
-pub use target_modules::{
-    desktop_sidecar_host_definition_v2, rust_server_host_definition_v2,
-    DesktopSidecarHostModuleV2, RustServerHostModuleV2, TargetHostDescriptorV2,
-    DESKTOP_SIDECAR_HOST_MODULE_REF_V2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
-    RUST_SERVER_HOST_MODULE_REF_V2, RUST_SERVER_HOST_SERVICE_V2,
-};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+pub use target_modules::{
+    desktop_sidecar_host_definition_v2, rust_server_host_definition_v2,
+    rust_server_http_routes_definition_v2, DesktopSidecarHostModuleV2, RustServerHostModuleV2,
+    RustServerHttpRouteContributionV2, RustServerHttpRoutesModuleV2, TargetHostDescriptorV2,
+    DESKTOP_SIDECAR_HOST_MODULE_REF_V2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
+    RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2, RUST_SERVER_HOST_MODULE_REF_V2,
+    RUST_SERVER_HOST_SERVICE_V2, RUST_SERVER_HTTP_ROUTES_MODULE_REF_V2,
+    RUST_SERVER_HTTP_ROUTES_SERVICE_V2, RUST_SERVER_HTTP_ROUTE_STRATEGY_V2,
+};
 use thiserror::Error;
 
 pub const PLATFORM_PLUGIN_SNAPSHOT_TYPE_URL_V2: &str = "types.memstack.ai/plugin.profile.v2";

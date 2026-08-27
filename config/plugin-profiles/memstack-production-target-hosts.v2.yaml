@@ -16,6 +16,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-rust-server-http-routes
+      parent_entry_id: builtin-rust-server-generation-host
+      plugin_ref: memstack-native-target-hosts
+      module_ref: builtin://memstack/rust-server/http-routes
+      enabled: true
+      config:
+        contribution_id: memstack-rust-default-api.v1
+        strategy: axum-host-router
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-sidecar-local-capability
       parent_entry_id: null
       plugin_ref: memstack-native-target-hosts

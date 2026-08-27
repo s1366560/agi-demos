@@ -7,8 +7,10 @@ use std::{
 };
 
 use agistack_plugin_host::{
-    DataPlaneTargetV2, GenerationLeaseV2, GenerationManagerV2, RuntimeV2Error, ScopeKindV2,
-    ScopeV2, TargetHostDescriptorV2, RUST_SERVER_HOST_SERVICE_V2,
+    DataPlaneTargetV2, GenerationLeaseV2, GenerationManagerV2, RuntimeV2Error,
+    RustServerHttpRouteContributionV2, ScopeKindV2, ScopeV2, TargetHostDescriptorV2,
+    RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2, RUST_SERVER_HOST_SERVICE_V2,
+    RUST_SERVER_HTTP_ROUTES_SERVICE_V2, RUST_SERVER_HTTP_ROUTE_STRATEGY_V2,
 };
 use axum::{
     body::Body,
@@ -25,6 +27,7 @@ use tokio::sync::{oneshot, Notify};
 pub(crate) const RUST_SERVER_GENERATION_STRATEGY_V2: &str = "generated-catalog-bootstrap";
 const RUST_SERVER_TARGET_V2: &str = "rust-server";
 const RUST_SERVER_HOST_SERVICE_VERSION_V2: &str = "1.0.0";
+const RUST_SERVER_HTTP_ROUTES_SERVICE_VERSION_V2: &str = "1.0.0";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct RustServerRequestGenerationV2 {
@@ -33,6 +36,8 @@ pub(crate) struct RustServerRequestGenerationV2 {
     pub(crate) digest: String,
     pub(crate) target: DataPlaneTargetV2,
     pub(crate) strategy: String,
+    pub(crate) route_contribution_id: String,
+    pub(crate) route_strategy: String,
 }
 
 #[derive(Default)]
@@ -192,16 +197,17 @@ fn request_descriptor_v2(
     let generation = lease
         .generation()
         .map_err(GenerationAdmissionRejectionV2::runtime)?;
+    let root_scope = ScopeV2 {
+        kind: ScopeKindV2::Root,
+        tenant_id: None,
+        project_id: None,
+        session_id: None,
+    };
     let descriptor = generation
         .resolve_versioned::<TargetHostDescriptorV2>(
             RUST_SERVER_HOST_SERVICE_V2,
             RUST_SERVER_HOST_SERVICE_VERSION_V2,
-            &ScopeV2 {
-                kind: ScopeKindV2::Root,
-                tenant_id: None,
-                project_id: None,
-                session_id: None,
-            },
+            &root_scope,
             None,
         )
         .map_err(GenerationAdmissionRejectionV2::runtime)?;
@@ -217,12 +223,34 @@ fn request_descriptor_v2(
             "protocol-v2 generation uses an incompatible Rust server strategy",
         ));
     }
+    let routes = generation
+        .resolve_versioned::<RustServerHttpRouteContributionV2>(
+            RUST_SERVER_HTTP_ROUTES_SERVICE_V2,
+            RUST_SERVER_HTTP_ROUTES_SERVICE_VERSION_V2,
+            &root_scope,
+            None,
+        )
+        .map_err(GenerationAdmissionRejectionV2::runtime)?;
+    if routes.contribution_id != RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2 {
+        return Err(GenerationAdmissionRejectionV2::new(
+            "invalid_rust_server_route_contribution",
+            "protocol-v2 generation declares an unknown Rust server route contribution",
+        ));
+    }
+    if routes.strategy != RUST_SERVER_HTTP_ROUTE_STRATEGY_V2 {
+        return Err(GenerationAdmissionRejectionV2::new(
+            "invalid_rust_server_route_strategy",
+            "protocol-v2 generation uses an incompatible Rust server route strategy",
+        ));
+    }
     Ok(RustServerRequestGenerationV2 {
         profile_id: generation.snapshot.profile_id.clone(),
         generation: generation.snapshot.generation,
         digest: generation.snapshot.digest.clone(),
         target: DataPlaneTargetV2::RustServer,
         strategy: descriptor.strategy.clone(),
+        route_contribution_id: routes.contribution_id.clone(),
+        route_strategy: routes.strategy.clone(),
     })
 }
 
@@ -358,10 +386,13 @@ mod tests {
     };
 
     use agistack_plugin_host::{
-        parse_profile_snapshot_v2, rust_server_host_definition_v2, ContextV2, DataPlaneTargetV2,
-        GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2,
-        RuntimeGenerationV2, RuntimeV2Error, TargetHostDescriptorV2,
-        RUST_SERVER_HOST_MODULE_REF_V2, RUST_SERVER_HOST_SERVICE_V2,
+        parse_profile_snapshot_v2, rust_server_host_definition_v2,
+        rust_server_http_routes_definition_v2, ContextV2, DataPlaneTargetV2, GenerationManagerV2,
+        LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeGenerationV2, RuntimeV2Error,
+        RustServerHttpRouteContributionV2, TargetHostDescriptorV2,
+        RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2, RUST_SERVER_HOST_MODULE_REF_V2,
+        RUST_SERVER_HOST_SERVICE_V2, RUST_SERVER_HTTP_ROUTES_MODULE_REF_V2,
+        RUST_SERVER_HTTP_ROUTES_SERVICE_V2, RUST_SERVER_HTTP_ROUTE_STRATEGY_V2,
     };
     use async_trait::async_trait;
     use axum::{
@@ -395,6 +426,16 @@ mod tests {
         value: TestHostValueV2,
     }
 
+    #[derive(Clone)]
+    enum TestRouteValueV2 {
+        Descriptor(RustServerHttpRouteContributionV2),
+        WrongType,
+    }
+
+    struct TestRouteModuleV2 {
+        value: TestRouteValueV2,
+    }
+
     #[async_trait]
     impl PluginModuleRuntimeV2 for TestHostModuleV2 {
         async fn apply(
@@ -414,14 +455,40 @@ mod tests {
         }
     }
 
+    #[async_trait]
+    impl PluginModuleRuntimeV2 for TestRouteModuleV2 {
+        async fn apply(
+            &self,
+            context: &mut ContextV2,
+            _config: &BTreeMap<String, Value>,
+        ) -> Result<(), RuntimeV2Error> {
+            match &self.value {
+                TestRouteValueV2::Descriptor(descriptor) => {
+                    context.provide(RUST_SERVER_HTTP_ROUTES_SERVICE_V2, descriptor.clone())?;
+                }
+                TestRouteValueV2::WrongType => {
+                    context.provide(RUST_SERVER_HTTP_ROUTES_SERVICE_V2, 7_u64)?;
+                }
+            }
+            Ok(())
+        }
+    }
+
     fn test_definition(value: TestHostValueV2) -> PluginDefinitionV2 {
         let mut definition = rust_server_host_definition_v2();
         definition.module = Arc::new(TestHostModuleV2 { value });
         definition
     }
 
-    async fn stage_generation(
-        definition: Option<PluginDefinitionV2>,
+    fn test_route_definition(value: TestRouteValueV2) -> PluginDefinitionV2 {
+        let mut definition = rust_server_http_routes_definition_v2();
+        definition.module = Arc::new(TestRouteModuleV2 { value });
+        definition
+    }
+
+    async fn stage_generation_with(
+        host_definition: Option<PluginDefinitionV2>,
+        route_definition: Option<PluginDefinitionV2>,
         profile_id: &str,
         generation: u64,
         digest: &str,
@@ -430,15 +497,39 @@ mod tests {
         snapshot.profile_id = profile_id.to_owned();
         snapshot.generation = generation;
         snapshot.digest = digest.to_owned();
-        if definition.is_none() {
+        if host_definition.is_none() {
+            snapshot.entries.retain(|entry| {
+                entry.module_ref != RUST_SERVER_HOST_MODULE_REF_V2
+                    && entry.module_ref != RUST_SERVER_HTTP_ROUTES_MODULE_REF_V2
+            });
+        } else if route_definition.is_none() {
             snapshot
                 .entries
-                .retain(|entry| entry.module_ref != RUST_SERVER_HOST_MODULE_REF_V2);
+                .retain(|entry| entry.module_ref != RUST_SERVER_HTTP_ROUTES_MODULE_REF_V2);
         }
-        LoaderV2::for_target(DataPlaneTargetV2::RustServer, definition)
-            .stage(snapshot)
-            .await
-            .expect("test generation must stage")
+        LoaderV2::for_target(
+            DataPlaneTargetV2::RustServer,
+            host_definition.into_iter().chain(route_definition),
+        )
+        .stage(snapshot)
+        .await
+        .expect("test generation must stage")
+    }
+
+    async fn stage_generation(
+        host_definition: Option<PluginDefinitionV2>,
+        profile_id: &str,
+        generation: u64,
+        digest: &str,
+    ) -> Arc<RuntimeGenerationV2> {
+        stage_generation_with(
+            host_definition,
+            Some(rust_server_http_routes_definition_v2()),
+            profile_id,
+            generation,
+            digest,
+        )
+        .await
     }
 
     async fn admission_with(
@@ -530,6 +621,8 @@ mod tests {
                 "digest": "sha256:server-generation-41",
                 "target": "rust-server",
                 "strategy": RUST_SERVER_GENERATION_STRATEGY_V2,
+                "route_contribution_id": RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2,
+                "route_strategy": RUST_SERVER_HTTP_ROUTE_STRATEGY_V2,
             })
         );
         wait_for_in_flight(&admission, 0).await;
@@ -589,6 +682,69 @@ mod tests {
                     .await,
                 ),
                 "invalid_rust_server_generation_strategy",
+            ),
+            (
+                Some(
+                    stage_generation_with(
+                        Some(rust_server_host_definition_v2()),
+                        None,
+                        "missing-routes",
+                        5,
+                        "sha256:missing-routes",
+                    )
+                    .await,
+                ),
+                "missing_service",
+            ),
+            (
+                Some(
+                    stage_generation_with(
+                        Some(rust_server_host_definition_v2()),
+                        Some(test_route_definition(TestRouteValueV2::WrongType)),
+                        "wrong-route-type",
+                        6,
+                        "sha256:wrong-route-type",
+                    )
+                    .await,
+                ),
+                "service_type_mismatch",
+            ),
+            (
+                Some(
+                    stage_generation_with(
+                        Some(rust_server_host_definition_v2()),
+                        Some(test_route_definition(TestRouteValueV2::Descriptor(
+                            RustServerHttpRouteContributionV2 {
+                                contribution_id: "unknown-routes".to_owned(),
+                                strategy: RUST_SERVER_HTTP_ROUTE_STRATEGY_V2.to_owned(),
+                            },
+                        ))),
+                        "wrong-route-contribution",
+                        7,
+                        "sha256:wrong-route-contribution",
+                    )
+                    .await,
+                ),
+                "invalid_rust_server_route_contribution",
+            ),
+            (
+                Some(
+                    stage_generation_with(
+                        Some(rust_server_host_definition_v2()),
+                        Some(test_route_definition(TestRouteValueV2::Descriptor(
+                            RustServerHttpRouteContributionV2 {
+                                contribution_id: RUST_SERVER_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2
+                                    .to_owned(),
+                                strategy: "static-router".to_owned(),
+                            },
+                        ))),
+                        "wrong-route-strategy",
+                        8,
+                        "sha256:wrong-route-strategy",
+                    )
+                    .await,
+                ),
+                "invalid_rust_server_route_strategy",
             ),
         ];
 
