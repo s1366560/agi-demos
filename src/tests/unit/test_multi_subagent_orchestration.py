@@ -5,6 +5,8 @@ execution based on TaskDecomposer results.
 """
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +14,38 @@ import pytest
 
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.subagent.task_decomposer import SubTask
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+
+class _FakeForkedOperationV2:
+    descriptor = PluginGenerationDescriptorV2(
+        profile_id="unit-test",
+        generation=1,
+        digest="0" * 64,
+    )
+
+    def __init__(self, *, admission_error: BaseException | None = None) -> None:
+        self.admission_error = admission_error
+        self.admitted = False
+        self.exited = False
+        self.released = False
+
+    @asynccontextmanager
+    async def admit(self, **_kwargs) -> AsyncIterator[SimpleNamespace]:
+        self.admitted = True
+        try:
+            if self.admission_error is not None:
+                raise self.admission_error
+            yield SimpleNamespace(descriptor=self.descriptor)
+        finally:
+            self.exited = True
+            await self.release()
+
+    async def release(self) -> None:
+        self.released = True
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -35,7 +68,23 @@ def _make_react_agent(**kwargs):
         "enable_subagent_as_tool": False,  # Test legacy pre-routing behavior
     }
     defaults.update(kwargs)
-    return ReActAgent(**defaults)
+    agent = ReActAgent(**defaults)
+    registry = SubAgentRunRegistry()
+
+    def resolver() -> SubAgentRunRegistry:
+        return registry
+
+    async def reserve_operation() -> _FakeForkedOperationV2:
+        return _FakeForkedOperationV2()
+
+    agent._session_runner.deps.subagent_run_registry_resolver = resolver
+    agent._session_runner.deps.operation_reserver = reserve_operation
+    agent._tool_builder.deps.subagent_run_registry_resolver = resolver
+    return agent
+
+
+def _run_registry(agent):
+    return agent._session_runner.deps.subagent_run_registry
 
 
 def _make_result(name: str = "agent", success: bool = True) -> SubAgentResult:
@@ -128,13 +177,14 @@ class TestSessionizedRuntime:
         sa = _make_subagent("researcher")
         agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
 
-        run = agent._subagent_run_registry.create_run(
+        registry = _run_registry(agent)
+        run = registry.create_run(
             conversation_id="c1",
             subagent_name=sa.name,
             task="Do work",
             run_id="run-announce-retry",
         )
-        agent._subagent_run_registry.mark_running("c1", run.run_id)
+        registry.mark_running("c1", run.run_id)
 
         async def _mock_execute_subagent(*args, **kwargs):
             yield {
@@ -151,7 +201,7 @@ class TestSessionizedRuntime:
                 "timestamp": "t",
             }
 
-        original_attach = agent._subagent_run_registry.attach_metadata
+        original_attach = registry.attach_metadata
         announce_attach_calls = {"count": 0}
 
         def _flaky_attach(*args, **kwargs):
@@ -170,9 +220,7 @@ class TestSessionizedRuntime:
                 "execute_subagent",
                 side_effect=_mock_execute_subagent,
             ),
-            patch.object(
-                agent._subagent_run_registry, "attach_metadata", side_effect=_flaky_attach
-            ),
+            patch.object(registry, "attach_metadata", side_effect=_flaky_attach),
         ):
             await agent._launch_subagent_session(
                 run_id=run.run_id,
@@ -186,7 +234,7 @@ class TestSessionizedRuntime:
             )
             await self._wait_session_finish(agent, run.run_id)
 
-        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        final = registry.get_run("c1", run.run_id)
         assert final is not None
         assert final.metadata.get("announce_status") == "delivered"
         assert final.metadata.get("announce_attempt_count") == 2
@@ -209,13 +257,14 @@ class TestSessionizedRuntime:
             subagent_lifecycle_hook=_hook,
         )
 
-        run = agent._subagent_run_registry.create_run(
+        registry = _run_registry(agent)
+        run = registry.create_run(
             conversation_id="c1",
             subagent_name=sa.name,
             task="Hooked task",
             run_id="run-hook",
         )
-        agent._subagent_run_registry.mark_running("c1", run.run_id)
+        registry.mark_running("c1", run.run_id)
 
         async def _mock_execute_subagent(*args, **kwargs):
             yield {
@@ -271,13 +320,14 @@ class TestSessionizedRuntime:
             subagent_lifecycle_hook=_failing_hook,
         )
 
-        run = agent._subagent_run_registry.create_run(
+        registry = _run_registry(agent)
+        run = registry.create_run(
             conversation_id="c1",
             subagent_name=sa.name,
             task="Task",
             run_id="run-hook-fail",
         )
-        agent._subagent_run_registry.mark_running("c1", run.run_id)
+        registry.mark_running("c1", run.run_id)
 
         async def _mock_execute_subagent(*args, **kwargs):
             yield {
@@ -311,9 +361,92 @@ class TestSessionizedRuntime:
             )
             await self._wait_session_finish(agent, run.run_id)
 
-        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        final = registry.get_run("c1", run.run_id)
         assert final is not None
         assert final.status.value == "completed"
+
+    async def test_launch_session_releases_reservation_when_admission_fails(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-admission-fail",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2(
+            admission_error=RuntimeV2Error("admission_failed", "admission failed")
+        )
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+
+        with pytest.raises(RuntimeV2Error) as error:
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                available_subagents=agent.subagents,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+
+        assert error.value.code == "admission_failed"
+        assert reservation.admitted is True
+        assert reservation.exited is True
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        failed = registry.get_run("c1", run.run_id)
+        assert failed is not None
+        assert failed.status.value == "failed"
+
+    async def test_launch_session_cancels_admitted_task_when_launch_hook_fails(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+        registry = _run_registry(agent)
+        run = registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-launch-hook-fail",
+        )
+        registry.mark_running("c1", run.run_id)
+        reservation = _FakeForkedOperationV2()
+
+        async def reserve_operation() -> _FakeForkedOperationV2:
+            return reservation
+
+        async def fail_launch_hooks(**_kwargs) -> None:
+            raise RuntimeError("launch hook failed")
+
+        agent._session_runner.deps.operation_reserver = reserve_operation
+        agent._session_runner.launch_emit_lifecycle_hooks = fail_launch_hooks
+
+        with pytest.raises(RuntimeError, match="launch hook failed"):
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                available_subagents=agent.subagents,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+
+        assert reservation.admitted is True
+        assert reservation.exited is True
+        assert reservation.released is True
+        assert run.run_id not in agent._subagent_session_tasks
+        failed = registry.get_run("c1", run.run_id)
+        assert failed is not None
+        assert failed.status.value == "failed"
 
 
 @pytest.mark.unit

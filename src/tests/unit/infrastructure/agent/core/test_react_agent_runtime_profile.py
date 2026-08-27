@@ -20,6 +20,7 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     build_builtin_workspace_verifier_agent,
     list_builtin_agents,
 )
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 
 
@@ -30,7 +31,15 @@ def _make_react_agent(**overrides) -> ReActAgent:
         "provider_id": "test-provider",
     }
     defaults.update(overrides)
-    return ReActAgent(**defaults)
+    agent = ReActAgent(**defaults)
+    registry = SubAgentRunRegistry()
+
+    def resolver() -> SubAgentRunRegistry:
+        return registry
+
+    agent._session_runner.deps.subagent_run_registry_resolver = resolver
+    agent._tool_builder.deps.subagent_run_registry_resolver = resolver
+    return agent
 
 
 def _make_agent(**overrides) -> Agent:

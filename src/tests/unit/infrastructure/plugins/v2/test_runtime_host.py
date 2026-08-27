@@ -23,6 +23,7 @@ from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
     current_generation_v2,
     current_operation_context_v2,
+    fork_current_agent_operation_v2,
     install_process_generation_host_v2,
     pin_agent_turn_operation_v2,
     pin_generation_v2,
@@ -407,6 +408,44 @@ async def test_operation_boundary_resets_context_when_dispose_is_cancelled(
 
 
 @pytest.mark.unit
+async def test_copied_task_rejects_the_parent_operation_after_dispose() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="disposed-copied-operation",
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def copied_task() -> str:
+        entered.set()
+        await release.wait()
+        try:
+            current_operation_context_v2()
+        except RuntimeV2Error as exc:
+            return exc.code
+        return "unexpected-active-operation"
+
+    try:
+        async with pin_operation_context_v2(
+            host,
+            operation_id="parent-operation",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            task = asyncio.create_task(copied_task())
+            await entered.wait()
+
+        release.set()
+        assert await task == "operation_context_not_pinned"
+    finally:
+        release.set()
+        await host.close()
+
+
+@pytest.mark.unit
 async def test_agent_turn_boundary_acquires_process_host_and_publishes_operation_services() -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await host.bootstrap(
@@ -443,6 +482,79 @@ async def test_agent_turn_boundary_acquires_process_host_and_publishes_operation
             }
             distribution = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
             assert distribution["descriptor"] == operation.descriptor.to_payload()
+    finally:
+        clear_process_generation_host_v2(host)
+        await host.close()
+
+
+@pytest.mark.unit
+async def test_forked_agent_operation_keeps_exact_generation_and_safe_services() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="forked-agent-generation-1",
+    )
+    install_process_generation_host_v2(host)
+    parent_generation = None
+
+    try:
+        async with pin_agent_turn_operation_v2(
+            operation_id="agent-turn:parent",
+            tenant_id="tenant-a",
+            project_id="project-a",
+            session_id="conversation-a",
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: "db-parent",
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": "tenant-a",
+                    "user_id": "user-a",
+                },
+            },
+        ) as parent:
+            parent_generation = parent.generation
+            fork = await fork_current_agent_operation_v2()
+            await host.bootstrap(
+                profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+                manifest_paths=(
+                    _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+                ),
+                generation=2,
+                version=2,
+                nonce="forked-agent-generation-2",
+            )
+
+        async with fork.admit(
+            operation_id="detached-subagent:run-a",
+            metadata={"kind": "detached-subagent", "run_id": "run-a"},
+            services={OPERATION_DB_SESSION_SERVICE_V2: "db-child"},
+        ) as child:
+            assert child.generation is parent_generation
+            assert child.descriptor.generation == 1
+            assert child.require(OPERATION_DB_SESSION_SERVICE_V2) == "db-child"
+            assert child.require(OPERATION_IDENTITY_SERVICE_V2) == {
+                "tenant_id": "tenant-a",
+                "user_id": "user-a",
+            }
+            assert child.require(OPERATION_METADATA_SERVICE_V2) == {
+                "kind": "detached-subagent",
+                "run_id": "run-a",
+                "parent_operation_id": "agent-turn:parent",
+            }
+            distribution = child.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+            assert distribution["descriptor"] == child.descriptor.to_payload()
+            assert host.manager.current is not None
+            assert host.manager.current.generation == 2
+
+        assert parent_generation is not None
+        with pytest.raises(RuntimeV2Error) as disposed_error:
+            parent_generation.resolve(
+                RUNTIME_BOUNDARY_SERVICE_V2,
+                ScopeV2(kind=ScopeKindV2.ROOT),
+            )
+        assert disposed_error.value.code == "disposed_generation"
     finally:
         clear_process_generation_host_v2(host)
         await host.close()

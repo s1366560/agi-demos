@@ -592,9 +592,6 @@ class ProjectReActAgent:
                 app_settings.agent_subagent_max_children_per_requester
             ),
             max_subagent_lane_concurrency=app_settings.agent_subagent_lane_concurrency,
-            subagent_terminal_retention_seconds=(
-                app_settings.agent_subagent_terminal_retention_seconds
-            ),
             subagent_announce_max_events=app_settings.agent_subagent_announce_max_events,
             subagent_announce_max_retries=app_settings.agent_subagent_announce_max_retries,
             subagent_announce_retry_delay_ms=(app_settings.agent_subagent_announce_retry_delay_ms),

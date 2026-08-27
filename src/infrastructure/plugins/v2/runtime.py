@@ -249,9 +249,11 @@ class OperationContextV2:
         return self.context.provide(service, value, version=version, label=label)
 
     def require(self, service: str, *, version: str = "1.0.0") -> object:
+        self._ensure_active()
         return self.context.require(service, version=version)
 
     async def dispatch(self, event: str, payload: object) -> object:
+        self._ensure_active()
         return await self.context.dispatch(event, payload)
 
     async def effect(
@@ -271,6 +273,13 @@ class OperationContextV2:
         self.phase = FiberPhaseV2.UNLOADING
         await self._effects.dispose()
         self.phase = FiberPhaseV2.DISPOSED
+
+    def _ensure_active(self) -> None:
+        if self.phase is not FiberPhaseV2.ACTIVE:
+            raise RuntimeV2Error(
+                "inactive_operation",
+                "inactive plugin operation cannot resolve or dispatch capabilities",
+            )
 
 
 class LoaderV2:
@@ -544,6 +553,7 @@ class GenerationManagerV2:
 
     def __init__(self) -> None:
         self._current: RuntimeGenerationV2 | None = None
+        self._owned_generations: set[RuntimeGenerationV2] = set()
         self._lock = asyncio.Lock()
 
     @property
@@ -563,10 +573,12 @@ class GenerationManagerV2:
                 commit()
             previous = self._current
             self._current = generation
+            self._owned_generations.add(generation)
             if previous is not None:
                 previous._retired = True
                 if previous._lease_count == 0:
                     dispose = previous
+                    self._owned_generations.discard(previous)
         if dispose is not None:
             await dispose.dispose()
         return previous
@@ -579,6 +591,21 @@ class GenerationManagerV2:
             generation._lease_count += 1
         return GenerationLeaseV2(self, generation)
 
+    async def retain(self, generation: RuntimeGenerationV2) -> GenerationLeaseV2:
+        """Acquire a second lease for an exact generation that is already leased."""
+        async with self._lock:
+            if (
+                generation not in self._owned_generations
+                or generation._disposed
+                or generation._lease_count <= 0
+            ):
+                raise RuntimeV2Error(
+                    "generation_retain_unavailable",
+                    "exact plugin generation can no longer be retained",
+                )
+            generation._lease_count += 1
+        return GenerationLeaseV2(self, generation)
+
     async def close(self) -> None:
         dispose: RuntimeGenerationV2 | None = None
         async with self._lock:
@@ -588,16 +615,24 @@ class GenerationManagerV2:
                 current._retired = True
                 if current._lease_count == 0:
                     dispose = current
+                    self._owned_generations.discard(current)
         if dispose is not None:
             await dispose.dispose()
 
     async def _release(self, generation: RuntimeGenerationV2) -> None:
         dispose = False
         async with self._lock:
+            if generation not in self._owned_generations:
+                raise RuntimeV2Error(
+                    "generation_lease_not_owned",
+                    "plugin generation lease does not belong to this manager",
+                )
             generation._lease_count -= 1
             if generation._lease_count < 0:
                 raise RuntimeV2Error("lease_underflow", "generation lease count underflow")
             dispose = generation._retired and generation._lease_count == 0
+            if dispose:
+                self._owned_generations.discard(generation)
         if dispose:
             await generation.dispose()
 

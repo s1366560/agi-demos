@@ -215,6 +215,21 @@ class PlatformPluginRuntimeHostV2:
         async with self._apply_lock:
             return await self.manager.acquire()
 
+    async def acquire_exact(
+        self,
+        generation: RuntimeGenerationV2,
+        descriptor: PluginGenerationDescriptorV2,
+    ) -> GenerationLeaseV2:
+        """Retain one exact host-owned generation before its parent lease exits."""
+        async with self._apply_lock:
+            distribution = self.distribution_for_generation(generation)
+            if generation.descriptor != descriptor or distribution.descriptor != descriptor:
+                raise RuntimeV2Error(
+                    "generation_descriptor_mismatch",
+                    "exact generation reservation does not match its descriptor",
+                )
+            return await self.manager.retain(generation)
+
     async def close(self) -> None:
         """Retire the active generation and dispose it after leases drain."""
         await self.reconciler.close()

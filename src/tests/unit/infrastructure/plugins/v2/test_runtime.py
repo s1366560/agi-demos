@@ -732,6 +732,92 @@ async def test_generation_lease_pins_old_generation_until_release() -> None:
 
 
 @pytest.mark.unit
+async def test_generation_lease_fork_keeps_the_exact_retired_generation_alive() -> None:
+    disposed: list[int] = []
+
+    def definition(version: int):
+        def apply(context, _config):
+            context.provide("service:value", version)
+            return lambda: disposed.append(version)
+
+        return apply
+
+    first_entry = _entry("root", "builtin://runtime/root")
+    first_snapshot = _snapshot(
+        1,
+        (first_entry,),
+        provides={first_entry.module_ref: ("service:value",)},
+    )
+    first = await _loader(
+        first_snapshot,
+        [_definition(first_snapshot, first_entry.module_ref, definition(1))],
+    ).stage(first_snapshot)
+    second_entry = replace(first_entry, module_ref="builtin://runtime/root-v2")
+    second_snapshot = _snapshot(
+        2,
+        (second_entry,),
+        provides={second_entry.module_ref: ("service:value",)},
+    )
+    second = await _loader(
+        second_snapshot,
+        [_definition(second_snapshot, second_entry.module_ref, definition(2))],
+    ).stage(second_snapshot)
+    manager = GenerationManagerV2()
+    await manager.publish(first)
+    parent_lease = await manager.acquire()
+    child_lease = await manager.retain(parent_lease.generation)
+
+    await manager.publish(second)
+    await parent_lease.release()
+
+    assert child_lease.generation is first
+    assert child_lease.generation.resolve("service:value", _scope(ScopeKindV2.ROOT)) == 1
+    assert disposed == []
+
+    await child_lease.release()
+    assert disposed == [1]
+    with pytest.raises(RuntimeV2Error) as released_error:
+        await manager.retain(parent_lease.generation)
+    assert released_error.value.code == "generation_retain_unavailable"
+
+    await manager.close()
+    assert disposed == [1, 2]
+
+
+@pytest.mark.unit
+async def test_generation_manager_rejects_retaining_another_managers_retired_generation() -> None:
+    first_entry = _entry("root", "builtin://runtime/root")
+    first_snapshot = _snapshot(1, (first_entry,))
+    first = await _loader(
+        first_snapshot,
+        [_definition(first_snapshot, first_entry.module_ref, lambda _context, _config: None)],
+    ).stage(first_snapshot)
+    second_entry = replace(first_entry, module_ref="builtin://runtime/root-v2")
+    second_snapshot = _snapshot(2, (second_entry,))
+    second = await _loader(
+        second_snapshot,
+        [_definition(second_snapshot, second_entry.module_ref, lambda _context, _config: None)],
+    ).stage(second_snapshot)
+    owner = GenerationManagerV2()
+    foreign = GenerationManagerV2()
+    await owner.publish(first)
+    owner_lease = await owner.acquire()
+    await owner.publish(second)
+    unexpected_lease = None
+
+    try:
+        with pytest.raises(RuntimeV2Error) as error:
+            unexpected_lease = await foreign.retain(first)
+        assert error.value.code == "generation_retain_unavailable"
+    finally:
+        if unexpected_lease is not None:
+            await unexpected_lease.release()
+        await owner_lease.release()
+        await owner.close()
+        await foreign.close()
+
+
+@pytest.mark.unit
 async def test_operation_context_derives_scope_chain_and_isolates_temporary_services() -> None:
     entry = _entry("root", "builtin://runtime/root")
     snapshot = _snapshot(3, (entry,))
@@ -764,6 +850,9 @@ async def test_operation_context_derives_scope_chain_and_isolates_temporary_serv
     with pytest.raises(RuntimeV2Error) as error:
         first.provide("service:late", object())
     assert error.value.code == "inactive_effect"
+    with pytest.raises(RuntimeV2Error) as require_error:
+        first.require("service:db-session")
+    assert require_error.value.code == "inactive_operation"
 
 
 @pytest.mark.unit

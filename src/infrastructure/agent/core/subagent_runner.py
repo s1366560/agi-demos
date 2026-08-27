@@ -11,7 +11,8 @@ import asyncio
 import inspect
 import logging
 import time
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -29,9 +30,21 @@ from src.domain.events.agent_events import (
 )
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
+from src.domain.model.agent.subagent_run import SubAgentRunStatus
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.subagent.spawn_validator import SpawnValidator
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    ForkedAgentOperationV2,
+    detached_operation_task_context_v2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from .processor import ProcessorConfig, ToolDefinition
+from .subagent_registry_authority import (
+    SubAgentRunRegistryResolverV2,
+    require_subagent_run_registry_v2,
+)
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
@@ -58,9 +71,11 @@ class SubAgentRunnerDeps:
     artifact_service: ArtifactService | None
     background_executor: Any
     result_aggregator: Any
+    operation_reserver: Callable[[], Awaitable[ForkedAgentOperationV2]]
+    session_factory: Callable[[], Any] | None
 
     # -- Shared registries / state --
-    subagent_run_registry: Any
+    subagent_run_registry_resolver: SubAgentRunRegistryResolverV2
     subagent_lane_semaphore: asyncio.Semaphore
     subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None
     # Mutable int counter wrapped in a list for shared mutation
@@ -99,6 +114,11 @@ class SubAgentRunnerDeps:
 
     # -- Spawn validation --
     spawn_validator: SpawnValidator | None = None
+
+    @property
+    def subagent_run_registry(self) -> SubAgentRunRegistry:
+        """Resolve the registry from the exact V2 operation on every access."""
+        return require_subagent_run_registry_v2(self.subagent_run_registry_resolver)
 
 
 class SubAgentSessionRunner:
@@ -596,8 +616,6 @@ class SubAgentSessionRunner:
         started_at: float,
     ) -> None:
         """Mark a SubAgent run as completed or failed in the registry."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         current = self.deps.subagent_run_registry.get_run(
             conversation_id,
             run_id,
@@ -639,8 +657,6 @@ class SubAgentSessionRunner:
         configured_timeout: float,
     ) -> None:
         """Handle TimeoutError for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         current = self.deps.subagent_run_registry.get_run(
             conversation_id,
             run_id,
@@ -666,8 +682,6 @@ class SubAgentSessionRunner:
         run_id: str,
     ) -> None:
         """Handle CancelledError for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         current = self.deps.subagent_run_registry.get_run(
             conversation_id,
             run_id,
@@ -731,8 +745,6 @@ class SubAgentSessionRunner:
         started_at: float,
     ) -> None:
         """Handle generic Exception for a SubAgent runner."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         current = self.deps.subagent_run_registry.get_run(
             conversation_id,
             run_id,
@@ -940,6 +952,33 @@ class SubAgentSessionRunner:
             }
         )
 
+    @staticmethod
+    def _record_launch_failure(
+        registry: SubAgentRunRegistry,
+        *,
+        conversation_id: str,
+        run_id: str,
+        error: BaseException,
+    ) -> None:
+        expected_statuses = [
+            SubAgentRunStatus.PENDING,
+            SubAgentRunStatus.RUNNING,
+        ]
+        if isinstance(error, asyncio.CancelledError):
+            _ = registry.mark_cancelled(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                reason="Detached SubAgent launch was cancelled",
+                expected_statuses=expected_statuses,
+            )
+        elif isinstance(error, Exception):
+            _ = registry.mark_failed(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                error=str(error),
+                expected_statuses=expected_statuses,
+            )
+
     # ------------------------------------------------------------------
     # Launch / consume / cancel
     # ------------------------------------------------------------------
@@ -1064,7 +1103,7 @@ class SubAgentSessionRunner:
         await self.emit_subagent_lifecycle_hook(payload)
         return True
 
-    async def launch_subagent_session(  # noqa: PLR0913,PLR0915
+    async def launch_subagent_session(  # noqa: C901,PLR0913,PLR0915
         self,
         run_id: str,
         subagent: SubAgent,
@@ -1109,12 +1148,14 @@ class SubAgentSessionRunner:
             if rejected:
                 return
 
+        session_registry = self.deps.subagent_run_registry
         if run_metadata:
+            metadata: dict[str, object] = dict(run_metadata)
             try:
-                self.deps.subagent_run_registry.attach_metadata(
+                session_registry.attach_metadata(
                     conversation_id=conversation_id,
                     run_id=run_id,
-                    metadata=run_metadata,
+                    metadata=metadata,
                 )
             except Exception:
                 logger.warning(
@@ -1123,9 +1164,35 @@ class SubAgentSessionRunner:
                     exc_info=True,
                 )
 
-        start_gate = asyncio.Event()
+        reservation = await self.deps.operation_reserver()
+        generation_metadata: dict[str, object] = {
+            "plugin_generation": reservation.descriptor.to_payload(),
+        }
+        try:
+            updated_run = session_registry.attach_metadata(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                metadata=generation_metadata,
+            )
+            if updated_run is None:
+                raise RuntimeV2Error(
+                    "subagent_generation_metadata_rejected",
+                    "detached SubAgent run rejected its exact generation descriptor",
+                )
+        except BaseException as exc:
+            await reservation.release()
+            self._record_launch_failure(
+                session_registry,
+                conversation_id=conversation_id,
+                run_id=run_id,
+                error=exc,
+            )
+            raise
 
-        async def _runner() -> None:
+        start_gate = asyncio.Event()
+        admission: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+
+        async def _run_admitted_session() -> None:
             await start_gate.wait()
             started_at = time.time()
             cancelled_by_control = False
@@ -1262,23 +1329,78 @@ class SubAgentSessionRunner:
                     resolved_thinking_override=(resolved_thinking_override),
                 )
 
-        task = asyncio.create_task(
-            _runner(),
-            name=f"subagent-session-{run_id}",
-        )
-        self.deps.subagent_session_tasks[run_id] = task
-        await self.launch_emit_lifecycle_hooks(
-            conversation_id=conversation_id,
-            run_id=run_id,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            subagent=subagent,
-            normalized_spawn_mode=normalized_spawn_mode,
-            thread_requested=thread_requested,
-            normalized_cleanup=normalized_cleanup,
-            requested_model_override=requested_model_override,
-            requested_thinking_override=requested_thinking_override,
-        )
+        async def _runner() -> None:
+            try:
+                operation_services: dict[str, object] = {}
+                async with AsyncExitStack() as stack:
+                    if self.deps.session_factory is not None:
+                        child_db = await stack.enter_async_context(self.deps.session_factory())
+                        operation_services[OPERATION_DB_SESSION_SERVICE_V2] = child_db
+                    async with reservation.admit(
+                        operation_id=f"detached-subagent:{run_id}",
+                        metadata={
+                            "kind": "detached-subagent",
+                            "run_id": run_id,
+                            "conversation_id": conversation_id,
+                            "subagent_id": subagent.id,
+                            "subagent_name": subagent.name,
+                            "spawn_mode": normalized_spawn_mode,
+                        },
+                        services=operation_services,
+                    ):
+                        child_registry = self.deps.subagent_run_registry
+                        if child_registry is not session_registry:
+                            raise RuntimeV2Error(
+                                "subagent_registry_generation_mismatch",
+                                "detached SubAgent resolved a different generation registry",
+                            )
+                        if not admission.done():
+                            admission.set_result(None)
+                        await _run_admitted_session()
+            except BaseException as exc:
+                if not admission.done():
+                    admission.set_exception(exc)
+                raise
+            finally:
+                current_task = asyncio.current_task()
+                if self.deps.subagent_session_tasks.get(run_id) is current_task:
+                    self.deps.subagent_session_tasks.pop(run_id, None)
+
+        task: asyncio.Task[None] | None = None
+        try:
+            task = asyncio.create_task(
+                _runner(),
+                name=f"subagent-session-{run_id}",
+                context=detached_operation_task_context_v2(),
+            )
+            self.deps.subagent_session_tasks[run_id] = task
+            await admission
+            await self.launch_emit_lifecycle_hooks(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                project_id=project_id,
+                tenant_id=tenant_id,
+                subagent=subagent,
+                normalized_spawn_mode=normalized_spawn_mode,
+                thread_requested=thread_requested,
+                normalized_cleanup=normalized_cleanup,
+                requested_model_override=requested_model_override,
+                requested_thinking_override=requested_thinking_override,
+            )
+        except BaseException as exc:
+            if task is not None:
+                task.cancel()
+                _ = await asyncio.gather(task, return_exceptions=True)
+                if self.deps.subagent_session_tasks.get(run_id) is task:
+                    self.deps.subagent_session_tasks.pop(run_id, None)
+            await reservation.release()
+            self._record_launch_failure(
+                session_registry,
+                conversation_id=conversation_id,
+                run_id=run_id,
+                error=exc,
+            )
+            raise
         start_gate.set()
 
     @staticmethod
@@ -1372,8 +1494,6 @@ class SubAgentSessionRunner:
         max_retries: int,
     ) -> None:
         """Persist terminal announce payload with retry/backoff."""
-        from src.domain.model.agent.subagent_run import SubAgentRunStatus
-
         terminal_statuses = [
             SubAgentRunStatus.COMPLETED,
             SubAgentRunStatus.FAILED,

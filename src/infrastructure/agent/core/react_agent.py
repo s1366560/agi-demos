@@ -34,6 +34,7 @@ from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
+from src.infrastructure.plugins.v2.boundary import fork_current_agent_operation_v2
 
 from ..commands.builtins import register_builtin_commands
 from ..commands.interceptor import CommandInterceptor
@@ -58,6 +59,7 @@ from .processor import (
     ProcessorFactory,
     ToolDefinition,
 )
+from .subagent_registry_authority import current_agent_subagent_run_registry_v2
 from .subagent_router import SubAgentMatch
 from .subagent_runner import SubAgentRunnerDeps, SubAgentSessionRunner
 from .subagent_tools import SubAgentToolBuilder, SubAgentToolBuilderDeps
@@ -177,8 +179,6 @@ class ReActAgent(
     _subagent_lifecycle_hook_failures: list[int]
     # _init_subagent_router
     subagent_router: Any
-    # _init_subagent_run_registry
-    _subagent_run_registry: Any
     _subagent_session_tasks: dict[str, asyncio.Task[Any]]
     # _init_orchestrators
     _event_converter: EventConverter
@@ -229,12 +229,6 @@ class ReActAgent(
         max_subagent_children_per_requester: int = 8,
         max_subagent_active_runs_per_lineage: int = 8,
         max_subagent_lane_concurrency: int = 8,
-        subagent_run_registry_path: str | None = None,
-        subagent_run_postgres_dsn: str | None = None,
-        subagent_run_sqlite_path: str | None = None,
-        subagent_run_redis_cache_url: str | None = None,
-        subagent_run_redis_cache_ttl_seconds: int = 60,
-        subagent_terminal_retention_seconds: int = 86400,
         subagent_announce_max_events: int = 20,
         subagent_announce_max_retries: int = 2,
         subagent_announce_retry_delay_ms: int = 200,
@@ -316,12 +310,6 @@ class ReActAgent(
             max_subagent_active_runs: Maximum active subagent runs per conversation.
             max_subagent_children_per_requester: Maximum active child runs per requester key.
             max_subagent_lane_concurrency: Maximum concurrent detached SubAgent sessions.
-            subagent_run_registry_path: Optional persistence path for SubAgent run registry.
-            subagent_run_postgres_dsn: Optional PostgreSQL DSN for DB-backed run repository.
-            subagent_run_sqlite_path: Optional SQLite path for DB-backed run repository.
-            subagent_run_redis_cache_url: Optional Redis URL for run snapshot cache.
-            subagent_run_redis_cache_ttl_seconds: TTL for run snapshot cache.
-            subagent_terminal_retention_seconds: Terminal run retention TTL in seconds.
             subagent_announce_max_events: Max retained announce events in run metadata.
             subagent_announce_max_retries: Max retries for completion announce metadata updates.
             subagent_announce_retry_delay_ms: Base retry delay in milliseconds.
@@ -422,12 +410,6 @@ class ReActAgent(
             subagent_announce_max_retries,
             subagent_announce_retry_delay_ms,
             subagent_lifecycle_hook,
-            subagent_run_registry_path,
-            subagent_run_postgres_dsn,
-            subagent_run_sqlite_path,
-            subagent_run_redis_cache_url,
-            subagent_run_redis_cache_ttl_seconds,
-            subagent_terminal_retention_seconds,
             span_service=span_service,
             fork_merge_service=fork_merge_service,
         )
@@ -475,7 +457,9 @@ class ReActAgent(
                 artifact_service=self.artifact_service,
                 background_executor=self._background_executor,
                 result_aggregator=self._result_aggregator,
-                subagent_run_registry=self._subagent_run_registry,
+                operation_reserver=fork_current_agent_operation_v2,
+                session_factory=self._session_factory,
+                subagent_run_registry_resolver=current_agent_subagent_run_registry_v2,
                 subagent_lane_semaphore=self._subagent_lane_semaphore,
                 subagent_lifecycle_hook=self._subagent_lifecycle_hook,
                 subagent_lifecycle_hook_failures=self._subagent_lifecycle_hook_failures,
@@ -497,7 +481,7 @@ class ReActAgent(
         )
         self._tool_builder = SubAgentToolBuilder(
             SubAgentToolBuilderDeps(
-                subagent_run_registry=self._subagent_run_registry,
+                subagent_run_registry_resolver=current_agent_subagent_run_registry_v2,
                 enable_subagent_as_tool=self._enable_subagent_as_tool,
                 max_subagent_delegation_depth=(self._max_subagent_delegation_depth),
                 max_subagent_active_runs=self._max_subagent_active_runs,

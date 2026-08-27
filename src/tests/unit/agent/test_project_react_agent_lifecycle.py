@@ -514,10 +514,7 @@ class TestProjectReActAgentLifecycleNotifications:
             mock_react_cls.call_args.kwargs["max_subagent_lane_concurrency"]
             == settings.agent_subagent_lane_concurrency
         )
-        assert (
-            mock_react_cls.call_args.kwargs["subagent_terminal_retention_seconds"]
-            == settings.agent_subagent_terminal_retention_seconds
-        )
+        assert "subagent_terminal_retention_seconds" not in mock_react_cls.call_args.kwargs
         assert (
             mock_react_cls.call_args.kwargs["subagent_announce_max_events"]
             == settings.agent_subagent_announce_max_events

@@ -50,8 +50,9 @@ def _build_tools(
     delegate_callback: Callable[..., Awaitable[str]] | None,
     registry: SubAgentRunRegistry | None = None,
 ) -> list[ToolDefinition]:
+    resolved_registry = registry or SubAgentRunRegistry()
     builder = SubAgentToolBuilder(
-        SubAgentToolBuilderDeps(subagent_run_registry=registry or SubAgentRunRegistry())
+        SubAgentToolBuilderDeps(subagent_run_registry_resolver=lambda: resolved_registry)
     )
     return builder.build_subagent_tool_definitions(
         subagent_map={"worker": object()},

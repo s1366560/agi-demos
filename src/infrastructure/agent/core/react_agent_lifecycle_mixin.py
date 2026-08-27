@@ -82,7 +82,6 @@ class _LifecycleAgent(Protocol):
     _subagent_lane_semaphore: Any
     _subagent_lifecycle_hook: Any
     _subagent_lifecycle_hook_failures: Any
-    _subagent_run_registry: Any
     _subagent_session_tasks: Any
     _event_converter: Any
     _background_executor: Any
@@ -96,7 +95,6 @@ class _LifecycleAgent(Protocol):
     def _launch_subagent_session(self, *args: Any, **kwargs: Any) -> Any: ...
     def _cancel_subagent_session(self, *args: Any, **kwargs: Any) -> Any: ...
     def _init_subagent_router(self, *args: Any, **kwargs: Any) -> None: ...
-    def _init_subagent_run_registry(self, *args: Any, **kwargs: Any) -> None: ...
 
 
 class LifecycleMixin:
@@ -266,12 +264,6 @@ class LifecycleMixin:
         subagent_announce_max_retries: int,
         subagent_announce_retry_delay_ms: int,
         subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None,
-        subagent_run_registry_path: str | None,
-        subagent_run_postgres_dsn: str | None,
-        subagent_run_sqlite_path: str | None,
-        subagent_run_redis_cache_url: str | None,
-        subagent_run_redis_cache_ttl_seconds: int,
-        subagent_terminal_retention_seconds: int,
         span_service: Any | None = None,
         fork_merge_service: Any | None = None,
     ) -> None:
@@ -290,17 +282,10 @@ class LifecycleMixin:
         self._subagent_lane_semaphore = asyncio.Semaphore(self._max_subagent_lane_concurrency)
         self._subagent_lifecycle_hook = subagent_lifecycle_hook
         self._subagent_lifecycle_hook_failures = [0]
+        self._subagent_session_tasks: dict[str, asyncio.Task[Any]] = {}
         self._span_service = span_service
         self._fork_merge_service = fork_merge_service
         self._init_subagent_router(subagents, execution_config, cached_subagent_router)
-        self._init_subagent_run_registry(
-            subagent_run_registry_path,
-            subagent_run_postgres_dsn,
-            subagent_run_sqlite_path,
-            subagent_run_redis_cache_url,
-            subagent_run_redis_cache_ttl_seconds,
-            subagent_terminal_retention_seconds,
-        )
 
     def _init_subagent_router(
         self: _LifecycleAgent,
@@ -319,28 +304,6 @@ class LifecycleMixin:
             )
         else:
             self.subagent_router = None
-
-    def _init_subagent_run_registry(
-        self: _LifecycleAgent,
-        subagent_run_registry_path: str | None,
-        subagent_run_postgres_dsn: str | None,
-        subagent_run_sqlite_path: str | None,
-        subagent_run_redis_cache_url: str | None,
-        subagent_run_redis_cache_ttl_seconds: int,
-        subagent_terminal_retention_seconds: int,
-    ) -> None:
-        """Initialize SubAgent run registry with persistence backend."""
-        from ..subagent.run_registry import get_shared_subagent_run_registry
-
-        self._subagent_run_registry = get_shared_subagent_run_registry(
-            persistence_path=subagent_run_registry_path,
-            postgres_persistence_dsn=subagent_run_postgres_dsn,
-            sqlite_persistence_path=subagent_run_sqlite_path,
-            redis_cache_url=subagent_run_redis_cache_url,
-            redis_cache_ttl_seconds=subagent_run_redis_cache_ttl_seconds,
-            terminal_retention_seconds=subagent_terminal_retention_seconds,
-        )
-        self._subagent_session_tasks: dict[str, asyncio.Task[Any]] = {}
 
     def _init_orchestrators(self: _LifecycleAgent) -> None:
         """Initialize orchestrators for modular components."""

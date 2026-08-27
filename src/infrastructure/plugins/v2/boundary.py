@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
-from contextvars import ContextVar, Token
+from contextvars import Context, ContextVar, Token, copy_context
+from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -51,6 +53,18 @@ class DistributionGenerationHostV2(GenerationHostV2, Protocol):
         generation: RuntimeGenerationV2,
     ) -> GenerationDistributionV2: ...
 
+    async def acquire_exact(
+        self,
+        generation: RuntimeGenerationV2,
+        descriptor: PluginGenerationDescriptorV2,
+    ) -> GenerationLeaseV2: ...
+
+
+_generation_host_context: ContextVar[GenerationHostV2 | None] = ContextVar(
+    "platform_plugin_generation_host_v2",
+    default=None,
+)
+
 
 type HostProviderV2 = Callable[[Scope], GenerationHostV2]
 
@@ -64,7 +78,7 @@ class GenerationDescriptorCarrierV2(Protocol):
 def current_generation_v2() -> RuntimeGenerationV2:
     """Return the generation pinned to the current data-plane boundary."""
     generation = _generation_context.get()
-    if generation is None:
+    if generation is None or generation._disposed:
         raise RuntimeV2Error(
             "generation_not_pinned",
             "plugin generation is not pinned to the current operation",
@@ -80,7 +94,7 @@ def current_generation_descriptor_v2() -> PluginGenerationDescriptorV2:
 def current_operation_context_v2() -> OperationContextV2:
     """Return the scoped operation overlay active on the current async task."""
     operation = _operation_context.get()
-    if operation is None:
+    if operation is None or operation.phase is not FiberPhaseV2.ACTIVE:
         raise RuntimeV2Error(
             "operation_context_not_pinned",
             "plugin operation context is not pinned to the current operation",
@@ -132,13 +146,198 @@ def attach_current_generation_v2(carrier: GenerationDescriptorCarrierV2) -> None
 async def pin_generation_v2(host: GenerationHostV2) -> AsyncIterator[RuntimeGenerationV2]:
     """Pin one acquired generation until the complete operation finishes."""
     lease = await host.acquire()
+    async with _pin_reserved_generation_v2(host, lease) as generation:
+        yield generation
+
+
+@asynccontextmanager
+async def _pin_reserved_generation_v2(
+    host: GenerationHostV2,
+    lease: GenerationLeaseV2,
+) -> AsyncIterator[RuntimeGenerationV2]:
+    """Activate an already-acquired lease without reacquiring the current generation."""
     generation = await lease.__aenter__()
-    token: Token[RuntimeGenerationV2 | None] = _generation_context.set(generation)
+    generation_token: Token[RuntimeGenerationV2 | None] = _generation_context.set(generation)
+    host_token: Token[GenerationHostV2 | None] = _generation_host_context.set(host)
     try:
         yield generation
     finally:
-        _generation_context.reset(token)
-        await lease.__aexit__(None, None, None)
+        try:
+            _generation_host_context.reset(host_token)
+            _generation_context.reset(generation_token)
+        finally:
+            await lease.__aexit__(None, None, None)
+
+
+@dataclass(kw_only=True)
+class ForkedAgentOperationV2:
+    """One-shot reservation for a detached operation on an exact generation."""
+
+    host: DistributionGenerationHostV2
+    lease: GenerationLeaseV2
+    generation: RuntimeGenerationV2
+    scope: ScopeV2
+    parent_operation_id: str
+    identity: dict[str, str]
+    distribution: dict[str, Any]
+    _claimed: bool = False
+    _released: bool = False
+
+    @property
+    def descriptor(self) -> PluginGenerationDescriptorV2:
+        return self.generation.descriptor
+
+    @asynccontextmanager
+    async def admit(
+        self,
+        *,
+        operation_id: str,
+        metadata: Mapping[str, object],
+        services: Mapping[str, object] | None = None,
+    ) -> AsyncIterator[OperationContextV2]:
+        """Activate the reserved lease as a new isolated operation exactly once."""
+        if self._claimed or self._released:
+            raise RuntimeV2Error(
+                "forked_operation_consumed",
+                "forked plugin operation reservation has already been consumed",
+            )
+        extra_services = dict(services or {})
+        unsupported = set(extra_services) - {OPERATION_DB_SESSION_SERVICE_V2}
+        if unsupported:
+            raise RuntimeV2Error(
+                "unsafe_forked_operation_service",
+                "forked plugin operation received an unclassified service",
+            )
+        child_metadata = deepcopy(dict(metadata))
+        child_metadata["parent_operation_id"] = self.parent_operation_id
+        operation_services: dict[str, object] = {
+            OPERATION_IDENTITY_SERVICE_V2: dict(self.identity),
+            OPERATION_METADATA_SERVICE_V2: child_metadata,
+            OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2: deepcopy(self.distribution),
+            **extra_services,
+        }
+        self._claimed = True
+        try:
+            async with (
+                _pin_reserved_generation_v2(self.host, self.lease) as generation,
+                _pin_agent_turn_on_generation_v2(
+                    generation,
+                    operation_id=operation_id,
+                    scope=self.scope,
+                    services=operation_services,
+                    parent=None,
+                ) as operation,
+            ):
+                yield operation
+        finally:
+            await self.lease.release()
+            self._released = True
+
+    async def release(self) -> None:
+        """Release an unclaimed reservation after task creation or admission failure."""
+        if self._released:
+            return
+        if self._claimed:
+            raise RuntimeV2Error(
+                "forked_operation_active",
+                "active forked plugin operation must exit before release",
+            )
+        await self.lease.release()
+        self._released = True
+
+
+async def fork_current_agent_operation_v2() -> ForkedAgentOperationV2:
+    """Reserve the exact active generation for one detached Agent operation."""
+    operation = current_operation_context_v2()
+    generation = current_generation_v2()
+    if operation.generation is not generation:
+        raise RuntimeV2Error(
+            "generation_descriptor_mismatch",
+            "operation and generation contexts do not reference the same generation",
+        )
+    host = _generation_host_context.get()
+    if (
+        host is None
+        or not hasattr(host, "acquire_exact")
+        or not hasattr(host, "distribution_for_generation")
+    ):
+        raise RuntimeV2Error(
+            "exact_generation_host_unavailable",
+            "active generation host cannot reserve an exact detached operation",
+        )
+    exact_host = cast(DistributionGenerationHostV2, host)
+    identity = _forked_operation_identity_v2(operation)
+    lease = await exact_host.acquire_exact(generation, operation.descriptor)
+    try:
+        distribution = exact_host.distribution_for_generation(generation).to_payload()
+        if distribution.get("descriptor") != operation.descriptor.to_payload():
+            raise RuntimeV2Error(
+                "generation_descriptor_mismatch",
+                "forked plugin distribution does not match its exact generation",
+            )
+        return ForkedAgentOperationV2(
+            host=exact_host,
+            lease=lease,
+            generation=generation,
+            scope=operation.context.scope,
+            parent_operation_id=operation.operation_id,
+            identity=identity,
+            distribution=deepcopy(distribution),
+        )
+    except BaseException:
+        await lease.release()
+        raise
+
+
+def detached_operation_task_context_v2() -> Context:
+    """Copy tracing context while removing parent plugin operation authority."""
+    context = copy_context()
+
+    def clear_plugin_context() -> None:
+        _generation_context.set(None)
+        _operation_context.set(None)
+        _generation_host_context.set(None)
+
+    context.run(clear_plugin_context)
+    return context
+
+
+def _forked_operation_identity_v2(operation: OperationContextV2) -> dict[str, str]:
+    raw_identity = operation.require(OPERATION_IDENTITY_SERVICE_V2)
+    if not isinstance(raw_identity, Mapping):
+        raise RuntimeV2Error(
+            "invalid_operation_identity",
+            "parent operation identity must be an object",
+        )
+    scope = operation.context.scope
+    identity: dict[str, str] = {}
+    for key, scope_value in (
+        ("tenant_id", scope.tenant_id),
+        ("project_id", scope.project_id),
+    ):
+        raw_value = raw_identity.get(key)
+        if raw_value is None:
+            continue
+        if not isinstance(raw_value, str) or not raw_value:
+            raise RuntimeV2Error(
+                "invalid_operation_identity",
+                "parent operation scope identity must be a non-empty string",
+            )
+        if scope_value is not None and raw_value != scope_value:
+            raise RuntimeV2Error(
+                "operation_identity_scope_mismatch",
+                "parent operation identity does not match its scope",
+            )
+        identity[key] = raw_value
+    user_id = raw_identity.get("user_id")
+    if user_id is not None:
+        if not isinstance(user_id, str) or not user_id:
+            raise RuntimeV2Error(
+                "invalid_operation_identity",
+                "parent operation user identity must be a non-empty string",
+            )
+        identity["user_id"] = user_id
+    return identity
 
 
 @asynccontextmanager

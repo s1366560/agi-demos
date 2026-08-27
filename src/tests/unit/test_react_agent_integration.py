@@ -15,6 +15,7 @@ from src.infrastructure.agent.mcp.skill_mcp_manager import SkillMCPManager
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.processor import ToolDefinition
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AgentRuntimeDispatchResultV2,
     PinnedAgentRuntimeDispatcherV2,
@@ -62,7 +63,15 @@ def _make_react_agent(**kwargs):
         "provider_id": "test-provider",
     }
     defaults.update(kwargs)
-    return ReActAgent(**defaults)
+    agent = ReActAgent(**defaults)
+    registry = SubAgentRunRegistry()
+
+    def resolver() -> SubAgentRunRegistry:
+        return registry
+
+    agent._session_runner.deps.subagent_run_registry_resolver = resolver
+    agent._tool_builder.deps.subagent_run_registry_resolver = resolver
+    return agent
 
 
 def _make_processor_mock() -> MagicMock:

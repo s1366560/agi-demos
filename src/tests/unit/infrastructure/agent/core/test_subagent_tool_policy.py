@@ -65,7 +65,9 @@ def test_subagent_tool_builder_fallback_applies_subagent_tool_policy() -> None:
     )
     raw_tools = {"read": object(), "bash": object(), "grep": object()}
     tool_definitions = [_tool("read"), _tool("bash"), _tool("grep")]
-    builder = SubAgentToolBuilder(SubAgentToolBuilderDeps(subagent_run_registry=object()))
+    builder = SubAgentToolBuilder(
+        SubAgentToolBuilderDeps(subagent_run_registry_resolver=lambda: object())
+    )
     builder.deps.get_current_tools_fn = lambda: (raw_tools, tool_definitions)
 
     filtered, existing_tool_names = builder.filter_tools(subagent)

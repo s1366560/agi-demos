@@ -11,7 +11,7 @@ from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.di_container import DIContainer
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
-from src.infrastructure.plugins.v2.boundary import pin_generation_v2
+from src.infrastructure.plugins.v2.boundary import pin_generation_v2, pin_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
@@ -205,6 +205,61 @@ async def test_agent_container_rebuilds_coordination_for_a_new_registry_generati
         await host.close()
         first_registry.close()
         second_registry.close()
+
+
+async def test_react_agent_registry_resolver_tracks_generation_reload() -> None:
+    first_registry = SubAgentRunRegistry()
+    second_registry = SubAgentRunRegistry()
+    registries = iter((first_registry, second_registry))
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(
+            subagent_run_registry_factory=lambda _config: next(registries),
+        )
+    )
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=188,
+        version=188,
+    )
+    assert first.accepted is True
+
+    from src.infrastructure.agent.core.react_agent import ReActAgent
+
+    agent = ReActAgent(model="test-model", provider_id="test-provider", tools={})
+    resolver = agent._session_runner.deps.subagent_run_registry_resolver
+
+    try:
+        async with pin_operation_context_v2(
+            host,
+            operation_id="subagent-registry-generation-188",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            assert agent._session_runner.deps.subagent_run_registry is first_registry
+            assert agent._tool_builder.deps.subagent_run_registry is first_registry
+
+        second = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=189,
+            version=189,
+        )
+        assert second.accepted is True
+
+        async with pin_operation_context_v2(
+            host,
+            operation_id="subagent-registry-generation-189",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            assert agent._session_runner.deps.subagent_run_registry is second_registry
+            assert agent._tool_builder.deps.subagent_run_registry is second_registry
+
+        assert agent._session_runner.deps.subagent_run_registry_resolver is resolver
+        assert agent._tool_builder.deps.subagent_run_registry_resolver is resolver
+    finally:
+        await host.close()
+        second_registry.close()
+        first_registry.close()
 
 
 def test_trace_production_path_and_top_level_di_have_no_static_registry_authority() -> None:

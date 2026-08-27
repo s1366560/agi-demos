@@ -17,8 +17,13 @@ from src.domain.model.agent.agent_role import (
     AgentRole,
 )
 from src.domain.model.agent.subagent import SubAgent
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 
 from .processor import ToolDefinition
+from .subagent_registry_authority import (
+    SubAgentRunRegistryResolverV2,
+    require_subagent_run_registry_v2,
+)
 from .subagent_router import subagent_allows_tool
 
 if TYPE_CHECKING:
@@ -34,7 +39,7 @@ class SubAgentToolBuilderDeps:
     """
 
     # -- Shared registries --
-    subagent_run_registry: Any
+    subagent_run_registry_resolver: SubAgentRunRegistryResolverV2
 
     # -- SubAgent config --
     enable_subagent_as_tool: bool = True
@@ -58,6 +63,11 @@ class SubAgentToolBuilderDeps:
     execute_subagent_fn: Callable[..., Any] | None = None
     launch_session_fn: Callable[..., Coroutine[Any, Any, None]] | None = None
     cancel_session_fn: Callable[..., Coroutine[Any, Any, bool]] | None = None
+
+    @property
+    def subagent_run_registry(self) -> SubAgentRunRegistry:
+        """Resolve the registry from the exact V2 operation on every access."""
+        return require_subagent_run_registry_v2(self.subagent_run_registry_resolver)
 
 
 class SubAgentToolBuilder:
