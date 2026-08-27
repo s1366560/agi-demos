@@ -31,14 +31,30 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
-    - entry_id: builtin-desktop-sidecar-local-capability
+    - entry_id: builtin-desktop-sidecar-http-routes
       parent_entry_id: null
+      plugin_ref: memstack-native-target-hosts
+      module_ref: builtin://memstack/desktop-sidecar/http-routes
+      enabled: true
+      config:
+        contribution_id: memstack-desktop-local-api.v1
+        strategy: axum-host-router
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-sidecar-local-capability
+      parent_entry_id: builtin-desktop-sidecar-http-routes
       plugin_ref: memstack-native-target-hosts
       module_ref: builtin://memstack/desktop-sidecar/local-capability
       enabled: true
       config:
         strategy: native-local-capability
-      inject: {}
+      inject:
+        routes: service:desktop-sidecar.http-route-contribution
       isolate: {}
       scope:
         kind: root

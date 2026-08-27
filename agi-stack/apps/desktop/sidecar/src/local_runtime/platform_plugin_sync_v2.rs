@@ -3,9 +3,9 @@
 use std::{sync::Arc, time::Duration};
 
 use agistack_plugin_host::{
-    desktop_sidecar_host_definition_v2, parse_control_plane_distribution_v2,
-    ControlPlaneDistributionV2, DataPlaneTargetV2, LoaderV2, PluginSnapshotReconcilerV2,
-    SnapshotApplyReceiptV2,
+    desktop_sidecar_host_definition_v2, desktop_sidecar_http_routes_definition_v2,
+    parse_control_plane_distribution_v2, ControlPlaneDistributionV2, DataPlaneTargetV2, LoaderV2,
+    PluginSnapshotReconcilerV2, SnapshotApplyReceiptV2,
 };
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -127,7 +127,10 @@ async fn reconcile_loop(
 fn desktop_reconciler() -> PluginSnapshotReconcilerV2 {
     let loader = LoaderV2::for_target(
         DataPlaneTargetV2::DesktopSidecar,
-        [desktop_sidecar_host_definition_v2()],
+        [
+            desktop_sidecar_http_routes_definition_v2(),
+            desktop_sidecar_host_definition_v2(),
+        ],
     );
     PluginSnapshotReconcilerV2::new(loader)
 }
@@ -416,8 +419,9 @@ pub(super) fn control_plane_url(base: &Url, suffix: &str) -> Url {
 #[cfg(test)]
 mod tests {
     use agistack_plugin_host::{
-        ApplyStatusV2, ScopeKindV2, ScopeV2, TargetHostDescriptorV2,
-        DESKTOP_SIDECAR_HOST_SERVICE_V2,
+        ApplyStatusV2, DesktopSidecarHttpRouteContributionV2, ScopeKindV2, ScopeV2,
+        TargetHostDescriptorV2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
+        DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
     };
     use serde_json::{json, Value};
 
@@ -452,6 +456,48 @@ mod tests {
     fn bootstrap_distribution(version: u64, nonce: &str) -> ControlPlaneDistributionV2 {
         let snapshot: Value = serde_json::from_str(BOOTSTRAP).expect("bootstrap must parse");
         let digest = snapshot["digest"].as_str().expect("snapshot digest");
+        let raw = json!({
+            "schema_version": 2,
+            "descriptor": {
+                "profile_id": snapshot["profile_id"],
+                "generation": snapshot["generation"],
+                "digest": digest,
+            },
+            "snapshot": snapshot,
+            "envelope": {
+                "version": version,
+                "nonce": nonce,
+                "snapshot_digest": digest,
+                "type_url": "types.memstack.ai/plugin.profile.v2",
+            },
+        });
+        parse_control_plane_distribution_v2(&raw.to_string()).expect("distribution must parse")
+    }
+
+    fn bootstrap_distribution_without_route_provider(
+        version: u64,
+        nonce: &str,
+    ) -> ControlPlaneDistributionV2 {
+        let mut snapshot: Value = serde_json::from_str(BOOTSTRAP).expect("bootstrap must parse");
+        let entries = snapshot["entries"].as_array_mut().expect("profile entries");
+        let provider_index = entries
+            .iter()
+            .position(|entry| entry["entry_id"] == "builtin-desktop-sidecar-http-routes")
+            .expect("desktop sidecar route provider entry");
+        entries.remove(provider_index);
+        entries
+            .iter_mut()
+            .find(|entry| entry["entry_id"] == "builtin-desktop-sidecar-local-capability")
+            .expect("desktop sidecar host entry")["parent_entry_id"] = Value::Null;
+
+        let mut digest_payload = snapshot.clone();
+        digest_payload
+            .as_object_mut()
+            .expect("snapshot object")
+            .remove("digest");
+        let canonical = serde_jcs::to_vec(&digest_payload).expect("snapshot must canonicalize");
+        let digest = format!("{:x}", <sha2::Sha256 as sha2::Digest>::digest(canonical));
+        snapshot["digest"] = Value::String(digest.clone());
         let raw = json!({
             "schema_version": 2,
             "descriptor": {
@@ -608,7 +654,87 @@ mod tests {
             .expect("local capability descriptor must resolve");
         assert_eq!(descriptor.target, "desktop-sidecar");
         assert_eq!(descriptor.strategy, "native-local-capability");
+        let routes = lease
+            .generation()
+            .expect("generation must remain leased")
+            .resolve::<DesktopSidecarHttpRouteContributionV2>(
+                DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
+                &ScopeV2 {
+                    kind: ScopeKindV2::Root,
+                    tenant_id: None,
+                    project_id: None,
+                    session_id: None,
+                },
+                None,
+            )
+            .expect("local HTTP route contribution must resolve");
+        assert_eq!(routes.contribution_id, "memstack-desktop-local-api.v1");
+        assert_eq!(routes.strategy, "axum-host-router");
         lease.release().await.expect("lease must release");
+        reconciler.close().await;
+    }
+
+    #[tokio::test]
+    async fn rejected_route_candidate_preserves_the_last_good_desktop_generation() {
+        let mut reconciler = desktop_reconciler();
+        let accepted = bootstrap_distribution(18, "nonce-last-good");
+        assert_eq!(reconciler.apply(&accepted).await.status, ApplyStatusV2::Ack);
+        let accepted_digest = accepted.snapshot.digest.clone();
+        let pinned = reconciler
+            .manager()
+            .acquire()
+            .expect("accepted generation must be available");
+
+        let rejected = bootstrap_distribution_without_route_provider(19, "nonce-rejected");
+        assert_ne!(rejected.snapshot.digest, accepted_digest);
+        let receipt = reconciler.apply(&rejected).await;
+
+        assert_eq!(receipt.status, ApplyStatusV2::Nack);
+        assert_eq!(
+            receipt.error_code.as_deref(),
+            Some("generation_apply_failed")
+        );
+        assert!(receipt
+            .error_message
+            .as_deref()
+            .is_some_and(|message| message.contains("injects missing service")));
+        assert_eq!(receipt.applied_version, Some(18));
+        assert_eq!(
+            receipt.applied_digest.as_deref(),
+            Some(accepted_digest.as_str())
+        );
+
+        let active = reconciler
+            .manager()
+            .acquire()
+            .expect("last-good generation must remain active");
+        assert_eq!(
+            active
+                .generation()
+                .expect("active generation must remain leased")
+                .snapshot
+                .digest,
+            accepted_digest
+        );
+        let routes = pinned
+            .generation()
+            .expect("pinned generation must survive the rejected candidate")
+            .resolve::<DesktopSidecarHttpRouteContributionV2>(
+                DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
+                &ScopeV2 {
+                    kind: ScopeKindV2::Root,
+                    tenant_id: None,
+                    project_id: None,
+                    session_id: None,
+                },
+                None,
+            )
+            .expect("last-good route contribution must still resolve");
+        assert_eq!(routes.contribution_id, "memstack-desktop-local-api.v1");
+        assert_eq!(routes.strategy, "axum-host-router");
+
+        active.release().await.expect("active lease must release");
+        pinned.release().await.expect("pinned lease must release");
         reconciler.close().await;
     }
 }

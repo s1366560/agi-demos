@@ -346,7 +346,10 @@ fn disposal_tracking_desktop_reconciler_v2(
     agistack_plugin_host::PluginSnapshotReconcilerV2::new(
         agistack_plugin_host::LoaderV2::for_target(
             agistack_plugin_host::DataPlaneTargetV2::DesktopSidecar,
-            [definition],
+            [
+                agistack_plugin_host::desktop_sidecar_http_routes_definition_v2(),
+                definition,
+            ],
         ),
     )
 }

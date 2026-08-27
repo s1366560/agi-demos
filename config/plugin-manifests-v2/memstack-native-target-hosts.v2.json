@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/rust-server/generation-host",
       "entrypoint": "RustServerHostModuleV2::apply",
       "artifact": {
-        "digest": "sha256:882ee8661d61be7e1234e0750c9ad82ee6a0ff2fedf86c49f8bb8c764edd4b45",
+        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": ["rust-server"],
@@ -37,7 +37,7 @@
       "module_ref": "builtin://memstack/rust-server/http-routes",
       "entrypoint": "RustServerHttpRoutesModuleV2::apply",
       "artifact": {
-        "digest": "sha256:882ee8661d61be7e1234e0750c9ad82ee6a0ff2fedf86c49f8bb8c764edd4b45",
+        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": ["rust-server"],
@@ -69,10 +69,45 @@
       "contract_digest": "sha256:75443a63ac79d996d7bcba1a2015ab84320702e0157897cbd62970669a79d2b2"
     },
     {
+      "module_ref": "builtin://memstack/desktop-sidecar/http-routes",
+      "entrypoint": "DesktopSidecarHttpRoutesModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
+        "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
+      },
+      "targets": ["desktop-sidecar"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-sidecar.http-route-contribution",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["contribution_id", "strategy"],
+          "properties": {
+            "contribution_id": {
+              "const": "memstack-desktop-local-api.v1",
+              "type": "string"
+            },
+            "strategy": { "const": "axum-host-router", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:aca3c6333f9094d591c3be9313b7e95be51385485b551a36281cd221e440ea5d"
+    },
+    {
       "module_ref": "builtin://memstack/desktop-sidecar/local-capability",
       "entrypoint": "DesktopSidecarHostModuleV2::apply",
       "artifact": {
-        "digest": "sha256:882ee8661d61be7e1234e0750c9ad82ee6a0ff2fedf86c49f8bb8c764edd4b45",
+        "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
       "targets": ["desktop-sidecar"],
@@ -81,7 +116,13 @@
           "provides": [
             { "service": "service:desktop-sidecar.local-capability", "version": "1.0.0" }
           ],
-          "requires": []
+          "requires": [
+            {
+              "alias": "routes",
+              "service": "service:desktop-sidecar.http-route-contribution",
+              "version": "1.0.0"
+            }
+          ]
         },
         "events": { "emits": [], "handles": [] },
         "config_schema": {
@@ -94,7 +135,7 @@
           }
         }
       },
-      "contract_digest": "sha256:417fd72b2a8177362bf2362158c113ed423ff84b1106634b271cddf17dbfbf46"
+      "contract_digest": "sha256:b017f9051aba361bfd977d664f9b5ea89a752a64ac6e537422535bd7b24f4c1d"
     }
   ],
   "permissions": [],

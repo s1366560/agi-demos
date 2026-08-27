@@ -5,9 +5,11 @@ use std::{
 };
 
 use agistack_plugin_host::{
-    project_snapshot_entries_v2, ControlPlaneDistributionV2, DataPlaneTargetV2, GenerationLeaseV2,
-    GenerationManagerV2, ScopeKindV2, ScopeV2, TargetHostDescriptorV2,
-    DESKTOP_SIDECAR_HOST_SERVICE_V2,
+    project_snapshot_entries_v2, ControlPlaneDistributionV2, DataPlaneTargetV2,
+    DesktopSidecarHttpRouteContributionV2, GenerationLeaseV2, GenerationManagerV2, ScopeKindV2,
+    ScopeV2, TargetHostDescriptorV2, DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2,
+    DESKTOP_SIDECAR_HOST_SERVICE_V2, DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
+    DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_VERSION_V2, DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2,
 };
 use serde::Serialize;
 use tokio::sync::oneshot;
@@ -187,6 +189,9 @@ impl PlatformPluginGenerationAcquireV2Error {
 
 pub(super) struct ActivePlatformPluginGenerationLeaseV2 {
     projection: Arc<ActivePlatformPluginGenerationV2>,
+    // The next router-authority batch will consume this pinned contribution in production.
+    #[cfg_attr(not(test), allow(dead_code))]
+    http_routes: Arc<DesktopSidecarHttpRouteContributionV2>,
     _release_guard: GenerationReleaseGuardV2,
 }
 
@@ -202,6 +207,12 @@ impl fmt::Debug for ActivePlatformPluginGenerationLeaseV2 {
 impl ActivePlatformPluginGenerationLeaseV2 {
     pub(super) fn descriptor(&self) -> &ActivePlatformPluginGenerationDescriptorV2 {
         self.projection.descriptor()
+    }
+
+    // Keep the typed seam testable before production route authority moves off `local_router`.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(super) fn http_routes(&self) -> &DesktopSidecarHttpRouteContributionV2 {
+        &self.http_routes
     }
 
     pub(super) fn plugin_availability(
@@ -277,18 +288,19 @@ impl PlatformPluginAuthorityV2 {
                     reason: PlatformPluginAvailabilityV2Error::GenerationUnavailable,
                     descriptor: descriptor.clone(),
                 })?;
-        let runtime_matches =
+        let http_routes =
             runtime_generation_matches_projection(&lease, published.projection.descriptor());
         let release_guard = spawn_release_owner(lease);
-        if !runtime_matches {
+        let Some(http_routes) = http_routes else {
             drop(release_guard);
             return Err(PlatformPluginGenerationAcquireV2Error {
                 reason: PlatformPluginAvailabilityV2Error::GenerationMismatch,
                 descriptor,
             });
-        }
+        };
         Ok(ActivePlatformPluginGenerationLeaseV2 {
             projection: Arc::clone(&published.projection),
+            http_routes,
             _release_guard: release_guard,
         })
     }
@@ -297,31 +309,47 @@ impl PlatformPluginAuthorityV2 {
 fn runtime_generation_matches_projection(
     lease: &GenerationLeaseV2,
     descriptor: &ActivePlatformPluginGenerationDescriptorV2,
-) -> bool {
+) -> Option<Arc<DesktopSidecarHttpRouteContributionV2>> {
     let Ok(generation) = lease.generation() else {
-        return false;
+        return None;
     };
     if generation.snapshot.profile_id != descriptor.profile_id
         || generation.snapshot.generation != descriptor.generation
         || generation.snapshot.digest != descriptor.digest
     {
-        return false;
+        return None;
     }
-    generation
+    let root_scope = ScopeV2 {
+        kind: ScopeKindV2::Root,
+        tenant_id: None,
+        project_id: None,
+        session_id: None,
+    };
+    let host_matches = generation
         .resolve_versioned::<TargetHostDescriptorV2>(
             DESKTOP_SIDECAR_HOST_SERVICE_V2,
             DESKTOP_SIDECAR_HOST_SERVICE_VERSION_V2,
-            &ScopeV2 {
-                kind: ScopeKindV2::Root,
-                tenant_id: None,
-                project_id: None,
-                session_id: None,
-            },
+            &root_scope,
             None,
         )
         .is_ok_and(|host| {
             host.target == DESKTOP_SIDECAR_TARGET_V2
                 && host.strategy == DESKTOP_SIDECAR_HOST_STRATEGY_V2
+        });
+    if !host_matches {
+        return None;
+    }
+    generation
+        .resolve_versioned::<DesktopSidecarHttpRouteContributionV2>(
+            DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
+            DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_VERSION_V2,
+            &root_scope,
+            None,
+        )
+        .ok()
+        .filter(|routes| {
+            routes.contribution_id == DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2
+                && routes.strategy == DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2
         })
 }
 
@@ -371,8 +399,9 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use agistack_plugin_host::{
-        desktop_sidecar_host_definition_v2, parse_control_plane_distribution_v2, ApplyStatusV2,
-        ControlPlaneDistributionV2, LoaderV2, PluginSnapshotReconcilerV2,
+        desktop_sidecar_host_definition_v2, desktop_sidecar_http_routes_definition_v2,
+        parse_control_plane_distribution_v2, ApplyStatusV2, ControlPlaneDistributionV2, LoaderV2,
+        PluginSnapshotReconcilerV2,
     };
     use serde_json::{json, Value};
 
@@ -445,7 +474,10 @@ mod tests {
         let distribution = bootstrap_distribution();
         let mut reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
             DataPlaneTargetV2::DesktopSidecar,
-            [desktop_sidecar_host_definition_v2()],
+            [
+                desktop_sidecar_http_routes_definition_v2(),
+                desktop_sidecar_host_definition_v2(),
+            ],
         ));
         assert_eq!(
             reconciler.apply(&distribution).await.status,
@@ -459,6 +491,14 @@ mod tests {
             .expect("runtime generation must be available");
         assert_eq!(lease.descriptor().digest, distribution.snapshot.digest);
         assert_eq!(
+            lease.http_routes().contribution_id,
+            DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2
+        );
+        assert_eq!(
+            lease.http_routes().strategy,
+            DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2
+        );
+        assert_eq!(
             lease.plugin_availability(
                 "memstack-native-target-hosts@2.0.0",
                 "local",
@@ -468,6 +508,10 @@ mod tests {
         );
 
         authority.clear();
+        assert_eq!(
+            lease.http_routes().contribution_id,
+            DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2
+        );
         assert_eq!(
             lease.plugin_availability(
                 "memstack-native-target-hosts@2.0.0",
@@ -485,7 +529,10 @@ mod tests {
         let distribution = bootstrap_distribution();
         let mut reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
             DataPlaneTargetV2::DesktopSidecar,
-            [desktop_sidecar_host_definition_v2()],
+            [
+                desktop_sidecar_http_routes_definition_v2(),
+                desktop_sidecar_host_definition_v2(),
+            ],
         ));
         assert_eq!(
             reconciler.apply(&distribution).await.status,
