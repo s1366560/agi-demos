@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from src.configuration import containers
 from src.configuration.containers.auth_container import AuthContainer
-from src.configuration.containers.project_container import ProjectContainer
 from src.configuration.di_container import DIContainer
 from src.infrastructure.plugins.v2.composer import load_profile_document_v2
 from src.infrastructure.plugins.v2.project_tenant_services import (
@@ -57,9 +57,8 @@ def test_project_tenant_legacy_di_accessors_and_shadow_adapter_are_removed() -> 
     }
     assert not retired_accessors.intersection(vars(DIContainer))
     assert "tenant_repository" not in vars(AuthContainer)
-    assert not {"project_repository", "project_service", "tenant_service"}.intersection(
-        vars(ProjectContainer)
-    )
+    assert "ProjectContainer" not in vars(containers)
+    assert not (_ROOT / "src/configuration/containers/project_container.py").exists()
     assert not (
         _ROOT / "src/infrastructure/adapters/primary/web/project_tenant_shadow_v2.py"
     ).exists()
