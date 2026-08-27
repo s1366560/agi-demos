@@ -148,7 +148,9 @@ use changes::{ChangeLineKind, ChangeSnapshot, ChangeSnapshotStatus, GitChangesIn
 use composer_context::{validate_composer_context_items, ComposerContextItem, ComposerContextKind};
 use conversation_llm_route::{normalized_conversation_llm_route, workload_role_for_capability};
 use mcp_supervisor::{McpSupervisor, SupervisorLimits};
-use platform_plugin_authority_v2::PlatformPluginAvailabilityV2Error;
+use platform_plugin_authority_v2::{
+    ActivePlatformPluginGenerationLeaseV2, PlatformPluginAvailabilityV2Error,
+};
 #[cfg(test)]
 use provider_credentials::ProviderCredentialStore;
 use provider_credentials::{
@@ -6469,7 +6471,8 @@ fn validate_composer_context_authority(
     authenticated: &AuthenticatedContext,
     workspace_id: &str,
     items: &[ComposerContextItem],
-) -> Result<(), (StatusCode, Json<Value>)> {
+) -> Result<Option<ActivePlatformPluginGenerationLeaseV2>, (StatusCode, Json<Value>)> {
+    let mut plugin_generation = None;
     for item in items {
         let available = match item.kind {
             ComposerContextKind::Attachment => item.resource_id.starts_with("file:"),
@@ -6554,15 +6557,22 @@ fn validate_composer_context_authority(
                     })
             }
             ComposerContextKind::Plugin => {
-                let generation = state
-                    .platform_plugin_authority_v2
-                    .active_generation()
-                    .ok_or_else(|| {
-                        unavailable_plugin_composer_context(
-                            PlatformPluginAvailabilityV2Error::GenerationUnavailable,
-                            None,
-                        )
-                    })?;
+                if plugin_generation.is_none() {
+                    plugin_generation = Some(
+                        state
+                            .platform_plugin_authority_v2
+                            .acquire_generation()
+                            .map_err(|error| {
+                                unavailable_plugin_composer_context(
+                                    error.reason(),
+                                    error.descriptor(),
+                                )
+                            })?,
+                    );
+                }
+                let generation = plugin_generation
+                    .as_ref()
+                    .expect("plugin generation was initialized above");
                 generation
                     .plugin_availability(
                         &item.resource_id,
@@ -6581,7 +6591,7 @@ fn validate_composer_context_authority(
             ));
         }
     }
-    Ok(())
+    Ok(plugin_generation)
 }
 
 async fn list_run_inputs(
@@ -6650,7 +6660,7 @@ async fn create_run_input(
         .workspace_id
         .as_deref()
         .ok_or_else(|| invalid_composer_context("run conversation has no workspace"))?;
-    validate_composer_context_authority(
+    let _plugin_generation_lease = validate_composer_context_authority(
         &state,
         &authenticated,
         run_workspace_id,

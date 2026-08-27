@@ -689,3 +689,68 @@ fn composer_plugin_context_ignores_legacy_registry_without_active_v2_generation(
     assert_eq!(payload["detail"]["target"], "desktop-sidecar");
     assert_eq!(payload["detail"]["generation"], Value::Null);
 }
+
+#[tokio::test]
+async fn composer_plugin_context_returns_the_pinned_runtime_generation() {
+    const BOOTSTRAP: &str =
+        include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
+    let state = test_state("composer-plugin-runtime-v2-secret");
+    let authenticated = state
+        .session_store
+        .validate_session_credential(
+            "composer-plugin-runtime-v2-secret",
+            Utc::now().timestamp_millis(),
+        )
+        .expect("validate session credential")
+        .expect("authenticated context");
+    let snapshot: Value = serde_json::from_str(BOOTSTRAP).expect("bootstrap must parse");
+    let digest = snapshot["digest"].as_str().expect("snapshot digest");
+    let distribution = agistack_plugin_host::parse_control_plane_distribution_v2(
+        &json!({
+            "schema_version": 2,
+            "descriptor": {
+                "profile_id": snapshot["profile_id"],
+                "generation": snapshot["generation"],
+                "digest": digest,
+            },
+            "snapshot": snapshot,
+            "envelope": {
+                "version": 77,
+                "nonce": "composer-plugin-runtime-v2",
+                "snapshot_digest": digest,
+                "type_url": "types.memstack.ai/plugin.profile.v2",
+            },
+        })
+        .to_string(),
+    )
+    .expect("distribution must parse");
+    let mut reconciler = agistack_plugin_host::PluginSnapshotReconcilerV2::new(
+        agistack_plugin_host::LoaderV2::for_target(
+            agistack_plugin_host::DataPlaneTargetV2::DesktopSidecar,
+            [agistack_plugin_host::desktop_sidecar_host_definition_v2()],
+        ),
+    );
+    assert_eq!(
+        reconciler.apply(&distribution).await.status,
+        agistack_plugin_host::ApplyStatusV2::Ack
+    );
+    state
+        .platform_plugin_authority_v2
+        .publish(&distribution, reconciler.manager());
+    let context = [ComposerContextItem {
+        kind: ComposerContextKind::Plugin,
+        resource_id: "memstack-native-target-hosts@2.0.0".to_string(),
+        label: "Native target hosts".to_string(),
+        metadata: Some(json!({ "execution_slot": "plugin" })),
+    }];
+
+    let lease =
+        validate_composer_context_authority(&state, &authenticated, "local-workspace", &context)
+            .expect("plugin context must be active")
+            .expect("plugin context must retain a generation lease");
+
+    assert_eq!(lease.descriptor().publication_version, 77);
+    assert_eq!(lease.descriptor().digest, distribution.snapshot.digest);
+    drop(lease);
+    reconciler.close().await;
+}

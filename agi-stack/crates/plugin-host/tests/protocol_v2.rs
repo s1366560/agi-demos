@@ -1131,6 +1131,19 @@ fn reconciler_nacks_stale_versions_and_retains_last_good() {
 }
 
 #[test]
+fn reconciler_exposes_one_shared_generation_manager_handle() {
+    let reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
+        DataPlaneTargetV2::DesktopSidecar,
+        std::iter::empty::<PluginDefinitionV2>(),
+    ));
+
+    let first = reconciler.manager();
+    let second = reconciler.manager();
+
+    assert!(Arc::ptr_eq(&first, &second));
+}
+
+#[test]
 fn loader_resolves_inject_and_disposes_effects_in_lifo_order() {
     block_on(async {
         let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");

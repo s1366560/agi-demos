@@ -15,7 +15,7 @@ use axum::{
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, Notify};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -143,12 +143,13 @@ async fn create_status_proxy_server(status: StatusCode) -> String {
 
 type TaskSessionObservation = (String, HeaderMap, Vec<u8>);
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum TaskSessionProxyBehavior {
     Success,
     Failure(StatusCode),
     IdempotencyConflict,
     MalformedSuccess,
+    Wait(Arc<Notify>),
 }
 
 async fn create_task_session_proxy_server_with(
@@ -173,10 +174,13 @@ async fn create_task_session_proxy_server_with(
             .send((path, headers, body.clone()))
             .await
             .expect("proxy observation receiver");
-        if let TaskSessionProxyBehavior::Failure(status) = behavior {
-            return (status, Json(json!({ "detail": "Core failure" }))).into_response();
+        if let TaskSessionProxyBehavior::Wait(release) = &behavior {
+            release.notified().await;
         }
-        if matches!(behavior, TaskSessionProxyBehavior::IdempotencyConflict) {
+        if let TaskSessionProxyBehavior::Failure(status) = &behavior {
+            return (*status, Json(json!({ "detail": "Core failure" }))).into_response();
+        }
+        if matches!(&behavior, TaskSessionProxyBehavior::IdempotencyConflict) {
             return (
                 StatusCode::CONFLICT,
                 Json(json!({
@@ -258,7 +262,7 @@ async fn create_task_session_proxy_server_with(
                 "updated_at": "2026-08-13T00:00:00Z"
             });
         }
-        if matches!(behavior, TaskSessionProxyBehavior::MalformedSuccess) {
+        if matches!(&behavior, TaskSessionProxyBehavior::MalformedSuccess) {
             response["initial_message"]["content"] = json!("Unexpected objective");
         }
         Json(response).into_response()
@@ -276,6 +280,75 @@ async fn create_task_session_proxy_server_with(
 
 async fn create_task_session_proxy_server() -> (String, mpsc::Receiver<TaskSessionObservation>) {
     create_task_session_proxy_server_with(TaskSessionProxyBehavior::Success).await
+}
+
+struct DisposalTrackingPluginModuleV2 {
+    delegate: Arc<dyn agistack_plugin_host::PluginModuleRuntimeV2>,
+    disposals: Arc<AtomicUsize>,
+}
+
+#[async_trait::async_trait]
+impl agistack_plugin_host::PluginModuleRuntimeV2 for DisposalTrackingPluginModuleV2 {
+    async fn apply(
+        &self,
+        context: &mut agistack_plugin_host::ContextV2,
+        config: &std::collections::BTreeMap<String, Value>,
+    ) -> Result<(), agistack_plugin_host::RuntimeV2Error> {
+        self.delegate.apply(context, config).await?;
+        let disposals = Arc::clone(&self.disposals);
+        context.effect(
+            "track-task-session-generation-disposal",
+            Box::new(move || {
+                Box::pin(async move {
+                    disposals.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                })
+            }),
+        )?;
+        Ok(())
+    }
+}
+
+fn bootstrap_platform_plugin_distribution_v2() -> agistack_plugin_host::ControlPlaneDistributionV2 {
+    const BOOTSTRAP: &str =
+        include_str!("../../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
+    let snapshot: Value = serde_json::from_str(BOOTSTRAP).expect("bootstrap must parse");
+    let digest = snapshot["digest"].as_str().expect("snapshot digest");
+    agistack_plugin_host::parse_control_plane_distribution_v2(
+        &json!({
+            "schema_version": 2,
+            "descriptor": {
+                "profile_id": snapshot["profile_id"],
+                "generation": snapshot["generation"],
+                "digest": digest,
+            },
+            "snapshot": snapshot,
+            "envelope": {
+                "version": 91,
+                "nonce": "task-session-plugin-runtime-v2",
+                "snapshot_digest": digest,
+                "type_url": "types.memstack.ai/plugin.profile.v2",
+            },
+        })
+        .to_string(),
+    )
+    .expect("distribution must parse")
+}
+
+fn disposal_tracking_desktop_reconciler_v2(
+    disposals: Arc<AtomicUsize>,
+) -> agistack_plugin_host::PluginSnapshotReconcilerV2 {
+    let mut definition = agistack_plugin_host::desktop_sidecar_host_definition_v2();
+    definition.module = Arc::new(DisposalTrackingPluginModuleV2 {
+        delegate: Arc::clone(&definition.module),
+        disposals,
+    });
+    agistack_plugin_host::PluginSnapshotReconcilerV2::new(
+        agistack_plugin_host::LoaderV2::for_target(
+            agistack_plugin_host::DataPlaneTargetV2::DesktopSidecar,
+            [definition],
+        ),
+    )
 }
 
 type RoutingPolicyObservation = (String, String, HeaderMap, Vec<u8>);
@@ -1855,6 +1928,90 @@ async fn task_sessions_are_core_owned_and_fail_closed_when_authority_is_lost() {
         .expect("response");
 
     assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn task_session_plugin_context_pins_generation_until_core_operation_finishes() {
+    let state = state();
+    state
+        .session_store
+        .seed_test_session("desktop-session")
+        .expect("desktop session");
+    let release_core = Arc::new(Notify::new());
+    let (core_url, mut observations) = create_task_session_proxy_server_with(
+        TaskSessionProxyBehavior::Wait(Arc::clone(&release_core)),
+    )
+    .await;
+    install(&state, &core_url);
+
+    let distribution = bootstrap_platform_plugin_distribution_v2();
+    let disposals = Arc::new(AtomicUsize::new(0));
+    let mut reconciler = disposal_tracking_desktop_reconciler_v2(Arc::clone(&disposals));
+    assert_eq!(
+        reconciler.apply(&distribution).await.status,
+        agistack_plugin_host::ApplyStatusV2::Ack
+    );
+    state
+        .platform_plugin_authority_v2
+        .publish(&distribution, reconciler.manager());
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/tenants/local/projects/local-project/task-sessions")
+        .header("x-agistack-launch", "launch-token")
+        .header(AUTHORIZATION, "Bearer desktop-session")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "idempotency_key": "desktop-task-session-plugin-generation-v2",
+                "workspace": {
+                    "kind": "existing",
+                    "workspace_id": "local-workspace"
+                },
+                "conversation": {
+                    "title": "Pinned plugin generation",
+                    "capability_mode": "work"
+                },
+                "initial_message": {
+                    "content": "Keep the plugin generation pinned",
+                    "context_items": [{
+                        "kind": "plugin",
+                        "resource_id": "memstack-native-target-hosts@2.0.0",
+                        "label": "Native target hosts",
+                        "metadata": { "execution_slot": "plugin" }
+                    }]
+                }
+            })
+            .to_string(),
+        ))
+        .expect("request");
+    let app = local_router(Arc::clone(&state));
+    let request_task = tokio::spawn(async move { app.oneshot(request).await });
+
+    tokio::time::timeout(std::time::Duration::from_secs(5), observations.recv())
+        .await
+        .expect("Core request must arrive")
+        .expect("Core request observation");
+    state.platform_plugin_authority_v2.clear();
+    reconciler.close().await;
+    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    assert_eq!(disposals.load(Ordering::SeqCst), 0);
+
+    release_core.notify_one();
+    let response = tokio::time::timeout(std::time::Duration::from_secs(5), request_task)
+        .await
+        .expect("task-session request must finish")
+        .expect("task-session request task")
+        .expect("task-session response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while disposals.load(Ordering::SeqCst) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("retired generation must be disposed after operation completion");
+    assert_eq!(disposals.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]

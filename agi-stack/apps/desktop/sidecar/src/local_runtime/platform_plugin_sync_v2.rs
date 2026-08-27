@@ -240,7 +240,9 @@ async fn restore_last_good(
             .error_code
             .unwrap_or_else(|| "last_good_restore_failed".into()));
     }
-    state.platform_plugin_authority_v2.publish(&distribution);
+    state
+        .platform_plugin_authority_v2
+        .publish(&distribution, reconciler.manager());
     Ok(())
 }
 
@@ -266,7 +268,9 @@ async fn reconcile_once(
     }
     let receipt = reconciler.apply(&distribution).await;
     if receipt.status == agistack_plugin_host::ApplyStatusV2::Ack {
-        state.platform_plugin_authority_v2.publish(&distribution);
+        state
+            .platform_plugin_authority_v2
+            .publish(&distribution, reconciler.manager());
     }
     {
         let mut connection = state.session_store.connection()?;

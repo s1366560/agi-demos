@@ -1,5 +1,7 @@
 //! Transactional protocol-v2 reconciliation for Rust data planes.
 
+use std::sync::Arc;
+
 use super::{
     ApplyStatusV2, ControlPlaneDistributionV2, GenerationManagerV2, LoaderV2,
     SnapshotApplyReceiptV2,
@@ -8,7 +10,7 @@ use super::{
 /// Stages complete target-specific generations and retains the last-good publication.
 pub struct PluginSnapshotReconcilerV2 {
     loader: LoaderV2,
-    manager: GenerationManagerV2,
+    manager: Arc<GenerationManagerV2>,
     applied_version: Option<u64>,
     applied_digest: Option<String>,
 }
@@ -19,16 +21,16 @@ impl PluginSnapshotReconcilerV2 {
     pub fn new(loader: LoaderV2) -> Self {
         Self {
             loader,
-            manager: GenerationManagerV2::new(),
+            manager: Arc::new(GenerationManagerV2::new()),
             applied_version: None,
             applied_digest: None,
         }
     }
 
-    /// Return the generation manager used to lease the currently applied generation.
+    /// Return the shared generation manager used to lease the currently applied generation.
     #[must_use]
-    pub const fn manager(&self) -> &GenerationManagerV2 {
-        &self.manager
+    pub fn manager(&self) -> Arc<GenerationManagerV2> {
+        Arc::clone(&self.manager)
     }
 
     /// Validate transition ordering, stage target entries, and atomically publish on ACK.
