@@ -163,8 +163,10 @@ async def pin_operation_context_v2(
         try:
             yield operation
         finally:
-            await operation.dispose()
-            _operation_context.reset(token)
+            try:
+                await operation.dispose()
+            finally:
+                _operation_context.reset(token)
 
 
 @asynccontextmanager
@@ -275,9 +277,11 @@ async def _pin_agent_turn_on_generation_v2(
         token = _operation_context.set(operation)
         yield operation
     finally:
-        await operation.dispose()
-        if token is not None:
-            _operation_context.reset(token)
+        try:
+            await operation.dispose()
+        finally:
+            if token is not None:
+                _operation_context.reset(token)
 
 
 def _distribution_payload_for_generation_v2(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -33,7 +34,7 @@ from src.infrastructure.plugins.v2.builtin_modules import (
     builtin_runtime_definitions_v2,
 )
 from src.infrastructure.plugins.v2.protocol import PluginProtocolV2Error
-from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import (
     DataPlaneGenerationAdmissionV2,
     PlatformPluginRuntimeHostV2,
@@ -366,6 +367,46 @@ async def test_operation_boundary_pins_old_generation_until_cleanup_finishes() -
 
 
 @pytest.mark.unit
+async def test_operation_boundary_resets_context_when_dispose_is_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="cancelled-operation-boundary",
+    )
+    original_dispose = OperationContextV2.dispose
+
+    async def dispose_then_cancel(operation: OperationContextV2) -> None:
+        await original_dispose(operation)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(OperationContextV2, "dispose", dispose_then_cancel)
+
+    async def exercise_boundary() -> bool:
+        with pytest.raises(asyncio.CancelledError):
+            async with pin_operation_context_v2(
+                host,
+                operation_id="cancelled-operation",
+                scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            ):
+                pass
+        try:
+            current_operation_context_v2()
+        except RuntimeV2Error as exc:
+            return exc.code == "operation_context_not_pinned"
+        return False
+
+    try:
+        assert await asyncio.create_task(exercise_boundary()) is True
+    finally:
+        await host.close()
+
+
+@pytest.mark.unit
 async def test_agent_turn_boundary_acquires_process_host_and_publishes_operation_services() -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await host.bootstrap(
@@ -402,6 +443,49 @@ async def test_agent_turn_boundary_acquires_process_host_and_publishes_operation
             }
             distribution = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
             assert distribution["descriptor"] == operation.descriptor.to_payload()
+    finally:
+        clear_process_generation_host_v2(host)
+        await host.close()
+
+
+@pytest.mark.unit
+async def test_agent_turn_boundary_resets_context_when_dispose_is_cancelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="cancelled-agent-turn-boundary",
+    )
+    install_process_generation_host_v2(host)
+    original_dispose = OperationContextV2.dispose
+
+    async def dispose_then_cancel(operation: OperationContextV2) -> None:
+        await original_dispose(operation)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(OperationContextV2, "dispose", dispose_then_cancel)
+
+    async def exercise_boundary() -> bool:
+        with pytest.raises(asyncio.CancelledError):
+            async with pin_agent_turn_operation_v2(
+                operation_id="cancelled-agent-turn",
+                tenant_id="tenant-a",
+                project_id="project-a",
+                session_id="conversation-a",
+            ):
+                pass
+        try:
+            current_operation_context_v2()
+        except RuntimeV2Error as exc:
+            return exc.code == "operation_context_not_pinned"
+        return False
+
+    try:
+        assert await asyncio.create_task(exercise_boundary()) is True
     finally:
         clear_process_generation_host_v2(host)
         await host.close()

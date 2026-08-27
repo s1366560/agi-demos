@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:a9d1f75d9d0a62a772274b265b095f1394db5ee7fddf148071f15768537e49d0",
+        "digest": "sha256:22484f41717a16c99896e6c05cce6098723ab8417e4e0fe5fce2b64d15e8b6f0",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -6781,7 +6781,7 @@
       },
       "contract_digest": "sha256:c45f9c8ba00b7d68570a0ca5a269f62d0ef202b389d0f689755bada1e4ba9608",
       "artifact": {
-        "digest": "sha256:51ac7f4af7ab83d2eef692f639f89f2384e1a6fd0d7d0a71ca4e1b6669d62482",
+        "digest": "sha256:9817bb10c05244362fdbcfcd8d5edd6c93d06aefebead7f2f1b88bab8ede5fae",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
       }
     },
@@ -6818,6 +6818,31 @@
       "artifact": {
         "digest": "sha256:8c0a22ef52a4266d8718c59095b074199fa64d130a13bf346aaf5bebbab634aa",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_canvas_tools.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/skill-mcp-manager",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_skill_mcp_service:_apply_skill_mcp_manager_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:agent.skill-mcp-manager", "version": "1.0.0" }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:95799c52b8e193059168271e9df16c441a7f1d53498ab4b87f8d04fa3e0ef9f6",
+      "artifact": {
+        "digest": "sha256:d9f4e61af37519b2d45c9a081fbbc0b9fe1ad726652046f3f811a604ed13b558",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_skill_mcp_service.py"
       }
     },
     {

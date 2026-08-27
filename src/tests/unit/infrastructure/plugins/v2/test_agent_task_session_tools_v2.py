@@ -36,7 +36,10 @@ from src.infrastructure.plugins.v2.builtin_modules import (
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
-from src.infrastructure.plugins.v2.tool_set import TOOL_SET_MODULE_V2
+from src.infrastructure.plugins.v2.tool_set import (
+    TOOL_SET_MODULE_V2,
+    ToolSetCatalogV2,
+)
 
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -174,6 +177,7 @@ async def test_disabling_task_session_contribution_removes_only_its_tools(
             tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
+                operation_catalog=ToolSetCatalogV2(),
             )
             tools, _definitions = tool_set.tools, tool_set.definitions
     finally:
@@ -198,6 +202,7 @@ async def test_enabling_task_session_contribution_restores_exact_prepared_tools(
             tool_set = _resolve_current_tools_from_runtime_v2(
                 agent,
                 ToolSelectionContext(),
+                operation_catalog=ToolSetCatalogV2(),
             )
             tools, definitions = tool_set.tools, tool_set.definitions
     finally:
@@ -222,7 +227,11 @@ async def test_enabled_task_session_contribution_fails_when_prepared_tools_are_m
             scope=ScopeV2(kind=ScopeKindV2.ROOT),
         ):
             with pytest.raises(RuntimeV2Error) as error:
-                _resolve_current_tools_from_runtime_v2(agent, ToolSelectionContext())
+                _resolve_current_tools_from_runtime_v2(
+                    agent,
+                    ToolSelectionContext(),
+                    operation_catalog=ToolSetCatalogV2(),
+                )
     finally:
         await manager.close()
 

@@ -41,8 +41,20 @@ from src.domain.model.agent.skill import Skill
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.plugins.v2.agent_capabilities import AgentCapabilitySetV2
+from src.infrastructure.plugins.v2.agent_operation_tool_contributions import (
+    OPERATION_SUBAGENT_TOOL_SOURCE_V2,
+    SkillMCPManagerProtocolV2,
+    activate_skill_mcp_operation_tools_v2,
+    contribute_operation_tool_definitions_v2,
+    parse_skill_mcp_configs_v2,
+)
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
-from src.infrastructure.plugins.v2.tool_set import ToolSetV2, restrict_tool_set_v2
+from src.infrastructure.plugins.v2.tool_set import (
+    ToolSetContributionCatalogProtocolV2,
+    ToolSetV2,
+    bind_operation_tool_set_catalog_v2,
+    restrict_tool_set_v2,
+)
 
 from ..i18n import directive_for, resolve_response_language
 from ..plugins.selection_pipeline import ToolSelectionContext, ToolSelectionTraceStep
@@ -196,6 +208,8 @@ async def _bind_processor_model_route(
 def _resolve_current_tools_from_runtime_v2(
     agent: object,
     selection_context: ToolSelectionContext,
+    *,
+    operation_catalog: ToolSetContributionCatalogProtocolV2,
 ) -> ToolSetV2:
     """Resolve tools through the required service in the pinned v2 operation."""
     from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
@@ -208,7 +222,11 @@ def _resolve_current_tools_from_runtime_v2(
     resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
     if not isinstance(resolver, ToolSetResolverProtocolV2):
         raise RuntimeError("v2 tool-set resolver has an invalid implementation")
-    raw_tool_set: object = resolver.resolve(agent=agent, selection_context=selection_context)
+    raw_tool_set: object = resolver.resolve(
+        agent=agent,
+        selection_context=selection_context,
+        operation_catalog=operation_catalog,
+    )
     if not isinstance(raw_tool_set, ToolSetV2):
         raise RuntimeV2Error(
             "invalid_tool_set",
@@ -226,6 +244,7 @@ def _finalize_turn_tool_set_v2(
     is_workspace_conversation: bool,
     allow_tools: Sequence[str] | None,
     deny_tools: Sequence[str] | None,
+    forced_operation_tool_names: Sequence[str] = (),
 ) -> ToolSetV2:
     """Apply objective turn-scope filters once before every model consumer."""
     definitions = list(tool_set.definitions)
@@ -235,6 +254,9 @@ def _finalize_turn_tool_set_v2(
         skill_tools: set[str] = {
             name for name in matched_skill.tools if isinstance(name, str) and name
         }
+        skill_tools.update(
+            name for name in forced_operation_tool_names if isinstance(name, str) and name
+        )
         if skill_tools:
             allowed = skill_tools | {"todowrite", "todoread"}
             definitions = [definition for definition in definitions if definition.name in allowed]
@@ -456,8 +478,6 @@ class _StreamAgent(Protocol):
     _max_subagent_active_runs: Any
     _max_subagent_children_per_requester: Any
     _max_subagent_active_runs_per_lineage: Any
-    _skill_mcp_manager: Any
-    _skill_mcp_tools: Any
     _enable_subagent_as_tool: Any
     _tool_builder: Any
 
@@ -1728,8 +1748,6 @@ class StreamMixin:
             project_id=project_id,
         )
         if selected_agent is None:
-            from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-
             raise RuntimeV2Error(
                 "agent_definition_not_found",
                 f"agent definition {resolved_agent_id} is unavailable in the pinned generation",
@@ -1838,77 +1856,32 @@ class StreamMixin:
         is_forced: bool = cast(bool, skill_state["is_forced"])
         should_inject_prompt: bool = cast(bool, skill_state["should_inject_prompt"])
 
-        # Phase 5b: Activate skill-embedded MCP servers. These post-resolution
-        # additions are migrated to explicit V2 contributions in T2.
-        self._skill_mcp_tools = []
+        # Phase 5b: Bind all turn-local tool effects to the pinned operation.
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+        operation = current_operation_context_v2()
+        operation_catalog = bind_operation_tool_set_catalog_v2(operation)
+        from src.infrastructure.plugins.v2.agent_skill_mcp_service import (
+            SKILL_MCP_MANAGER_SERVICE_V2,
+        )
+
+        skill_mcp_manager = operation.require(SKILL_MCP_MANAGER_SERVICE_V2)
+        if not isinstance(skill_mcp_manager, SkillMCPManagerProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_skill_mcp_manager",
+                "service:agent.skill-mcp-manager has an invalid implementation",
+            )
+        mcp_tool_names: tuple[str, ...] = ()
         if matched_skill and matched_skill.metadata:
             mcp_servers_raw = matched_skill.metadata.get("mcp_servers")
-            if mcp_servers_raw and isinstance(mcp_servers_raw, list):
-                from ..mcp.skill_mcp_manager import SkillMCPConfig
-
-                mcp_configs = [
-                    SkillMCPConfig(
-                        server_name=cfg["server_name"],
-                        command=cfg["command"],
-                        args=cfg.get("args", []),
-                        env=cfg.get("env", {}),
-                        auto_start=cfg.get("auto_start", True),
-                    )
-                    for cfg in mcp_servers_raw
-                    if isinstance(cfg, dict) and "server_name" in cfg and "command" in cfg
-                ]
-                if mcp_configs:
-                    try:
-                        self._skill_mcp_manager.register_skill_mcps(matched_skill.name, mcp_configs)
-                        mcp_tools = await self._skill_mcp_manager.activate_skill(matched_skill.name)
-                        # Convert MCPTool objects to ToolDefinition for injection
-                        for mcp_tool in mcp_tools:
-                            if not mcp_tool.schema.is_model_visible:
-                                continue
-                            client = self._skill_mcp_manager.get_active_client(mcp_tool.server_name)
-
-                            async def _make_mcp_exec(
-                                _client: Any,
-                                _tool_name: str,
-                            ) -> Any:
-                                async def _exec(**kwargs: Any) -> Any:
-                                    if _client is None:
-                                        return f"MCP server not available for tool {_tool_name}"
-                                    result = await _client.call_tool(_tool_name, kwargs)
-                                    if isinstance(result, dict):
-                                        return result.get("content", str(result))
-                                    return result
-
-                                return _exec
-
-                            td = ToolDefinition(
-                                name=mcp_tool.schema.name,
-                                description=(
-                                    mcp_tool.schema.description
-                                    or f"MCP tool: {mcp_tool.schema.name}"
-                                ),
-                                parameters=(
-                                    mcp_tool.schema.input_schema
-                                    or {
-                                        "type": "object",
-                                        "properties": {},
-                                    }
-                                ),
-                                execute=await _make_mcp_exec(client, mcp_tool.schema.name),
-                            )
-                            self._skill_mcp_tools.append(td)
-                        if self._skill_mcp_tools:
-                            logger.info(
-                                "[ReActAgent] Activated %d MCP tool(s) for skill '%s': %s",
-                                len(self._skill_mcp_tools),
-                                matched_skill.name,
-                                [t.name for t in self._skill_mcp_tools],
-                            )
-                    except Exception:
-                        logger.exception(
-                            "[ReActAgent] Failed to activate MCP servers for skill '%s'",
-                            matched_skill.name,
-                        )
+            mcp_configs = parse_skill_mcp_configs_v2(mcp_servers_raw)
+            mcp_tool_names = await activate_skill_mcp_operation_tools_v2(
+                operation=operation,
+                catalog=operation_catalog,
+                manager=skill_mcp_manager,
+                skill_id=matched_skill.name,
+                configs=mcp_configs,
+            )
 
         # Phase 6: Mode/selection context setup
         effective_mode, selection_context = self._stream_resolve_mode(
@@ -1921,6 +1894,7 @@ class StreamMixin:
             conversation_context=conversation_context,
             allow_tools=runtime_profile.allow_tools,
             deny_tools=runtime_profile.deny_tools,
+            forced_operation_tool_names=mcp_tool_names,
         )
 
         # Phase 6b: Inject matched skill's declared tools into selection context
@@ -1933,7 +1907,30 @@ class StreamMixin:
                 f"injecting into selection context for pipeline pinning"
             )
 
-        # Phase 6c: Resolve and finalize one immutable model-visible ToolSet.
+        # Phase 6c: Contribute turn-bound SubAgent closures before the one
+        # selection pass so prompt, processor, traces, and telemetry share them.
+        subagent_definitions = self._stream_inject_subagent_tools(
+            tools_to_use=[],
+            available_subagents=available_subagents,
+            conversation_context=conversation_context,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            abort_signal=abort_signal,
+            workspace_root_task=workspace_root_task,
+            leader_agent_id=selected_agent.id,
+            actor_user_id=user_id,
+            selected_agent=selected_agent,
+        )
+        if subagent_definitions:
+            await contribute_operation_tool_definitions_v2(
+                operation=operation,
+                catalog=operation_catalog,
+                source_id=OPERATION_SUBAGENT_TOOL_SOURCE_V2,
+                definitions=subagent_definitions,
+            )
+
+        # Phase 6d: Resolve and finalize one immutable model-visible ToolSet.
         # Every consumer below receives this exact value; no consumer may
         # independently refresh native/static tools during the turn.
         from src.infrastructure.agent.workspace.runtime_role_contract import (
@@ -1941,7 +1938,11 @@ class StreamMixin:
         )
 
         workspace_conversation_flag = _is_workspace_conversation(workspace_runtime_payload)
-        turn_tool_set = _resolve_current_tools_from_runtime_v2(self, selection_context)
+        turn_tool_set = _resolve_current_tools_from_runtime_v2(
+            self,
+            selection_context,
+            operation_catalog=operation_catalog,
+        )
         turn_tool_set = _finalize_turn_tool_set_v2(
             turn_tool_set,
             is_forced=is_forced,
@@ -1950,9 +1951,10 @@ class StreamMixin:
             is_workspace_conversation=workspace_conversation_flag,
             allow_tools=runtime_profile.allow_tools,
             deny_tools=runtime_profile.deny_tools,
+            forced_operation_tool_names=mcp_tool_names,
         )
 
-        # Phase 6d: Operational resource sync derives its sandbox identity
+        # Phase 6e: Operational resource sync derives its sandbox identity
         # from the same pinned ToolSet used by model-visible consumers.
         if should_inject_prompt and matched_skill:
             await self._stream_sync_skill_resources(
@@ -2040,41 +2042,6 @@ class StreamMixin:
         ):
             yield event
         tools_to_use = list(turn_tool_set.definitions)
-        tools_to_use = filter_non_workspace_conversation_tools(
-            tools_to_use,
-            is_workspace_conversation=workspace_conversation_flag,
-        )
-
-        # Phase 10b: Inject skill-embedded MCP tools
-        if self._skill_mcp_tools:
-            existing_names = {t.name for t in tools_to_use}
-            for mcp_td in self._skill_mcp_tools:
-                if mcp_td.name not in existing_names:
-                    tools_to_use.append(mcp_td)
-            logger.info(
-                "[ReActAgent] Injected %d skill MCP tool(s) into tool set",
-                len(self._skill_mcp_tools),
-            )
-
-        # Phase 11: SubAgent-as-Tool injection
-        tools_to_use = self._stream_inject_subagent_tools(
-            tools_to_use=tools_to_use,
-            available_subagents=available_subagents,
-            conversation_context=conversation_context,
-            project_id=project_id,
-            tenant_id=tenant_id,
-            conversation_id=conversation_id,
-            abort_signal=abort_signal,
-            workspace_root_task=workspace_root_task,
-            leader_agent_id=selected_agent.id,
-            actor_user_id=user_id,
-            selected_agent=selected_agent,
-        )
-        tools_to_use = self._filter_tools_by_name_policy(
-            tools_to_use,
-            allow_tools=runtime_profile.allow_tools,
-            deny_tools=runtime_profile.deny_tools,
-        )
 
         # Phase 12: Processor creation
         config = self._stream_create_processor_config(
@@ -2173,7 +2140,8 @@ class StreamMixin:
         # Pass forced skill context to processor for loop reinforcement (Fix 4)
         if is_forced and matched_skill:
             config.forced_skill_name = matched_skill.name
-            config.forced_skill_tools = list(matched_skill.tools) if matched_skill.tools else None
+            forced_skill_tools = tuple(dict.fromkeys((*matched_skill.tools, *mcp_tool_names)))
+            config.forced_skill_tools = list(forced_skill_tools) if forced_skill_tools else None
 
         # Rebuild model-specific reasoning options after an explicit route change.
         route_changed = previous_model_route != effective_model_route
@@ -2326,17 +2294,6 @@ class StreamMixin:
         execution_time_ms = int((end_time - start_time) * 1000)
         logger.debug(f"[ReActAgent] Stream finished in {execution_time_ms}ms")
         self._stream_record_skill_usage(matched_skill, self._stream_success)
-
-        # Cleanup: Deactivate skill MCP servers
-        if matched_skill and self._skill_mcp_manager.active_skills:
-            try:
-                await self._skill_mcp_manager.deactivate_skill(matched_skill.name)
-            except Exception:
-                logger.exception(
-                    "[ReActAgent] Failed to deactivate MCP servers for skill '%s'",
-                    matched_skill.name,
-                )
-        self._skill_mcp_tools = []
 
     async def astream_multi_level(
         self: _StreamAgent,

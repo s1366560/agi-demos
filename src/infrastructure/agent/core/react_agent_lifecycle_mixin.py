@@ -70,8 +70,6 @@ class _LifecycleAgent(Protocol):
     _stream_execution_summary: dict[str, Any] | None
     _stream_success: Any
     _filesystem_skills_loaded: Any
-    _skill_mcp_manager: Any
-    _skill_mcp_tools: Any
     _enable_subagent_as_tool: Any
     _max_subagent_delegation_depth: Any
     _max_subagent_active_runs: Any
@@ -211,12 +209,6 @@ class LifecycleMixin:
         self.skill_fallback_on_error = skill_fallback_on_error
         self.skill_execution_timeout = skill_execution_timeout
         self._filesystem_skills_loaded = False
-
-        # Skill-embedded MCP manager (lazy import to avoid circular deps)
-        from ..mcp.skill_mcp_manager import SkillMCPManager
-
-        self._skill_mcp_manager = SkillMCPManager()
-        self._skill_mcp_tools: list[ToolDefinition] = []
 
     async def _load_filesystem_skills(
         self: _LifecycleAgent,

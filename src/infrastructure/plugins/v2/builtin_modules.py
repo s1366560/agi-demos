@@ -46,6 +46,7 @@ from .agent_runtime_utility_tools import (
 from .agent_sandbox_mcp_tools import (
     builtin_agent_sandbox_mcp_tool_contribution_definition_v2,
 )
+from .agent_skill_mcp_service import builtin_skill_mcp_manager_definition_v2
 from .agent_system_api_tool import builtin_agent_system_api_tool_contribution_definition_v2
 from .agent_task_session_tools import (
     builtin_agent_task_session_tool_contribution_definitions_v2,
@@ -433,6 +434,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_agent_loop_definition_v2(),
         builtin_system_prompt_definition_v2(),
         builtin_tool_set_definition_v2(),
+        builtin_skill_mcp_manager_definition_v2(),
         builtin_agent_hitl_tool_contribution_definition_v2(),
         builtin_agent_memory_tool_contribution_definition_v2(),
         builtin_agent_model_awareness_tool_contribution_definition_v2(),

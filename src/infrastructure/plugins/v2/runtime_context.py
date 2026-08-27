@@ -112,8 +112,16 @@ class _EffectStack:
         raise RuntimeV2Error("invalid_effect", f"{label} returned an unsupported effect")
 
     async def dispose(self) -> None:
+        pending_base_error: BaseException | None = None
         for record in reversed(self._records):
-            await record.dispose()
+            try:
+                await record.dispose()
+            except BaseException as exc:
+                record.error = f"{type(exc).__name__}: {exc}"
+                if pending_base_error is None:
+                    pending_base_error = exc
+        if pending_base_error is not None:
+            raise pending_base_error
 
     def diagnostics(self) -> tuple[EffectDiagnosticV2, ...]:
         return tuple(

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.domain.model.agent.subagent import SubAgent
+from src.infrastructure.agent.mcp.skill_mcp_manager import SkillMCPManager
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.processor import ToolDefinition
@@ -18,10 +19,17 @@ from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AgentRuntimeDispatchResultV2,
     PinnedAgentRuntimeDispatcherV2,
 )
+from src.infrastructure.plugins.v2.agent_skill_mcp_service import (
+    SKILL_MCP_MANAGER_SERVICE_V2,
+)
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
 )
-from src.infrastructure.plugins.v2.tool_set import ToolSetV2
+from src.infrastructure.plugins.v2.tool_set import (
+    OPERATION_TOOL_SET_CATALOG_SERVICE_V2,
+    ToolSetCatalogV2,
+    ToolSetV2,
+)
 
 
 def _turn_tool_set(*names: str) -> ToolSetV2:
@@ -95,13 +103,29 @@ def _make_operation_context(dispatcher):
         spawn_manager=MagicMock(),
         message_bus=MagicMock(),
     )
+    operation_catalog = ToolSetCatalogV2()
+    skill_mcp_manager = SkillMCPManager()
 
     def _require(service_key: str):
         if service_key == AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2:
             return orchestrator
+        if service_key == OPERATION_TOOL_SET_CATALOG_SERVICE_V2:
+            return operation_catalog
+        if service_key == SKILL_MCP_MANAGER_SERVICE_V2:
+            return skill_mcp_manager
         return dispatcher
 
-    return SimpleNamespace(require=_require)
+    async def _effect(setup, *, label: str):
+        del label
+        result = setup()
+        if hasattr(result, "__await__"):
+            await result
+
+    return SimpleNamespace(
+        operation_id="test-turn",
+        require=_require,
+        effect=_effect,
+    )
 
 
 @pytest.mark.unit

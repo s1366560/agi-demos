@@ -9,9 +9,13 @@ from unittest.mock import patch
 import pytest
 
 from src.application.services.agent.tool_discovery import ToolDiscoveryService
+from src.domain.model.agent.skill import Skill
 from src.infrastructure.agent.core.react_agent_composition_mixin import CompositionMixin
 from src.infrastructure.agent.core.react_agent_prompt_mixin import PromptMixin
-from src.infrastructure.agent.core.react_agent_stream_mixin import StreamMixin
+from src.infrastructure.agent.core.react_agent_stream_mixin import (
+    StreamMixin,
+    _finalize_turn_tool_set_v2,
+)
 from src.infrastructure.agent.plugins.selection_pipeline import (
     ToolSelectionContext,
     ToolSelectionTraceStep,
@@ -68,10 +72,25 @@ def _turn_tool_set() -> ToolSetV2:
     )
 
 
+def _named_tool_set(*names: str) -> ToolSetV2:
+    tools = {name: object() for name in names}
+    definitions = tuple(
+        ToolDefinition(
+            name=name,
+            description=name,
+            parameters={"type": "object", "properties": {}},
+            execute=_execute_tool,
+        )
+        for name in names
+    )
+    return ToolSetV2(tools=MappingProxyType(tools), definitions=definitions)
+
+
 @pytest.mark.unit
 def test_stream_is_the_only_turn_tool_set_resolution_site() -> None:
     stream_source = getsource(StreamMixin.stream)
     assert stream_source.count("_resolve_current_tools_from_runtime_v2(") == 1
+    assert "from src.infrastructure.plugins.v2.runtime import RuntimeV2Error" not in stream_source
 
     for consumer in (
         PromptMixin._build_system_prompt,
@@ -84,6 +103,62 @@ def test_stream_is_the_only_turn_tool_set_resolution_site() -> None:
         source = getsource(consumer)
         assert "_get_current_tools(" not in source
         assert "_resolve_current_tools_from_runtime_v2(" not in source
+
+
+@pytest.mark.unit
+def test_operation_tool_contributions_are_registered_before_turn_resolution() -> None:
+    stream_source = getsource(StreamMixin.stream)
+    resolve_offset = stream_source.index("_resolve_current_tools_from_runtime_v2(")
+    finalize_offset = stream_source.index("turn_tool_set = _finalize_turn_tool_set_v2(")
+    resource_sync_offset = stream_source.index("# Phase 6e:")
+
+    assert stream_source.index("activate_skill_mcp_operation_tools_v2(") < resolve_offset
+    assert stream_source.index("contribute_operation_tool_definitions_v2(") < resolve_offset
+    assert (
+        "forced_operation_tool_names=mcp_tool_names"
+        in stream_source[finalize_offset:resource_sync_offset]
+    )
+    assert "_skill_mcp_tools" not in stream_source
+    assert "_stream_inject_subagent_tools(" not in stream_source[resolve_offset:]
+
+
+@pytest.mark.unit
+def test_turn_policy_filters_dynamic_contributions_with_the_base_tool_set() -> None:
+    tool_set = _named_tool_set(
+        "base_tool",
+        "mcp_echo",
+        "delegate_to_subagent",
+        "denied_dynamic",
+    )
+    matched_skill = Skill.create(
+        tenant_id="tenant-a",
+        name="mcp-skill",
+        description="Use the turn MCP tool",
+        tools=["base_tool"],
+    )
+
+    forced = _finalize_turn_tool_set_v2(
+        tool_set,
+        is_forced=True,
+        matched_skill=matched_skill,
+        workspace_root_task=None,
+        is_workspace_conversation=False,
+        allow_tools=("mcp_echo", "delegate_to_subagent"),
+        deny_tools=("delegate_to_subagent",),
+        forced_operation_tool_names=("mcp_echo",),
+    )
+    ordinary = _finalize_turn_tool_set_v2(
+        tool_set,
+        is_forced=False,
+        matched_skill=None,
+        workspace_root_task=None,
+        is_workspace_conversation=False,
+        allow_tools=("base_tool", "mcp_echo", "delegate_to_subagent"),
+        deny_tools=("delegate_to_subagent",),
+    )
+
+    assert tuple(forced.tools) == ("mcp_echo",)
+    assert tuple(ordinary.tools) == ("base_tool", "mcp_echo")
 
 
 @pytest.mark.unit

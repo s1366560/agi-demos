@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
 from typing import Any
@@ -788,3 +789,35 @@ async def test_operation_context_disposes_temporary_effects_in_lifo_order() -> N
     assert operation.descriptor.profile_id == "runtime-v2-tests"
     assert operation.descriptor.generation == 4
     assert operation.descriptor.digest == generation.digest
+
+
+@pytest.mark.unit
+async def test_operation_context_continues_lifo_cleanup_and_preserves_cancellation() -> None:
+    entry = _entry("root", "builtin://runtime/root")
+    snapshot = _snapshot(5, (entry,))
+    generation = await _loader(
+        snapshot,
+        [_definition(snapshot, entry.module_ref, lambda _context, _config: None)],
+    ).stage(snapshot)
+    disposed: list[str] = []
+    operation = OperationContextV2(
+        generation=generation,
+        operation_id="cancelled-cleanup",
+        scope=_scope(ScopeKindV2.ROOT),
+    )
+
+    async def cancelled_disposer() -> None:
+        disposed.append("cancelled")
+        raise asyncio.CancelledError
+
+    await operation.__aenter__()
+    try:
+        await operation.effect(lambda: lambda: disposed.append("first"), label="first")
+        await operation.effect(lambda: cancelled_disposer, label="cancelled")
+        await operation.effect(lambda: lambda: disposed.append("last"), label="last")
+
+        with pytest.raises(asyncio.CancelledError):
+            await operation.dispose()
+        assert disposed == ["last", "cancelled", "first"]
+    finally:
+        await operation.dispose()

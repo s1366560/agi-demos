@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -247,6 +248,50 @@ class TestActivation:
         mock.connect.assert_awaited_once()
         assert manager.get_server_refcount("fetch-server") == 2
 
+    async def test_activate_rejects_conflicting_shared_server_configuration(
+        self,
+        manager: SkillMCPManager,
+        fetch_config: SkillMCPConfig,
+    ) -> None:
+        conflicting_config = _make_config(
+            server_name="fetch-server",
+            command="different-command",
+            args=["--different"],
+        )
+        manager.register_skill_mcps("skill-a", [fetch_config])
+        manager.register_skill_mcps("skill-b", [conflicting_config])
+        client = _mock_client()
+
+        with patch.object(manager, "_create_client", return_value=client):
+            await manager.activate_skill("skill-a")
+            with pytest.raises(RuntimeError, match="different configuration"):
+                await manager.activate_skill("skill-b")
+
+        client.connect.assert_awaited_once()
+        assert manager.active_skills == frozenset({"skill-a"})
+        assert manager.get_server_refcount("fetch-server") == 1
+
+    async def test_activate_tool_discovery_failure_releases_client_and_propagates(
+        self,
+        manager: SkillMCPManager,
+        fetch_config: SkillMCPConfig,
+    ) -> None:
+        manager.register_skill_mcps("skill-a", [fetch_config])
+        client = _mock_client()
+        client.list_tools = AsyncMock(side_effect=RuntimeError("discovery failed"))
+
+        with (
+            patch.object(manager, "_create_client", return_value=client),
+            pytest.raises(RuntimeError, match="discovery failed"),
+        ):
+            await manager.activate_skill("skill-a")
+
+        client.disconnect.assert_awaited_once()
+        assert manager.active_skills == frozenset()
+        assert manager.active_servers == frozenset()
+        assert manager.get_server_refcount("fetch-server") == 0
+        assert "fetch-server" not in manager._server_tools
+
     async def test_activate_rollback_on_failure(self, manager: SkillMCPManager) -> None:
         """If a server fails to start, previous servers' refcounts roll back."""
         good_config = _make_config(server_name="good-server")
@@ -274,8 +319,64 @@ class TestActivation:
             await manager.activate_skill("skill-a")
 
         assert "skill-a" not in manager.active_skills
-        # good-server refcount should be rolled back to 0
+        good_client.disconnect.assert_awaited_once()
         assert manager.get_server_refcount("good-server") == 0
+        assert "good-server" not in manager.active_servers
+
+    async def test_activate_cancellation_during_tool_discovery_releases_client(
+        self,
+        manager: SkillMCPManager,
+        fetch_config: SkillMCPConfig,
+    ) -> None:
+        manager.register_skill_mcps("skill-a", [fetch_config])
+        client = _mock_client()
+        client.list_tools = AsyncMock(side_effect=asyncio.CancelledError())
+
+        with (
+            patch.object(manager, "_create_client", return_value=client),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await manager.activate_skill("skill-a")
+
+        client.disconnect.assert_awaited_once()
+        assert manager.active_skills == frozenset()
+        assert manager.active_servers == frozenset()
+        assert manager.get_server_refcount("fetch-server") == 0
+
+    async def test_activate_cancellation_rolls_back_prior_server_in_reverse_order(
+        self,
+        manager: SkillMCPManager,
+    ) -> None:
+        first_config = _make_config(server_name="first-server")
+        second_config = _make_config(server_name="second-server")
+        manager.register_skill_mcps("skill-a", [first_config, second_config])
+        first_client = _mock_client()
+        second_client = _mock_client()
+        second_client.connect = AsyncMock(side_effect=asyncio.CancelledError())
+        disconnect_order: list[str] = []
+
+        async def disconnect_first() -> None:
+            disconnect_order.append("first-server")
+
+        async def disconnect_second() -> None:
+            disconnect_order.append("second-server")
+
+        first_client.disconnect = AsyncMock(side_effect=disconnect_first)
+        second_client.disconnect = AsyncMock(side_effect=disconnect_second)
+        clients = iter((first_client, second_client))
+
+        with (
+            patch.object(manager, "_create_client", side_effect=lambda _config: next(clients)),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await manager.activate_skill("skill-a")
+
+        first_client.disconnect.assert_awaited_once()
+        second_client.disconnect.assert_awaited_once()
+        assert disconnect_order == ["second-server", "first-server"]
+        assert manager.active_servers == frozenset()
+        assert manager.get_server_refcount("first-server") == 0
+        assert manager.get_server_refcount("second-server") == 0
 
     async def test_activate_multiple_servers(
         self,
@@ -363,6 +464,43 @@ class TestDeactivation:
         await manager.activate_skill("skill-a")
         await manager.deactivate_skill("skill-a")
         assert "skill-a" not in manager.active_skills
+
+    async def test_deactivate_cancellation_cleans_all_servers_in_reverse_order(
+        self,
+        manager: SkillMCPManager,
+    ) -> None:
+        first_config = _make_config(server_name="first-server")
+        second_config = _make_config(server_name="second-server")
+        manager.register_skill_mcps("skill-a", [first_config, second_config])
+        first_client = _mock_client()
+        second_client = _mock_client()
+        disconnect_order: list[str] = []
+
+        async def disconnect_first() -> None:
+            disconnect_order.append("first-server")
+
+        async def cancel_second() -> None:
+            disconnect_order.append("second-server")
+            raise asyncio.CancelledError
+
+        first_client.disconnect = AsyncMock(side_effect=disconnect_first)
+        second_client.disconnect = AsyncMock(side_effect=cancel_second)
+        clients = iter((first_client, second_client))
+        with patch.object(
+            manager,
+            "_create_client",
+            side_effect=lambda _config: next(clients),
+        ):
+            await manager.activate_skill("skill-a")
+
+        with pytest.raises(asyncio.CancelledError):
+            await manager.deactivate_skill("skill-a")
+
+        assert disconnect_order == ["second-server", "first-server"]
+        assert manager.active_skills == frozenset()
+        assert manager.active_servers == frozenset()
+        assert manager.get_server_refcount("first-server") == 0
+        assert manager.get_server_refcount("second-server") == 0
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +619,27 @@ class TestHealthCheck:
         assert result is False
         assert "fetch-server" not in manager.active_servers
 
+    async def test_restart_discovery_failure_disconnects_new_client(
+        self,
+        manager: SkillMCPManager,
+        fetch_config: SkillMCPConfig,
+    ) -> None:
+        old_client = _mock_client()
+        manager.register_skill_mcps("skill-a", [fetch_config])
+        with patch.object(manager, "_create_client", return_value=old_client):
+            await manager.activate_skill("skill-a")
+
+        new_client = _mock_client()
+        new_client.list_tools = AsyncMock(side_effect=RuntimeError("discovery failed"))
+        with patch.object(manager, "_create_client", return_value=new_client):
+            result = await manager.restart_server("fetch-server")
+
+        assert result is False
+        old_client.disconnect.assert_awaited_once()
+        new_client.disconnect.assert_awaited_once()
+        assert "fetch-server" not in manager.active_servers
+        assert "fetch-server" not in manager._active_server_configs
+
 
 # ---------------------------------------------------------------------------
 # Shutdown tests
@@ -568,11 +727,12 @@ class TestInternalHelpers:
         # Should not raise
         await manager._safe_disconnect(mock)
 
-    async def test_cache_server_tools_handles_error(self, manager: SkillMCPManager) -> None:
+    async def test_cache_server_tools_propagates_error(self, manager: SkillMCPManager) -> None:
         mock = _mock_client()
         mock.list_tools = AsyncMock(side_effect=RuntimeError("no tools"))
-        await manager._cache_server_tools("test-server", mock)
-        assert manager._server_tools["test-server"] == []
+        with pytest.raises(RuntimeError, match="no tools"):
+            await manager._cache_server_tools("test-server", mock)
+        assert "test-server" not in manager._server_tools
 
     def test_get_server_refcount_default(self, manager: SkillMCPManager) -> None:
         assert manager.get_server_refcount("nonexistent") == 0

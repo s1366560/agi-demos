@@ -10,6 +10,7 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from .runtime import (
     ContextV2,
+    OperationContextV2,
     PluginDefinitionV2,
     RuntimeV2Error,
     generated_contract_digest_v2,
@@ -18,6 +19,7 @@ from .runtime import (
 TOOL_SET_MODULE_V2 = "builtin://memstack/agent/tool-set"
 TOOL_SET_CATALOG_SERVICE_V2 = "service:tool-set-catalog"
 TOOL_SET_RESOLVER_SERVICE_V2 = "service:tool-set-resolver"
+OPERATION_TOOL_SET_CATALOG_SERVICE_V2 = "service:operation.tool-set-contributions"
 
 type ToolContributionDisposerV2 = Callable[[], None | Awaitable[None]]
 type ToolContributionV2 = Callable[..., object]
@@ -41,8 +43,8 @@ class ToolSetV2:
 
 
 @runtime_checkable
-class ToolSetCatalogProtocolV2(Protocol):
-    """Mutable ordered contribution catalog owned by one staged generation."""
+class ToolSetContributionCatalogProtocolV2(Protocol):
+    """Ordered contribution catalog owned by one generation or operation."""
 
     def register_tools(
         self,
@@ -50,11 +52,19 @@ class ToolSetCatalogProtocolV2(Protocol):
         contribution: ToolContributionV2,
     ) -> ToolContributionDisposerV2: ...
 
+    def contributions(self) -> tuple[tuple[str, ToolContributionV2], ...]: ...
+
+
+@runtime_checkable
+class ToolSetCatalogProtocolV2(ToolSetContributionCatalogProtocolV2, Protocol):
+    """Generation catalog that merges an optional operation overlay."""
+
     def resolve(
         self,
         *,
         agent: object,
         selection_context: object | None,
+        operation_catalog: ToolSetContributionCatalogProtocolV2 | None = None,
     ) -> ToolSetV2: ...
 
 
@@ -89,16 +99,38 @@ class ToolSetCatalogV2:
 
         return dispose
 
+    def contributions(self) -> tuple[tuple[str, ToolContributionV2], ...]:
+        """Snapshot ordered sources without exposing the mutable registry."""
+        return tuple(self._sources.items())
+
     def resolve(
         self,
         *,
         agent: object,
         selection_context: object | None,
+        operation_catalog: ToolSetContributionCatalogProtocolV2 | None = None,
     ) -> ToolSetV2:
         resolved_tools: dict[str, Any] = {}
         definitions: list[Any] = []
         source_by_name: dict[str, str] = {}
-        for source_id, contribution in self._sources.items():
+        source_ids: set[str] = set()
+        catalogs: tuple[ToolSetContributionCatalogProtocolV2, ...] = (
+            (self,)
+            if operation_catalog is None
+            else (
+                self,
+                operation_catalog,
+            )
+        )
+        for source_id, contribution in (
+            item for catalog in catalogs for item in catalog.contributions()
+        ):
+            if source_id in source_ids:
+                raise RuntimeV2Error(
+                    "tool_contribution_source_conflict",
+                    f"tool source {source_id} exists in generation and operation catalogs",
+                )
+            source_ids.add(source_id)
             raw_result: object = contribution(
                 agent=agent,
                 selection_context=selection_context,
@@ -166,6 +198,7 @@ class ToolSetResolverProtocolV2(Protocol):
         *,
         agent: object,
         selection_context: object | None,
+        operation_catalog: ToolSetContributionCatalogProtocolV2 | None = None,
     ) -> ToolSetV2: ...
 
 
@@ -181,8 +214,41 @@ class ToolSetResolverV2:
         *,
         agent: object,
         selection_context: object | None,
+        operation_catalog: ToolSetContributionCatalogProtocolV2 | None = None,
     ) -> ToolSetV2:
-        return self.catalog.resolve(agent=agent, selection_context=selection_context)
+        return self.catalog.resolve(
+            agent=agent,
+            selection_context=selection_context,
+            operation_catalog=operation_catalog,
+        )
+
+
+def bind_operation_tool_set_catalog_v2(
+    operation: OperationContextV2 | None = None,
+) -> ToolSetContributionCatalogProtocolV2:
+    """Bind one disposable contribution catalog to the current operation."""
+    if operation is None:
+        from .boundary import current_operation_context_v2
+
+        operation = current_operation_context_v2()
+    try:
+        existing = operation.require(OPERATION_TOOL_SET_CATALOG_SERVICE_V2)
+    except RuntimeV2Error as exc:
+        if exc.code != "missing_service":
+            raise
+        catalog = ToolSetCatalogV2()
+        _ = operation.provide(
+            OPERATION_TOOL_SET_CATALOG_SERVICE_V2,
+            catalog,
+            label="operation-tool-set-catalog",
+        )
+        return catalog
+    if not isinstance(existing, ToolSetContributionCatalogProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_operation_tool_set_catalog",
+            "operation tool contribution catalog has an invalid implementation",
+        )
+    return existing
 
 
 def _apply_tool_set_resolver_v2(
@@ -291,14 +357,17 @@ def builtin_tool_set_definition_v2() -> PluginDefinitionV2:
 
 
 __all__ = [
+    "OPERATION_TOOL_SET_CATALOG_SERVICE_V2",
     "TOOL_SET_CATALOG_SERVICE_V2",
     "TOOL_SET_MODULE_V2",
     "TOOL_SET_RESOLVER_SERVICE_V2",
     "ToolSetCatalogProtocolV2",
     "ToolSetCatalogV2",
+    "ToolSetContributionCatalogProtocolV2",
     "ToolSetResolverProtocolV2",
     "ToolSetResolverV2",
     "ToolSetV2",
+    "bind_operation_tool_set_catalog_v2",
     "builtin_tool_set_definition_v2",
     "restrict_tool_set_v2",
 ]

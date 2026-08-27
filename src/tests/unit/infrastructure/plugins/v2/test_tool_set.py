@@ -95,15 +95,16 @@ class _ToolAgent:
 
 class _AlternativeToolSetResolver:
     def __init__(self) -> None:
-        self.calls: list[tuple[object, object]] = []
+        self.calls: list[tuple[object, object, object]] = []
 
     def resolve(
         self,
         *,
         agent: object,
         selection_context: object,
+        operation_catalog: object,
     ) -> ToolSetV2:
-        self.calls.append((agent, selection_context))
+        self.calls.append((agent, selection_context, operation_catalog))
         definition = SimpleNamespace(name="alternative", description="Alternative tool")
         return ToolSetV2(
             tools=MappingProxyType({"alternative": object()}),
@@ -133,7 +134,11 @@ def test_tool_set_requires_pinned_v2_operation_without_native_fallback() -> None
     selection = ToolSelectionContext(tenant_id="tenant-a", project_id="project-a")
 
     with pytest.raises(RuntimeV2Error) as error:
-        _resolve_current_tools_from_runtime_v2(agent, selection)
+        _resolve_current_tools_from_runtime_v2(
+            agent,
+            selection,
+            operation_catalog=ToolSetCatalogV2(),
+        )
 
     assert error.value.code == "operation_context_not_pinned"
     assert agent.contexts == []
@@ -156,7 +161,11 @@ def test_tool_set_propagates_missing_v2_service_without_native_fallback() -> Non
         ),
         pytest.raises(RuntimeV2Error) as error,
     ):
-        _resolve_current_tools_from_runtime_v2(agent, selection)
+        _resolve_current_tools_from_runtime_v2(
+            agent,
+            selection,
+            operation_catalog=ToolSetCatalogV2(),
+        )
 
     assert error.value.code == "missing_service"
     operation.require.assert_called_once_with(TOOL_SET_RESOLVER_SERVICE_V2)
@@ -170,16 +179,21 @@ def test_tool_set_accepts_structural_non_builtin_provider() -> None:
     provider = _AlternativeToolSetResolver()
     operation = Mock()
     operation.require.return_value = provider
+    operation_catalog = ToolSetCatalogV2()
 
     with patch(
         "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
         return_value=operation,
     ):
-        tool_set = _resolve_current_tools_from_runtime_v2(agent, selection)
+        tool_set = _resolve_current_tools_from_runtime_v2(
+            agent,
+            selection,
+            operation_catalog=operation_catalog,
+        )
 
     assert set(tool_set.tools) == {"alternative"}
     assert len(tool_set.definitions) == 1
-    assert provider.calls == [(agent, selection)]
+    assert provider.calls == [(agent, selection, operation_catalog)]
     assert agent.contexts == []
 
 
@@ -319,7 +333,11 @@ async def test_runtime_consumer_resolves_tools_from_generation_provider() -> Non
                 operation.require(TOOL_SET_RESOLVER_SERVICE_V2),
                 ToolSetResolverV2,
             )
-            tool_set = _resolve_current_tools_from_runtime_v2(agent, selection)
+            tool_set = _resolve_current_tools_from_runtime_v2(
+                agent,
+                selection,
+                operation_catalog=ToolSetCatalogV2(),
+            )
     finally:
         await manager.close()
 
