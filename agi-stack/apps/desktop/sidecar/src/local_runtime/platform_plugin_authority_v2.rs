@@ -1,9 +1,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
 };
 
+use agistack_plugin_host::protocol_v2::ProfileSnapshotV2;
 use agistack_plugin_host::{
     project_snapshot_entries_v2, ControlPlaneDistributionV2, DataPlaneTargetV2,
     DesktopSidecarHttpRouteContributionV2, GenerationLeaseV2, GenerationManagerV2, ScopeKindV2,
@@ -22,7 +23,7 @@ const DESKTOP_SIDECAR_HOST_STRATEGY_V2: &str = "native-local-capability";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(super) struct ActivePlatformPluginGenerationDescriptorV2 {
-    pub(super) publication_version: u64,
+    pub(super) publication_version: Option<u64>,
     pub(super) profile_id: String,
     pub(super) generation: u64,
     pub(super) digest: String,
@@ -89,8 +90,12 @@ pub(super) struct ActivePlatformPluginGenerationV2 {
 }
 
 impl ActivePlatformPluginGenerationV2 {
+    #[cfg(test)]
     pub(super) fn from_distribution(distribution: &ControlPlaneDistributionV2) -> Self {
-        let snapshot = &distribution.snapshot;
+        Self::from_snapshot(&distribution.snapshot, Some(distribution.envelope.version))
+    }
+
+    fn from_snapshot(snapshot: &ProfileSnapshotV2, publication_version: Option<u64>) -> Self {
         let mut manifest_versions: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for manifest in &snapshot.manifests {
             manifest_versions
@@ -116,7 +121,7 @@ impl ActivePlatformPluginGenerationV2 {
                 .collect();
         Self {
             descriptor: ActivePlatformPluginGenerationDescriptorV2 {
-                publication_version: distribution.envelope.version,
+                publication_version,
                 profile_id: snapshot.profile_id.clone(),
                 generation: snapshot.generation,
                 digest: snapshot.digest.clone(),
@@ -168,7 +173,6 @@ impl ActivePlatformPluginGenerationV2 {
 
 struct PublishedPlatformPluginGenerationV2 {
     projection: Arc<ActivePlatformPluginGenerationV2>,
-    manager: Arc<GenerationManagerV2>,
 }
 
 #[derive(Debug)]
@@ -238,10 +242,20 @@ impl Drop for GenerationReleaseGuardV2 {
     }
 }
 
-#[derive(Default)]
 pub(super) struct PlatformPluginAuthorityV2 {
-    active_generation: Mutex<Option<Arc<PublishedPlatformPluginGenerationV2>>>,
+    active_generation: RwLock<Option<Arc<PublishedPlatformPluginGenerationV2>>>,
+    manager: Arc<GenerationManagerV2>,
     trusted_sessions: Mutex<Option<TrustedSessionBroker>>,
+}
+
+impl Default for PlatformPluginAuthorityV2 {
+    fn default() -> Self {
+        Self {
+            active_generation: RwLock::new(None),
+            manager: Arc::new(GenerationManagerV2::new()),
+            trusted_sessions: Mutex::new(None),
+        }
+    }
 }
 
 impl PlatformPluginAuthorityV2 {
@@ -253,41 +267,76 @@ impl PlatformPluginAuthorityV2 {
         lock(&self.trusted_sessions).clone()
     }
 
-    pub(super) fn publish(
+    pub(super) fn manager(&self) -> Arc<GenerationManagerV2> {
+        Arc::clone(&self.manager)
+    }
+
+    pub(super) async fn publish(
         &self,
         distribution: &ControlPlaneDistributionV2,
-        manager: Arc<GenerationManagerV2>,
+        generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     ) {
-        *lock(&self.active_generation) = Some(Arc::new(PublishedPlatformPluginGenerationV2 {
-            projection: Arc::new(ActivePlatformPluginGenerationV2::from_distribution(
-                distribution,
-            )),
-            manager,
-        }));
+        self.publish_snapshot(
+            &distribution.snapshot,
+            Some(distribution.envelope.version),
+            generation,
+        )
+        .await;
+    }
+
+    pub(super) async fn publish_local_baseline(
+        &self,
+        snapshot: &ProfileSnapshotV2,
+        generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
+    ) {
+        self.publish_snapshot(snapshot, None, generation).await;
+    }
+
+    async fn publish_snapshot(
+        &self,
+        snapshot: &ProfileSnapshotV2,
+        publication_version: Option<u64>,
+        generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
+    ) {
+        let retirement = {
+            let mut active_generation = write_lock(&self.active_generation);
+            let retirement = self.manager.replace_current(generation);
+            *active_generation = Some(Arc::new(PublishedPlatformPluginGenerationV2 {
+                projection: Arc::new(ActivePlatformPluginGenerationV2::from_snapshot(
+                    snapshot,
+                    publication_version,
+                )),
+            }));
+            retirement
+        };
+        retirement.dispose().await;
     }
 
     pub(super) fn clear(&self) {
-        lock(&self.active_generation).take();
+        write_lock(&self.active_generation).take();
     }
 
     pub(super) fn acquire_generation(
         &self,
     ) -> Result<ActivePlatformPluginGenerationLeaseV2, PlatformPluginGenerationAcquireV2Error> {
-        let published = lock(&self.active_generation).clone().ok_or(
-            PlatformPluginGenerationAcquireV2Error {
-                reason: PlatformPluginAvailabilityV2Error::GenerationUnavailable,
-                descriptor: None,
-            },
-        )?;
-        let descriptor = Some(published.projection.descriptor().clone());
-        let lease =
-            published
-                .manager
-                .acquire()
-                .map_err(|_| PlatformPluginGenerationAcquireV2Error {
+        let active_generation = read_lock(&self.active_generation);
+        let published =
+            active_generation
+                .as_ref()
+                .cloned()
+                .ok_or(PlatformPluginGenerationAcquireV2Error {
                     reason: PlatformPluginAvailabilityV2Error::GenerationUnavailable,
-                    descriptor: descriptor.clone(),
+                    descriptor: None,
                 })?;
+        let descriptor = Some(published.projection.descriptor().clone());
+        let lease = self
+            .manager
+            .acquire()
+            .map_err(|_| PlatformPluginGenerationAcquireV2Error {
+                reason: PlatformPluginAvailabilityV2Error::GenerationUnavailable,
+                descriptor: descriptor.clone(),
+            })?;
+        drop(active_generation);
         let http_routes =
             runtime_generation_matches_projection(&lease, published.projection.descriptor());
         let release_guard = spawn_release_owner(lease);
@@ -396,11 +445,21 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+fn read_lock<T>(lock: &RwLock<T>) -> std::sync::RwLockReadGuard<'_, T> {
+    lock.read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn write_lock<T>(lock: &RwLock<T>) -> std::sync::RwLockWriteGuard<'_, T> {
+    lock.write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[cfg(test)]
 mod tests {
     use agistack_plugin_host::{
         desktop_sidecar_host_definition_v2, desktop_sidecar_http_routes_definition_v2,
-        parse_control_plane_distribution_v2, ApplyStatusV2, ControlPlaneDistributionV2, LoaderV2,
+        parse_control_plane_distribution_v2, ControlPlaneDistributionV2, LoaderV2,
         PluginSnapshotReconcilerV2,
     };
     use serde_json::{json, Value};
@@ -472,19 +531,22 @@ mod tests {
     #[tokio::test]
     async fn authority_acquires_the_reconciler_generation_and_pins_it_after_clear() {
         let distribution = bootstrap_distribution();
-        let mut reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
-            DataPlaneTargetV2::DesktopSidecar,
-            [
-                desktop_sidecar_http_routes_definition_v2(),
-                desktop_sidecar_host_definition_v2(),
-            ],
-        ));
-        assert_eq!(
-            reconciler.apply(&distribution).await.status,
-            ApplyStatusV2::Ack
-        );
         let authority = PlatformPluginAuthorityV2::default();
-        authority.publish(&distribution, reconciler.manager());
+        let reconciler = PluginSnapshotReconcilerV2::new_with_manager(
+            LoaderV2::for_target(
+                DataPlaneTargetV2::DesktopSidecar,
+                [
+                    desktop_sidecar_http_routes_definition_v2(),
+                    desktop_sidecar_host_definition_v2(),
+                ],
+            ),
+            authority.manager(),
+        );
+        let generation = reconciler
+            .stage_snapshot(distribution.snapshot.clone())
+            .await
+            .expect("generation must stage");
+        authority.publish(&distribution, generation).await;
 
         let lease = authority
             .acquire_generation()
@@ -527,22 +589,25 @@ mod tests {
     #[tokio::test]
     async fn authority_rejects_a_projection_from_another_runtime_generation() {
         let distribution = bootstrap_distribution();
-        let mut reconciler = PluginSnapshotReconcilerV2::new(LoaderV2::for_target(
-            DataPlaneTargetV2::DesktopSidecar,
-            [
-                desktop_sidecar_http_routes_definition_v2(),
-                desktop_sidecar_host_definition_v2(),
-            ],
-        ));
-        assert_eq!(
-            reconciler.apply(&distribution).await.status,
-            ApplyStatusV2::Ack
+        let authority = PlatformPluginAuthorityV2::default();
+        let reconciler = PluginSnapshotReconcilerV2::new_with_manager(
+            LoaderV2::for_target(
+                DataPlaneTargetV2::DesktopSidecar,
+                [
+                    desktop_sidecar_http_routes_definition_v2(),
+                    desktop_sidecar_host_definition_v2(),
+                ],
+            ),
+            authority.manager(),
         );
+        let generation = reconciler
+            .stage_snapshot(distribution.snapshot.clone())
+            .await
+            .expect("generation must stage");
         let mut mismatched_projection = distribution.clone();
         mismatched_projection.snapshot.generation += 1;
         mismatched_projection.snapshot.digest = "sha256:mismatched-projection".to_owned();
-        let authority = PlatformPluginAuthorityV2::default();
-        authority.publish(&mismatched_projection, reconciler.manager());
+        authority.publish(&mismatched_projection, generation).await;
 
         let error = authority
             .acquire_generation()

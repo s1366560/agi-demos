@@ -8,7 +8,7 @@ use agistack_plugin_host::{
     parse_control_plane_distribution_v2, parse_profile_snapshot_v2, project_snapshot_entries_v2,
     ApplyStatusV2, ContextV2, DataPlaneTargetV2, GenerationManagerV2, LoaderV2, PluginDefinitionV2,
     PluginModuleRuntimeV2, PluginProtocolV2Error, PluginSnapshotReconcilerV2, RuntimeGenerationV2,
-    RuntimeV2Error,
+    RuntimeV2Error, SnapshotPreparationV2,
 };
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -1141,6 +1141,119 @@ fn reconciler_exposes_one_shared_generation_manager_handle() {
     let second = reconciler.manager();
 
     assert!(Arc::ptr_eq(&first, &second));
+}
+
+#[test]
+fn reconciler_baseline_does_not_consume_the_first_publication_version() {
+    block_on(async {
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");
+        let disposed = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let mut reconciler = PluginSnapshotReconcilerV2::new_with_baseline(
+            loader(
+                &snapshot,
+                7,
+                false,
+                Arc::clone(&disposed),
+                Arc::clone(&observed),
+            ),
+            snapshot.clone(),
+        )
+        .await
+        .expect("baseline generation must stage");
+        let baseline = reconciler
+            .manager()
+            .acquire()
+            .expect("baseline generation must publish");
+        assert_eq!(
+            baseline
+                .generation()
+                .expect("baseline generation must remain leased")
+                .snapshot
+                .digest,
+            snapshot.digest
+        );
+        baseline
+            .release()
+            .await
+            .expect("baseline lease must release");
+
+        let raw: Value = serde_json::from_str(SNAPSHOT).expect("fixture JSON must parse");
+        let publication = parse_control_plane_distribution_v2(&distribution(
+            raw,
+            1,
+            "first-publication-after-baseline",
+        ))
+        .expect("publication must parse");
+        let receipt = reconciler.apply(&publication).await;
+
+        assert_eq!(receipt.status, ApplyStatusV2::Ack);
+        assert_eq!(receipt.applied_version, Some(1));
+        assert_eq!(
+            receipt.applied_digest.as_deref(),
+            Some(publication.snapshot.digest.as_str())
+        );
+        assert_eq!(*lock(&observed), vec![7, 7]);
+        reconciler.close().await;
+    });
+}
+
+#[test]
+fn prepared_generation_is_invisible_until_commit_and_disposable_on_persistence_failure() {
+    block_on(async {
+        let snapshot = parse_profile_snapshot_v2(SNAPSHOT).expect("fixture must parse");
+        let raw: Value = serde_json::from_str(SNAPSHOT).expect("fixture JSON must parse");
+        let distribution =
+            parse_control_plane_distribution_v2(&distribution(raw, 1, "durable-before-visible"))
+                .expect("distribution must parse");
+        let disposed = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let mut reconciler = PluginSnapshotReconcilerV2::new(loader(
+            &snapshot,
+            7,
+            false,
+            Arc::clone(&disposed),
+            Arc::clone(&observed),
+        ));
+        let manager = reconciler.manager();
+
+        let prepared = match reconciler.prepare(&distribution).await {
+            SnapshotPreparationV2::Ready(prepared) => prepared,
+            SnapshotPreparationV2::Receipt(receipt) => {
+                panic!("candidate must prepare: {receipt:?}")
+            }
+        };
+        assert_eq!(prepared.receipt().status, ApplyStatusV2::Ack);
+        assert!(matches!(
+            manager.acquire(),
+            Err(RuntimeV2Error::GenerationUnavailable)
+        ));
+        prepared.discard().await;
+        assert_eq!(*lock(&disposed), vec!["module", "listener"]);
+        assert!(matches!(
+            manager.acquire(),
+            Err(RuntimeV2Error::GenerationUnavailable)
+        ));
+
+        let prepared = match reconciler.prepare(&distribution).await {
+            SnapshotPreparationV2::Ready(prepared) => prepared,
+            SnapshotPreparationV2::Receipt(receipt) => {
+                panic!("candidate must prepare again: {receipt:?}")
+            }
+        };
+        let receipt = prepared.commit().await;
+        assert_eq!(receipt.status, ApplyStatusV2::Ack);
+        let lease = manager
+            .acquire()
+            .expect("committed generation must publish");
+        lease.release().await.expect("lease must release");
+        reconciler.close().await;
+        assert_eq!(
+            *lock(&disposed),
+            vec!["module", "listener", "module", "listener"]
+        );
+        assert_eq!(*lock(&observed), vec![7, 7]);
+    });
 }
 
 #[test]

@@ -16,11 +16,11 @@ pub use distribution::{
 };
 pub use generated::*;
 pub use generated_catalog::{PLUGIN_MODULE_CATALOG_DIGEST_V2, PLUGIN_MODULE_CATALOG_V2_JSON};
-pub use reconciler::PluginSnapshotReconcilerV2;
+pub use reconciler::{PluginSnapshotReconcilerV2, PreparedSnapshotApplyV2, SnapshotPreparationV2};
 pub use runtime::{
     project_snapshot_entries_v2, ContextV2, FiberPhaseV2, FiberV2, GenerationLeaseV2,
-    GenerationManagerV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2, RuntimeGenerationV2,
-    RuntimeV2Error,
+    GenerationManagerV2, GenerationRetirementV2, LoaderV2, PluginDefinitionV2,
+    PluginModuleRuntimeV2, RuntimeGenerationV2, RuntimeV2Error,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};

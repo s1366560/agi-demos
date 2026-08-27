@@ -337,13 +337,14 @@ fn bootstrap_platform_plugin_distribution_v2() -> agistack_plugin_host::ControlP
 
 fn disposal_tracking_desktop_reconciler_v2(
     disposals: Arc<AtomicUsize>,
+    manager: Arc<agistack_plugin_host::GenerationManagerV2>,
 ) -> agistack_plugin_host::PluginSnapshotReconcilerV2 {
     let mut definition = agistack_plugin_host::desktop_sidecar_host_definition_v2();
     definition.module = Arc::new(DisposalTrackingPluginModuleV2 {
         delegate: Arc::clone(&definition.module),
         disposals,
     });
-    agistack_plugin_host::PluginSnapshotReconcilerV2::new(
+    agistack_plugin_host::PluginSnapshotReconcilerV2::new_with_manager(
         agistack_plugin_host::LoaderV2::for_target(
             agistack_plugin_host::DataPlaneTargetV2::DesktopSidecar,
             [
@@ -351,6 +352,7 @@ fn disposal_tracking_desktop_reconciler_v2(
                 definition,
             ],
         ),
+        manager,
     )
 }
 
@@ -1949,14 +1951,18 @@ async fn task_session_plugin_context_pins_generation_until_core_operation_finish
 
     let distribution = bootstrap_platform_plugin_distribution_v2();
     let disposals = Arc::new(AtomicUsize::new(0));
-    let mut reconciler = disposal_tracking_desktop_reconciler_v2(Arc::clone(&disposals));
-    assert_eq!(
-        reconciler.apply(&distribution).await.status,
-        agistack_plugin_host::ApplyStatusV2::Ack
+    let reconciler = disposal_tracking_desktop_reconciler_v2(
+        Arc::clone(&disposals),
+        state.platform_plugin_authority_v2.manager(),
     );
+    let generation = reconciler
+        .stage_snapshot(distribution.snapshot.clone())
+        .await
+        .expect("generation must stage");
     state
         .platform_plugin_authority_v2
-        .publish(&distribution, reconciler.manager());
+        .publish(&distribution, generation)
+        .await;
 
     let request = Request::builder()
         .method("POST")

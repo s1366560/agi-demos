@@ -129,8 +129,16 @@ pub(crate) async fn run() -> Result<(), String> {
     .await?;
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
     let trusted_sessions = TrustedSessionBroker::native(credential_vault);
-    let plugin_control_plane_v2 =
-        runtime.start_platform_plugin_control_plane_v2(trusted_sessions.clone());
+    let plugin_control_plane_v2 = match runtime
+        .start_platform_plugin_control_plane_v2(trusted_sessions.clone())
+        .await
+    {
+        Ok(reconciler) => reconciler,
+        Err(error) => {
+            runtime.shutdown().await;
+            return Err(error);
+        }
+    };
     let status = runtime.status();
     let workspace_core = match WorkspaceCoreSupervisor::start(
         initialize.workspace_core_binary_path,
@@ -142,6 +150,7 @@ pub(crate) async fn run() -> Result<(), String> {
     {
         Ok(supervisor) => supervisor,
         Err(error) => {
+            plugin_control_plane_v2.shutdown().await;
             runtime.shutdown().await;
             return Err(error);
         }

@@ -1,11 +1,61 @@
 //! Transactional protocol-v2 reconciliation for Rust data planes.
 
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
 use super::{
-    ApplyStatusV2, ControlPlaneDistributionV2, GenerationManagerV2, LoaderV2,
-    SnapshotApplyReceiptV2,
+    ApplyStatusV2, ControlPlaneDistributionV2, GenerationManagerV2, LoaderV2, ProfileSnapshotV2,
+    RuntimeGenerationV2, RuntimeV2Error, SnapshotApplyReceiptV2,
 };
+
+pub enum SnapshotPreparationV2<'a> {
+    Ready(PreparedSnapshotApplyV2<'a>),
+    Receipt(SnapshotApplyReceiptV2),
+}
+
+#[must_use]
+pub struct PreparedSnapshotApplyV2<'a> {
+    reconciler: &'a mut PluginSnapshotReconcilerV2,
+    distribution: &'a ControlPlaneDistributionV2,
+    generation: Arc<RuntimeGenerationV2>,
+}
+
+impl PreparedSnapshotApplyV2<'_> {
+    #[must_use]
+    pub fn receipt(&self) -> SnapshotApplyReceiptV2 {
+        SnapshotApplyReceiptV2 {
+            status: ApplyStatusV2::Ack,
+            requested_version: self.distribution.envelope.version,
+            requested_digest: self.distribution.snapshot.digest.clone(),
+            applied_version: Some(self.distribution.envelope.version),
+            applied_digest: Some(self.distribution.snapshot.digest.clone()),
+            error_code: None,
+            error_message: None,
+        }
+    }
+
+    pub async fn commit(self) -> SnapshotApplyReceiptV2 {
+        self.commit_with(|manager, generation| async move {
+            manager.publish(generation).await;
+        })
+        .await
+    }
+
+    pub async fn commit_with<F, Fut>(self, publish: F) -> SnapshotApplyReceiptV2
+    where
+        F: FnOnce(Arc<GenerationManagerV2>, Arc<RuntimeGenerationV2>) -> Fut,
+        Fut: Future<Output = ()>,
+    {
+        let receipt = self.receipt();
+        publish(self.reconciler.manager(), self.generation).await;
+        self.reconciler.applied_version = Some(self.distribution.envelope.version);
+        self.reconciler.applied_digest = Some(self.distribution.snapshot.digest.clone());
+        receipt
+    }
+
+    pub async fn discard(self) {
+        self.generation.dispose().await;
+    }
+}
 
 /// Stages complete target-specific generations and retains the last-good publication.
 pub struct PluginSnapshotReconcilerV2 {
@@ -19,12 +69,52 @@ impl PluginSnapshotReconcilerV2 {
     /// Create a reconciler for a loader whose target is fixed at construction.
     #[must_use]
     pub fn new(loader: LoaderV2) -> Self {
+        Self::new_with_manager(loader, Arc::new(GenerationManagerV2::new()))
+    }
+
+    /// Create a reconciler that shares an externally owned generation manager.
+    #[must_use]
+    pub fn new_with_manager(loader: LoaderV2, manager: Arc<GenerationManagerV2>) -> Self {
         Self {
             loader,
-            manager: Arc::new(GenerationManagerV2::new()),
+            manager,
             applied_version: None,
             applied_digest: None,
         }
+    }
+
+    /// Stage a local baseline without claiming a control-plane publication version.
+    ///
+    /// The first subsequent distribution is still compared against an empty publication history,
+    /// so a control plane may start at version one while the baseline remains available on NACK.
+    pub async fn new_with_baseline(
+        loader: LoaderV2,
+        baseline: ProfileSnapshotV2,
+    ) -> Result<Self, RuntimeV2Error> {
+        let reconciler = Self::new(loader);
+        let generation = reconciler.stage_snapshot(baseline).await?;
+        reconciler.manager.publish(generation).await;
+        Ok(reconciler)
+    }
+
+    /// Stage a complete snapshot without changing the published generation.
+    pub async fn stage_snapshot(
+        &self,
+        snapshot: ProfileSnapshotV2,
+    ) -> Result<Arc<RuntimeGenerationV2>, RuntimeV2Error> {
+        self.loader.stage(snapshot).await
+    }
+
+    /// Start a new authority epoch while retaining the shared manager and its current generation.
+    pub fn reset_publication_ordering(&mut self) {
+        self.applied_version = None;
+        self.applied_digest = None;
+    }
+
+    /// Adopt the durable last-good ordering for a newly selected authority.
+    pub fn restore_publication_ordering(&mut self, version: u64, digest: String) {
+        self.applied_version = Some(version);
+        self.applied_digest = Some(digest);
     }
 
     /// Return the shared generation manager used to lease the currently applied generation.
@@ -38,30 +128,48 @@ impl PluginSnapshotReconcilerV2 {
         &mut self,
         distribution: &ControlPlaneDistributionV2,
     ) -> SnapshotApplyReceiptV2 {
+        match self.prepare(distribution).await {
+            SnapshotPreparationV2::Ready(prepared) => prepared.commit().await,
+            SnapshotPreparationV2::Receipt(receipt) => receipt,
+        }
+    }
+
+    /// Validate ordering and stage a candidate without making it visible.
+    pub async fn prepare<'a>(
+        &'a mut self,
+        distribution: &'a ControlPlaneDistributionV2,
+    ) -> SnapshotPreparationV2<'a> {
         if let Some(applied_version) = self.applied_version {
             if distribution.envelope.version < applied_version {
-                return self.nack(distribution, "stale_version", "snapshot version is stale");
+                return SnapshotPreparationV2::Receipt(self.nack(
+                    distribution,
+                    "stale_version",
+                    "snapshot version is stale",
+                ));
             }
             if distribution.envelope.version == applied_version {
                 if self.applied_digest.as_deref() == Some(distribution.snapshot.digest.as_str()) {
-                    return self.ack(distribution);
+                    return SnapshotPreparationV2::Receipt(self.ack(distribution));
                 }
-                return self.nack(
+                return SnapshotPreparationV2::Receipt(self.nack(
                     distribution,
                     "version_conflict",
                     "snapshot version already belongs to another digest",
-                );
+                ));
             }
         }
 
         match self.loader.stage(distribution.snapshot.clone()).await {
-            Ok(generation) => {
-                self.manager.publish(generation).await;
-                self.applied_version = Some(distribution.envelope.version);
-                self.applied_digest = Some(distribution.snapshot.digest.clone());
-                self.ack(distribution)
-            }
-            Err(error) => self.nack(distribution, "generation_apply_failed", &error.to_string()),
+            Ok(generation) => SnapshotPreparationV2::Ready(PreparedSnapshotApplyV2 {
+                reconciler: self,
+                distribution,
+                generation,
+            }),
+            Err(error) => SnapshotPreparationV2::Receipt(self.nack(
+                distribution,
+                "generation_apply_failed",
+                &error.to_string(),
+            )),
         }
     }
 

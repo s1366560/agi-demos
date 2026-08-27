@@ -724,7 +724,7 @@ async fn composer_plugin_context_returns_the_pinned_runtime_generation() {
         .to_string(),
     )
     .expect("distribution must parse");
-    let mut reconciler = agistack_plugin_host::PluginSnapshotReconcilerV2::new(
+    let reconciler = agistack_plugin_host::PluginSnapshotReconcilerV2::new_with_manager(
         agistack_plugin_host::LoaderV2::for_target(
             agistack_plugin_host::DataPlaneTargetV2::DesktopSidecar,
             [
@@ -732,14 +732,16 @@ async fn composer_plugin_context_returns_the_pinned_runtime_generation() {
                 agistack_plugin_host::desktop_sidecar_host_definition_v2(),
             ],
         ),
+        state.platform_plugin_authority_v2.manager(),
     );
-    assert_eq!(
-        reconciler.apply(&distribution).await.status,
-        agistack_plugin_host::ApplyStatusV2::Ack
-    );
+    let generation = reconciler
+        .stage_snapshot(distribution.snapshot.clone())
+        .await
+        .expect("generation must stage");
     state
         .platform_plugin_authority_v2
-        .publish(&distribution, reconciler.manager());
+        .publish(&distribution, generation)
+        .await;
     let context = [ComposerContextItem {
         kind: ComposerContextKind::Plugin,
         resource_id: "memstack-native-target-hosts@2.0.0".to_string(),
@@ -752,7 +754,7 @@ async fn composer_plugin_context_returns_the_pinned_runtime_generation() {
             .expect("plugin context must be active")
             .expect("plugin context must retain a generation lease");
 
-    assert_eq!(lease.descriptor().publication_version, 77);
+    assert_eq!(lease.descriptor().publication_version, Some(77));
     assert_eq!(lease.descriptor().digest, distribution.snapshot.digest);
     drop(lease);
     reconciler.close().await;

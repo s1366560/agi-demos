@@ -403,10 +403,10 @@ impl LocalRuntimeService {
         }
     }
 
-    pub(crate) fn start_platform_plugin_control_plane_v2(
+    pub(crate) async fn start_platform_plugin_control_plane_v2(
         &self,
         trusted_sessions: crate::trusted_session::TrustedSessionBroker,
-    ) -> platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2 {
+    ) -> Result<platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2, String> {
         self.state
             .platform_plugin_authority_v2
             .install_trusted_sessions(trusted_sessions.clone());
@@ -414,6 +414,7 @@ impl LocalRuntimeService {
             Arc::clone(&self.state),
             trusted_sessions,
         )
+        .await
     }
 
     pub fn configure(&self, config: LocalRuntimeConfig) -> Result<LocalRuntimeStatus, String> {

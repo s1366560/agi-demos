@@ -2,10 +2,12 @@
 
 use std::{sync::Arc, time::Duration};
 
+use agistack_plugin_host::protocol_v2::ProfileSnapshotV2;
 use agistack_plugin_host::{
     desktop_sidecar_host_definition_v2, desktop_sidecar_http_routes_definition_v2,
-    parse_control_plane_distribution_v2, ControlPlaneDistributionV2, DataPlaneTargetV2, LoaderV2,
-    PluginSnapshotReconcilerV2, SnapshotApplyReceiptV2,
+    parse_control_plane_distribution_v2, parse_profile_snapshot_v2, ControlPlaneDistributionV2,
+    DataPlaneTargetV2, LoaderV2, PluginSnapshotReconcilerV2, SnapshotApplyReceiptV2,
+    SnapshotPreparationV2,
 };
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -29,11 +31,28 @@ const INITIAL_ERROR_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_ERROR_INTERVAL: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_DISTRIBUTION_BYTES: usize = 4 * 1024 * 1024;
+const LOCAL_BOOTSTRAP_PROFILE_V2: &str =
+    include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
 
 pub(super) struct CloudAuthorityV2 {
     pub(super) base_url: Url,
     pub(super) credential: String,
     fingerprint: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum DesktopAuthoritySourceV2 {
+    Local,
+    Cloud(String),
+}
+
+impl DesktopAuthoritySourceV2 {
+    fn fingerprint(&self) -> Option<&str> {
+        match self {
+            Self::Local => None,
+            Self::Cloud(fingerprint) => Some(fingerprint),
+        }
+    }
 }
 
 /// Owns the protocol-v2 desktop-sidecar polling task and its shutdown signal.
@@ -44,33 +63,39 @@ pub(crate) struct PlatformPluginControlPlaneReconcilerV2 {
 }
 
 impl PlatformPluginControlPlaneReconcilerV2 {
-    pub(super) fn start(
+    pub(super) async fn start(
         state: Arc<LocalRuntimeState>,
         trusted_sessions: TrustedSessionBroker,
-    ) -> Self {
+    ) -> Result<Self, String> {
         Self::start_with_intervals(
             state,
             trusted_sessions,
             SUCCESS_INTERVAL,
             INITIAL_ERROR_INTERVAL,
         )
+        .await
     }
 
-    fn start_with_intervals(
+    async fn start_with_intervals(
         state: Arc<LocalRuntimeState>,
         trusted_sessions: TrustedSessionBroker,
         success_interval: Duration,
         initial_error_interval: Duration,
-    ) -> Self {
+    ) -> Result<Self, String> {
+        let mut reconciler = desktop_reconciler(&state);
+        activate_authority_source(&state, &mut reconciler, &DesktopAuthoritySourceV2::Local)
+            .await?;
         let (shutdown, shutdown_rx) = watch::channel(false);
         let task = tokio::spawn(reconcile_loop(
             state,
             trusted_sessions,
             shutdown_rx,
+            reconciler,
+            DesktopAuthoritySourceV2::Local,
             success_interval,
             initial_error_interval,
         ));
-        Self { shutdown, task }
+        Ok(Self { shutdown, task })
     }
 
     pub(crate) async fn shutdown(self) {
@@ -83,11 +108,12 @@ async fn reconcile_loop(
     state: Arc<LocalRuntimeState>,
     trusted_sessions: TrustedSessionBroker,
     mut shutdown_rx: watch::Receiver<bool>,
+    mut reconciler: PluginSnapshotReconcilerV2,
+    mut active_authority: DesktopAuthoritySourceV2,
     success_interval: Duration,
-    mut error_interval: Duration,
+    initial_error_interval: Duration,
 ) {
-    let mut reconciler = desktop_reconciler();
-    let mut active_authority = None;
+    let mut error_interval = initial_error_interval;
 
     loop {
         match reconcile_iteration(
@@ -99,7 +125,7 @@ async fn reconcile_loop(
         .await
         {
             Ok(()) => {
-                error_interval = INITIAL_ERROR_INTERVAL;
+                error_interval = initial_error_interval;
                 tokio::select! {
                     _ = shutdown_rx.changed() => break,
                     _ = tokio::time::sleep(success_interval) => {}
@@ -124,54 +150,96 @@ async fn reconcile_loop(
     state.platform_plugin_authority_v2.clear();
 }
 
-fn desktop_reconciler() -> PluginSnapshotReconcilerV2 {
-    let loader = LoaderV2::for_target(
+fn desktop_reconciler(state: &LocalRuntimeState) -> PluginSnapshotReconcilerV2 {
+    PluginSnapshotReconcilerV2::new_with_manager(
+        desktop_loader(),
+        state.platform_plugin_authority_v2.manager(),
+    )
+}
+
+fn desktop_loader() -> LoaderV2 {
+    LoaderV2::for_target(
         DataPlaneTargetV2::DesktopSidecar,
         [
             desktop_sidecar_http_routes_definition_v2(),
             desktop_sidecar_host_definition_v2(),
         ],
-    );
-    PluginSnapshotReconcilerV2::new(loader)
+    )
+}
+
+fn local_bootstrap_snapshot() -> Result<ProfileSnapshotV2, String> {
+    parse_profile_snapshot_v2(LOCAL_BOOTSTRAP_PROFILE_V2).map_err(|error| error.to_string())
+}
+
+async fn activate_authority_source(
+    state: &LocalRuntimeState,
+    reconciler: &mut PluginSnapshotReconcilerV2,
+    source: &DesktopAuthoritySourceV2,
+) -> Result<(), String> {
+    let last_good = match source.fingerprint() {
+        Some(fingerprint) => restore_last_good(state, fingerprint)?,
+        None => None,
+    };
+    match last_good {
+        Some(distribution) => {
+            let generation = reconciler
+                .stage_snapshot(distribution.snapshot.clone())
+                .await
+                .map_err(|error| error.to_string())?;
+            state
+                .platform_plugin_authority_v2
+                .publish(&distribution, generation)
+                .await;
+            reconciler.restore_publication_ordering(
+                distribution.envelope.version,
+                distribution.snapshot.digest,
+            );
+        }
+        None => {
+            let baseline = local_bootstrap_snapshot()?;
+            let generation = reconciler
+                .stage_snapshot(baseline.clone())
+                .await
+                .map_err(|error| error.to_string())?;
+            state
+                .platform_plugin_authority_v2
+                .publish_local_baseline(&baseline, generation)
+                .await;
+            reconciler.reset_publication_ordering();
+        }
+    }
+    Ok(())
 }
 
 async fn reconcile_iteration(
     state: &LocalRuntimeState,
     trusted_sessions: &TrustedSessionBroker,
     reconciler: &mut PluginSnapshotReconcilerV2,
-    active_authority: &mut Option<String>,
+    active_authority: &mut DesktopAuthoritySourceV2,
 ) -> Result<(), String> {
     let authority = match load_cloud_authority(trusted_sessions) {
         Ok(authority) => authority,
         Err(error) => {
-            state.platform_plugin_authority_v2.clear();
-            if active_authority.take().is_some() {
-                replace_reconciler(reconciler).await;
+            if *active_authority != DesktopAuthoritySourceV2::Local {
+                activate_authority_source(state, reconciler, &DesktopAuthoritySourceV2::Local)
+                    .await?;
+                *active_authority = DesktopAuthoritySourceV2::Local;
             }
             return Err(error);
         }
     };
-    let next_fingerprint = authority
+    let next_authority = authority
         .as_ref()
-        .map(|authority| authority.fingerprint.as_str());
-    if active_authority.as_deref() != next_fingerprint {
-        state.platform_plugin_authority_v2.clear();
-        replace_reconciler(reconciler).await;
-        active_authority.take();
-        if let Some(authority) = authority.as_ref() {
-            restore_last_good(state, &authority.fingerprint, reconciler).await?;
-            *active_authority = Some(authority.fingerprint.clone());
-        }
+        .map(|authority| DesktopAuthoritySourceV2::Cloud(authority.fingerprint.clone()))
+        .unwrap_or(DesktopAuthoritySourceV2::Local);
+    if *active_authority != next_authority {
+        activate_authority_source(state, reconciler, &next_authority).await?;
+        *active_authority = next_authority;
     }
     match authority {
-        Some(authority) => reconcile_once(state, &authority, reconciler).await,
+        Some(authority) => reconcile_once(state, trusted_sessions, &authority, reconciler).await,
         None => Ok(()),
     }
-}
-
-async fn replace_reconciler(reconciler: &mut PluginSnapshotReconcilerV2) {
-    let previous = std::mem::replace(reconciler, desktop_reconciler());
-    previous.close().await;
 }
 
 pub(super) fn load_cloud_authority(
@@ -223,34 +291,19 @@ fn normalized_cloud_base_url(base_url: &Url) -> String {
     normalized.to_string()
 }
 
-async fn restore_last_good(
+fn restore_last_good(
     state: &LocalRuntimeState,
     authority_fingerprint: &str,
-    reconciler: &mut PluginSnapshotReconcilerV2,
-) -> Result<(), String> {
-    let last_good = {
-        let connection = state.session_store.connection()?;
-        plugin_snapshots_v2::initialize_schema(&connection).map_err(|error| error.to_string())?;
-        plugin_snapshots_v2::read_last_good(&connection, authority_fingerprint)
-            .map_err(|error| error.to_string())?
-    };
-    let Some(distribution) = last_good else {
-        return Ok(());
-    };
-    let receipt = reconciler.apply(&distribution).await;
-    if receipt.status == agistack_plugin_host::ApplyStatusV2::Nack {
-        return Err(receipt
-            .error_code
-            .unwrap_or_else(|| "last_good_restore_failed".into()));
-    }
-    state
-        .platform_plugin_authority_v2
-        .publish(&distribution, reconciler.manager());
-    Ok(())
+) -> Result<Option<ControlPlaneDistributionV2>, String> {
+    let connection = state.session_store.connection()?;
+    plugin_snapshots_v2::initialize_schema(&connection).map_err(|error| error.to_string())?;
+    plugin_snapshots_v2::read_last_good(&connection, authority_fingerprint)
+        .map_err(|error| error.to_string())
 }
 
 async fn reconcile_once(
     state: &LocalRuntimeState,
+    trusted_sessions: &TrustedSessionBroker,
     authority: &CloudAuthorityV2,
     reconciler: &mut PluginSnapshotReconcilerV2,
 ) -> Result<(), String> {
@@ -263,28 +316,49 @@ async fn reconcile_once(
     else {
         return Ok(());
     };
+    if !cloud_authority_is_current(trusted_sessions, &authority.fingerprint)? {
+        return Ok(());
+    }
     {
         let connection = state.session_store.connection()?;
         plugin_snapshots_v2::initialize_schema(&connection).map_err(|error| error.to_string())?;
         plugin_snapshots_v2::record_requested(&connection, &authority.fingerprint, &distribution)
             .map_err(|error| error.to_string())?;
     }
-    let receipt = reconciler.apply(&distribution).await;
-    if receipt.status == agistack_plugin_host::ApplyStatusV2::Ack {
-        state
-            .platform_plugin_authority_v2
-            .publish(&distribution, reconciler.manager());
-    }
-    {
-        let mut connection = state.session_store.connection()?;
-        plugin_snapshots_v2::record_receipt(
-            &mut connection,
-            &authority.fingerprint,
-            &distribution.envelope.nonce,
-            &receipt,
-        )
-        .map_err(|error| error.to_string())?;
-    }
+    let receipt = match reconciler.prepare(&distribution).await {
+        SnapshotPreparationV2::Receipt(receipt) => {
+            persist_receipt(state, authority, &distribution, &receipt)?;
+            receipt
+        }
+        SnapshotPreparationV2::Ready(prepared) => {
+            if !cloud_authority_is_current(trusted_sessions, &authority.fingerprint)? {
+                prepared.discard().await;
+                return Ok(());
+            }
+            let durable_receipt = prepared.receipt();
+            if let Err(error) = persist_receipt(state, authority, &distribution, &durable_receipt) {
+                prepared.discard().await;
+                return Err(error);
+            }
+            if !cloud_authority_is_current(trusted_sessions, &authority.fingerprint)? {
+                prepared.discard().await;
+                return Ok(());
+            }
+            let expected_manager = state.platform_plugin_authority_v2.manager();
+            let distribution_for_publish = distribution.clone();
+            let receipt = prepared
+                .commit_with(|manager, generation| async move {
+                    debug_assert!(Arc::ptr_eq(&manager, &expected_manager));
+                    state
+                        .platform_plugin_authority_v2
+                        .publish(&distribution_for_publish, generation)
+                        .await;
+                })
+                .await;
+            debug_assert_eq!(receipt, durable_receipt);
+            receipt
+        }
+    };
     post_receipt(
         &client,
         &authority.base_url,
@@ -293,6 +367,33 @@ async fn reconcile_once(
         &receipt,
     )
     .await
+}
+
+fn persist_receipt(
+    state: &LocalRuntimeState,
+    authority: &CloudAuthorityV2,
+    distribution: &ControlPlaneDistributionV2,
+    receipt: &SnapshotApplyReceiptV2,
+) -> Result<(), String> {
+    let mut connection = state.session_store.connection()?;
+    plugin_snapshots_v2::record_receipt(
+        &mut connection,
+        &authority.fingerprint,
+        &distribution.envelope.nonce,
+        receipt,
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn cloud_authority_is_current(
+    trusted_sessions: &TrustedSessionBroker,
+    expected_fingerprint: &str,
+) -> Result<bool, String> {
+    load_cloud_authority(trusted_sessions).map(|authority| {
+        authority
+            .as_ref()
+            .is_some_and(|authority| authority.fingerprint == expected_fingerprint)
+    })
 }
 
 async fn fetch_distribution(
@@ -418,39 +519,79 @@ pub(super) fn control_plane_url(base: &Url, suffix: &str) -> Url {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    };
+
+    use agistack_adapters_device::SqliteCheckpointStore;
+    use agistack_adapters_local_tools::LocalToolHost;
     use agistack_plugin_host::{
         ApplyStatusV2, DesktopSidecarHttpRouteContributionV2, ScopeKindV2, ScopeV2,
         TargetHostDescriptorV2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
         DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
     };
     use serde_json::{json, Value};
+    use uuid::Uuid;
 
+    use crate::trusted_session::{TrustedSessionStore, TrustedSessionStoreError};
+
+    use super::super::session_store::DesktopSessionStore;
     use super::*;
 
-    const SNAPSHOT: &str =
-        include_str!("../../../../../../shared/fixtures/platform-plugin-profile.v2.json");
     const BOOTSTRAP: &str =
         include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
+    const CLOUD_AUTHORITY: &str =
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-    fn distribution(version: u64, nonce: &str) -> ControlPlaneDistributionV2 {
-        let snapshot: Value = serde_json::from_str(SNAPSHOT).expect("fixture must parse");
-        let digest = snapshot["digest"].as_str().expect("snapshot digest");
-        let raw = json!({
-            "schema_version": 2,
-            "descriptor": {
-                "profile_id": snapshot["profile_id"],
-                "generation": snapshot["generation"],
-                "digest": digest,
-            },
-            "snapshot": snapshot,
-            "envelope": {
-                "version": version,
-                "nonce": nonce,
-                "snapshot_digest": digest,
-                "type_url": "types.memstack.ai/plugin.profile.v2",
-            },
-        });
-        parse_control_plane_distribution_v2(&raw.to_string()).expect("distribution must parse")
+    #[derive(Default)]
+    struct InMemoryTrustedSessionStore {
+        raw: Mutex<Option<String>>,
+    }
+
+    impl TrustedSessionStore for InMemoryTrustedSessionStore {
+        fn save_raw(&self, value: &str) -> Result<(), TrustedSessionStoreError> {
+            *self
+                .raw
+                .lock()
+                .map_err(|_| TrustedSessionStoreError::Unavailable)? = Some(value.to_owned());
+            Ok(())
+        }
+
+        fn load_raw(&self) -> Result<Option<String>, TrustedSessionStoreError> {
+            self.raw
+                .lock()
+                .map(|raw| raw.clone())
+                .map_err(|_| TrustedSessionStoreError::Unavailable)
+        }
+
+        fn clear_raw(&self) -> Result<(), TrustedSessionStoreError> {
+            self.raw
+                .lock()
+                .map(|mut raw| raw.take())
+                .map(|_| ())
+                .map_err(|_| TrustedSessionStoreError::Unavailable)
+        }
+    }
+
+    fn test_state() -> Arc<LocalRuntimeState> {
+        let root: PathBuf = std::env::temp_dir().join(format!(
+            "agistack-platform-plugin-sync-v2-{}",
+            Uuid::new_v4()
+        ));
+        let tool_host = LocalToolHost::new(&root).expect("tool host");
+        let checkpoints = Arc::new(SqliteCheckpointStore::in_memory().expect("checkpoints"));
+        let session_store = DesktopSessionStore::in_memory().expect("session store");
+        Arc::new(
+            LocalRuntimeState::new(
+                root,
+                tool_host,
+                checkpoints,
+                "platform-plugin-sync-v2-secret".to_owned(),
+                session_store,
+            )
+            .expect("local runtime state"),
+        )
     }
 
     fn bootstrap_distribution(version: u64, nonce: &str) -> ControlPlaneDistributionV2 {
@@ -606,28 +747,106 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn replacing_reconciler_clears_the_active_generation() {
-        let mut reconciler = desktop_reconciler();
-        let requested = distribution(17, "nonce-17");
+    async fn local_bootstrap_is_active_before_control_plane_start_returns() {
+        let state = test_state();
+        let trusted_sessions =
+            TrustedSessionBroker::new(Arc::new(InMemoryTrustedSessionStore::default()));
+
+        let control_plane = PlatformPluginControlPlaneReconcilerV2::start_with_intervals(
+            Arc::clone(&state),
+            trusted_sessions,
+            Duration::from_secs(3600),
+            Duration::from_secs(3600),
+        )
+        .await
+        .expect("local bootstrap must activate");
+
+        let lease = state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .expect("local bootstrap generation must be available");
+        assert_eq!(lease.descriptor().publication_version, None);
         assert_eq!(
-            reconciler.apply(&requested).await.status,
-            ApplyStatusV2::Ack
+            lease.http_routes().contribution_id,
+            "memstack-desktop-local-api.v1"
         );
-        let lease = reconciler
-            .manager()
-            .acquire()
-            .expect("generation must be active before replacement");
-        lease.release().await.expect("lease must release");
+        drop(lease);
+        control_plane.shutdown().await;
+        assert!(state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .is_err());
+    }
 
-        replace_reconciler(&mut reconciler).await;
+    #[tokio::test]
+    async fn cloud_to_local_switch_is_atomic_and_keeps_the_old_lease_pinned() {
+        let state = test_state();
+        let cloud_distribution = bootstrap_distribution(7, "cloud-last-good");
+        let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader());
+        let receipt = seed.apply(&cloud_distribution).await;
+        assert_eq!(receipt.status, ApplyStatusV2::Ack);
+        {
+            let mut connection = state.session_store.connection().expect("session store");
+            plugin_snapshots_v2::initialize_schema(&connection).expect("plugin snapshot schema");
+            plugin_snapshots_v2::record_requested(
+                &connection,
+                CLOUD_AUTHORITY,
+                &cloud_distribution,
+            )
+            .expect("requested cloud distribution");
+            plugin_snapshots_v2::record_receipt(
+                &mut connection,
+                CLOUD_AUTHORITY,
+                &cloud_distribution.envelope.nonce,
+                &receipt,
+            )
+            .expect("cloud last-good receipt");
+        }
+        seed.close().await;
 
-        assert!(reconciler.manager().acquire().is_err());
+        let mut reconciler = desktop_reconciler(&state);
+        let lifecycle_manager = reconciler.manager();
+        activate_authority_source(
+            &state,
+            &mut reconciler,
+            &DesktopAuthoritySourceV2::Cloud(CLOUD_AUTHORITY.to_owned()),
+        )
+        .await
+        .expect("cloud authority generation must activate");
+        let cloud_lease = state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .expect("cloud last-good generation must publish");
+        assert_eq!(cloud_lease.descriptor().publication_version, Some(7));
+
+        activate_authority_source(&state, &mut reconciler, &DesktopAuthoritySourceV2::Local)
+            .await
+            .expect("local authority generation must replace cloud");
+        assert!(Arc::ptr_eq(&lifecycle_manager, &reconciler.manager()));
+        let local_lease = state
+            .platform_plugin_authority_v2
+            .acquire_generation()
+            .expect("local bootstrap generation must publish");
+        assert_eq!(local_lease.descriptor().publication_version, None);
+        assert_eq!(
+            local_lease.http_routes().contribution_id,
+            "memstack-desktop-local-api.v1"
+        );
+        assert_eq!(cloud_lease.descriptor().publication_version, Some(7));
+        assert_eq!(
+            cloud_lease.http_routes().contribution_id,
+            "memstack-desktop-local-api.v1"
+        );
+
+        drop(local_lease);
+        drop(cloud_lease);
         reconciler.close().await;
+        state.platform_plugin_authority_v2.clear();
     }
 
     #[tokio::test]
     async fn desktop_reconciler_activates_the_generated_local_capability_module() {
-        let mut reconciler = desktop_reconciler();
+        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader());
         let requested = bootstrap_distribution(18, "nonce-18");
 
         assert_eq!(
@@ -676,7 +895,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejected_route_candidate_preserves_the_last_good_desktop_generation() {
-        let mut reconciler = desktop_reconciler();
+        let mut reconciler = PluginSnapshotReconcilerV2::new(desktop_loader());
         let accepted = bootstrap_distribution(18, "nonce-last-good");
         assert_eq!(reconciler.apply(&accepted).await.status, ApplyStatusV2::Ack);
         let accepted_digest = accepted.snapshot.digest.clone();

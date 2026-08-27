@@ -526,7 +526,7 @@ impl RuntimeGenerationV2 {
             .unwrap_or_default()
     }
 
-    async fn dispose(&self) {
+    pub(super) async fn dispose(&self) {
         let fibers = lock(&self.fibers).take();
         if let Some(mut fibers) = fibers {
             for fiber in fibers.iter_mut().rev() {
@@ -565,6 +565,24 @@ pub struct GenerationManagerV2 {
     current: ArcSwapOption<RuntimeGenerationV2>,
 }
 
+/// Deferred cleanup returned by a synchronous generation pointer swap.
+///
+/// Callers may update projection metadata under the same external lock as
+/// [`GenerationManagerV2::replace_current`], then release that lock before
+/// awaiting effect disposal.
+#[must_use]
+pub struct GenerationRetirementV2 {
+    generation: Option<Arc<RuntimeGenerationV2>>,
+}
+
+impl GenerationRetirementV2 {
+    pub async fn dispose(self) {
+        if let Some(generation) = self.generation {
+            generation.dispose().await;
+        }
+    }
+}
+
 impl GenerationManagerV2 {
     pub fn new() -> Self {
         Self {
@@ -572,12 +590,16 @@ impl GenerationManagerV2 {
         }
     }
 
+    pub fn replace_current(&self, generation: Arc<RuntimeGenerationV2>) -> GenerationRetirementV2 {
+        let generation = self
+            .current
+            .swap(Some(generation))
+            .filter(|previous| previous.retire());
+        GenerationRetirementV2 { generation }
+    }
+
     pub async fn publish(&self, generation: Arc<RuntimeGenerationV2>) {
-        if let Some(previous) = self.current.swap(Some(generation)) {
-            if previous.retire() {
-                previous.dispose().await;
-            }
-        }
+        self.replace_current(generation).dispose().await;
     }
 
     pub fn acquire(&self) -> Result<GenerationLeaseV2, RuntimeV2Error> {
@@ -594,12 +616,13 @@ impl GenerationManagerV2 {
         }
     }
 
+    pub fn clear_current(&self) -> GenerationRetirementV2 {
+        let generation = self.current.swap(None).filter(|current| current.retire());
+        GenerationRetirementV2 { generation }
+    }
+
     pub async fn close(&self) {
-        if let Some(current) = self.current.swap(None) {
-            if current.retire() {
-                current.dispose().await;
-            }
-        }
+        self.clear_current().dispose().await;
     }
 }
 

@@ -61,15 +61,38 @@ pub(crate) fn initialize_schema(connection: &Connection) -> Result<(), PluginSna
                 state_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS desktop_platform_plugin_authority_state_v2 (
+                authority_fingerprint TEXT PRIMARY KEY,
+                state_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             "#,
         )
-        .map_err(storage_error)
+        .map_err(storage_error)?;
+    migrate_legacy_state(connection)
 }
 
 pub(crate) fn read_state(
     connection: &Connection,
+    authority_fingerprint: &str,
 ) -> Result<Option<PluginSnapshotStateV2>, PluginSnapshotStoreV2Error> {
+    validate_authority_fingerprint(authority_fingerprint)?;
     let raw = connection
+        .query_row(
+            r#"
+            SELECT state_json
+            FROM desktop_platform_plugin_authority_state_v2
+            WHERE authority_fingerprint = ?1
+            "#,
+            params![authority_fingerprint],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(storage_error)?;
+    if let Some(raw) = raw {
+        return parse_state(&raw).map(Some);
+    }
+    let legacy_raw = connection
         .query_row(
             "SELECT state_json FROM desktop_platform_plugin_state_v2 WHERE id = 1",
             [],
@@ -77,7 +100,13 @@ pub(crate) fn read_state(
         )
         .optional()
         .map_err(storage_error)?;
-    raw.map(|item| parse_state(&item)).transpose()
+    legacy_raw
+        .map(|item| parse_state(&item))
+        .transpose()
+        .map(|state| {
+            state
+                .filter(|item| item.authority_fingerprint.as_deref() == Some(authority_fingerprint))
+        })
 }
 
 pub(crate) fn read_last_good(
@@ -85,11 +114,7 @@ pub(crate) fn read_last_good(
     authority_fingerprint: &str,
 ) -> Result<Option<ControlPlaneDistributionV2>, PluginSnapshotStoreV2Error> {
     validate_authority_fingerprint(authority_fingerprint)?;
-    Ok(read_state(connection)?.and_then(|state| {
-        (state.authority_fingerprint.as_deref() == Some(authority_fingerprint))
-            .then_some(state.last_good)
-            .flatten()
-    }))
+    Ok(read_state(connection, authority_fingerprint)?.and_then(|state| state.last_good))
 }
 
 pub(crate) fn record_requested(
@@ -98,15 +123,8 @@ pub(crate) fn record_requested(
     distribution: &ControlPlaneDistributionV2,
 ) -> Result<(), PluginSnapshotStoreV2Error> {
     validate_authority_fingerprint(authority_fingerprint)?;
-    let existing = read_state(connection)?;
-    let same_authority = existing
-        .as_ref()
-        .is_some_and(|state| state.authority_fingerprint.as_deref() == Some(authority_fingerprint));
-    if let Some(requested) = existing
-        .as_ref()
-        .filter(|_| same_authority)
-        .and_then(|state| state.requested.as_ref())
-    {
+    let existing = read_state(connection, authority_fingerprint)?;
+    if let Some(requested) = existing.as_ref().and_then(|state| state.requested.as_ref()) {
         if requested.envelope.nonce == distribution.envelope.nonce && requested != distribution {
             return Err(PluginSnapshotStoreV2Error::NonceConflict);
         }
@@ -115,9 +133,7 @@ pub(crate) fn record_requested(
         authority_fingerprint: Some(authority_fingerprint.to_owned()),
         requested: Some(distribution.clone()),
         receipt: None,
-        last_good: existing
-            .filter(|_| same_authority)
-            .and_then(|item| item.last_good),
+        last_good: existing.and_then(|item| item.last_good),
     };
     write_state(connection, &state)
 }
@@ -129,10 +145,17 @@ pub(crate) fn record_receipt(
     receipt: &SnapshotApplyReceiptV2,
 ) -> Result<(), PluginSnapshotStoreV2Error> {
     validate_authority_fingerprint(authority_fingerprint)?;
-    let mut state = read_state(connection)?.ok_or(PluginSnapshotStoreV2Error::StaleReceipt)?;
-    if state.authority_fingerprint.as_deref() != Some(authority_fingerprint) {
-        return Err(PluginSnapshotStoreV2Error::AuthorityMismatch);
-    }
+    let Some(mut state) = read_state(connection, authority_fingerprint)? else {
+        return if requested_nonce_belongs_to_other_authority(
+            connection,
+            authority_fingerprint,
+            nonce,
+        )? {
+            Err(PluginSnapshotStoreV2Error::AuthorityMismatch)
+        } else {
+            Err(PluginSnapshotStoreV2Error::StaleReceipt)
+        };
+    };
     let requested = state
         .requested
         .as_ref()
@@ -257,16 +280,85 @@ fn write_state(
     connection
         .execute(
             r#"
-            INSERT INTO desktop_platform_plugin_state_v2 (id, state_json)
-            VALUES (1, ?1)
-            ON CONFLICT(id) DO UPDATE SET
+            INSERT INTO desktop_platform_plugin_authority_state_v2 (
+                authority_fingerprint,
+                state_json
+            )
+            VALUES (?1, ?2)
+            ON CONFLICT(authority_fingerprint) DO UPDATE SET
                 state_json = excluded.state_json,
                 updated_at = CURRENT_TIMESTAMP
             "#,
-            params![raw],
+            params![authority_fingerprint, raw],
         )
         .map(|_| ())
         .map_err(storage_error)
+}
+
+fn migrate_legacy_state(connection: &Connection) -> Result<(), PluginSnapshotStoreV2Error> {
+    let legacy_raw = connection
+        .query_row(
+            "SELECT state_json FROM desktop_platform_plugin_state_v2 WHERE id = 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(storage_error)?;
+    let Some(legacy_raw) = legacy_raw else {
+        return Ok(());
+    };
+    let Ok(state) = parse_state(&legacy_raw) else {
+        return Ok(());
+    };
+    let Some(authority_fingerprint) = state.authority_fingerprint else {
+        return Ok(());
+    };
+    connection
+        .execute(
+            r#"
+            INSERT OR IGNORE INTO desktop_platform_plugin_authority_state_v2 (
+                authority_fingerprint,
+                state_json
+            )
+            VALUES (?1, ?2)
+            "#,
+            params![authority_fingerprint, legacy_raw],
+        )
+        .map(|_| ())
+        .map_err(storage_error)
+}
+
+fn requested_nonce_belongs_to_other_authority(
+    connection: &Connection,
+    authority_fingerprint: &str,
+    nonce: &str,
+) -> Result<bool, PluginSnapshotStoreV2Error> {
+    let mut statement = connection
+        .prepare(
+            r#"
+            SELECT authority_fingerprint, state_json
+            FROM desktop_platform_plugin_authority_state_v2
+            WHERE authority_fingerprint != ?1
+            "#,
+        )
+        .map_err(storage_error)?;
+    let rows = statement
+        .query_map(params![authority_fingerprint], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(storage_error)?;
+    for row in rows {
+        let (_, raw) = row.map_err(storage_error)?;
+        let state = parse_state(&raw)?;
+        if state
+            .requested
+            .as_ref()
+            .is_some_and(|requested| requested.envelope.nonce == nonce)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn validate_authority_fingerprint(
@@ -393,7 +485,9 @@ mod tests {
             .expect("read last-good")
             .expect("last-good must exist");
         assert_eq!(restored, requested);
-        let state = read_state(&connection).expect("read state").expect("state");
+        let state = read_state(&connection, AUTHORITY_A)
+            .expect("read state")
+            .expect("state");
         assert_eq!(state.receipt.expect("receipt").status, ApplyStatusV2::Ack);
     }
 
@@ -450,7 +544,7 @@ mod tests {
             .expect("seed incompatible state");
 
         assert_eq!(
-            read_state(&connection),
+            read_state(&connection, AUTHORITY_A),
             Err(PluginSnapshotStoreV2Error::IncompatibleSchemaVersion)
         );
     }
@@ -485,9 +579,54 @@ mod tests {
 
         let second = distribution(12, "nonce-12");
         record_requested(&connection, AUTHORITY_B, &second).expect("second requested");
-        let state = read_state(&connection).expect("state read").expect("state");
+        assert_eq!(
+            read_last_good(&connection, AUTHORITY_A).expect("first authority last-good"),
+            Some(first)
+        );
+        let state = read_state(&connection, AUTHORITY_B)
+            .expect("state read")
+            .expect("state");
         assert_eq!(state.authority_fingerprint.as_deref(), Some(AUTHORITY_B));
         assert_eq!(state.last_good, None);
+    }
+
+    #[test]
+    fn scoped_legacy_v2_state_migrates_to_its_authority_row() {
+        let connection = Connection::open_in_memory().expect("database");
+        initialize_schema(&connection).expect("schema");
+        let requested = distribution(11, "legacy-nonce-11");
+        let persisted = PersistedStateV2 {
+            schema_version: SCHEMA_VERSION,
+            authority_fingerprint: Some(AUTHORITY_A.to_owned()),
+            requested: Some(serde_json::to_value(&requested).expect("requested value")),
+            receipt: Some(receipt(&requested, ApplyStatusV2::Ack)),
+            last_good: Some(serde_json::to_value(&requested).expect("last-good value")),
+        };
+        connection
+            .execute(
+                "INSERT INTO desktop_platform_plugin_state_v2 (id, state_json) VALUES (1, ?1)",
+                params![serde_json::to_string(&persisted).expect("legacy state")],
+            )
+            .expect("seed scoped legacy state");
+
+        initialize_schema(&connection).expect("legacy migration");
+
+        assert_eq!(
+            read_last_good(&connection, AUTHORITY_A).expect("migrated last-good"),
+            Some(requested)
+        );
+        let migrated_rows: u64 = connection
+            .query_row(
+                r#"
+                SELECT COUNT(*)
+                FROM desktop_platform_plugin_authority_state_v2
+                WHERE authority_fingerprint = ?1
+                "#,
+                params![AUTHORITY_A],
+                |row| row.get(0),
+            )
+            .expect("migrated row count");
+        assert_eq!(migrated_rows, 1);
     }
 
     #[test]
@@ -533,8 +672,12 @@ mod tests {
         assert_eq!(restored, requested);
         let persisted: String = connection
             .query_row(
-                "SELECT state_json FROM desktop_platform_plugin_state_v2 WHERE id = 1",
-                [],
+                r#"
+                SELECT state_json
+                FROM desktop_platform_plugin_authority_state_v2
+                WHERE authority_fingerprint = ?1
+                "#,
+                params![AUTHORITY_A],
                 |row| row.get(0),
             )
             .expect("persisted state");
