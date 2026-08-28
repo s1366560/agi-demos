@@ -11,11 +11,7 @@ EventConverter and AgentEventType directly.
 
 # Re-export unified type for explicit access
 from src.domain.events.types import AgentEventType
-from src.infrastructure.agent.events.converter import (
-    EventConverter,
-    get_event_converter,
-    set_event_converter,
-)
+from src.infrastructure.agent.events.converter import EventConverter
 from src.infrastructure.agent.events.event_mapper import (
     AgentDomainEvent,
     EventBus,
@@ -36,6 +32,4 @@ __all__ = [
     "EventType",  # Deprecated alias for backward compatibility
     # SSE models
     "SSEEvent",
-    "get_event_converter",
-    "set_event_converter",
 ]

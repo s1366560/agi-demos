@@ -8,6 +8,7 @@ import time
 
 import pytest
 
+from src.configuration.containers.agent_container import AgentContainer
 from src.domain.events.agent_events import (
     AgentActEvent,
     AgentArtifactCreatedEvent,
@@ -18,11 +19,9 @@ from src.domain.events.agent_events import (
     AgentThoughtEvent,
     AgentThoughtStartEvent,
 )
-from src.infrastructure.agent.events.converter import (
-    EventConverter,
-    get_event_converter,
-    set_event_converter,
-)
+from src.infrastructure.agent import events as events_package
+from src.infrastructure.agent.events import converter as converter_module
+from src.infrastructure.agent.events.converter import EventConverter
 
 # ============================================================
 # Test Fixtures
@@ -320,35 +319,20 @@ class TestEventConverterPlan:
 
 
 # ============================================================
-# Test Singleton Functions
+# Retired Process-Global Authority
 # ============================================================
 
 
 @pytest.mark.unit
-class TestEventConverterSingleton:
-    """Test singleton functions."""
-
-    def test_get_event_converter_returns_instance(self):
-        """Test that get_event_converter returns an instance."""
-        converter = get_event_converter()
-        assert isinstance(converter, EventConverter)
-
-    def test_get_event_converter_returns_same_instance(self):
-        """Test that get_event_converter returns the same instance."""
-        converter1 = get_event_converter()
-        converter2 = get_event_converter()
-        assert converter1 is converter2
-
-    def test_set_event_converter(self):
-        """Test setting custom event converter."""
-        custom_converter = EventConverter(debug_logging=True)
-        set_event_converter(custom_converter)
-
-        result = get_event_converter()
-        assert result is custom_converter
-
-        # Cleanup
-        set_event_converter(EventConverter())
+@pytest.mark.parametrize(
+    "authority_name",
+    ("_default_converter", "get_event_converter", "set_event_converter"),
+)
+def test_process_global_event_converter_authority_is_retired(authority_name: str) -> None:
+    assert not hasattr(converter_module, authority_name)
+    if not authority_name.startswith("_"):
+        assert not hasattr(events_package, authority_name)
+    assert not hasattr(AgentContainer, "event_converter")
 
 
 # ============================================================

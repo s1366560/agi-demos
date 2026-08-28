@@ -387,14 +387,6 @@ class AgentContainer:
             redis_client=self._redis_client,
         )
 
-    # === Agent Orchestrators ===
-
-    def event_converter(self) -> Any:
-        """Get EventConverter for domain event to SSE conversion."""
-        from src.infrastructure.agent.events.converter import get_event_converter
-
-        return get_event_converter()
-
     def attachment_processor(self) -> Any:
         """Get AttachmentProcessor for handling chat attachments."""
         from src.infrastructure.agent.attachment.processor import get_attachment_processor

@@ -12,15 +12,13 @@ import pytest
 class TestRefactoredArchitectureIntegration:
     """Integration tests for the refactored ReActAgent modules."""
 
-    def test_event_converter_singleton(self):
-        """Test EventConverter singleton pattern."""
-        from src.infrastructure.agent.events.converter import (
-            get_event_converter,
-        )
+    def test_event_converter_is_explicitly_constructed(self):
+        """Test EventConverter has no implicit process-global identity."""
+        from src.infrastructure.agent.events.converter import EventConverter
 
-        converter1 = get_event_converter()
-        converter2 = get_event_converter()
-        assert converter1 is converter2
+        converter1 = EventConverter()
+        converter2 = EventConverter()
+        assert converter1 is not converter2
 
     def test_attachment_processor_singleton(self):
         """Test AttachmentProcessor singleton pattern."""

@@ -303,31 +303,3 @@ class EventConverter:
             data=event.get("data", {}),
             timestamp=datetime.now(UTC).isoformat(),
         )
-
-
-# Module-level singleton for convenience
-_default_converter: EventConverter | None = None
-
-
-def get_event_converter() -> EventConverter:
-    """
-    Get the default event converter singleton.
-
-    Returns:
-        EventConverter instance
-    """
-    global _default_converter
-    if _default_converter is None:
-        _default_converter = EventConverter()
-    return _default_converter
-
-
-def set_event_converter(converter: EventConverter) -> None:
-    """
-    Set the default event converter singleton.
-
-    Args:
-        converter: EventConverter instance to use
-    """
-    global _default_converter
-    _default_converter = converter
