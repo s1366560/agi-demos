@@ -11,20 +11,7 @@ import pytest
 
 from src.infrastructure.plugins.v2 import docker_monitor_runtime as runtime_module
 from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
-    ARTIFACT_CONTENT_GC_MODULE_V2,
-    ASYNC_SESSION_FACTORY_MODULE_V2,
-)
-from src.infrastructure.plugins.v2.artifact_content_persistence import (
-    ARTIFACT_CONTENT_PROVIDER_MODULE_V2,
-)
-from src.infrastructure.plugins.v2.artifact_content_services import (
-    ARTIFACT_CONTENT_APPLICATION_MODULE_V2,
-)
-from src.infrastructure.plugins.v2.artifact_lifecycle_persistence import (
-    ARTIFACT_LIFECYCLE_PROVIDER_MODULE_V2,
-)
-from src.infrastructure.plugins.v2.artifact_lifecycle_services import (
-    ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2,
+    ASYNC_SESSION_FACTORY_SERVICE_V2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
@@ -38,9 +25,8 @@ from src.infrastructure.plugins.v2.docker_monitor_runtime import (
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
-from src.infrastructure.plugins.v2.tenant_agent_config_services import (
-    TENANT_AGENT_CONFIG_APPLICATION_MODULE_V2,
-    TENANT_AGENT_CONFIG_PROVIDER_MODULE_V2,
+from src.tests.unit.infrastructure.plugins.v2.runtime_test_support import (
+    disable_service_provider_closure_v2,
 )
 
 pytestmark = pytest.mark.unit
@@ -198,26 +184,13 @@ async def test_docker_monitor_config_change_requires_process_restart(
 
 async def test_docker_monitor_rejects_missing_sessions_without_fallback() -> None:
     document = load_profile_document_v2(_PROFILE_PATH)
-    disabled = replace(
-        document,
-        entries=tuple(
-            replace(entry, enabled=False)
-            if entry.module_ref
-            in {
-                ARTIFACT_CONTENT_APPLICATION_MODULE_V2,
-                ARTIFACT_CONTENT_GC_MODULE_V2,
-                ARTIFACT_CONTENT_PROVIDER_MODULE_V2,
-                ARTIFACT_LIFECYCLE_APPLICATION_MODULE_V2,
-                ARTIFACT_LIFECYCLE_PROVIDER_MODULE_V2,
-                ASYNC_SESSION_FACTORY_MODULE_V2,
-                TENANT_AGENT_CONFIG_APPLICATION_MODULE_V2,
-                TENANT_AGENT_CONFIG_PROVIDER_MODULE_V2,
-            }
-            else entry
-            for entry in document.entries
-        ),
-    )
     manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    disabled = disable_service_provider_closure_v2(
+        document,
+        manifest,
+        missing_service=ASYNC_SESSION_FACTORY_SERVICE_V2,
+        kept_consumer_module_ref=DOCKER_EVENT_MONITOR_MODULE_V2,
+    )
     snapshot = compose_profile_v2(disabled, {manifest.plugin_id: manifest}, generation=135)
 
     with pytest.raises(RuntimeV2Error) as error:

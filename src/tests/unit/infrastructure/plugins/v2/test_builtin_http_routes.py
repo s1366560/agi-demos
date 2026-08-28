@@ -92,7 +92,9 @@ def test_graph_mounts_one_declared_mixed_http_websocket_row() -> None:
         ("/api/v1/tunnel/connect", "tunnel_connect", ()),
         ("/api/v1/admin/tunnel/status", "tunnel_status", ("GET",)),
     )
-    assert "/api/v1/admin/tunnel/status" in claimed.table.openapi_snapshot(descriptor).schema["paths"]
+    assert (
+        "/api/v1/admin/tunnel/status" in claimed.table.openapi_snapshot(descriptor).schema["paths"]
+    )
     assert claimed.v2_owned_row_ids == ("tunnel",)
     assert claimed.static_mounted_row_ids == ()
 
@@ -199,15 +201,14 @@ def test_required_row_without_a_v2_contribution_is_rejected_before_mount() -> No
 async def test_generation_dispatcher_executes_claimed_row_before_static_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def v2_features(_current_user: object) -> list[dict[str, str]]:
+    async def v2_features() -> list[dict[str, str]]:
         return [{"source": "v2"}]
 
-    monkeypatch.setattr(system_subject, "_list_features", v2_features)
+    monkeypatch.setattr(system_subject, "list_features", v2_features)
 
     graph = build_builtin_route_graph_v2(
         workspace_core_settings=get_workspace_core_settings(),
         route_definitions=system_subject.system_route_definitions_v2(),
-        dependency_overrides={system_subject.get_current_user: lambda: object()},
     )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     await host.bootstrap(
