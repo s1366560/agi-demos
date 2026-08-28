@@ -16,8 +16,6 @@ if TYPE_CHECKING:
         ProjectAgentMetrics,
         ProjectAgentStatus,
         ProjectReActAgent,
-        get_project_agent_manager,
-        stop_project_agent_manager,
     )
     from .react_agent import ReActAgent, create_react_agent
 
@@ -30,8 +28,6 @@ _EXPORTS = {
     "ProjectAgentMetrics": (".project_react_agent", "ProjectAgentMetrics"),
     "ProjectAgentStatus": (".project_react_agent", "ProjectAgentStatus"),
     "ProjectReActAgent": (".project_react_agent", "ProjectReActAgent"),
-    "get_project_agent_manager": (".project_react_agent", "get_project_agent_manager"),
-    "stop_project_agent_manager": (".project_react_agent", "stop_project_agent_manager"),
     "ReActAgent": (".react_agent", "ReActAgent"),
     "create_react_agent": (".react_agent", "create_react_agent"),
 }
@@ -50,8 +46,6 @@ __all__ = [
     "SessionProcessor",
     "ToolDefinition",
     "create_react_agent",
-    "get_project_agent_manager",
-    "stop_project_agent_manager",
 ]
 
 

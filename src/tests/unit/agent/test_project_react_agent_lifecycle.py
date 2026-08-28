@@ -12,6 +12,8 @@ import pytest
 
 from src.configuration.config import get_settings
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent import core as core_package
+from src.infrastructure.agent.core import project_react_agent as project_react_agent_module
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
@@ -26,6 +28,24 @@ from src.infrastructure.plugins.v2.runtime import ContextV2, RuntimeV2Error
 # The correct import path for patching is where the module imports these functions
 # For functions imported inside initialize(), we need to patch the full path
 WORKER_STATE_MODULE = "src.infrastructure.agent.state.agent_worker_state"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "authority_name",
+    (
+        "_project_agent_manager",
+        "_manager_lock",
+        "get_project_agent_manager",
+        "stop_project_agent_manager",
+    ),
+)
+def test_process_global_project_agent_manager_authority_is_retired(
+    authority_name: str,
+) -> None:
+    assert not hasattr(project_react_agent_module, authority_name)
+    if not authority_name.startswith("_"):
+        assert not hasattr(core_package, authority_name)
 
 
 class MockConnectionManager:

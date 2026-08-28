@@ -1574,37 +1574,3 @@ class ProjectAgentManager:
             logger.info(f"ProjectAgentManager: Cleaned up {len(agents_to_stop)} idle agents")
 
         return len(agents_to_stop)
-
-
-# Global manager instance
-_project_agent_manager: ProjectAgentManager | None = None
-_manager_lock = asyncio.Lock()
-
-
-async def get_project_agent_manager() -> ProjectAgentManager:
-    """
-    Get the global ProjectAgentManager instance.
-
-    Returns:
-        ProjectAgentManager singleton
-    """
-    global _project_agent_manager
-
-    if _project_agent_manager is None:
-        async with _manager_lock:
-            if _project_agent_manager is None:
-                _project_agent_manager = ProjectAgentManager()
-                await _project_agent_manager.start()
-                logger.info("ProjectAgentManager: Global instance created")
-
-    return _project_agent_manager
-
-
-async def stop_project_agent_manager() -> None:
-    """Stop the global ProjectAgentManager."""
-    global _project_agent_manager
-
-    if _project_agent_manager:
-        await _project_agent_manager.stop()
-        _project_agent_manager = None
-        logger.info("ProjectAgentManager: Global instance stopped")
