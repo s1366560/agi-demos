@@ -173,7 +173,6 @@ class ProcessorFactory:
             max_steps=subagent.max_iterations,
             llm_client=self.llm_client,
             plugin_event_dispatcher=_default_runtime_dispatcher(),
-            runtime_hook_overrides=[],
             doom_loop_threshold=doom_loop_threshold if doom_loop_threshold is not None else 3,
             provider_options=_provider_opts,
             message_bus=self.message_bus,

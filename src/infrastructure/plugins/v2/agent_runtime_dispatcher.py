@@ -32,8 +32,6 @@ class AgentRuntimeDispatcherProtocolV2(Protocol):
         self,
         hook_name: str,
         payload: Mapping[str, Any] | None = None,
-        *,
-        runtime_hook_overrides: list[dict[str, Any]] | None = None,
     ) -> AgentRuntimeDispatchResultV2: ...
 
 
@@ -67,8 +65,6 @@ class PinnedAgentRuntimeDispatcherV2:
         self,
         hook_name: str,
         payload: Mapping[str, Any] | None = None,
-        *,
-        runtime_hook_overrides: list[dict[str, Any]] | None = None,
     ) -> AgentRuntimeDispatchResultV2:
         effective_payload = dict(payload or {})
         event = _V2_EVENT_BY_PROCESSOR_HOOK.get(hook_name)

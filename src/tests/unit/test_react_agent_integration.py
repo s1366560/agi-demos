@@ -1297,6 +1297,7 @@ class TestReActAgentWorkspaceDelegation:
         assert events[-1]["type"] == "complete"
         assert dispatcher.dispatch.await_args.args[0] == "before_prompt_build"
         assert "runtime_hook_overrides" not in dispatcher.dispatch.await_args.kwargs
+        assert not hasattr(agent.config, "runtime_hook_overrides")
 
     async def test_stream_resets_stale_memory_context_before_before_prompt_build(self):
         agent = _make_react_agent()

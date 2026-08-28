@@ -109,7 +109,6 @@ class TestNotifyPluginHookHelper:
         dispatcher.dispatch.assert_awaited_once_with(
             "on_session_start",
             payload=payload,
-            runtime_hook_overrides=[],
         )
 
     async def test_dispatcher_error_propagates_without_fallback(self):
@@ -120,35 +119,9 @@ class TestNotifyPluginHookHelper:
             await proc._notify_plugin_hook("on_error", {"err": "x"})
         dispatcher.dispatch.assert_awaited_once()
 
-    async def test_runtime_overrides_are_not_an_implicit_dispatcher(self):
-        """Persisted compatibility rows cannot execute without the V2 dispatcher."""
-        config = ProcessorConfig(
-            model="test-model",
-            runtime_hook_overrides=[
-                {
-                    "plugin_name": "__custom__",
-                    "hook_name": "before_response",
-                    "hook_family": "mutating",
-                    "executor_kind": "script",
-                    "source_ref": "src/infrastructure/agent/hooks/scripts/demo_runtime_hook.py",
-                    "entrypoint": "append_demo_response_instruction",
-                    "enabled": True,
-                    "priority": 15,
-                    "settings": {},
-                }
-            ],
-        )
-        proc = SessionProcessor(config=config, tools=[])
-
-        await proc._notify_plugin_hook(
-            "before_response",
-            {
-                "response_instructions": list(proc._response_instructions),
-                "session_instructions": list(proc._session_instructions),
-            },
-        )
-
-        assert proc._response_instructions == []
+    def test_processor_config_exposes_no_v1_runtime_hook_override_surface(self):
+        """Persisted V1 compatibility rows cannot be injected into a processor."""
+        assert "runtime_hook_overrides" not in ProcessorConfig.__dataclass_fields__
 
     def test_runtime_hook_context_exposes_workspace_fields(self):
         """Workspace runtime plugins need structured runtime context, not prompt parsing."""

@@ -180,7 +180,7 @@ class TestCreateForSubagent:
         assert processor.config.loop_resolver is loop_resolver.return_value
         assert not hasattr(processor.config, "plugin_registry")
         assert processor.config.plugin_event_dispatcher is runtime_dispatcher.return_value
-        assert processor.config.runtime_hook_overrides == []
+        assert not hasattr(processor.config, "runtime_hook_overrides")
         assert processor.config.provider_id == "gemini"
         loop_resolver.assert_called_once_with()
         runtime_dispatcher.assert_called_once_with()

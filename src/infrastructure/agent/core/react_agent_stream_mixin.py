@@ -1095,7 +1095,6 @@ class StreamMixin:
             max_cost_per_session=config.max_cost_per_session,
             llm_client=config.llm_client,
             plugin_event_dispatcher=dispatcher,
-            runtime_hook_overrides=[],
             runtime_context=dict(config.runtime_context),
             tool_provider=None,
             forced_skill_name=config.forced_skill_name,
@@ -1862,10 +1861,6 @@ class StreamMixin:
             runtime_profile = self._with_workspace_leader_replan_tool_allowlist(runtime_profile)
         elif has_workspace_binding:
             runtime_profile = self._with_workspace_worker_tool_allowlist(runtime_profile)
-        self.config.runtime_hook_overrides = [
-            runtime_hook.to_dict()
-            for runtime_hook in runtime_profile.tenant_agent_config.runtime_hooks
-        ]
         runtime_workspace_manager = self._build_runtime_workspace_manager(selected_agent)
 
         # Phase 5: Skill matching

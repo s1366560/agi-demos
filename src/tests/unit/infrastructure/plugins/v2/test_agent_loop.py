@@ -169,7 +169,7 @@ async def test_subagent_factory_consumes_generation_scoped_agent_loop_provider()
             AGENT_RUNTIME_DISPATCHER_SERVICE_V2
         )
         assert not hasattr(processor.config, "plugin_registry")
-        assert processor.config.runtime_hook_overrides == []
+        assert not hasattr(processor.config, "runtime_hook_overrides")
         assert processor.config.provider_id == "deepseek"
 
     await host.close()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from inspect import signature
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -102,16 +103,27 @@ async def test_processor_events_dispatch_only_through_pinned_v2_generation() -> 
 
 
 @pytest.mark.unit
-async def test_unmigrated_processor_event_has_no_v1_fallback() -> None:
+async def test_undeclared_processor_event_has_no_fallback() -> None:
     dispatcher = PinnedAgentRuntimeDispatcherV2()
     result = await dispatcher.dispatch(
         "on_session_end",
         {"conversation_id": "session-a"},
-        runtime_hook_overrides=[{"plugin_name": "legacy-must-not-run"}],
     )
 
     assert result.payload == {"conversation_id": "session-a"}
     assert result.diagnostics == ()
+
+
+@pytest.mark.unit
+def test_dispatcher_contract_exposes_no_v1_runtime_hook_override_surface() -> None:
+    assert (
+        "runtime_hook_overrides"
+        not in signature(AgentRuntimeDispatcherProtocolV2.dispatch).parameters
+    )
+    assert (
+        "runtime_hook_overrides"
+        not in signature(PinnedAgentRuntimeDispatcherV2.dispatch).parameters
+    )
 
 
 @pytest.mark.unit

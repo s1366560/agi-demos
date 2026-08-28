@@ -357,7 +357,7 @@ class TestRequestScopedConfigSeamForwarding:
 
         assert not hasattr(new_config, "plugin_registry")
         assert new_config.plugin_event_dispatcher is dispatcher
-        assert new_config.runtime_hook_overrides == []
+        assert not hasattr(new_config, "runtime_hook_overrides")
         assert operation.require(AGENT_RUNTIME_DISPATCHER_SERVICE_V2) is dispatcher
 
     def test_processor_config_requires_a_pinned_v2_operation(self):

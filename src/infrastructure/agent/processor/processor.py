@@ -183,7 +183,6 @@ class ProcessorConfig:
 
     # Generation-owned plugin event dispatcher for hook notifications.
     plugin_event_dispatcher: Any | None = None
-    runtime_hook_overrides: list[dict[str, Any]] = field(default_factory=list)
     runtime_context: dict[str, Any] = field(default_factory=dict)
 
     # Tool refresh callback (optional, enables dynamic tool loading)
@@ -518,7 +517,6 @@ class SessionProcessor:
             result = await self._plugin_event_dispatcher.dispatch(
                 hook_name,
                 payload=effective_payload,
-                runtime_hook_overrides=self.config.runtime_hook_overrides,
             )
             for diagnostic in result.diagnostics:
                 diagnostic_message = getattr(diagnostic, "message", str(diagnostic))
