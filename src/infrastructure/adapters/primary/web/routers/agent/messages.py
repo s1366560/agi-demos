@@ -15,7 +15,6 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.hitl_response_contract import hitl_authority_revision
-from src.configuration.di_container import DIContainer
 from src.configuration.factories import create_llm_client
 from src.domain.events.types import (
     DELTA_EVENT_TYPES,
@@ -44,9 +43,14 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
+    current_operation_context_v2,
     pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.session_event_log import (
+    SESSION_EVENT_LOG_SERVICE_V2,
+    SessionEventLogServiceV2,
+)
 
 from .schemas import ExecutionStatsResponse
 from .utils import get_container_with_db
@@ -1796,7 +1800,6 @@ async def get_conversation_execution_status(
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
 
         async with pin_agent_turn_operation_v2(
             operation_id=f"agent-execution-status:{conversation_id}",
@@ -1841,7 +1844,6 @@ async def get_conversation_execution_status(
 
             if include_recovery_info:
                 recovery_info = await _get_recovery_info(
-                    container=container,
                     redis_client=redis_client,
                     conversation_id=conversation_id,
                     message_id=current_message_id,
@@ -1870,8 +1872,18 @@ async def get_conversation_execution_status(
         ) from exc
 
 
+def _session_event_log_service_v2() -> SessionEventLogServiceV2:
+    """Resolve the durable recovery authority from the pinned V2 operation."""
+    provider = current_operation_context_v2().require(SESSION_EVENT_LOG_SERVICE_V2)
+    if not isinstance(provider, SessionEventLogServiceV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "v2 session event-log service has an invalid implementation",
+        )
+    return provider
+
+
 async def _get_recovery_info(
-    container: DIContainer,
     redis_client: Any,
     conversation_id: str,
     message_id: str | None,
@@ -1893,14 +1905,17 @@ async def _get_recovery_info(
                 recovery_info.update(stream_recovery)
 
         if not recovery_info["stream_exists"]:
-            event_repo = container.agent_execution_event_repository()
-            last_time_us, last_counter = await event_repo.get_last_event_time(conversation_id)
-            if last_time_us > 0:
-                recovery_info["last_event_time_us"] = last_time_us
-                recovery_info["last_event_counter"] = last_counter
+            cursor = await _session_event_log_service_v2().last_cursor(
+                conversation_id=conversation_id
+            )
+            if cursor.event_time_us > 0:
+                recovery_info["last_event_time_us"] = cursor.event_time_us
+                recovery_info["last_event_counter"] = cursor.event_counter
                 recovery_info["can_recover"] = True
                 recovery_info["recovery_source"] = "database"
 
+    except RuntimeV2Error:
+        raise
     except Exception as e:
         logger.warning(f"Error getting recovery info: {e}")
 

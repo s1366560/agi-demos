@@ -1,5 +1,6 @@
 """Tests for agent message endpoints."""
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -27,6 +28,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.session_event_log_types import SessionEventCursorV2
 
 
 @pytest.mark.unit
@@ -555,14 +558,33 @@ class TestAgentMessagesRouter:
 
     @pytest.mark.asyncio
     async def test_execution_status_sanitizes_internal_errors(self, test_db, test_user):
+        @asynccontextmanager
+        async def operation_context(**_kwargs: object):
+            yield None
+
+        class FailingRedis:
+            async def exists(self, _key: str) -> int:
+                raise RuntimeError("internal status secret")
+
         self.monkeypatch.setattr(
             messages_router,
             "_verify_conversation_access",
             AsyncMock(return_value=None),
         )
         self.monkeypatch.setattr(
+            messages_router,
+            "pin_agent_turn_operation_v2",
+            operation_context,
+        )
+        self.monkeypatch.setattr(
+            messages_router,
+            "current_agent_worker_redis_client_v2",
+            lambda: FailingRedis(),
+        )
+        get_container = MagicMock(return_value=SimpleNamespace())
+        self.monkeypatch.setattr(
             "src.infrastructure.adapters.primary.web.routers.agent.messages.get_container_with_db",
-            MagicMock(side_effect=RuntimeError("internal status secret")),
+            get_container,
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -580,6 +602,7 @@ class TestAgentMessagesRouter:
         assert exc_info.value.status_code == 500
         assert exc_info.value.detail == "Failed to get execution status"
         assert "internal" not in exc_info.value.detail
+        get_container.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_execution_status_rejects_cross_tenant_conversation(
@@ -631,13 +654,21 @@ class TestAgentMessagesRouter:
         class ResponseError(Exception):
             pass
 
-        event_repo = SimpleNamespace(get_last_event_time=AsyncMock(return_value=(123_456, 7)))
-        container = SimpleNamespace(agent_execution_event_repository=lambda: event_repo)
+        event_log = SimpleNamespace(
+            last_cursor=AsyncMock(
+                return_value=SessionEventCursorV2(event_time_us=123_456, event_counter=7)
+            )
+        )
         monkeypatch.setattr("redis.asyncio.Redis", FakeRedis)
         monkeypatch.setattr("redis.asyncio.ResponseError", ResponseError)
+        monkeypatch.setattr(
+            messages_router,
+            "_session_event_log_service_v2",
+            lambda: event_log,
+            raising=False,
+        )
 
         result = await _get_recovery_info(
-            container=container,
             redis_client=FakeRedis(),
             conversation_id="conversation-1",
             message_id="message-1",
@@ -651,6 +682,43 @@ class TestAgentMessagesRouter:
             "stream_exists": False,
             "recovery_source": "database",
         }
+        event_log.last_cursor.assert_awaited_once_with(conversation_id="conversation-1")
+
+    @pytest.mark.asyncio
+    async def test_recovery_info_propagates_missing_v2_log_authority(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class FakeRedis:
+            async def xinfo_stream(self, _stream_key: str):
+                raise ResponseError
+
+        class ResponseError(Exception):
+            pass
+
+        def missing_event_log() -> None:
+            raise RuntimeV2Error(
+                "session_event_log_unavailable",
+                "internal event-log diagnostic",
+            )
+
+        monkeypatch.setattr("redis.asyncio.Redis", FakeRedis)
+        monkeypatch.setattr("redis.asyncio.ResponseError", ResponseError)
+        monkeypatch.setattr(
+            messages_router,
+            "_session_event_log_service_v2",
+            missing_event_log,
+            raising=False,
+        )
+
+        with pytest.raises(RuntimeV2Error) as error:
+            await _get_recovery_info(
+                redis_client=FakeRedis(),
+                conversation_id="conversation-1",
+                message_id="message-1",
+                from_time_us=0,
+            )
+
+        assert error.value.code == "session_event_log_unavailable"
 
     @pytest.mark.asyncio
     async def test_execution_stats_sanitizes_internal_errors(self, test_db, test_user):

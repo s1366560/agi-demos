@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import redis.asyncio as redis
@@ -96,10 +96,12 @@ def _request() -> Request:
 def _bind_route(
     monkeypatch: pytest.MonkeyPatch,
     container: _StaticContainerRedisProbe,
-) -> None:
+) -> MagicMock:
+    get_container = MagicMock(return_value=container)
     monkeypatch.setattr(messages, "_verify_conversation_access", AsyncMock(return_value=None))
-    monkeypatch.setattr(messages, "get_container_with_db", lambda _request, _db: container)
+    monkeypatch.setattr(messages, "get_container_with_db", get_container)
     monkeypatch.setattr(redis, "Redis", _TrackedRedisClient)
+    return get_container
 
 
 async def _read_status(*, include_recovery_info: bool) -> dict[str, Any]:
@@ -150,7 +152,7 @@ async def test_execution_status_uses_exact_request_generation_redis_during_reloa
     first_client.reload_generation = reload_generation
     static_client = _TrackedRedisClient("static")
     static_probe = _StaticContainerRedisProbe(static_client)
-    _bind_route(monkeypatch, static_probe)
+    get_container = _bind_route(monkeypatch, static_probe)
 
     try:
         async with pin_generation_v2(host):
@@ -169,6 +171,7 @@ async def test_execution_status_uses_exact_request_generation_redis_during_reloa
                 "recovery_source": "stream",
             },
         }
+        get_container.assert_not_called()
         assert static_probe.accesses == 0
         assert first_client.calls == [
             ("exists", "agent:running:conversation-1"),
@@ -201,7 +204,7 @@ async def test_execution_status_rejects_when_v2_redis_is_unavailable(
 
     static_client = _TrackedRedisClient("static")
     static_probe = _StaticContainerRedisProbe(static_client)
-    _bind_route(monkeypatch, static_probe)
+    get_container = _bind_route(monkeypatch, static_probe)
 
     try:
         async with pin_generation_v2(host):
@@ -216,5 +219,6 @@ async def test_execution_status_rejects_when_v2_redis_is_unavailable(
         "code": "agent_worker_redis_unavailable",
         "message": "Agent execution status authority is unavailable",
     }
+    get_container.assert_not_called()
     assert static_probe.accesses == 0
     assert static_client.calls == []
