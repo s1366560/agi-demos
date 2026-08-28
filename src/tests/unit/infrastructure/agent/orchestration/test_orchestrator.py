@@ -149,6 +149,39 @@ def _make_session(**overrides: Any) -> AgentSession:
 
 
 # ---------------------------------------------------------------------------
+# register_agent_session
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRegisterAgentSession:
+    """Public orchestration seam for binding an agent to a conversation."""
+
+    async def test_register_agent_session_delegates_to_owned_registry(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        expected = _make_session(
+            agent_id="agent-1",
+            conversation_id="conversation-1",
+            project_id="proj-1",
+        )
+        fx.session_registry.register = AsyncMock(return_value=expected)
+
+        result = await fx.orchestrator.register_agent_session(
+            agent_id="agent-1",
+            conversation_id="conversation-1",
+            project_id="proj-1",
+        )
+
+        assert result is expected
+        fx.session_registry.register.assert_awaited_once_with(
+            agent_id="agent-1",
+            conversation_id="conversation-1",
+            project_id="proj-1",
+        )
+
+
+# ---------------------------------------------------------------------------
 # spawn_agent
 # ---------------------------------------------------------------------------
 

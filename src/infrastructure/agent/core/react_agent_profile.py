@@ -95,10 +95,7 @@ async def _register_selected_agent_session(
         )
 
         orchestrator = current_agent_orchestrator_v2()
-        session_registry = getattr(orchestrator, "_session_registry", None)
-        if session_registry is None:
-            return
-        await session_registry.register(
+        _ = await orchestrator.register_agent_session(
             agent_id=selected_agent_id,
             conversation_id=conversation_id,
             project_id=project_id,

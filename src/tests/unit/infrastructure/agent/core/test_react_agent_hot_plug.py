@@ -37,8 +37,7 @@ class TestReActAgentHotPlug:
 
     @pytest.mark.asyncio
     async def test_register_selected_agent_session_uses_resolved_agent_id(self):
-        session_registry = SimpleNamespace(register=AsyncMock())
-        orchestrator = SimpleNamespace(_session_registry=session_registry)
+        orchestrator = SimpleNamespace(register_agent_session=AsyncMock())
 
         with patch(
             "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
@@ -50,7 +49,7 @@ class TestReActAgentHotPlug:
                 selected_agent_id="builtin:sisyphus",
             )
 
-        session_registry.register.assert_awaited_once_with(
+        orchestrator.register_agent_session.assert_awaited_once_with(
             agent_id="builtin:sisyphus",
             conversation_id="conv-1",
             project_id="proj-1",

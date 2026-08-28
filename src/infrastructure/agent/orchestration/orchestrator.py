@@ -756,6 +756,20 @@ class AgentOrchestrator:
 
         return stopped
 
+    async def register_agent_session(
+        self,
+        *,
+        agent_id: str,
+        conversation_id: str,
+        project_id: str,
+    ) -> AgentSession:
+        """Bind an agent to a conversation through the owned session registry."""
+        return await self._session_registry.register(
+            agent_id=agent_id,
+            conversation_id=conversation_id,
+            project_id=project_id,
+        )
+
     async def list_agents(
         self,
         project_id: str,
