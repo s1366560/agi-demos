@@ -217,16 +217,12 @@ class WorkspaceSupervisor:
     async def start(self) -> None:
         """Begin consuming. Safe to call multiple times (idempotent)."""
         if self._redis is None:
-            logger.warning(
-                "WorkspaceSupervisor.start skipped: no Redis client available"
-            )
+            logger.warning("WorkspaceSupervisor.start skipped: no Redis client available")
             return
         if self.is_running:
             return
         self._stop_event.clear()
-        self._task = asyncio.create_task(
-            self._run_loop(), name="workspace-supervisor"
-        )
+        self._task = asyncio.create_task(self._run_loop(), name="workspace-supervisor")
         if self._stale_seconds > 0 and self._watchdog_task is None:
             self._watchdog_task = asyncio.create_task(
                 self._watchdog_loop(), name="workspace-supervisor-watchdog"
@@ -283,9 +279,7 @@ class WorkspaceSupervisor:
                     )
                     await self._dispatch_entry(self._last_id, fields)
 
-    async def _dispatch_entry(
-        self, entry_id: str, fields: dict[Any, Any]
-    ) -> None:
+    async def _dispatch_entry(self, entry_id: str, fields: dict[Any, Any]) -> None:
         """Parse one stream entry and route to the domain sink."""
         try:
             raw = fields.get("data") or fields.get(b"data")
@@ -335,14 +329,10 @@ class WorkspaceSupervisor:
                 "workspace_id": envelope.workspace_id,
                 "task_id": envelope.task_id,
                 "root_goal_task_id": envelope.root_goal_task_id or "",
-                "leader_agent_id": envelope.extra_metadata.get("leader_agent_id")
-                or "",
-                "worker_agent_id": envelope.extra_metadata.get("worker_agent_id")
-                or "",
+                "leader_agent_id": envelope.extra_metadata.get("leader_agent_id") or "",
+                "worker_agent_id": envelope.extra_metadata.get("worker_agent_id") or "",
                 "actor_user_id": envelope.extra_metadata.get("actor_user_id") or "",
-                "worker_conversation_id": envelope.extra_metadata.get(
-                    "worker_conversation_id"
-                )
+                "worker_conversation_id": envelope.extra_metadata.get("worker_conversation_id")
                 or "",
                 "last_verb": verb.value,
             }
@@ -385,8 +375,7 @@ class WorkspaceSupervisor:
                 )
             except Exception:
                 logger.exception(
-                    "workspace_supervisor: failed delivering clarify_response "
-                    "correlation=%s",
+                    "workspace_supervisor: failed delivering clarify_response correlation=%s",
                     envelope.correlation_id,
                 )
             return
@@ -402,9 +391,7 @@ class WorkspaceSupervisor:
         try:
             while not self._stop_event.is_set():
                 try:
-                    await asyncio.wait_for(
-                        self._stop_event.wait(), timeout=self._watchdog_interval
-                    )
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=self._watchdog_interval)
                     return
                 except TimeoutError:
                     pass
@@ -433,9 +420,7 @@ class WorkspaceSupervisor:
             self._liveness.pop(attempt_id, None)
             await self._apply_stale_attempt(attempt_id, info)
 
-    async def _apply_stale_attempt(
-        self, attempt_id: str, info: dict[str, Any]
-    ) -> None:
+    async def _apply_stale_attempt(self, attempt_id: str, info: dict[str, Any]) -> None:
         """Record a ``blocked`` terminal report for a stale attempt."""
         from src.infrastructure.agent.workspace.workspace_goal_runtime import (
             apply_workspace_worker_report,
@@ -464,9 +449,7 @@ class WorkspaceSupervisor:
                 summary=summary,
                 artifacts=None,
                 leader_agent_id=(
-                    str(info["leader_agent_id"])
-                    if info.get("leader_agent_id")
-                    else None
+                    str(info["leader_agent_id"]) if info.get("leader_agent_id") else None
                 ),
                 report_id=f"watchdog:{attempt_id}",
             )
@@ -478,8 +461,7 @@ class WorkspaceSupervisor:
             )
         except Exception:
             logger.exception(
-                "workspace_supervisor.watchdog failed to apply stale report "
-                "(attempt=%s task=%s)",
+                "workspace_supervisor.watchdog failed to apply stale report (attempt=%s task=%s)",
                 attempt_id,
                 info.get("task_id"),
             )
@@ -514,9 +496,7 @@ class WorkspaceSupervisor:
                         envelope.attempt_id,
                         attempt_index + 1,
                     )
-                    await asyncio.sleep(
-                        PROGRESS_PERSIST_RETRY_BASE_SECONDS * (attempt_index + 1)
-                    )
+                    await asyncio.sleep(PROGRESS_PERSIST_RETRY_BASE_SECONDS * (attempt_index + 1))
                     continue
                 logger.warning(
                     "workspace_supervisor failed to persist progress "
@@ -537,15 +517,9 @@ class WorkspaceSupervisor:
             apply_workspace_worker_report,
         )
 
-        report_type = (
-            "completed" if envelope.verb is WtpVerb.TASK_COMPLETED else "blocked"
-        )
+        report_type = "completed" if envelope.verb is WtpVerb.TASK_COMPLETED else "blocked"
         payload = envelope.payload
-        summary = str(
-            payload.get("summary")
-            or payload.get("reason")
-            or ""
-        )
+        summary = str(payload.get("summary") or payload.get("reason") or "")
         if not summary:
             summary = f"WTP {envelope.verb.value} (no summary)"
         evidence = payload.get("evidence")
@@ -574,9 +548,7 @@ class WorkspaceSupervisor:
                 report_type=report_type,
                 summary=summary,
                 artifacts=artifacts,
-                leader_agent_id=leader_agent_id
-                if isinstance(leader_agent_id, str)
-                else None,
+                leader_agent_id=leader_agent_id if isinstance(leader_agent_id, str) else None,
                 report_id=envelope.correlation_id,
             )
             logger.info(
@@ -587,27 +559,10 @@ class WorkspaceSupervisor:
             )
         except Exception:
             logger.exception(
-                "workspace_supervisor: apply_workspace_worker_report failed "
-                "(task=%s verb=%s)",
+                "workspace_supervisor: apply_workspace_worker_report failed (task=%s verb=%s)",
                 envelope.task_id,
                 envelope.verb.value,
             )
-
-
-# --- Global accessor --------------------------------------------------------
-
-_supervisor: WorkspaceSupervisor | None = None
-
-
-def set_workspace_supervisor(supervisor: WorkspaceSupervisor | None) -> None:
-    """Record the process-wide supervisor (called from FastAPI lifespan)."""
-    global _supervisor
-    _supervisor = supervisor
-
-
-def get_workspace_supervisor() -> WorkspaceSupervisor | None:
-    """Return the process-wide supervisor, or ``None`` if not initialised."""
-    return _supervisor
 
 
 # Redis client injected separately so the WTP tools can publish even when
@@ -649,9 +604,7 @@ __all__ = [
     "WORKSPACE_WTP_INBOX_STREAM",
     "WorkspaceSupervisor",
     "configure_wtp_publisher",
-    "get_workspace_supervisor",
     "get_wtp_publisher_redis",
     "publish_envelope",
     "publish_envelope_default",
-    "set_workspace_supervisor",
 ]
