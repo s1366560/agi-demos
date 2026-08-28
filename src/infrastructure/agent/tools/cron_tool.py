@@ -1,8 +1,7 @@
 """Cron job management tool -- allows the agent to manage scheduled tasks.
 
 Provides CRUD operations on cron jobs plus manual triggering and run history.
-Worker contributions bind a session factory to each generation; the
-``configure_cron_tool()`` path remains for direct-call compatibility.
+Worker contributions bind a session factory to each generation.
 
 Ported from OpenClaw's cron-tool.ts, adapted for MemStack's DDD + Hexagonal
 Architecture.
@@ -41,38 +40,20 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Generation-bound runtime with module-level compatibility fallback
+# Generation-bound runtime
 # ---------------------------------------------------------------------------
 
-_cron_session_factory: Callable[..., Any] | None = None
 _cron_session_runtime: ContextVar[Callable[..., Any] | None] = ContextVar(
     f"{__name__}.cron_session_runtime",
     default=None,
 )
 
 
-def configure_cron_tool(
-    session_factory: Callable[..., Any],
-) -> None:
-    """Inject the DB session factory at agent startup.
-
-    Each tool invocation creates its own session, builds repos/service,
-    performs work, commits, and closes -- matching the todowrite pattern.
-
-    Args:
-        session_factory: An ``async_session_factory`` callable that returns
-            an async context manager yielding ``AsyncSession``.
-    """
-    global _cron_session_factory
-    _cron_session_factory = session_factory
-
-
 def _get_session_factory() -> Callable[..., Any]:
-    """Return the configured session factory or raise."""
-    runtime_factory = _cron_session_runtime.get()
-    session_factory = runtime_factory if runtime_factory is not None else _cron_session_factory
+    """Return the invocation-bound session factory or raise."""
+    session_factory = _cron_session_runtime.get()
     if session_factory is None:
-        raise RuntimeError("cron tool not configured -- call configure_cron_tool() first")
+        raise RuntimeError("cron requires a generation-bound runtime")
     return session_factory
 
 

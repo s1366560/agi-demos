@@ -519,9 +519,6 @@ def test_worker_cron_uses_bound_factory(
         captured.update(kwargs)
         return marker
 
-    def _forbidden(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("worker cron must not mutate module-level runtime state")
-
     monkeypatch.setattr(
         "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
         session_factory,
@@ -530,10 +527,6 @@ def test_worker_cron_uses_bound_factory(
         "src.infrastructure.agent.tools.cron_tool.make_cron_tool",
         _make_cron_tool,
         raising=False,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.cron_tool.configure_cron_tool",
-        _forbidden,
     )
 
     tools: dict[str, object] = {}
