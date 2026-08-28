@@ -656,6 +656,174 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
 
 
 @pytest.mark.unit
+async def test_execute_approved_plan_closes_stream_before_boundary_release_on_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    lifecycle: list[str] = []
+    waiting_for_next = asyncio.Event()
+    run = SimpleNamespace(
+        status="queued",
+        revision=1,
+        updated_at=datetime.now(UTC),
+        completed_at=None,
+        error=None,
+    )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run),
+        refresh=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            lifecycle.append("session-enter")
+            return session
+
+        async def __aexit__(self, *_args: object) -> None:
+            lifecycle.append("session-exit")
+
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object) -> AsyncIterator[None]:
+        lifecycle.append("operation-enter")
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-generation-release")
+
+    class ClosingStream:
+        def __init__(self) -> None:
+            self._event_emitted = False
+
+        def __aiter__(self) -> "ClosingStream":
+            return self
+
+        async def __anext__(self) -> dict[str, str]:
+            if not self._event_emitted:
+                self._event_emitted = True
+                return {"type": "start"}
+            waiting_for_next.set()
+            await asyncio.Future()
+            raise AssertionError("unreachable")
+
+        async def aclose(self) -> None:
+            lifecycle.append("stream-close")
+
+    class Service:
+        def stream_chat_v2(self, **_kwargs: object) -> ClosingStream:
+            return ClosingStream()
+
+    scoped_container = SimpleNamespace(agent_service=lambda _llm: Service())
+    base_container = SimpleNamespace(with_db=lambda _session: scoped_container)
+    monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
+    monkeypatch.setattr(plans_router, "create_llm_client", AsyncMock(return_value=object()))
+    monkeypatch.setattr(plans_router, "pin_agent_turn_operation_v2", operation_context)
+
+    task = asyncio.create_task(
+        plans_router._execute_approved_plan(
+            base_container=base_container,
+            run_id="plan-run-1",
+            conversation_id="conversation-1",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            message="Execute",
+            message_id="client-message-1",
+        )
+    )
+    await asyncio.wait_for(waiting_for_next.wait(), timeout=1)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert lifecycle.index("stream-close") < lifecycle.index("operation-generation-release")
+    assert lifecycle.index("operation-generation-release") < lifecycle.index("session-exit")
+
+
+@pytest.mark.unit
+async def test_execute_approved_plan_closes_stream_before_boundary_release_on_stream_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
+
+    lifecycle: list[str] = []
+    run = SimpleNamespace(
+        status="queued",
+        revision=1,
+        updated_at=datetime.now(UTC),
+        completed_at=None,
+        error=None,
+    )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=run),
+        refresh=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+    class SessionContext:
+        async def __aenter__(self) -> object:
+            lifecycle.append("session-enter")
+            return session
+
+        async def __aexit__(self, *_args: object) -> None:
+            lifecycle.append("session-exit")
+
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object) -> AsyncIterator[None]:
+        lifecycle.append("operation-enter")
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-generation-release")
+
+    class FailingClosingStream:
+        def __init__(self) -> None:
+            self._event_emitted = False
+
+        def __aiter__(self) -> "FailingClosingStream":
+            return self
+
+        async def __anext__(self) -> dict[str, str]:
+            if not self._event_emitted:
+                self._event_emitted = True
+                return {"type": "start"}
+            raise RuntimeError("stream failed")
+
+        async def aclose(self) -> None:
+            lifecycle.append("stream-close")
+
+    class Service:
+        def stream_chat_v2(self, **_kwargs: object) -> FailingClosingStream:
+            return FailingClosingStream()
+
+    scoped_container = SimpleNamespace(agent_service=lambda _llm: Service())
+    base_container = SimpleNamespace(with_db=lambda _session: scoped_container)
+    monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
+    monkeypatch.setattr(plans_router, "create_llm_client", AsyncMock(return_value=object()))
+    monkeypatch.setattr(plans_router, "pin_agent_turn_operation_v2", operation_context)
+    monkeypatch.setattr(plans_router, "settle_agent_plan_run", AsyncMock())
+    monkeypatch.setattr(plans_router, "_publish_plan_run_status", AsyncMock())
+
+    await plans_router._execute_approved_plan(
+        base_container=base_container,
+        run_id="plan-run-1",
+        conversation_id="conversation-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        message="Execute",
+        message_id="client-message-1",
+    )
+
+    assert lifecycle.index("stream-close") < lifecycle.index("operation-generation-release")
+    assert lifecycle.index("operation-generation-release") < lifecycle.index("session-exit")
+
+
+@pytest.mark.unit
 async def test_publish_plan_run_status_persists_and_broadcasts_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

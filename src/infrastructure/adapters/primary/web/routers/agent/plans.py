@@ -7,6 +7,8 @@ Task list endpoint for agent-managed task checklists per conversation.
 import asyncio
 import logging
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -819,16 +821,21 @@ async def _execute_approved_plan(
                 },
                 force_process_host_lease=True,
             ):
-                async for _event in service.stream_chat_v2(
-                    conversation_id=conversation_id,
-                    user_message=message,
-                    project_id=project_id,
-                    user_id=user_id,
-                    tenant_id=tenant_id,
-                    execution_message_id=message_id,
-                    canonical_run_id=run_id,
-                ):
-                    pass
+                agent_stream = cast(
+                    AsyncGenerator[dict[str, Any], None],
+                    service.stream_chat_v2(
+                        conversation_id=conversation_id,
+                        user_message=message,
+                        project_id=project_id,
+                        user_id=user_id,
+                        tenant_id=tenant_id,
+                        execution_message_id=message_id,
+                        canonical_run_id=run_id,
+                    ),
+                )
+                async with aclosing(agent_stream) as events:
+                    async for _event in events:
+                        pass
             await session.refresh(run)
             run.status = "ready_review"
             run.revision += 1
