@@ -68,13 +68,6 @@ class TestRefactoredArchitectureIntegration:
         assert extractor is not None
         assert isinstance(extractor, ArtifactExtractor)
 
-    def test_react_loop_class_exists(self):
-        """Test ReActLoop class exists."""
-        from src.infrastructure.agent.core.react_loop import ReActLoop
-
-        assert ReActLoop is not None
-        assert hasattr(ReActLoop, "run")
-
 
 @pytest.mark.integration
 class TestModuleImports:
@@ -124,21 +117,11 @@ class TestModuleImports:
 
         assert ArtifactExtractor is not None
 
-    def test_import_react_loop(self):
-        """Test ReActLoop module imports."""
-        from src.infrastructure.agent.core.react_loop import ReActLoop
-
-        assert ReActLoop is not None
-
     def test_import_agent_ports(self):
         """Test all agent ports can be imported."""
-        from src.domain.ports.agent import (
-            LLMInvokerPort,
-            ReActLoopPort,
-        )
+        from src.domain.ports.agent import LLMInvokerPort
 
         assert LLMInvokerPort is not None
-        assert ReActLoopPort is not None
 
 
 @pytest.mark.integration
