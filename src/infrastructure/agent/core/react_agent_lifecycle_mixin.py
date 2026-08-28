@@ -114,10 +114,7 @@ class LifecycleMixin:
             tool_selection_pipeline or build_default_tool_selection_pipeline()
         )
         self._tool_selection_max_tools = max(8, int(tool_selection_max_tools))
-        normalized_backend = str(tool_selection_semantic_backend).strip().lower()
-        if normalized_backend not in {"keyword", "token_vector", "embedding_vector"}:
-            normalized_backend = "token_vector"
-        self._tool_selection_semantic_backend = normalized_backend
+        self._tool_selection_semantic_backend = "agent_decision"
         self._router_mode_tool_count_threshold = max(1, int(router_mode_tool_count_threshold))
         self._tool_policy_layers = normalize_policy_layers(
             {"policy_layers": dict(tool_policy_layers or {})}

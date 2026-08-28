@@ -276,7 +276,7 @@ class ReActAgent(
         session_factory: Any = None,
         tool_selection_pipeline: Any | None = None,
         tool_selection_max_tools: int = 40,
-        tool_selection_semantic_backend: str = "embedding_vector",
+        tool_selection_semantic_backend: str = "agent_decision",
         router_mode_tool_count_threshold: int = 100,
         tool_policy_layers: Mapping[str, Any] | None = None,
         span_service: Any | None = None,

@@ -11,6 +11,7 @@ from src.infrastructure.agent.core.tool_name_policy import canonical_tool_policy
 from src.infrastructure.agent.core.tool_selector import (
     CORE_TOOLS,
     SKILL_TOOLS,
+    SemanticToolRanker,
     ToolSelectionContext as CoreToolSelectionContext,
     get_tool_selector,
 )
@@ -156,39 +157,6 @@ def context_filter_stage(
     return filtered
 
 
-def intent_router_stage(
-    tools: dict[str, Any],
-    context: ToolSelectionContext,
-) -> dict[str, Any]:
-    """Optional rule-based intent filter (disabled unless explicitly enabled)."""
-    if not bool(context.metadata.get("enable_intent_filter", False)):
-        return dict(tools)
-
-    query = str(context.metadata.get("user_message", "")).lower()
-    if not query:
-        return dict(tools)
-
-    intent = _detect_intent(query)
-    if intent is None:
-        return dict(tools)
-
-    prefixes_map = {
-        "web": ("web_", "search", "scrape"),
-        "memory": ("memory_",),
-        "skill": ("skill_",),
-        "mcp": ("mcp__", "register_mcp_server", "sandbox_"),
-    }
-    matched_prefixes = prefixes_map.get(intent, ())
-    filtered: dict[str, Any] = {}
-    for name, tool in tools.items():
-        if name in CORE_TOOLS:
-            filtered[name] = tool
-            continue
-        if any(name.startswith(prefix) or prefix in name for prefix in matched_prefixes):
-            filtered[name] = tool
-    return filtered or dict(tools)
-
-
 _USER_MCP_TOOL_PREFIX = "mcp__"
 
 
@@ -196,10 +164,10 @@ def semantic_ranker_stage(
     tools: dict[str, Any],
     context: ToolSelectionContext,
 ) -> dict[str, Any]:
-    """Rank tools by conversation relevance and enforce max_tools budget.
+    """Apply an explicit Agent ranking when the MCP tool budget is exceeded.
 
     System built-in tools and sandbox tools are always included.
-    Only user MCP tools (mcp__* prefix) are subject to budget pruning.
+    Without a valid Agent ranker, all user MCP tools remain available.
     """
     max_tools = _resolve_max_tools_budget(
         context.metadata,
@@ -241,7 +209,7 @@ def semantic_ranker_stage(
 
     selector = get_tool_selector()
     semantic_backend = (
-        str(context.metadata.get("semantic_backend", "embedding_vector")).strip().lower()
+        str(context.metadata.get("semantic_backend", "agent_decision")).strip().lower()
     )
     selected_names = selector.select_tools(
         user_mcp_tools,
@@ -254,9 +222,6 @@ def semantic_ranker_stage(
                 "user_message": str(user_message or ""),
                 "semantic_backend": semantic_backend,
                 "semantic_ranker": context.metadata.get("semantic_ranker"),
-                "embedding_ranker": context.metadata.get("embedding_ranker"),
-                "tool_quality_scores": context.metadata.get("tool_quality_scores"),
-                "tool_quality_stats": context.metadata.get("tool_quality_stats"),
             },
         ),
     )
@@ -302,11 +267,10 @@ def policy_stage(
 
 
 def build_default_tool_selection_pipeline() -> ToolSelectionPipeline:
-    """Build the default context/intent/semantic/policy pipeline."""
+    """Build the default structural/Agent-ranking/policy pipeline."""
     return ToolSelectionPipeline(
         stages=[
             context_filter_stage,
-            intent_router_stage,
             semantic_ranker_stage,
             policy_stage,
         ]
@@ -342,13 +306,6 @@ def _build_stage_explain(
     if stage_name == "context_filter_stage":
         explain["allow_names_count"] = len(_read_str_list(metadata, "tool_names_allowlist"))
         explain["allow_prefixes_count"] = len(_read_str_list(metadata, "tool_prefix_allowlist"))
-    elif stage_name == "intent_router_stage":
-        enabled = bool(metadata.get("enable_intent_filter", False))
-        explain["intent_filter_enabled"] = enabled
-        if enabled:
-            query = str(metadata.get("user_message", "")).lower()
-            if query:
-                explain["detected_intent"] = _detect_intent(query)
     elif stage_name == "semantic_ranker_stage":
         policy_context = _resolve_policy_context(metadata, explicit=context.policy_context)
         explain["max_tools"] = _resolve_max_tools_budget(
@@ -358,16 +315,18 @@ def _build_stage_explain(
         )
         history = metadata.get("conversation_history") or ()
         explain["history_messages"] = len(history) if isinstance(history, list) else 0
-        semantic_backend = str(metadata.get("semantic_backend", "embedding_vector")).strip().lower()
+        semantic_backend = str(metadata.get("semantic_backend", "agent_decision")).strip().lower()
         explain["semantic_backend"] = semantic_backend
-        if semantic_backend == "embedding_vector":
-            has_embedding_ranker = bool(
-                callable(metadata.get("embedding_ranker"))
-                or hasattr(metadata.get("embedding_ranker"), "rank_tools")
-            )
-            explain["semantic_backend_effective"] = (
-                "embedding_vector" if has_embedding_ranker else "token_vector"
-            )
+        semantic_ranker = metadata.get("semantic_ranker")
+        has_agent_ranker = bool(
+            semantic_backend == "agent_decision"
+            and isinstance(semantic_ranker, SemanticToolRanker)
+            and semantic_ranker.decision_mode == "structured_tool_call"
+            and semantic_ranker.audit_enabled is True
+        )
+        explain["semantic_backend_effective"] = (
+            "agent_decision" if has_agent_ranker else "unfiltered"
+        )
     elif stage_name == "policy_stage":
         policy_context = _resolve_policy_context(metadata, explicit=context.policy_context)
         _allow_tools, _deny_tools, policy_info = _resolve_policy_lists(
@@ -385,18 +344,6 @@ def _build_stage_explain(
         explain["unknown_allow_tools_count"] = policy_info.get("unknown_allow_tools_count", 0)
         explain["unknown_deny_tools_count"] = policy_info.get("unknown_deny_tools_count", 0)
     return explain
-
-
-def _detect_intent(query: str) -> str | None:
-    if any(token in query for token in ("search", "web", "scrape", "crawl")):
-        return "web"
-    if any(token in query for token in ("memory", "recall", "knowledge", "entity")):
-        return "memory"
-    if any(token in query for token in ("skill", "install skill", "sync skill")):
-        return "skill"
-    if any(token in query for token in ("mcp", "tool server", "register server")):
-        return "mcp"
-    return None
 
 
 def _resolve_max_tools_budget(
