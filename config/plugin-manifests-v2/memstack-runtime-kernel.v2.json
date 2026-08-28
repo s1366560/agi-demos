@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:7acd23e22e4924a3c796fce41c19dec66aeaf8af280ae77c97465149502dbda4",
+        "digest": "sha256:30b2694db30b44446d0bbae718114bb63ef6f0ed7774f9dda095863edfca0a12",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -7616,6 +7616,40 @@
       "artifact": {
         "digest": "sha256:10994c124a162a858c9735555319e71ef840c48a3cf9f36b963bc61ec2507619",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/routing",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_routing:_apply_agent_routing_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:agent-route-resolver", "version": "1.0.0" }
+          ],
+          "requires": [
+            {
+              "alias": "definition_resolver",
+              "service": "service:agent-definition-resolver",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default_agent_id"],
+          "properties": {
+            "default_agent_id": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "contract_digest": "sha256:97c4d09ed5e4c594fb6b9e3d118e53761b25ed48716848aee55495e105c049ab",
+      "artifact": {
+        "digest": "sha256:97db140443ec21d4192da092c65c45bc8ee27f282a594764c3659b5c41e4af10",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_routing.py"
       }
     },
     {

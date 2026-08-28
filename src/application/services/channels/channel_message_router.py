@@ -781,7 +781,7 @@ class ChannelMessageRouter:
             if session_ctx is None:
                 return
 
-            db_session, agent_service, conversation, resolved_agent_id = session_ctx
+            db_session, agent_service, conversation = session_ctx
             channel_message_id = self._extract_channel_message_id(message)
             operation_message_id = channel_message_id or message.id or str(uuid.uuid4())
 
@@ -794,7 +794,6 @@ class ChannelMessageRouter:
                 operation_id=f"channel-turn:{operation_message_id}",
                 channel_message_id=channel_message_id,
                 file_metadata=file_metadata,
-                agent_id=resolved_agent_id,
             )
 
         except Exception as e:
@@ -805,15 +804,8 @@ class ChannelMessageRouter:
 
     async def _setup_agent_session(
         self, message: Message, conversation_id: str
-    ) -> tuple[Any, Any, Any, str | None] | None:
-        """Set up agent session: validate text, load conversation, create service.
-
-        Returns ``(session, agent_service, conversation, agent_id)`` or
-        *None* if setup fails.  ``agent_id`` is resolved via
-        :class:`BindingRouter` when ``MULTI_AGENT_ENABLED`` is true;
-        otherwise it is *None*.
-        """
-        from src.configuration.config import get_settings
+    ) -> tuple[Any, Any, Any] | None:
+        """Set up DB-backed state needed before the scoped agent operation."""
         from src.configuration.factories import create_llm_client
         from src.infrastructure.adapters.primary.web.startup.container import get_app_container
         from src.infrastructure.adapters.secondary.persistence.database import (
@@ -847,32 +839,7 @@ class ChannelMessageRouter:
         llm = await create_llm_client(conversation.tenant_id)
         container = app_container.with_db(db_session)
         agent_service = container.agent_service(llm)
-
-        resolved_agent_id: str | None = None
-        if get_settings().multi_agent_enabled:
-            try:
-                binding_router = container.binding_router()
-                agent = await binding_router.resolve_agent(
-                    tenant_id=conversation.tenant_id or "",
-                    channel_type=(str(message.channel) if message.channel else None),
-                    channel_id=self._extract_channel_config_id(message),
-                    account_id=(message.sender.id if message.sender else None),
-                    peer_id=(
-                        message.sender.id
-                        if message.sender and message.chat_type == ChatType.P2P
-                        else None
-                    ),
-                )
-                if agent is not None:
-                    resolved_agent_id = str(agent.id)
-            except Exception:
-                logger.warning(
-                    "[MessageRouter] BindingRouter resolution failed, "
-                    "falling back to default agent",
-                    exc_info=True,
-                )
-
-        return db_session, agent_service, conversation, resolved_agent_id
+        return db_session, agent_service, conversation
 
     async def _run_agent_stream(
         self,
@@ -884,9 +851,8 @@ class ChannelMessageRouter:
         operation_id: str,
         channel_message_id: str | None,
         file_metadata: list[dict[str, Any]] | None = None,
-        agent_id: str | None = None,
     ) -> None:
-        """Pin and consume one complete channel agent stream."""
+        """Resolve routing and consume one channel stream on the same pinned operation."""
         async with pin_agent_turn_operation_v2(
             operation_id=operation_id,
             tenant_id=conversation.tenant_id,
@@ -908,6 +874,7 @@ class ChannelMessageRouter:
                 },
             },
         ):
+            agent_id = await self._resolve_channel_agent_id_v2(message, conversation)
             await self._run_agent_stream_pinned(
                 message=message,
                 conversation_id=conversation_id,
@@ -916,6 +883,38 @@ class ChannelMessageRouter:
                 file_metadata=file_metadata,
                 agent_id=agent_id,
             )
+
+    async def _resolve_channel_agent_id_v2(
+        self,
+        message: Message,
+        conversation: Any,
+    ) -> str:
+        """Resolve an explicit agent ID from the current operation generation."""
+        from src.infrastructure.plugins.v2.agent_routing import (
+            AGENT_ROUTE_RESOLVER_SERVICE_V2,
+            AgentRouteResolverProtocolV2,
+        )
+        from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        operation = current_operation_context_v2()
+        resolver = operation.require(AGENT_ROUTE_RESOLVER_SERVICE_V2)
+        if not isinstance(resolver, AgentRouteResolverProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_service_implementation",
+                "agent-route resolver service has an invalid implementation",
+            )
+        resolution = await resolver.resolve(
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+            channel_type=(str(message.channel) if message.channel else None),
+            channel_id=self._extract_channel_config_id(message),
+            account_id=(message.sender.id if message.sender else None),
+            peer_id=(
+                message.sender.id if message.sender and message.chat_type == ChatType.P2P else None
+            ),
+        )
+        return resolution.agent_id
 
     async def _run_agent_stream_pinned(
         self,

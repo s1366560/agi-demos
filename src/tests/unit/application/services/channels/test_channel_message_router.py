@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -20,6 +20,7 @@ from src.domain.model.channels.message import (
     MessageType,
     SenderInfo,
 )
+from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -32,9 +33,11 @@ from src.infrastructure.plugins.v2.boundary import (
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.channel_runtime import UnavailableChannelRuntimeServiceV2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[6]
+_REAL_RESOLVE_CHANNEL_AGENT_ID_V2 = ChannelMessageRouter._resolve_channel_agent_id_v2
 
 
 @asynccontextmanager
@@ -47,6 +50,10 @@ async def _noop_operation(*_args: object, **_kwargs: object) -> AsyncIterator[No
     yield None
 
 
+async def _profile_default_agent_id(*_args: object, **_kwargs: object) -> str:
+    return BUILTIN_SISYPHUS_ID
+
+
 @pytest.fixture(autouse=True)
 def _isolate_legacy_router_tests_from_generation_host(
     monkeypatch: pytest.MonkeyPatch,
@@ -56,6 +63,11 @@ def _isolate_legacy_router_tests_from_generation_host(
         "pin_agent_turn_operation_v2",
         _noop_agent_turn_operation,
         raising=False,
+    )
+    monkeypatch.setattr(
+        ChannelMessageRouter,
+        "_resolve_channel_agent_id_v2",
+        _profile_default_agent_id,
     )
 
 
@@ -1177,18 +1189,35 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
     db_session = object()
     observed: dict[str, object] = {}
 
-    class AgentService:
-        async def stream_chat_v2(self, **_kwargs: object):
+    class BindingRepository:
+        async def resolve_binding(self, **_kwargs: object) -> None:
             operation = current_operation_context_v2()
+            observed["routing_operation"] = operation
+            observed["routing_distribution"] = operation.require(
+                OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2
+            )
+            return None
+
+    binding_repository = BindingRepository()
+    agent_registry = SimpleNamespace(get_by_id=AsyncMock())
+
+    class AgentService:
+        async def stream_chat_v2(self, **kwargs: object):
+            operation = current_operation_context_v2()
+            observed["stream_operation"] = operation
             observed["operation_id"] = operation.operation_id
             observed["db"] = operation.require(OPERATION_DB_SESSION_SERVICE_V2)
             observed["identity"] = operation.require(OPERATION_IDENTITY_SERVICE_V2)
             observed["metadata"] = operation.require(OPERATION_METADATA_SERVICE_V2)
             observed["distribution"] = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
+            observed["agent_id"] = kwargs["agent_id"]
             yield {"type": "complete", "data": {"content": "final answer"}}
 
-    router._setup_agent_session = AsyncMock(
-        return_value=(db_session, AgentService(), conversation, None)
+    router._setup_agent_session = AsyncMock(return_value=(db_session, AgentService(), conversation))
+    monkeypatch.setattr(
+        router,
+        "_resolve_channel_agent_id_v2",
+        _REAL_RESOLVE_CHANNEL_AGENT_ID_V2.__get__(router, ChannelMessageRouter),
     )
     monkeypatch.setattr(
         channel_message_router_module,
@@ -1196,20 +1225,32 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
         real_pin_agent_turn_operation_v2,
     )
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    await host.bootstrap(
-        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
-        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
-        generation=1,
-        version=1,
-        nonce="channel-agent-turn",
-    )
+    with (
+        patch(
+            "src.infrastructure.plugins.v2.agent_routing._build_binding_repository_v2",
+            return_value=binding_repository,
+        ),
+        patch(
+            "src.infrastructure.plugins.v2.agent_routing._build_agent_registry_v2",
+            return_value=agent_registry,
+        ),
+    ):
+        await host.bootstrap(
+            profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+            manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+            generation=1,
+            version=1,
+            nonce="channel-agent-turn",
+        )
     install_process_generation_host_v2(host)
 
     try:
         await router._invoke_agent(message, "conv-1")
 
         assert observed["operation_id"] == "channel-turn:msg-1"
+        assert observed["routing_operation"] is observed["stream_operation"]
         assert observed["db"] is db_session
+        assert observed["agent_id"] == BUILTIN_SISYPHUS_ID
         assert observed["identity"] == {
             "tenant_id": "tenant-1",
             "user_id": "user-1",
@@ -1225,6 +1266,8 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
         distribution = observed["distribution"]
         assert isinstance(distribution, dict)
         assert distribution["descriptor"]["generation"] == 1
+        assert observed["routing_distribution"] == distribution
+        agent_registry.get_by_id.assert_not_awaited()
         router._send_response.assert_awaited_once_with(
             message,
             "conv-1",
@@ -1233,6 +1276,34 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
     finally:
         clear_process_generation_host_v2(host)
         await host.close()
+
+
+@pytest.mark.unit
+async def test_invoke_agent_routing_failure_never_starts_stream_or_default_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = ChannelMessageRouter()
+    message = _build_message(text="hello")
+    conversation = SimpleNamespace(
+        id="conv-1",
+        project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
+    )
+    agent_service = SimpleNamespace(stream_chat_v2=Mock())
+    router._setup_agent_session = AsyncMock(return_value=(object(), agent_service, conversation))
+    routing = AsyncMock(
+        side_effect=RuntimeV2Error(
+            "agent_route_definition_not_found",
+            "the explicit Profile default is unavailable",
+        )
+    )
+    monkeypatch.setattr(router, "_resolve_channel_agent_id_v2", routing)
+
+    await router._invoke_agent(message, "conv-1")
+
+    routing.assert_awaited_once_with(message, conversation)
+    agent_service.stream_chat_v2.assert_not_called()
 
 
 @pytest.mark.unit

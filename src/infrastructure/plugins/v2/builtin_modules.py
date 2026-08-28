@@ -40,6 +40,7 @@ from .agent_orchestration_runtime import (
 from .agent_orchestration_tools import (
     builtin_agent_orchestration_tool_contribution_definition_v2,
 )
+from .agent_routing import builtin_agent_routing_definition_v2
 from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
     PinnedAgentRuntimeDispatcherV2,
@@ -452,6 +453,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *builtin_agent_runtime_utility_tool_contribution_definitions_v2(),
         builtin_agent_orchestration_tool_contribution_definition_v2(),
         builtin_agent_definition_v2(),
+        builtin_agent_routing_definition_v2(),
         builtin_agent_definition_contribution_v2(),
         builtin_agent_capability_definition_v2(),
         builtin_skill_contribution_v2(),
