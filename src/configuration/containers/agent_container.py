@@ -190,17 +190,6 @@ class AgentContainer:
         assert self._db is not None
         return SqlAgentBindingRepository(self._db)
 
-    def binding_router(self) -> Any:
-        """Get BindingRouter for agent-aware channel routing."""
-        from src.infrastructure.agent.channels.channel_router import ChannelRouter
-        from src.infrastructure.agent.routing.binding_router import BindingRouter
-
-        return BindingRouter(
-            binding_repository=self.agent_binding_repository(),
-            agent_registry=self.agent_registry(),
-            channel_router=ChannelRouter(),
-        )
-
     # === Skill Service ===
 
     def skill_service(self) -> SkillService:
@@ -468,14 +457,6 @@ class AgentContainer:
 
         assert self._db is not None
         return SqlMessageBindingRepository(self._db)
-
-    def agent_router_service(self) -> Any:
-        from src.application.services.agent_router_service import AgentRouterService
-
-        return AgentRouterService(
-            binding_repository=self.agent_binding_repository(),
-            agent_registry=self.agent_registry(),
-        )
 
     def redis_agent_namespace(self) -> Any:
         if self._redis_agent_namespace_instance is not None:

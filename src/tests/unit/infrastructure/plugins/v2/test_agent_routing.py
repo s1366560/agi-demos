@@ -38,6 +38,13 @@ _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 _CHANNEL_ROUTER_PATH = _ROOT / "src/application/services/channels/channel_message_router.py"
+_AGENT_CONTAINER_PATH = _ROOT / "src/configuration/containers/agent_container.py"
+_DI_CONTAINER_PATH = _ROOT / "src/configuration/di_container.py"
+_ROUTING_PACKAGE_PATH = _ROOT / "src/infrastructure/agent/routing/__init__.py"
+_LEGACY_ROUTER_PATHS = (
+    _ROOT / "src/application/services/agent_router_service.py",
+    _ROOT / "src/infrastructure/agent/routing/binding_router.py",
+)
 
 
 def _agent(
@@ -237,6 +244,20 @@ def test_channel_production_path_has_no_static_binding_or_builtin_fallback() -> 
     assert "get_settings().multi_agent_enabled" not in source
     assert "falling back to default agent" not in source
     assert "build_builtin_sisyphus_agent" not in source
+
+
+@pytest.mark.unit
+def test_static_agent_routing_facades_and_di_accessors_are_retired() -> None:
+    agent_container = _AGENT_CONTAINER_PATH.read_text(encoding="utf-8")
+    di_container = _DI_CONTAINER_PATH.read_text(encoding="utf-8")
+    routing_package = _ROUTING_PACKAGE_PATH.read_text(encoding="utf-8")
+
+    assert "def binding_router(" not in agent_container
+    assert "def agent_router_service(" not in agent_container
+    assert "def binding_router(" not in di_container
+    assert "BindingRouter" not in routing_package
+    assert "AgentRouteResult" not in routing_package
+    assert all(not path.exists() for path in _LEGACY_ROUTER_PATHS)
 
 
 @pytest.mark.unit

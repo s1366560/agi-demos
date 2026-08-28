@@ -177,23 +177,6 @@ class TestAgentContainerMultiAgentFactories:
         with pytest.raises(AssertionError):
             container.default_message_router()
 
-    # --- agent_router_service ---
-
-    async def test_agent_router_service_returns_correct_type(self) -> None:
-        from src.application.services.agent_router_service import AgentRouterService
-        from src.configuration.containers.agent_container import AgentContainer
-
-        container = AgentContainer(db=MagicMock())
-        result = container.agent_router_service()
-        assert isinstance(result, AgentRouterService)
-
-    async def test_agent_router_service_raises_without_db(self) -> None:
-        from src.configuration.containers.agent_container import AgentContainer
-
-        container = AgentContainer()
-        with pytest.raises(AssertionError):
-            container.agent_router_service()
-
     # ------------------------------------------------------------------
     # 4. Context engine
     # ------------------------------------------------------------------

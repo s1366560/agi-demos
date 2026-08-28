@@ -143,9 +143,6 @@ class DIContainer:
     def agent_binding_repository(self) -> Any:
         return self._agent.agent_binding_repository()
 
-    def binding_router(self) -> Any:
-        return self._agent.binding_router()
-
     def agent_orchestrator(self) -> Any:
         return self._agent.agent_orchestrator()
 
