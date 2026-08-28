@@ -3,7 +3,6 @@
 Public API:
     - CanvasBlockType, CanvasBlock, CanvasState  (models)
     - CanvasManager                               (state management)
-    - configure_canvas                            (DI)
     - canvas_create, canvas_update, canvas_delete (tools)
     - build_canvas_event_dict                     (event helper)
     - A2UI builder helpers                        (a2ui_builder)
@@ -45,7 +44,6 @@ from src.infrastructure.agent.canvas.models import (
     CanvasBlockType,
     CanvasState,
 )
-from src.infrastructure.agent.canvas.tools import configure_canvas
 
 __all__ = [
     "CanvasBlock",
@@ -60,7 +58,6 @@ __all__ = [
     "card_component",
     "checkbox_component",
     "column_component",
-    "configure_canvas",
     "data_model_update",
     "delete_surface",
     "divider_component",

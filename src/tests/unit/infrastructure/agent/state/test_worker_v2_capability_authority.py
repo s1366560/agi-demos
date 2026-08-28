@@ -554,10 +554,6 @@ def test_worker_canvas_uses_v2_manager_and_bound_factory(
         raising=False,
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.canvas.tools.configure_canvas",
-        _forbidden,
-    )
-    monkeypatch.setattr(
         "src.infrastructure.agent.canvas.tools.get_canvas_manager",
         _forbidden,
     )

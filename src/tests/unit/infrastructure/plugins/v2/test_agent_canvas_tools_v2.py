@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+import src.infrastructure.agent.canvas as canvas_package
+import src.infrastructure.agent.canvas.tools as canvas_tools_module
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.canvas.manager import CanvasManager
 from src.infrastructure.agent.canvas.tools import make_canvas_tools
@@ -37,6 +39,13 @@ _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 _CANVAS_TOOLS = make_canvas_tools(manager=CanvasManager())
+
+
+@pytest.mark.unit
+def test_process_global_canvas_configuration_is_retired() -> None:
+    assert not hasattr(canvas_tools_module, "configure_canvas")
+    assert "_canvas_manager" not in vars(canvas_tools_module)
+    assert "configure_canvas" not in canvas_package.__all__
 
 
 class _ReadTool:

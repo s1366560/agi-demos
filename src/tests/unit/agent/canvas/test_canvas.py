@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextvars import ContextVar
+from unittest.mock import patch
 
 import pytest
 
@@ -24,10 +26,10 @@ from src.infrastructure.agent.canvas.tools import (
     canvas_create_interactive,
     canvas_delete,
     canvas_update,
-    configure_canvas,
     get_canvas_manager,
 )
 from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.tests.unit.agent.canvas.a2ui_contract_fixtures import (
     contract_case_jsonl,
     get_a2ui_contract_case,
@@ -41,6 +43,39 @@ from src.tests.unit.agent.canvas.native_block_contract_fixtures import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+_TEST_CANVAS_MANAGER: ContextVar[CanvasManager | None] = ContextVar(
+    "test_canvas_manager",
+    default=None,
+)
+
+
+def configure_canvas(manager: CanvasManager | None) -> None:
+    """Set the manager returned by the test-only V2 projection."""
+    _TEST_CANVAS_MANAGER.set(manager)
+
+
+def _current_canvas_manager_v2() -> CanvasManager:
+    manager = _TEST_CANVAS_MANAGER.get()
+    if manager is None:
+        raise RuntimeV2Error(
+            "operation_context_not_pinned",
+            "test Canvas projection requires a pinned operation",
+        )
+    return manager
+
+
+@pytest.fixture(autouse=True)
+def _canvas_runtime_projection() -> object:
+    token = _TEST_CANVAS_MANAGER.set(None)
+    try:
+        with patch(
+            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_canvas_manager_v2",
+            side_effect=_current_canvas_manager_v2,
+        ):
+            yield
+    finally:
+        _TEST_CANVAS_MANAGER.reset(token)
 
 
 @pytest.fixture()
@@ -386,8 +421,10 @@ class TestCanvasTools:
 
     def test_get_manager_unconfigured(self) -> None:
         configure_canvas(None)  # reset global
-        with pytest.raises(RuntimeError, match="Canvas not configured"):
+        with pytest.raises(RuntimeV2Error) as error:
             get_canvas_manager()
+
+        assert error.value.code == "operation_context_not_pinned"
 
     async def test_bound_canvas_tools_ignore_legacy_manager_changes(self) -> None:
         from src.infrastructure.agent.canvas.tools import make_canvas_tools

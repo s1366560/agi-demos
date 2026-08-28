@@ -17,7 +17,7 @@ from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.agent.actor import execution, local_chat_worker, project_agent_actor
 from src.infrastructure.agent.canvas.manager import CanvasManager
-from src.infrastructure.agent.canvas.tools import configure_canvas, get_canvas_manager
+from src.infrastructure.agent.canvas.tools import get_canvas_manager
 from src.infrastructure.agent.core import react_agent_profile, react_agent_prompt_mixin
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.state import agent_worker_state
@@ -118,8 +118,6 @@ async def test_agent_worker_runtime_resolves_adapter_from_exact_generation() -> 
 async def test_agent_canvas_manager_is_host_owned_and_survives_generation_reload() -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     other_host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    legacy_manager = CanvasManager()
-    configure_canvas(legacy_manager)
     first_manager: CanvasManager | None = None
 
     try:
@@ -141,7 +139,6 @@ async def test_agent_canvas_manager_is_host_owned_and_survives_generation_reload
                 assert isinstance(resolver, AgentWorkerRuntimeResolverProtocolV2)
                 manager = resolver.resolve(operation).canvas_manager
                 assert get_canvas_manager() is manager
-                assert manager is not legacy_manager
                 if first_manager is None:
                     first_manager = manager
                     _ = manager.create_block(
@@ -174,7 +171,6 @@ async def test_agent_canvas_manager_is_host_owned_and_survives_generation_reload
             assert other_manager is not first_manager
             assert other_manager.get_blocks("conversation-a") == []
     finally:
-        configure_canvas(None)
         await other_host.close()
         await host.close()
 

@@ -807,19 +807,12 @@ block = manager.create_block(
 )
 ```
 
-### Configuration
+### Runtime ownership
 
-The canvas system is configured via module-level DI:
-
-```python
-from canvas.tools import configure_canvas
-from canvas.manager import CanvasManager
-
-configure_canvas(CanvasManager())
-```
-
-This is called during agent initialization. The `CanvasManager` instance is shared
-across all conversations within the same agent process.
+Canvas tools are bound to the `CanvasManager` owned by the active V2 runtime host.
+Normal tool execution uses a scoped binding, while the A2UI HITL handler resolves the
+same manager from the pinned operation generation. Missing generation context fails
+closed; there is no process-global Canvas configuration fallback.
 
 ---
 
