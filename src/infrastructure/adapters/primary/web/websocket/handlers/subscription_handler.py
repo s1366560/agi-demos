@@ -8,6 +8,9 @@ import asyncio
 import logging
 from typing import Any, override
 
+from src.infrastructure.adapters.primary.web.conversation_access_application_authority_v2 import (
+    conversation_access_application_authority_v2,
+)
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
@@ -203,30 +206,37 @@ class SubscribeHandler(WebSocketMessageHandler):
             return
 
         try:
-            # Verify conversation ownership
-            container = context.get_scoped_container()
-            conversation_repo = container.conversation_repository()
-            conversation = await conversation_repo.find_by_id(conversation_id)
-
-            if not conversation:
-                await context.send_error("Conversation not found", conversation_id=conversation_id)
-                return
-
-            if conversation.user_id != context.user_id:
-                await context.send_error(
-                    "You do not have permission to access this conversation",
-                    conversation_id=conversation_id,
-                )
-                return
-
-            await context.connection_manager.subscribe(context.session_id, conversation_id)
-            await _maybe_start_recovery_bridge(
-                context=context,
+            async with conversation_access_application_authority_v2(
+                context,
                 conversation_id=conversation_id,
-                project_id=conversation.project_id,
-                message=message,
-            )
-            await context.send_ack("subscribe", conversation_id=conversation_id)
+            ) as authority:
+                conversation = await authority.service.find_by_id(conversation_id)
+
+                if not conversation:
+                    await context.send_error(
+                        "Conversation not found",
+                        conversation_id=conversation_id,
+                    )
+                    return
+
+                if (
+                    conversation.user_id != context.user_id
+                    or conversation.tenant_id != context.tenant_id
+                ):
+                    await context.send_error(
+                        "You do not have permission to access this conversation",
+                        conversation_id=conversation_id,
+                    )
+                    return
+
+                await context.connection_manager.subscribe(context.session_id, conversation_id)
+                await _maybe_start_recovery_bridge(
+                    context=context,
+                    conversation_id=conversation_id,
+                    project_id=conversation.project_id,
+                    message=message,
+                )
+                await context.send_ack("subscribe", conversation_id=conversation_id)
 
         except Exception:
             logger.exception(

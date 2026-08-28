@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:d489c13c1dab7c8eba6b74b990444c98a39d9fd18a9d2001f6eca02a4106cb3e",
+        "digest": "sha256:558a0d29d5b9ed90aa177962f0a6c75d85a06481556454df14039371b05998c8",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -3946,6 +3946,74 @@
       "artifact": {
         "digest": "sha256:aef297500dd4f4630a201d188bd00508fae8e5de2623fd2f0429e5b795af3e49",
         "source": "repo+python://src/infrastructure/plugins/v2/background_task_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/conversation-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_access_services:_apply_conversation_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.conversation-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:99e069586c9a83004ea6e6085900e48f7ceda5cc91b9a91385de50f68cd9c5c2",
+      "artifact": {
+        "digest": "sha256:6b200a04e6a6372aa3cbce11591dbe35e25ffd8bd19bd3edb55edad6b8340ac1",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/conversation-access",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_access_services:_apply_conversation_access_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.conversation-access",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repository_provider",
+              "service": "service:persistence.conversation-repository-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:363ceac59f2cae3f8a553e6678e7db662fc3d1fd14a9ea0757f94319049dfb8c",
+      "artifact": {
+        "digest": "sha256:6b200a04e6a6372aa3cbce11591dbe35e25ffd8bd19bd3edb55edad6b8340ac1",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
       }
     },
     {

@@ -25,7 +25,7 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         try_start_bridge_task=AsyncMock(return_value=True),
         bridge_tasks={},
     )
-    conversation_repo = SimpleNamespace(find_by_id=AsyncMock())
+    conversation_access = SimpleNamespace(find_by_id=AsyncMock())
     redis_client = SimpleNamespace(get=AsyncMock(return_value=None))
     session_event_log = SimpleNamespace(
         message_recovery_state=AsyncMock(
@@ -37,7 +37,9 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         ),
     )
     container = SimpleNamespace(
-        conversation_repository=lambda: conversation_repo,
+        conversation_repository=MagicMock(
+            side_effect=AssertionError("static conversation repository must not be used")
+        ),
         agent_execution_event_repository=MagicMock(
             side_effect=AssertionError("static event repository must not be used")
         ),
@@ -56,6 +58,7 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         send_error=AsyncMock(),
         v2_redis=redis_client,
         v2_session_event_log=session_event_log,
+        v2_conversation_access=conversation_access,
     )
 
     @asynccontextmanager
@@ -79,6 +82,22 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         "_session_event_log_service_v2",
         lambda: context.v2_session_event_log,
     )
+
+    @asynccontextmanager
+    async def _conversation_access_authority(
+        _context: object,
+        *,
+        conversation_id: str,
+    ):
+        assert conversation_id == "conv-1"
+        yield SimpleNamespace(service=context.v2_conversation_access)
+
+    monkeypatch.setattr(
+        subscription_handler,
+        "conversation_access_application_authority_v2",
+        _conversation_access_authority,
+        raising=False,
+    )
     return context
 
 
@@ -87,8 +106,12 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 async def test_subscribe_starts_recovery_bridge_when_running(monkeypatch) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
 
     created_tasks = []
@@ -139,11 +162,37 @@ async def test_subscribe_starts_recovery_bridge_when_running(monkeypatch) -> Non
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_subscribe_rejects_conversation_from_another_tenant(monkeypatch) -> None:
+    context = _build_context(monkeypatch)
+    handler = SubscribeHandler()
+    context.v2_conversation_access.find_by_id.return_value = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-other",
+        project_id="project-other",
+    )
+
+    await handler.handle(context, {"conversation_id": "conv-1"})
+
+    context.connection_manager.subscribe.assert_not_awaited()
+    context.connection_manager.try_start_bridge_task.assert_not_awaited()
+    context.send_ack.assert_not_awaited()
+    context.send_error.assert_awaited_once_with(
+        "You do not have permission to access this conversation",
+        conversation_id="conv-1",
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_subscribe_keeps_client_recovery_cursor(monkeypatch) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
     context.v2_session_event_log.message_recovery_state.return_value = (
         SessionMessageRecoveryStateV2(
@@ -215,8 +264,12 @@ async def test_subscribe_uses_message_scoped_recovery_cursor_when_client_cursor_
 ) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
     context.v2_session_event_log.message_recovery_state.return_value = (
         SessionMessageRecoveryStateV2(
@@ -286,8 +339,12 @@ async def test_subscribe_skips_recovery_when_running_key_is_stale(
 ) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
     context.v2_session_event_log.message_recovery_state.return_value = (
         SessionMessageRecoveryStateV2(
@@ -316,8 +373,12 @@ async def test_subscribe_skips_recovery_when_running_key_has_no_persisted_events
 ) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"attempt-1"
     context.v2_session_event_log.message_recovery_state.return_value = (
         SessionMessageRecoveryStateV2(
@@ -345,8 +406,12 @@ async def test_subscribe_does_not_fallback_when_v2_session_log_is_unavailable(
 ) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
     context.v2_session_event_log.message_recovery_state.side_effect = RuntimeError(
         "v2 session log unavailable"
@@ -364,11 +429,50 @@ async def test_subscribe_does_not_fallback_when_v2_session_log_is_unavailable(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_subscribe_does_not_fallback_when_v2_conversation_access_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _build_context(monkeypatch)
+    handler = SubscribeHandler()
+
+    @asynccontextmanager
+    async def _unavailable_authority(
+        _context: object,
+        *,
+        conversation_id: str,
+    ):
+        raise RuntimeError(f"v2 conversation access unavailable for {conversation_id}")
+        yield
+
+    monkeypatch.setattr(
+        subscription_handler,
+        "conversation_access_application_authority_v2",
+        _unavailable_authority,
+        raising=False,
+    )
+
+    await handler.handle(context, {"conversation_id": "conv-1"})
+
+    context.get_scoped_container().conversation_repository.assert_not_called()
+    context.connection_manager.subscribe.assert_not_awaited()
+    context.send_ack.assert_not_awaited()
+    context.send_error.assert_awaited_once_with(
+        "Failed to subscribe (see server logs)",
+        conversation_id="conv-1",
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_subscribe_ignores_boolean_cursor_values(monkeypatch) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
 
     real_create_task = asyncio.create_task
@@ -435,8 +539,12 @@ async def test_subscribe_skips_recovery_when_bridge_already_active(
 ) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
     context.connection_manager.try_start_bridge_task.return_value = False
 
@@ -453,8 +561,12 @@ async def test_subscribe_skips_recovery_when_bridge_already_active(
 async def test_subscribe_does_not_init_llm_when_bridge_not_started(monkeypatch) -> None:
     context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
-    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    conversation = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
     context.connection_manager.try_start_bridge_task.return_value = False
 

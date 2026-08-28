@@ -8,11 +8,15 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_handler import (
     SubscribeHandler,
 )
-from src.infrastructure.plugins.v2 import session_event_log_store as store_module
+from src.infrastructure.plugins.v2 import (
+    conversation_access_services as conversation_module,
+    session_event_log_store as store_module,
+)
 from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
     install_process_generation_host_v2,
@@ -87,6 +91,7 @@ class _StaticRecoveryAuthorityProbe:
                 return_value=SimpleNamespace(
                     id="conversation-1",
                     project_id="project-1",
+                    tenant_id="tenant-1",
                     user_id="user-1",
                 )
             )
@@ -122,6 +127,7 @@ class _StaticRecoveryAuthorityProbe:
 
 def _message_context(
     probe: _StaticRecoveryAuthorityProbe,
+    db: AsyncSession,
 ) -> SimpleNamespace:
     connection_manager = SimpleNamespace(
         subscribe=AsyncMock(),
@@ -131,7 +137,7 @@ def _message_context(
         user_id="user-1",
         tenant_id="tenant-1",
         session_id="session-1",
-        db=SimpleNamespace(),
+        db=db,
         connection_manager=connection_manager,
         get_scoped_container=lambda: probe,
         send_ack=AsyncMock(),
@@ -181,7 +187,19 @@ async def test_subscription_recovery_keeps_one_generation_for_redis_and_session_
 
     first_client.reload_generation = reload_generation
     static_probe = _StaticRecoveryAuthorityProbe()
-    context = _message_context(static_probe)
+    repository_sessions: list[AsyncSession] = []
+
+    def conversation_repository(db: AsyncSession) -> Any:
+        repository_sessions.append(db)
+        return static_probe._conversation_repository
+
+    monkeypatch.setattr(
+        conversation_module,
+        "SqlConversationRepository",
+        conversation_repository,
+    )
+    db = AsyncSession()
+    context = _message_context(static_probe, db)
 
     try:
         async with pin_generation_v2(host):
@@ -192,7 +210,8 @@ async def test_subscription_recovery_keeps_one_generation_for_redis_and_session_
         assert second_client.calls == []
         assert first_store.message_reads == [("conversation-1", "message-1")]
         assert second_store.message_reads == []
-        assert static_probe.conversation_repository_accesses == 1
+        assert repository_sessions == [db]
+        assert static_probe.conversation_repository_accesses == 0
         assert static_probe.redis_accesses == 0
         assert static_probe.event_repository_accesses == 0
         assert first_client.close_calls == 1
@@ -205,6 +224,7 @@ async def test_subscription_recovery_keeps_one_generation_for_redis_and_session_
         context.send_error.assert_not_awaited()
     finally:
         clear_process_generation_host_v2(host)
+        await db.close()
         await host.close()
 
     assert second_client.close_calls == 1
@@ -229,13 +249,26 @@ async def test_subscription_recovery_does_not_fallback_when_v2_redis_is_unavaila
     assert publication.accepted is True
     install_process_generation_host_v2(host)
     static_probe = _StaticRecoveryAuthorityProbe()
-    context = _message_context(static_probe)
+    repository_sessions: list[AsyncSession] = []
+
+    def conversation_repository(db: AsyncSession) -> Any:
+        repository_sessions.append(db)
+        return static_probe._conversation_repository
+
+    monkeypatch.setattr(
+        conversation_module,
+        "SqlConversationRepository",
+        conversation_repository,
+    )
+    db = AsyncSession()
+    context = _message_context(static_probe, db)
 
     try:
         async with pin_generation_v2(host):
             await SubscribeHandler().handle(context, {"conversation_id": "conversation-1"})
 
-        assert static_probe.conversation_repository_accesses == 1
+        assert repository_sessions == [db]
+        assert static_probe.conversation_repository_accesses == 0
         assert static_probe.redis_accesses == 0
         assert static_probe.event_repository_accesses == 0
         assert store.message_reads == []
@@ -247,4 +280,5 @@ async def test_subscription_recovery_does_not_fallback_when_v2_redis_is_unavaila
         context.send_error.assert_not_awaited()
     finally:
         clear_process_generation_host_v2(host)
+        await db.close()
         await host.close()

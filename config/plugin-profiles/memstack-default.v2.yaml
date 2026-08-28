@@ -1399,6 +1399,35 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-conversation-repository-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/conversation-repository-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-conversation-access
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/conversation-access
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        repository_provider: service:persistence.conversation-repository-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-task-log-repository-provider
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

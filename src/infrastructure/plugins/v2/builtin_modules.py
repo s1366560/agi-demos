@@ -75,6 +75,7 @@ from .channel_adapters import (
 )
 from .channel_runtime import ChannelRuntimeManagerV2, channel_runtime_definition_v2
 from .cluster_services import cluster_service_definitions_v2
+from .conversation_access_services import conversation_access_service_definitions_v2
 from .cron_services import cron_service_definitions_v2
 from .docker_monitor_runtime import docker_event_monitor_definition_v2
 from .engine_services import engine_catalog_definition_v2
@@ -354,6 +355,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         llm_health_runtime_definition_v2(),
         skill_evolution_scheduler_definition_v2(),
         *background_task_service_definitions_v2(),
+        *conversation_access_service_definitions_v2(),
         *task_log_service_definitions_v2(),
         *workflow_service_definitions_v2(workflow_runtime_factory),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
