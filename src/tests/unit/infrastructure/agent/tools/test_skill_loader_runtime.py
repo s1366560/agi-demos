@@ -147,7 +147,6 @@ async def test_bound_skill_loader_available_names_do_not_use_legacy_global_cache
 
     service.list_available_skills = _empty_list
     service.load_skill_content = _missing_content
-    monkeypatch.setattr(skill_loader_module, "_available_skill_names", ["legacy-leak"])
     monkeypatch.setattr(
         skill_loader_module,
         "_load_skill_content_from_cwd",
@@ -174,10 +173,8 @@ async def test_bound_skill_loader_available_names_do_not_use_legacy_global_cache
 
     assert "only-a" in result_a.output
     assert "only-b" not in result_a.output
-    assert "legacy-leak" not in result_a.output
     assert "only-b" in result_b.output
     assert "only-a" not in result_b.output
-    assert "legacy-leak" not in result_b.output
 
 
 @pytest.mark.unit
@@ -215,3 +212,37 @@ def test_bound_skill_loader_availability_updates_are_generation_isolated() -> No
     assert availability_b.snapshot() == ("skill-b",)
     assert availability_a.revision == 1
     assert availability_b.revision == 0
+
+
+@pytest.mark.unit
+async def test_unbound_skill_loader_template_rejects_legacy_runtime_fallback() -> None:
+    from src.infrastructure.agent.tools import skill_loader as skill_loader_module
+
+    result = await skill_loader_module.skill_loader_tool.execute(
+        _context("unbound"),
+        name="missing",
+    )
+
+    assert result.is_error is True
+    assert result.metadata == {
+        "error": "skill_loader_runtime_unavailable",
+        "service": "skill_loader",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "seam_name",
+    (
+        "_skill_loader_deps",
+        "_available_skill_names",
+        "configure_skill_loader_tool",
+        "get_available_skills",
+        "set_available_skills",
+        "set_sandbox_id",
+    ),
+)
+def test_skill_loader_module_has_no_legacy_runtime_seams(seam_name: str) -> None:
+    from src.infrastructure.agent.tools import skill_loader as skill_loader_module
+
+    assert not hasattr(skill_loader_module, seam_name)

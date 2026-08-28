@@ -359,17 +359,10 @@ async def test_worker_skill_loader_binds_sandbox_without_global_mutation(
         captured.update(kwargs)
         return marker
 
-    def _forbidden(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("worker skill loader must not mutate module-level sandbox state")
-
     monkeypatch.setattr(
         agent_worker_state,
         "get_or_create_skill_loader_tool",
         _get_skill_loader,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.skill_loader.set_sandbox_id",
-        _forbidden,
     )
 
     tools: dict[str, object] = {"bash": SimpleNamespace(sandbox_id="sandbox-a")}

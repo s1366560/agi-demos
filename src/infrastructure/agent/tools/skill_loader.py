@@ -32,10 +32,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "SkillAvailabilityV2",
-    "configure_skill_loader_tool",
-    "get_available_skills",
     "make_skill_loader_tool",
-    "set_sandbox_id",
     "skill_availability_for_tool",
     "skill_loader_tool",
 ]
@@ -105,91 +102,14 @@ class _SkillLoaderDeps:
     skill_availability: SkillAvailabilityV2 | None = None
 
 
-_skill_loader_deps: _SkillLoaderDeps | None = None
 _skill_loader_runtime: ContextVar[_SkillLoaderDeps | None] = ContextVar(
     f"{__name__}.skill_loader_runtime",
     default=None,
 )
 
-# Module-level skill name cache (replaces legacy SkillLoaderTool.get_available_skills)
-_available_skill_names: list[str] = []
-
-
-def get_available_skills() -> list[str]:
-    """Return cached list of available skill names.
-
-    This replaces the legacy ``SkillLoaderTool.get_available_skills()`` method.
-    The list is populated by external callers (e.g. agent_worker_state) that
-    initialise the skill loader.
-    """
-    return list(_available_skill_names)
-
-
-def set_available_skills(names: list[str]) -> None:
-    """Set the cached available skill names.
-
-    Called externally after skill discovery to populate the cache.
-    """
-    global _available_skill_names
-    _available_skill_names = list(names)
-
 
 def _current_skill_loader_deps() -> _SkillLoaderDeps | None:
-    runtime = _skill_loader_runtime.get()
-    return runtime if runtime is not None else _skill_loader_deps
-
-
-def set_sandbox_id(sandbox_id: str) -> None:
-    """Update the sandbox_id in the module-level deps.
-
-    This replaces the legacy ``SkillLoaderTool.set_sandbox_id()`` method.
-    Re-creates ``_skill_loader_deps`` with the new sandbox_id.
-    """
-    global _skill_loader_deps
-    if _skill_loader_deps is None:
-        logger.warning("set_sandbox_id called before configure_skill_loader_tool")
-        return
-    _skill_loader_deps = _SkillLoaderDeps(
-        skill_service=_skill_loader_deps.skill_service,
-        tenant_id=_skill_loader_deps.tenant_id,
-        project_id=_skill_loader_deps.project_id,
-        agent_mode=_skill_loader_deps.agent_mode,
-        permission_manager=_skill_loader_deps.permission_manager,
-        session_id=_skill_loader_deps.session_id,
-        skill_sync_service=_skill_loader_deps.skill_sync_service,
-        sandbox_id=sandbox_id,
-        skip_database=_skill_loader_deps.skip_database,
-        skill_availability=_skill_loader_deps.skill_availability,
-    )
-
-
-def configure_skill_loader_tool(
-    skill_service: Any,
-    tenant_id: str,
-    project_id: str,
-    agent_mode: str = "react",
-    permission_manager: Any = None,
-    session_id: str = "",
-    skill_sync_service: Any = None,
-    sandbox_id: str = "",
-    skip_database: bool = True,
-) -> None:
-    """Configure dependencies for the skill_loader tool.
-
-    Called at agent startup to inject services needed by the tool.
-    """
-    global _skill_loader_deps
-    _skill_loader_deps = _SkillLoaderDeps(
-        skill_service=skill_service,
-        tenant_id=tenant_id,
-        project_id=project_id,
-        agent_mode=agent_mode,
-        permission_manager=permission_manager,
-        session_id=session_id,
-        skill_sync_service=skill_sync_service,
-        sandbox_id=sandbox_id,
-        skip_database=skip_database,
-    )
+    return _skill_loader_runtime.get()
 
 
 # ---------------------------------------------------------------------------
@@ -297,8 +217,12 @@ async def skill_loader_tool(  # noqa: C901
     deps = _current_skill_loader_deps()
     if deps is None:
         return ToolResult(
-            output=("Skill loader not configured. No skill service available."),
+            output="Skill loader requires a generation-bound runtime.",
             is_error=True,
+            metadata={
+                "error": "skill_loader_runtime_unavailable",
+                "service": "skill_loader",
+            },
         )
 
     skill_name = name.strip()
@@ -340,9 +264,7 @@ async def skill_loader_tool(  # noqa: C901
 
         if not content:
             runtime_names = (
-                deps.skill_availability.snapshot()
-                if _skill_loader_runtime.get() is not None and deps.skill_availability is not None
-                else tuple(_available_skill_names)
+                deps.skill_availability.snapshot() if deps.skill_availability is not None else ()
             )
             available = sorted({s.name for s in skills_cache} | set(runtime_names))
             avail_str = ", ".join(available) if available else "none"

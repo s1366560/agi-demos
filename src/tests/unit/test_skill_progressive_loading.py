@@ -654,19 +654,16 @@ FS Content.
 class TestSkillLoaderTool:
     """Tests for skill_loader_tool (module-level @tool_define API)."""
 
-    @pytest.fixture(autouse=True)
-    def _configure_and_reset(self, mock_skill_service):
-        """Configure module deps before each test, reset after."""
-        import src.infrastructure.agent.tools.skill_loader as _mod
+    @pytest.fixture
+    def skill_loader(self, mock_skill_service):
+        """Build a generation-bound skill-loader contribution."""
+        from src.infrastructure.agent.tools.skill_loader import make_skill_loader_tool
 
-        _mod.configure_skill_loader_tool(
+        return make_skill_loader_tool(
             skill_service=mock_skill_service,
             tenant_id="test-tenant",
             project_id="test-project",
         )
-        yield
-        _mod._skill_loader_deps = None
-        _mod._available_skill_names = []
 
     @pytest.fixture
     def mock_skill_service(self):
@@ -691,10 +688,10 @@ class TestSkillLoaderTool:
         )
 
     async def test_initialize_builds_description(self, mock_skill_service):
-        """Test configure + set_available_skills populates cache."""
+        """Test factory construction captures a generation-local roster."""
         from src.infrastructure.agent.tools.skill_loader import (
-            get_available_skills,
-            set_available_skills,
+            make_skill_loader_tool,
+            skill_availability_for_tool,
         )
 
         skills = [
@@ -711,20 +708,24 @@ class TestSkillLoaderTool:
             return_value=skills,
         )
 
-        set_available_skills([s.name for s in skills])
+        tool = make_skill_loader_tool(
+            skill_service=mock_skill_service,
+            tenant_id="test-tenant",
+            project_id="test-project",
+            available_skill_names=tuple(s.name for s in skills),
+        )
 
-        cached = get_available_skills()
-        assert len(cached) == 1
-        assert "test-skill" in cached
+        availability = skill_availability_for_tool(tool)
+        assert availability is not None
+        assert availability.snapshot() == ("test-skill",)
 
     async def test_execute_loads_skill_content(self, mock_skill_service):
         """Test skill_loader_tool returns ToolResult with content."""
         from src.infrastructure.agent.tools.skill_loader import (
-            configure_skill_loader_tool,
-            skill_loader_tool,
+            make_skill_loader_tool,
         )
 
-        configure_skill_loader_tool(
+        skill_loader = make_skill_loader_tool(
             skill_service=mock_skill_service,
             tenant_id="test-tenant",
             project_id="test-project",
@@ -735,7 +736,7 @@ class TestSkillLoaderTool:
         )
 
         ctx = self._make_ctx()
-        result = await skill_loader_tool.execute(ctx, name="my-skill")
+        result = await skill_loader.execute(ctx, name="my-skill")
 
         assert not result.is_error
         assert result.title == "Loaded skill: my-skill"
@@ -750,12 +751,8 @@ class TestSkillLoaderTool:
         mock_skill_service.list_available_skills.assert_awaited_once()
         assert mock_skill_service.list_available_skills.await_args.kwargs["skip_database"] is False
 
-    async def test_execute_handles_not_found(self, mock_skill_service):
+    async def test_execute_handles_not_found(self, mock_skill_service, skill_loader):
         """Test error ToolResult for non-existent skill."""
-        from src.infrastructure.agent.tools.skill_loader import (
-            skill_loader_tool,
-        )
-
         mock_skill_service.load_skill_content = AsyncMock(
             return_value=None,
         )
@@ -773,7 +770,7 @@ class TestSkillLoaderTool:
         )
 
         ctx = self._make_ctx()
-        result = await skill_loader_tool.execute(ctx, name="nonexistent")
+        result = await skill_loader.execute(ctx, name="nonexistent")
 
         assert result.is_error
         assert "not found" in result.output.lower()
@@ -782,14 +779,11 @@ class TestSkillLoaderTool:
     async def test_execute_falls_back_to_cwd_when_primary_service_misses(
         self,
         mock_skill_service,
+        skill_loader,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ):
         """Test skill_loader_tool falls back to cwd skill files when primary service misses."""
-        from src.infrastructure.agent.tools.skill_loader import (
-            skill_loader_tool,
-        )
-
         skill_dir = tmp_path / ".memstack" / "skills" / "research"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
@@ -810,34 +804,37 @@ Use fallback loader.
         monkeypatch.chdir(tmp_path)
 
         ctx = self._make_ctx()
-        result = await skill_loader_tool.execute(ctx, name="research")
+        result = await skill_loader.execute(ctx, name="research")
 
         assert not result.is_error
         assert result.title == "Loaded skill: research"
         assert "# Fallback Skill" in result.output
 
-    async def test_execute_validates_empty_skill_name(self, mock_skill_service):
+    async def test_execute_validates_empty_skill_name(self, skill_loader):
         """Test error ToolResult for empty skill name."""
-        from src.infrastructure.agent.tools.skill_loader import (
-            skill_loader_tool,
-        )
-
         ctx = self._make_ctx()
-        result = await skill_loader_tool.execute(ctx, name="")
+        result = await skill_loader.execute(ctx, name="")
 
         assert result.is_error
         assert "required" in result.output.lower()
 
     def test_get_available_skills_after_set(self):
-        """Test get/set available skills cache round-trip."""
+        """Test the available skill roster is carried by the bound tool."""
         from src.infrastructure.agent.tools.skill_loader import (
-            get_available_skills,
-            set_available_skills,
+            make_skill_loader_tool,
+            skill_availability_for_tool,
         )
 
-        set_available_skills(["cached-skill"])
-        cached = get_available_skills()
-        assert cached == ["cached-skill"]
+        tool = make_skill_loader_tool(
+            skill_service=object(),
+            tenant_id="test-tenant",
+            project_id="test-project",
+            available_skill_names=("cached-skill",),
+        )
+
+        availability = skill_availability_for_tool(tool)
+        assert availability is not None
+        assert availability.snapshot() == ("cached-skill",)
 
     def test_skill_sync_invalidation_adds_synced_skill_to_available_cache(
         self, monkeypatch: pytest.MonkeyPatch
@@ -848,11 +845,18 @@ Use fallback loader.
             SelfModifyingLifecycleOrchestrator,
         )
         from src.infrastructure.agent.tools.skill_loader import (
-            get_available_skills,
-            set_available_skills,
+            make_skill_loader_tool,
+            skill_availability_for_tool,
         )
 
-        set_available_skills(["existing-skill"])
+        loader = make_skill_loader_tool(
+            skill_service=object(),
+            tenant_id="test-tenant",
+            project_id="test-project",
+            available_skill_names=("existing-skill",),
+        )
+        availability = skill_availability_for_tool(loader)
+        assert availability is not None
         monkeypatch.setattr(
             SelfModifyingLifecycleOrchestrator,
             "run_post_change",
@@ -871,7 +875,7 @@ Use fallback loader.
             skill_loader_tool=None,
         )
 
-        assert get_available_skills() == ["existing-skill"]
+        assert availability.snapshot() == ("existing-skill",)
         assert result["skill_availability"] == {
             "authority": "unavailable",
             "changed": False,

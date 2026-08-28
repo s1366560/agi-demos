@@ -186,10 +186,7 @@ async def test_bound_skill_sync_passes_exact_runtime_dependencies(
 def test_skill_sync_updates_only_the_bound_generation_skill_roster(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.infrastructure.agent.tools import (
-        skill_loader as skill_loader_module,
-        skill_sync as skill_sync_module,
-    )
+    from src.infrastructure.agent.tools import skill_sync as skill_sync_module
     from src.infrastructure.agent.tools.self_modifying_lifecycle import (
         SelfModifyingLifecycleOrchestrator,
     )
@@ -198,19 +195,6 @@ def test_skill_sync_updates_only_the_bound_generation_skill_roster(
         skill_availability_for_tool,
     )
 
-    def _legacy_cache_forbidden(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("bound skill sync must not use the process-global skill roster")
-
-    monkeypatch.setattr(
-        skill_loader_module,
-        "get_available_skills",
-        _legacy_cache_forbidden,
-    )
-    monkeypatch.setattr(
-        skill_loader_module,
-        "set_available_skills",
-        _legacy_cache_forbidden,
-    )
     monkeypatch.setattr(
         SelfModifyingLifecycleOrchestrator,
         "run_post_change",
