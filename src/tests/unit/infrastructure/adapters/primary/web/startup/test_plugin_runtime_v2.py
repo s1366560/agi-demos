@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import cast
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -27,6 +28,7 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
     PlatformPluginPublicationPolicyV2,
     PlatformPluginRepositoryV2,
 )
+from src.infrastructure.agent.hitl import local_resume_consumer as local_resume_consumer_mod
 from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.graph_runtime import (
@@ -41,7 +43,9 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 
 
 @pytest.mark.unit
-async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
+async def test_initialize_and_shutdown_plugin_runtime_v2(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     app = FastAPI()
 
     host = await initialize_plugin_runtime_v2(app)
@@ -213,7 +217,18 @@ async def test_initialize_and_shutdown_plugin_runtime_v2() -> None:
             )
         )
     assert error.value.code == "route_table_frozen"
+
+    async def shutdown_local_consumer() -> None:
+        assert host.manager.current is not None
+
+    shutdown_consumer = AsyncMock(side_effect=shutdown_local_consumer)
+    monkeypatch.setattr(
+        local_resume_consumer_mod,
+        "shutdown_local_consumer",
+        shutdown_consumer,
+    )
     await shutdown_plugin_runtime_v2(app)
+    shutdown_consumer.assert_awaited_once_with()
     assert app.state.platform_plugin_runtime_v2 is None
     assert host.manager.current is None
     assert app.state.platform_plugin_route_registry_v2 is None

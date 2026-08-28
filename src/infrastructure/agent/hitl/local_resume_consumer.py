@@ -20,11 +20,15 @@ from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as aioredis
 
+from src.infrastructure.agent.hitl.local_resume_generation_v2 import (
+    LocalHITLRedisGenerationBindingV2,
+)
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.hitl.utils import HITLRequestRecord
-    from src.infrastructure.plugins.v2.boundary import GenerationHostV2
+    from src.infrastructure.plugins.v2.boundary import GenerationHostV2, ReservedGenerationV2
 
 
 class LocalHITLResumeConsumer:
@@ -40,24 +44,27 @@ class LocalHITLResumeConsumer:
 
     def __init__(
         self,
-        redis_client: aioredis.Redis,
         *,
         generation_host: GenerationHostV2,
     ) -> None:
-        self._redis = redis_client
         self._generation_host = generation_host
+        self._redis_generation = LocalHITLRedisGenerationBindingV2(host=generation_host)
         self._projects: set[tuple[str, str]] = set()
         self._running = False
         self._listen_task: asyncio.Task[None] | None = None
         self._worker_id = f"local-resume-{os.getpid()}"
         self._background_tasks: set[asyncio.Task[Any]] = set()
+        self._reservation_cleanup_tasks: set[asyncio.Task[None]] = set()
         self._last_reclaim_at = 0.0
 
     async def start(self) -> None:
         if self._running:
             return
+        from src.infrastructure.plugins.v2.boundary import detached_operation_task_context_v2
+
         self._running = True
-        self._listen_task = asyncio.create_task(self._listen_loop())
+        task_context = detached_operation_task_context_v2()
+        self._listen_task = asyncio.create_task(self._listen_loop(), context=task_context)
         logger.info("[LocalHITL] Started local HITL resume consumer")
 
     async def stop(self) -> None:
@@ -74,15 +81,26 @@ class LocalHITLResumeConsumer:
             with contextlib.suppress(Exception):
                 await asyncio.gather(*background_tasks, return_exceptions=True)
             self._background_tasks.clear()
+        if self._reservation_cleanup_tasks:
+            cleanup_tasks = list(self._reservation_cleanup_tasks)
+            with contextlib.suppress(Exception):
+                await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+            self._reservation_cleanup_tasks.clear()
         logger.info("[LocalHITL] Stopped local HITL resume consumer")
 
     async def add_project(self, tenant_id: str, project_id: str) -> None:
         stream_key = self._stream_key(tenant_id, project_id)
-        try:
-            await self._redis.xgroup_create(stream_key, self.CONSUMER_GROUP, id="0", mkstream=True)
-        except aioredis.ResponseError as e:
-            if "BUSYGROUP" not in str(e):
-                raise
+        async with self._redis_generation.lease_current():
+            try:
+                await self._redis_generation.current().xgroup_create(
+                    stream_key,
+                    self.CONSUMER_GROUP,
+                    id="0",
+                    mkstream=True,
+                )
+            except aioredis.ResponseError as e:
+                if "BUSYGROUP" not in str(e):
+                    raise
         self._projects.add((tenant_id, project_id))
         logger.info(f"[LocalHITL] Registered project {tenant_id}:{project_id} for HITL resume")
 
@@ -93,29 +111,30 @@ class LocalHITLResumeConsumer:
                     await asyncio.sleep(1)
                     continue
 
-                now = time.monotonic()
-                if (
-                    self._last_reclaim_at == 0.0
-                    or now - self._last_reclaim_at >= self.RECLAIM_INTERVAL_SECONDS
-                ):
-                    await self._reclaim_pending_messages(min_idle_ms=self.RECLAIM_IDLE_MS)
-                    self._last_reclaim_at = now
+                async with self._redis_generation.lease_current():
+                    now = time.monotonic()
+                    if (
+                        self._last_reclaim_at == 0.0
+                        or now - self._last_reclaim_at >= self.RECLAIM_INTERVAL_SECONDS
+                    ):
+                        await self._reclaim_pending_messages(min_idle_ms=self.RECLAIM_IDLE_MS)
+                        self._last_reclaim_at = now
 
-                stream_keys = {self._stream_key(tid, pid): ">" for tid, pid in self._projects}
-                streams = await self._redis.xreadgroup(
-                    groupname=self.CONSUMER_GROUP,
-                    consumername=self._worker_id,
-                    streams=stream_keys,  # type: ignore[arg-type]  # Redis type stubs overly strict
-                    count=self.DEFAULT_BATCH_SIZE,
-                    block=self.DEFAULT_BLOCK_MS,
-                )
+                    stream_keys = {self._stream_key(tid, pid): ">" for tid, pid in self._projects}
+                    streams = await self._redis_generation.current().xreadgroup(
+                        groupname=self.CONSUMER_GROUP,
+                        consumername=self._worker_id,
+                        streams=stream_keys,  # type: ignore[arg-type]  # Redis stubs too strict
+                        count=self.DEFAULT_BATCH_SIZE,
+                        block=self.DEFAULT_BLOCK_MS,
+                    )
 
-                if not streams:
-                    continue
+                    if not streams:
+                        continue
 
-                for stream_key, messages in streams:
-                    for msg_id, fields in messages:
-                        await self._handle_message(stream_key, msg_id, fields)
+                    for stream_key, messages in streams:
+                        for msg_id, fields in messages:
+                            await self._handle_message(stream_key, msg_id, fields)
 
             except asyncio.CancelledError:
                 break
@@ -215,8 +234,83 @@ class LocalHITLResumeConsumer:
                 f"project={tenant_id}:{project_id}"
             )
 
-            _resume_task = asyncio.create_task(
-                self._resume_and_ack(
+            _ = await self._schedule_resume_and_ack(
+                stream_key,
+                msg_id,
+                tenant_id,
+                project_id,
+                request_id,
+                response_data,
+                conversation_id,
+                message_id,
+            )
+
+        except Exception as e:
+            logger.error(f"[LocalHITL] Failed to handle message {msg_id}: {e}", exc_info=True)
+
+    async def _schedule_resume_and_ack(
+        self,
+        stream_key: str | bytes,
+        msg_id: str | bytes,
+        tenant_id: str,
+        project_id: str,
+        request_id: str,
+        response_data: dict[str, Any],
+        conversation_id: str | None,
+        message_id: str | None,
+    ) -> asyncio.Task[None]:
+        """Reserve the stream generation before detaching resume and ACK work."""
+        from src.infrastructure.plugins.v2.boundary import (
+            detached_operation_task_context_v2,
+            reserve_current_generation_v2,
+        )
+
+        reservation = await reserve_current_generation_v2()
+        try:
+            task = asyncio.create_task(
+                self._resume_and_ack_reserved_generation(
+                    reservation,
+                    stream_key,
+                    msg_id,
+                    tenant_id,
+                    project_id,
+                    request_id,
+                    response_data,
+                    conversation_id,
+                    message_id,
+                ),
+                context=detached_operation_task_context_v2(),
+            )
+        except BaseException:
+            await reservation.release()
+            raise
+
+        self._background_tasks.add(task)
+
+        def task_done(done_task: asyncio.Task[None]) -> None:
+            self._background_tasks.discard(done_task)
+            cleanup_task = asyncio.create_task(reservation.release())
+            self._reservation_cleanup_tasks.add(cleanup_task)
+            cleanup_task.add_done_callback(self._reservation_cleanup_tasks.discard)
+
+        task.add_done_callback(task_done)
+        return task
+
+    async def _resume_and_ack_reserved_generation(
+        self,
+        reservation: ReservedGenerationV2,
+        stream_key: str | bytes,
+        msg_id: str | bytes,
+        tenant_id: str,
+        project_id: str,
+        request_id: str,
+        response_data: dict[str, Any],
+        conversation_id: str | None,
+        message_id: str | None,
+    ) -> None:
+        async with reservation.admit() as generation:
+            with self._redis_generation.bind(generation):
+                await self._resume_and_ack(
                     stream_key,
                     msg_id,
                     tenant_id,
@@ -226,12 +320,6 @@ class LocalHITLResumeConsumer:
                     conversation_id,
                     message_id,
                 )
-            )
-            self._background_tasks.add(_resume_task)
-            _resume_task.add_done_callback(self._background_tasks.discard)
-
-        except Exception as e:
-            logger.error(f"[LocalHITL] Failed to handle message {msg_id}: {e}", exc_info=True)
 
     async def _handle_request_status(
         self,
@@ -584,7 +672,9 @@ class LocalHITLResumeConsumer:
         from src.infrastructure.agent.actor.state.snapshot_repo import load_hitl_snapshot
         from src.infrastructure.agent.hitl.state_store import HITLStateStore
 
-        state = await HITLStateStore(self._redis).load_state_by_request(request_id)
+        state = await HITLStateStore(self._redis_generation.current()).load_state_by_request(
+            request_id
+        )
         if state is not None:
             return True
 
@@ -596,7 +686,11 @@ class LocalHITLResumeConsumer:
                 stream_key = stream_key.decode("utf-8")
             if isinstance(msg_id, bytes):
                 msg_id = msg_id.decode("utf-8")
-            await self._redis.xack(stream_key, self.CONSUMER_GROUP, msg_id)
+            await self._redis_generation.current().xack(
+                stream_key,
+                self.CONSUMER_GROUP,
+                msg_id,
+            )
         except Exception as e:
             logger.warning(f"[LocalHITL] Failed to ack {msg_id!r}: {e}")
 
@@ -604,7 +698,7 @@ class LocalHITLResumeConsumer:
         """Claim idle pending messages so crashed consumers do not strand responses."""
         for tenant_id, project_id in self._projects:
             stream_key = self._stream_key(tenant_id, project_id)
-            pending = await self._redis.xpending_range(
+            pending = await self._redis_generation.current().xpending_range(
                 stream_key,
                 self.CONSUMER_GROUP,
                 "-",
@@ -628,7 +722,7 @@ class LocalHITLResumeConsumer:
             if not message_ids:
                 continue
 
-            claimed = await self._redis.xclaim(
+            claimed = await self._redis_generation.current().xclaim(
                 stream_key,
                 self.CONSUMER_GROUP,
                 self._worker_id,
@@ -663,27 +757,27 @@ class LocalHITLResumeConsumer:
 
 # Module-level singleton
 _local_consumer: LocalHITLResumeConsumer | None = None
+_local_consumer_lock = asyncio.Lock()
 
 
 async def get_or_create_local_consumer() -> LocalHITLResumeConsumer:
     """Get or create the local HITL resume consumer singleton."""
     global _local_consumer
-    if _local_consumer is None:
-        from src.infrastructure.agent.hitl.recovery_service import recover_hitl_on_startup
-        from src.infrastructure.agent.state.agent_worker_state import (
-            get_redis_client,
-        )
-        from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
+    async with _local_consumer_lock:
+        if _local_consumer is None:
+            from src.infrastructure.agent.hitl.recovery_service import recover_hitl_on_startup
+            from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
 
-        redis = await get_redis_client()
-        generation_host = current_process_generation_host_v2()
-        _local_consumer = LocalHITLResumeConsumer(
-            redis,
-            generation_host=generation_host,
-        )
-        await recover_hitl_on_startup(generation_host=generation_host)
-        await _local_consumer.start()
-    return _local_consumer
+            generation_host = current_process_generation_host_v2()
+            candidate = LocalHITLResumeConsumer(generation_host=generation_host)
+            try:
+                await recover_hitl_on_startup(generation_host=generation_host)
+                await candidate.start()
+            except BaseException:
+                await candidate.stop()
+                raise
+            _local_consumer = candidate
+        return _local_consumer
 
 
 async def register_project_local(tenant_id: str, project_id: str) -> None:
@@ -695,6 +789,8 @@ async def register_project_local(tenant_id: str, project_id: str) -> None:
 async def shutdown_local_consumer() -> None:
     """Shut down the local HITL resume consumer."""
     global _local_consumer
-    if _local_consumer:
-        await _local_consumer.stop()
+    async with _local_consumer_lock:
+        consumer = _local_consumer
         _local_consumer = None
+        if consumer is not None:
+            await consumer.stop()

@@ -444,6 +444,9 @@ async def shutdown_plugin_runtime_v2(app: FastAPI) -> None:
     host = getattr(app.state, "platform_plugin_runtime_v2", None)
     if not isinstance(host, PlatformPluginRuntimeHostV2):
         return
+    from src.infrastructure.agent.hitl.local_resume_consumer import shutdown_local_consumer
+
+    await shutdown_local_consumer()
     clear_process_generation_host_v2(host)
     await host.close()
     app.state.platform_plugin_runtime_v2 = None
