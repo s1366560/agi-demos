@@ -7,10 +7,11 @@ import asyncio
 import logging
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import aclosing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from acp import PROTOCOL_VERSION, RequestError
 from acp.interfaces import Client
@@ -199,22 +200,27 @@ class MemStackACPAgent:
                         },
                     },
                 ):
-                    async for event in service.stream_chat_v2(
-                        conversation_id=session.conversation_id,
-                        user_message=user_message,
-                        project_id=session.project_id,
-                        user_id=self._user_id,
-                        tenant_id=self._tenant_id,
-                        api_auth_token=self._api_key,
-                    ):
-                        for update in memstack_event_to_acp_updates(event):
-                            await self._emit_update(session_id, update)
-                        if str(event.get("type") or "") in {"complete", "error"}:
-                            return PromptResponse(
-                                stop_reason="end_turn",
-                                user_message_id=message_id,
-                                usage=usage,
-                            )
+                    agent_stream = cast(
+                        AsyncGenerator[dict[str, Any], None],
+                        service.stream_chat_v2(
+                            conversation_id=session.conversation_id,
+                            user_message=user_message,
+                            project_id=session.project_id,
+                            user_id=self._user_id,
+                            tenant_id=self._tenant_id,
+                            api_auth_token=self._api_key,
+                        ),
+                    )
+                    async with aclosing(agent_stream) as events:
+                        async for event in events:
+                            for update in memstack_event_to_acp_updates(event):
+                                await self._emit_update(session_id, update)
+                            if str(event.get("type") or "") in {"complete", "error"}:
+                                return PromptResponse(
+                                    stop_reason="end_turn",
+                                    user_message_id=message_id,
+                                    usage=usage,
+                                )
             return PromptResponse(
                 stop_reason="end_turn",
                 user_message_id=message_id,

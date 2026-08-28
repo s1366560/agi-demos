@@ -11,7 +11,8 @@ import asyncio
 import logging
 import re
 import uuid
-from contextlib import AsyncExitStack
+from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack, aclosing
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
@@ -517,15 +518,20 @@ async def _agent_bridge(
                     full_response = ""
                     tts_buffer = ""
                     event_count = 0
-                    async for event in agent_service.stream_chat_v2(
-                        conversation_id=conversation_id,
-                        user_message=asr_text,
-                        project_id=project_id,
-                        user_id=user_id,
-                        tenant_id=tenant_id,
-                        image_attachments=None,
-                        api_auth_token=api_key,
-                    ):
+                    agent_stream = cast(
+                        AsyncGenerator[dict[str, Any], None],
+                        agent_service.stream_chat_v2(
+                            conversation_id=conversation_id,
+                            user_message=asr_text,
+                            project_id=project_id,
+                            user_id=user_id,
+                            tenant_id=tenant_id,
+                            image_attachments=None,
+                            api_auth_token=api_key,
+                        ),
+                    )
+                    events = await turn_stack.enter_async_context(aclosing(agent_stream))
+                    async for event in events:
                         event_type = event.get("type")
                         event_count += 1
                         if event_count <= 5 or event_count % 20 == 0:

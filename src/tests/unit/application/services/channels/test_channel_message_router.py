@@ -1167,6 +1167,40 @@ async def test_invoke_agent_streams_and_sends_final_response() -> None:
 
 
 @pytest.mark.unit
+async def test_channel_stream_closes_when_broadcast_fails() -> None:
+    router = ChannelMessageRouter()
+    router._broadcast_workspace_event = AsyncMock(side_effect=RuntimeError("broadcast failed"))
+    router._get_streaming_adapter = Mock(return_value=None)
+    closed = False
+
+    class AgentService:
+        async def stream_chat_v2(self, **_kwargs: object) -> AsyncIterator[dict[str, object]]:
+            nonlocal closed
+            try:
+                yield {"type": "text_delta", "data": {"delta": "partial"}}
+                yield {"type": "complete", "data": {"content": "late"}}
+            finally:
+                closed = True
+
+    message = _build_message(text="hello")
+    conversation = SimpleNamespace(
+        project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
+    )
+
+    with pytest.raises(RuntimeError, match="broadcast failed"):
+        await router._run_agent_stream_pinned(
+            message=message,
+            conversation_id="conv-1",
+            conversation=conversation,
+            agent_service=AgentService(),
+        )
+
+    assert closed is True
+
+
+@pytest.mark.unit
 async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_message_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

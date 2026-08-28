@@ -269,6 +269,53 @@ async def test_prompt_returns_after_terminal_memstack_event(
     ]
 
 
+async def test_prompt_closes_terminal_stream_before_operation_and_db(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    order: list[str] = []
+
+    class ClosingService(FakeAgentService):
+        async def stream_chat_v2(self, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+            self.streamed.append(kwargs)
+            try:
+                yield {"type": "complete", "data": {"message_id": "message-1"}}
+                yield {"type": "text_delta", "data": {"delta": "late"}}
+            finally:
+                order.append("stream-closed")
+
+    class OrderedSessionFactory(DummySessionFactory):
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            order.append("db-closed")
+
+    @asynccontextmanager
+    async def ordered_operation(**_kwargs: object) -> AsyncIterator[None]:
+        try:
+            yield None
+        finally:
+            order.append("operation-closed")
+
+    service = ClosingService()
+    session_factory = OrderedSessionFactory()
+    agent = MemStackACPAgent(
+        container=object(),  # type: ignore[arg-type]
+        session_factory=session_factory,  # type: ignore[arg-type]
+        user_id="user-1",
+        tenant_id="tenant-1",
+    )
+    monkeypatch.setattr(agent, "_agent_service", _agent_service_factory(service))
+    monkeypatch.setattr(acp_server_module, "pin_agent_turn_operation_v2", ordered_operation)
+    await agent.new_session(cwd="/tmp/project", mcp_servers=[], memstack={"projectId": "p1"})
+    order.clear()
+
+    _ = await agent.prompt(
+        session_id="conversation-1",
+        prompt=[TextContentBlock(type="text", text="hello")],
+        message_id="message-1",
+    )
+
+    assert order == ["stream-closed", "operation-closed", "db-closed"]
+
+
 async def test_cancel_underlying_execution_uses_shared_runtime_cancellation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

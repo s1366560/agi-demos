@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import logging
 import uuid
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -1603,51 +1604,56 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
             )
             return
 
-        async for event in agent_service.stream_chat_v2(
-            conversation_id=conversation_id,
-            user_message=user_message,
-            project_id=project_id,
-            user_id=context.user_id,
-            tenant_id=context.tenant_id,
-            preferred_language=preferred_language,
-            attachment_ids=attachment_ids,
-            file_metadata=file_metadata,
-            forced_skill_name=forced_skill_name,
-            app_model_context=_sanitize_client_app_model_context(app_model_context),
-            image_attachments=image_attachments,
-            agent_id=agent_id,
-            mentions=mentions,
-            api_auth_token=context.api_key,
-            execution_message_id=execution_message_id,
-        ):
-            event_count += 1
-            event_type = event.get("type", "unknown")
-            event_data = event.get("data", {})
+        agent_stream = cast(
+            AsyncGenerator[dict[str, Any], None],
+            agent_service.stream_chat_v2(
+                conversation_id=conversation_id,
+                user_message=user_message,
+                project_id=project_id,
+                user_id=context.user_id,
+                tenant_id=context.tenant_id,
+                preferred_language=preferred_language,
+                attachment_ids=attachment_ids,
+                file_metadata=file_metadata,
+                forced_skill_name=forced_skill_name,
+                app_model_context=_sanitize_client_app_model_context(app_model_context),
+                image_attachments=image_attachments,
+                agent_id=agent_id,
+                mentions=mentions,
+                api_auth_token=context.api_key,
+                execution_message_id=execution_message_id,
+            ),
+        )
+        async with contextlib.aclosing(agent_stream) as events:
+            async for event in events:
+                event_count += 1
+                event_type = event.get("type", "unknown")
+                event_data = event.get("data", {})
 
-            logger.debug(
-                f"[WS Bridge] Event #{event_count}: type={event_type}, conv={conversation_id}"
-            )
-
-            # Check if session is still subscribed
-            if not manager.is_subscribed(context.session_id, conversation_id):
-                logger.info(
-                    f"[WS] Session {context.session_id[:8]}... unsubscribed, stopping stream"
+                logger.debug(
+                    f"[WS Bridge] Event #{event_count}: type={event_type}, conv={conversation_id}"
                 )
-                break
 
-            # Add conversation_id to event for routing
-            ws_event = {
-                "type": event.get("type"),
-                "conversation_id": conversation_id,
-                "data": event_data,
-                "seq": event.get("id"),
-                "timestamp": event.get("timestamp", datetime.now(UTC).isoformat()),
-                "event_time_us": event.get("event_time_us"),
-                "event_counter": event.get("event_counter"),
-            }
+                # Check if session is still subscribed
+                if not manager.is_subscribed(context.session_id, conversation_id):
+                    logger.info(
+                        f"[WS] Session {context.session_id[:8]}... unsubscribed, stopping stream"
+                    )
+                    break
 
-            # Broadcast to ALL sessions subscribed to this conversation
-            await manager.broadcast_to_conversation(conversation_id, ws_event)
+                # Add conversation_id to event for routing
+                ws_event = {
+                    "type": event.get("type"),
+                    "conversation_id": conversation_id,
+                    "data": event_data,
+                    "seq": event.get("id"),
+                    "timestamp": event.get("timestamp", datetime.now(UTC).isoformat()),
+                    "event_time_us": event.get("event_time_us"),
+                    "event_counter": event.get("event_counter"),
+                }
+
+                # Broadcast to ALL sessions subscribed to this conversation
+                await manager.broadcast_to_conversation(conversation_id, ws_event)
 
     except asyncio.CancelledError:
         logger.info(f"[WS] Stream cancelled for conversation {conversation_id}")

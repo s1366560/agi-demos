@@ -11,6 +11,8 @@ import math
 import re
 import time
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -950,18 +952,22 @@ class ChannelMessageRouter:
             )
 
         # Consume agent stream
+        agent_stream = cast(
+            AsyncGenerator[dict[str, Any], None],
+            agent_service.stream_chat_v2(
+                conversation_id=conversation_id,
+                user_message=text,
+                project_id=conversation.project_id,
+                user_id=conversation.user_id,
+                tenant_id=conversation.tenant_id,
+                file_metadata=file_metadata,
+                app_model_context=self._build_app_model_context(message),
+                agent_id=agent_id,
+            ),
+        )
         try:
-            async with asyncio.timeout(_STREAM_TIMEOUT):
-                async for event in agent_service.stream_chat_v2(
-                    conversation_id=conversation_id,
-                    user_message=text,
-                    project_id=conversation.project_id,
-                    user_id=conversation.user_id,
-                    tenant_id=conversation.tenant_id,
-                    file_metadata=file_metadata,
-                    app_model_context=self._build_app_model_context(message),
-                    agent_id=agent_id,
-                ):
+            async with aclosing(agent_stream) as events, asyncio.timeout(_STREAM_TIMEOUT):
+                async for event in events:
                     event_type = event.get("type")
                     event_data = event.get("data") or {}
 

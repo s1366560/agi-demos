@@ -159,3 +159,34 @@ async def test_websocket_agent_turn_fails_closed_without_process_host(
     assert len(context.connection_manager.errors) == 1
     error = context.connection_manager.errors[0][1]
     assert error["data"]["message"] == "plugin generation host is not configured for this process"
+
+
+@pytest.mark.unit
+async def test_websocket_unsubscribe_closes_agent_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _TurnContext()
+    context.connection_manager.is_subscribed = lambda *_args: False  # type: ignore[method-assign]
+    closed = False
+
+    class AgentService:
+        async def stream_chat_v2(self, **_kwargs: Any):
+            nonlocal closed
+            try:
+                yield {"type": "text_delta", "data": {"delta": "partial"}}
+                yield {"type": "complete", "data": {"content": "late"}}
+            finally:
+                closed = True
+
+    monkeypatch.setattr(chat_handler, "_load_external_acp_backend", AsyncMock(return_value=None))
+
+    await chat_handler._stream_agent_to_websocket_pinned(
+        agent_service=AgentService(),  # type: ignore[arg-type]
+        context=context,  # type: ignore[arg-type]
+        conversation_id="conversation-1",
+        user_message="hello",
+        project_id="project-1",
+    )
+
+    assert closed is True
+    assert context.connection_manager.broadcasts == []
