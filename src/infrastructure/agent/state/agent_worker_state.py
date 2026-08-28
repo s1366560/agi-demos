@@ -3016,12 +3016,12 @@ async def prewarm_agent_session(
     """
     try:
         from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_worker_redis_client_v2,
             current_agent_worker_runtime_services_v2,
         )
 
         graph_service = current_agent_worker_runtime_services_v2().graph_runtime.graph_service
-
-        redis_client = await get_redis_client()
+        redis_client = current_agent_worker_redis_client_v2()
 
         provider_config = await get_or_create_provider_config()
         llm_client = await get_or_create_llm_client(provider_config)
