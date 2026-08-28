@@ -22,8 +22,6 @@ def test_execute_step_use_case_does_not_mutate_process_tool_runtime() -> None:
             "src.infrastructure.plugins.v2.sandbox_projection."
             "current_sandbox_application_services_v2"
         ) as sandbox_projection,
-        patch("src.infrastructure.agent.tools.desktop_tool.configure_desktop") as desktop,
-        patch("src.infrastructure.agent.tools.terminal_tool.configure_terminal") as terminal,
         patch("src.infrastructure.agent.tools.handoff_tool.configure_handoff") as handoff,
         patch.object(container, "graph_orchestrator") as graph_orchestrator,
     ):
@@ -31,7 +29,5 @@ def test_execute_step_use_case_does_not_mutate_process_tool_runtime() -> None:
 
     assert isinstance(use_case, ExecuteStepUseCase)
     sandbox_projection.assert_not_called()
-    desktop.assert_not_called()
-    terminal.assert_not_called()
     handoff.assert_not_called()
     graph_orchestrator.assert_not_called()

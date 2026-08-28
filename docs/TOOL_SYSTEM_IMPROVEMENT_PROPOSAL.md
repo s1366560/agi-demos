@@ -35,7 +35,7 @@ Tools inherited from a two-level class hierarchy (the legacy path, still support
 ```
 AgentToolBase (domain port, ABC)
   -> AgentTool (infrastructure, adds truncation)
-    -> ConcreteTools (terminal_tool, todo_tools, etc.)
+    -> ConcreteTools (todo_tools, etc.)
 ```
 
 Each tool must implement:
@@ -1369,7 +1369,7 @@ MemStack (proposed):
 | `src/infrastructure/agent/permission/manager.py` | Add pattern matching, persistent approvals |
 | `src/infrastructure/agent/tools/tool_registry.py` | Add model-aware selection, hook registration |
 | `src/infrastructure/agent/tools/truncation.py` | Enhance with disk persistence, direction awareness |
-| All tool files (`todo_tools.py`, `terminal_tool.py`, etc.) | Migrate from class to `@tool_define` (Phase 2-3) |
+| Remaining tool files (`todo_tools.py`, etc.) | Migrate from class to `@tool_define` (Phase 2-3) |
 | `src/infrastructure/mcp/sandbox_tool_adapter.py` | Remove HTML caching; use unified adapter |
 | `src/infrastructure/agent/mcp/adapter.py` | Standardize naming, add Pydantic validation |
 | `src/infrastructure/adapters/secondary/sandbox/mcp_sandbox_adapter.py` | Add abort signal propagation support |

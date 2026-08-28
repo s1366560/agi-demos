@@ -37,6 +37,12 @@ _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("module_name", ("terminal_tool.py", "desktop_tool.py"))
+def test_process_global_sandbox_ui_tool_wrappers_are_retired(module_name: str) -> None:
+    assert not (_ROOT / "src/infrastructure/agent/tools" / module_name).exists()
+
+
 async def _execute_tool(**_kwargs: object) -> str:
     return "ok"
 
