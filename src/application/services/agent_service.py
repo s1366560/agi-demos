@@ -20,7 +20,7 @@ import json
 import logging
 import time as time_module
 import uuid
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast, override
 
@@ -416,14 +416,22 @@ class AgentService(AgentServicePort):
                 f"[AgentService] Started actor {actor_id} for conversation {conversation_id}"
             )
 
-            # Connect to stream with message_id filtering
-            async for event in self.connect_chat_stream(
-                conversation_id,
-                message_id=user_msg_id,
-            ):
-                # Add correlation_id to streamed events
-                event["correlation_id"] = correlation_id
-                yield event
+            # Connect to stream with message_id filtering.  The live stream
+            # must close synchronously when an outer operation owner stops
+            # early so its generation and DB resources are still active while
+            # the stream's ``finally`` handlers run.
+            chat_stream = cast(
+                AsyncGenerator[dict[str, Any], None],
+                self.connect_chat_stream(
+                    conversation_id,
+                    message_id=user_msg_id,
+                ),
+            )
+            async with contextlib.aclosing(chat_stream) as events:
+                async for event in events:
+                    # Add correlation_id to streamed events
+                    event["correlation_id"] = correlation_id
+                    yield event
 
         except RuntimeV2Error as e:
             logger.error(f"[AgentService] Error in stream_chat_v2: {e}", exc_info=True)
@@ -1198,10 +1206,17 @@ class AgentService(AgentServicePort):
             f"last_event_time_us={last_event_time_us}, start_id={stream_start_id}"
         )
         live_event_count = 0
+        live_stream = cast(
+            AsyncGenerator[dict[str, Any], None],
+            self._event_bus.stream_read(
+                stream_key,
+                last_id=stream_start_id,
+                count=1000,
+                block_ms=1000,
+            ),
+        )
         try:
-            async for message in self._event_bus.stream_read(
-                stream_key, last_id=stream_start_id, count=1000, block_ms=1000
-            ):
+            async for message in live_stream:
                 live_event_count += 1
                 filtered = self._filter_live_event(
                     message,
@@ -1263,6 +1278,8 @@ class AgentService(AgentServicePort):
                     return
         except Exception as e:
             logger.error(f"[AgentService] Error streaming from Redis Stream: {e}", exc_info=True)
+        finally:
+            await live_stream.aclose()
 
     @override
     async def create_conversation(

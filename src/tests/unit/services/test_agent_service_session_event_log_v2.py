@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -78,6 +79,7 @@ class _MemorySessionEventLogStore:
 
 class _RecordingAgentService(AgentService):
     started_kwargs: dict[str, Any] | None = None
+    connect_stream_closed = False
 
     async def get_available_tools(self) -> list[object]:
         return []
@@ -91,11 +93,14 @@ class _RecordingAgentService(AgentService):
         conversation_id: str,
         message_id: str,
     ) -> AsyncIterator[dict[str, Any]]:
-        yield {
-            "type": "complete",
-            "data": {"conversation_id": conversation_id, "message_id": message_id},
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        try:
+            yield {
+                "type": "complete",
+                "data": {"conversation_id": conversation_id, "message_id": message_id},
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        finally:
+            self.connect_stream_closed = True
 
 
 def _conversation() -> Conversation:
@@ -248,6 +253,43 @@ async def test_stream_admits_turn_and_materializes_history_only_through_pinned_v
     direct_event_repo.save_and_commit.assert_not_awaited()
     direct_event_repo.get_message_events.assert_not_awaited()
     context_loader.load_context.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_stream_close_propagates_to_connect_stream_before_boundary_exit(
+    runtime: tuple[PlatformPluginRuntimeHostV2, _MemorySessionEventLogStore],
+) -> None:
+    host, _store = runtime
+    conversation_repo = AsyncMock()
+    conversation_repo.find_by_id.return_value = _conversation()
+    service = _service(
+        conversation_repo=conversation_repo,
+        direct_event_repo=AsyncMock(),
+        context_loader=AsyncMock(),
+    )
+
+    async with pin_operation_context_v2(
+        host,
+        operation_id="agent-service-stream-close",
+        scope=_ROOT_SCOPE,
+    ):
+        stream = cast(
+            AsyncGenerator[dict[str, Any], None],
+            service.stream_chat_v2(
+                conversation_id="conversation-a",
+                user_message="close after terminal",
+                project_id="project-a",
+                user_id="user-a",
+                tenant_id="tenant-a",
+                execution_message_id="execution-message-close",
+            ),
+        )
+        async with aclosing(stream) as events:
+            assert (await anext(events))["type"] == "message"
+            assert (await anext(events))["type"] == "complete"
+            assert service.connect_stream_closed is False
+
+        assert service.connect_stream_closed is True
 
 
 @pytest.mark.unit

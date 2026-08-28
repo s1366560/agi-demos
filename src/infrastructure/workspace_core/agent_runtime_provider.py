@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import AbstractAsyncContextManager, AsyncExitStack
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import AbstractAsyncContextManager, AsyncExitStack, aclosing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast
@@ -295,18 +295,23 @@ class MemStackAgentRuntimeProvider:
                         },
                     )
                 )
-                async for raw_event in service.stream_chat_v2(
-                    conversation_id=conversation.id,
-                    user_message=message_text,
-                    project_id=scope.project_id,
-                    user_id=scope.user_id,
-                    tenant_id=scope.tenant_id,
-                    app_model_context=app_model_context,
-                    image_attachments=_provider_image_urls(request),
-                    agent_id=request.to_bot.provider_bot_ref or None,
-                    execution_message_id=message_id,
-                    canonical_run_id=request.id,
-                ):
+                agent_stream = cast(
+                    AsyncGenerator[dict[str, Any], None],
+                    service.stream_chat_v2(
+                        conversation_id=conversation.id,
+                        user_message=message_text,
+                        project_id=scope.project_id,
+                        user_id=scope.user_id,
+                        tenant_id=scope.tenant_id,
+                        app_model_context=app_model_context,
+                        image_attachments=_provider_image_urls(request),
+                        agent_id=request.to_bot.provider_bot_ref or None,
+                        execution_message_id=message_id,
+                        canonical_run_id=request.id,
+                    ),
+                )
+                events = await turn_stack.enter_async_context(aclosing(agent_stream))
+                async for raw_event in events:
                     provider_event = _map_runtime_event(raw_event, sequence=sequence)
                     if provider_event is None:
                         continue

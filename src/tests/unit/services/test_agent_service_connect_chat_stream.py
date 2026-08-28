@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import aclosing
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -100,6 +102,44 @@ async def test_connect_chat_stream_skips_db_replay_when_disabled() -> None:
 
     service._replay_db_events.assert_not_awaited()
     assert [event["type"] for event in events] == ["text_delta", "complete"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_connect_chat_stream_close_propagates_to_event_bus_stream() -> None:
+    service = _build_service()
+    event_bus_closed = False
+
+    async def _stream_read(*_args: object, **_kwargs: object):
+        nonlocal event_bus_closed
+        try:
+            yield {
+                "id": "1-0",
+                "data": {
+                    "type": "text_delta",
+                    "event_time_us": 10,
+                    "event_counter": 1,
+                    "data": {"message_id": "m1", "delta": "hello"},
+                },
+            }
+        finally:
+            event_bus_closed = True
+
+    service._event_bus.stream_read = _stream_read
+    stream = cast(
+        AsyncGenerator[dict[str, Any], None],
+        service.connect_chat_stream(
+            conversation_id="conv-1",
+            message_id="m1",
+            replay_from_db=False,
+        ),
+    )
+
+    async with aclosing(stream) as events:
+        assert (await anext(events))["type"] == "text_delta"
+        assert event_bus_closed is False
+
+    assert event_bus_closed is True
 
 
 @pytest.mark.unit

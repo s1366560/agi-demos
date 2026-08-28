@@ -122,9 +122,10 @@ def _request(
 
 
 class FakeDb:
-    def __init__(self) -> None:
+    def __init__(self, *, close_events: list[str] | None = None) -> None:
         self.rollback_count = 0
         self.commit_count = 0
+        self.close_events = close_events
 
     async def commit(self) -> None:
         self.commit_count += 1
@@ -141,6 +142,8 @@ class FakeSessionContext:
         return self.db
 
     async def __aexit__(self, *_args: object) -> None:
+        if self.db.close_events is not None:
+            self.db.close_events.append("db-session-closed")
         return None
 
 
@@ -499,6 +502,47 @@ async def test_send_uses_real_runtime_contract_and_marks_persisted_terminal() ->
     assert terminal.report["usage"] == {"total_tokens": 12}
     assert terminal.report["legacy_event"]["event_type"] == "complete"
     assert events[-1].correlation_id == correlation.correlation_id
+
+
+async def test_send_closes_agent_stream_before_operation_disposal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scoped = FakeScopedContainer()
+    lifecycle: list[str] = []
+
+    class ClosingAgentService(FakeAgentService):
+        async def stream_chat_v2(self, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:
+            try:
+                async for event in super().stream_chat_v2(**kwargs):
+                    yield event
+            finally:
+                lifecycle.append("agent-stream-closed")
+
+    @asynccontextmanager
+    async def tracking_operation(**_kwargs: object) -> AsyncIterator[None]:
+        lifecycle.append("operation-entered")
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-disposed")
+
+    scoped.service = ClosingAgentService(scoped.event_repo)
+    db = FakeDb(close_events=lifecycle)
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "pin_agent_turn_operation_v2",
+        tracking_operation,
+    )
+
+    events = [event async for event in _provider(scoped, db=db).stream_send(_request())]
+
+    assert [event.state for event in events] == ["delta", "final"]
+    assert lifecycle == [
+        "operation-entered",
+        "agent-stream-closed",
+        "operation-disposed",
+        "db-session-closed",
+    ]
 
 
 async def test_send_pins_workspace_provider_turn_with_complete_operation_services(
