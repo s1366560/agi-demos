@@ -53,6 +53,7 @@ async def _run(request_file: Path) -> int:
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
     from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
     from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        agent_worker_graph_runtime_factory_v2,
         agent_worker_sandbox_runtime_factory_v2,
     )
     from src.infrastructure.plugins.v2.boundary import (
@@ -80,6 +81,7 @@ async def _run(request_file: Path) -> int:
         _attach_plan_repository(agent)
         admission = DataPlaneGenerationAdmissionV2(
             builtin_runtime_definitions_v2(
+                graph_runtime_factory=agent_worker_graph_runtime_factory_v2(config.tenant_id),
                 sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
             )
         )

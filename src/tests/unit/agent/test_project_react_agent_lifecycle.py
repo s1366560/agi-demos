@@ -5,6 +5,7 @@ Tests TDD: RED phase - These tests should fail before implementation.
 """
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,6 +29,20 @@ from src.infrastructure.plugins.v2.runtime import ContextV2, RuntimeV2Error
 # The correct import path for patching is where the module imports these functions
 # For functions imported inside initialize(), we need to patch the full path
 WORKER_STATE_MODULE = "src.infrastructure.agent.state.agent_worker_state"
+WORKER_RUNTIME_MODULE = "src.infrastructure.plugins.v2.agent_worker_runtime"
+
+
+def _worker_runtime_services(
+    graph_service: object | None,
+    *,
+    unavailable_code: str | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        graph_runtime=SimpleNamespace(
+            graph_service=graph_service,
+            unavailable_code=unavailable_code,
+        )
+    )
 
 
 @pytest.mark.unit
@@ -431,9 +446,8 @@ class TestProjectReActAgentLifecycleNotifications:
         # Note: Must use the full import path since they're imported inside the method
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
-                return_value=mock_graph_service,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+                return_value=_worker_runtime_services(mock_graph_service),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_redis_client",
@@ -515,8 +529,7 @@ class TestProjectReActAgentLifecycleNotifications:
         # Inject the mock notifier
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
                 side_effect=RuntimeError("graph service init failed"),
             ),
             patch(
@@ -562,9 +575,11 @@ class TestProjectReActAgentLifecycleNotifications:
 
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
-                return_value=None,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+                return_value=_worker_runtime_services(
+                    None,
+                    unavailable_code="no_active_provider",
+                ),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_redis_client",
@@ -633,9 +648,8 @@ class TestProjectReActAgentLifecycleNotifications:
 
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
-                return_value=mock_graph_service,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+                return_value=_worker_runtime_services(mock_graph_service),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_redis_client",
@@ -1031,9 +1045,8 @@ class TestProjectReActAgentNotificationContent:
 
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
-                return_value=mock_graph_service,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+                return_value=_worker_runtime_services(mock_graph_service),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_redis_client",
@@ -1155,8 +1168,7 @@ class TestProjectReActAgentNotificationContent:
         # Mock initialization to raise a specific error
         with (
             patch(
-                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-                new_callable=AsyncMock,
+                f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
                 side_effect=RuntimeError("graph service init failed"),
             ),
             # Inject the mock notifier

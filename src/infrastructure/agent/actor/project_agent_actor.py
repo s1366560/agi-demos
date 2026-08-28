@@ -13,8 +13,8 @@ from typing import Any
 
 import ray
 
-from src.configuration.factories import create_native_graph_adapter
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.agent.actor.execution import (
     continue_project_chat,
     execute_project_chat,
@@ -28,11 +28,9 @@ from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
 )
-from src.infrastructure.agent.state.agent_worker_state import (
-    set_agent_graph_service,
-)
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    agent_worker_graph_runtime_factory_v2,
     agent_worker_sandbox_runtime_factory_v2,
 )
 from src.infrastructure.plugins.v2.boundary import (
@@ -72,6 +70,7 @@ class ProjectAgentActor:
         self._shutdown_task: asyncio.Task[None] | None = None
         self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
             builtin_runtime_definitions_v2(
+                graph_runtime_factory=self._create_graph_runtime_v2,
                 sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
             )
         )
@@ -909,6 +908,16 @@ class ProjectAgentActor:
                 e,
             )
 
+    async def _create_graph_runtime_v2(self) -> GraphStorePort:
+        """Create this actor tenant's graph resource for one candidate generation."""
+        if self._config is None:
+            raise RuntimeV2Error(
+                "agent_actor_config_unavailable",
+                "actor configuration is required before graph runtime activation",
+            )
+        factory = agent_worker_graph_runtime_factory_v2(self._config.tenant_id)
+        return await factory()
+
     async def _bootstrap_runtime(self) -> None:
         if self._bootstrapped:
             return
@@ -921,12 +930,5 @@ class ProjectAgentActor:
                 await initialize_default_llm_providers()
             except Exception as e:
                 logger.warning(f"[ProjectAgentActor] LLM provider init failed: {e}")
-
-            try:
-                graph_service = await create_native_graph_adapter()
-                set_agent_graph_service(graph_service)
-            except Exception as e:
-                logger.error(f"[ProjectAgentActor] Graph service init failed: {e}")
-                raise
 
             self._bootstrapped = True

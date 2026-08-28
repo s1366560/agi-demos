@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.services.graph_store_port import GraphStorePort
+from src.infrastructure.plugins.v2.agent_worker_runtime import AGENT_WORKER_RUNTIME_MODULE_V2
 from src.infrastructure.plugins.v2.boundary import OPERATION_DB_SESSION_SERVICE_V2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
@@ -148,6 +149,7 @@ async def test_memory_application_rejects_missing_required_inject_without_fallba
     if disabled_module == "builtin://memstack/graph/runtime":
         disabled_modules.update(
             {
+                AGENT_WORKER_RUNTIME_MODULE_V2,
                 GRAPH_APPLICATION_MODULE_V2,
                 RETRIEVAL_RUNTIME_MODULE_V2,
             }

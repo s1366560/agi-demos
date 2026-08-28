@@ -348,17 +348,21 @@ class ProjectReActAgent:
             Tuple of (graph_service, redis_client, artifact_service, provider_config, llm_client)
         """
         from src.infrastructure.agent.state.agent_worker_state import (
-            get_or_create_agent_graph_service,
             get_or_create_llm_client,
             get_or_create_provider_config,
             get_redis_client,
         )
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_worker_runtime_services_v2,
+        )
 
-        graph_service = await get_or_create_agent_graph_service(tenant_id=self.config.tenant_id)
+        graph_runtime = current_agent_worker_runtime_services_v2().graph_runtime
+        graph_service = graph_runtime.graph_service
         if not graph_service:
             logger.warning(
                 f"ProjectReActAgent[{self.project_key}]: Graph service not available; "
-                "knowledge-graph features are disabled for this agent"
+                "knowledge-graph features are disabled for this agent "
+                f"(reason={graph_runtime.unavailable_code or 'unavailable'})"
             )
 
         redis_client = await get_redis_client()

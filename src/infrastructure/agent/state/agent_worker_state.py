@@ -79,7 +79,6 @@ __all__ = [  # noqa: RUF022
     "discover_tools_with_retry",
     # Utilities
     "generate_session_key",
-    "get_agent_graph_service",
     # Tools cache access (hot-plug support)
     "get_cached_tools",
     "get_cached_tools_for_project",
@@ -87,8 +86,6 @@ __all__ = [  # noqa: RUF022
     "current_mcp_sandbox_adapter_v2",
     # MCP Tools
     "get_mcp_tools_from_cache",
-    # Graph service
-    "get_or_create_agent_graph_service",
     "get_or_create_agent_session",
     # Provider config
     "get_or_create_provider_config",
@@ -109,14 +106,10 @@ __all__ = [  # noqa: RUF022
     "inject_discovered_mcp_tools_into_cache",
     # Prewarm
     "prewarm_agent_session",
-    "set_agent_graph_service",
     "update_mcp_tools_cache",
 ]
 
 # Global state for agent worker
-_agent_graph_service: Any | None = None
-_tenant_graph_services: dict[str, Any] = {}
-_tenant_graph_service_lock = asyncio.Lock()
 _redis_pool: redis.ConnectionPool | None = None
 
 # Tool set cache (by project_id key)
@@ -135,69 +128,6 @@ _skills_cache_lock = asyncio.Lock()
 # SkillLoaderTool cache (by tenant_id:project_id:agent_mode key)
 _skill_loader_cache: dict[str, Any] = {}
 _skill_loader_cache_lock = asyncio.Lock()
-
-
-def set_agent_graph_service(service: Any) -> None:
-    """Set the global graph service instance for agent worker.
-
-    Called during Agent Worker initialization to make graph_service
-    available to all Agent Activities.
-
-    Args:
-        service: The graph service (NativeGraphAdapter) instance
-    """
-    global _agent_graph_service
-    _agent_graph_service = service
-    _tenant_graph_services.setdefault("default", service)
-    logger.info("Agent Worker: Graph service registered for Activities")
-
-
-def get_agent_graph_service() -> Any | None:
-    """Get the global graph service instance for agent worker.
-
-    Returns:
-        The graph service instance or None if not initialized
-    """
-    return _agent_graph_service
-
-
-async def get_or_create_agent_graph_service(tenant_id: str | None = None) -> Any:
-    """Get tenant-scoped graph service, creating and caching when needed."""
-    cache_key = tenant_id or "default"
-    if cache_key in _tenant_graph_services:
-        return _tenant_graph_services[cache_key]
-
-    async with _tenant_graph_service_lock:
-        if cache_key in _tenant_graph_services:
-            return _tenant_graph_services[cache_key]
-
-        from src.configuration.factories import create_native_graph_adapter
-
-        try:
-            graph_service = await create_native_graph_adapter(tenant_id=tenant_id)
-        except Exception as exc:
-            # Mirror the API-startup degradation path: when the knowledge-graph
-            # stack cannot initialize (for example, no embedding provider is
-            # configured for the tenant), chat must stay available with
-            # graph-backed features disabled instead of failing outright.
-            # The failure is intentionally not cached so that configuring a
-            # provider later heals the graph service without a restart.
-            logger.warning(
-                "Agent Worker: Graph service unavailable for tenant key '%s' (%s); "
-                "continuing with knowledge-graph features disabled",
-                cache_key,
-                exc,
-            )
-            return None
-        _tenant_graph_services[cache_key] = graph_service
-
-        # Keep backward compatibility for callers that still use global getter
-        if cache_key == "default":
-            global _agent_graph_service
-            _agent_graph_service = graph_service
-
-        logger.info("Agent Worker: Graph service cached for tenant key '%s'", cache_key)
-        return graph_service
 
 
 def current_mcp_sandbox_adapter_v2() -> MCPSandboxAdapter | None:
@@ -284,15 +214,6 @@ def clear_state() -> None:
     Note: This clears references but does not close async resources.
     Use close_redis_pool() separately to properly close the Redis pool.
     """
-    global \
-        _agent_graph_service, \
-        _tenant_graph_services, \
-        _tools_cache, \
-        _project_sandbox_tools_cache, \
-        _skills_cache, \
-        _skill_loader_cache
-    _agent_graph_service = None
-    _tenant_graph_services.clear()
     _tools_cache.clear()
     _project_sandbox_tools_cache.clear()
     _skills_cache.clear()
@@ -3094,7 +3015,11 @@ async def prewarm_agent_session(
     outside of the critical request path.
     """
     try:
-        graph_service = await get_or_create_agent_graph_service(tenant_id=tenant_id)
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_worker_runtime_services_v2,
+        )
+
+        graph_service = current_agent_worker_runtime_services_v2().graph_runtime.graph_service
 
         redis_client = await get_redis_client()
 

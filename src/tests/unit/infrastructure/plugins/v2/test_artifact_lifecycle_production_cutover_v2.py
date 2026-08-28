@@ -32,6 +32,16 @@ _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 _WORKER_STATE_MODULE = "src.infrastructure.agent.state.agent_worker_state"
+_WORKER_RUNTIME_MODULE = "src.infrastructure.plugins.v2.agent_worker_runtime"
+
+
+def _worker_runtime_services(graph_service: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        graph_runtime=SimpleNamespace(
+            graph_service=graph_service,
+            unavailable_code=None,
+        )
+    )
 
 
 async def test_projection_returns_the_exact_pinned_generation_service() -> None:
@@ -77,9 +87,8 @@ async def test_project_agent_resolves_artifacts_only_from_the_pinned_generation(
 
     with (
         patch(
-            f"{_WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-            new_callable=AsyncMock,
-            return_value=MagicMock(),
+            f"{_WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+            return_value=_worker_runtime_services(MagicMock()),
         ),
         patch(
             f"{_WORKER_STATE_MODULE}.get_redis_client",
@@ -119,9 +128,8 @@ async def test_project_agent_propagates_missing_required_artifact_service() -> N
 
     with (
         patch(
-            f"{_WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-            new_callable=AsyncMock,
-            return_value=MagicMock(),
+            f"{_WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
+            return_value=_worker_runtime_services(MagicMock()),
         ),
         patch(
             f"{_WORKER_STATE_MODULE}.get_redis_client",

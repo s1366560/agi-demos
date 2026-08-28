@@ -1188,6 +1188,7 @@ class AgentRuntimeBootstrapper:
 
             from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
             from src.infrastructure.plugins.v2.agent_worker_runtime import (
+                agent_worker_graph_runtime_factory_v2,
                 agent_worker_sandbox_runtime_factory_v2,
             )
             from src.infrastructure.plugins.v2.boundary import (
@@ -1204,6 +1205,7 @@ class AgentRuntimeBootstrapper:
 
             admission = DataPlaneGenerationAdmissionV2(
                 builtin_runtime_definitions_v2(
+                    graph_runtime_factory=agent_worker_graph_runtime_factory_v2(config.tenant_id),
                     sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
                 )
             )
@@ -1277,16 +1279,10 @@ class AgentRuntimeBootstrapper:
                 logger.warning("[AgentService] Failed to publish error event: %s", pub_err)
 
     async def _ensure_local_runtime_bootstrapped(self) -> None:
-        """Bootstrap shared services for local (non-Ray) agent execution."""
+        """Bootstrap process services and bind the admitted generation orchestrator."""
         if not AgentRuntimeBootstrapper._local_bootstrapped:
             async with AgentRuntimeBootstrapper._local_bootstrap_lock:
                 if not AgentRuntimeBootstrapper._local_bootstrapped:
-                    from src.configuration.factories import create_native_graph_adapter
-                    from src.domain.llm_providers.models import NoActiveProviderError
-                    from src.infrastructure.agent.state.agent_worker_state import (
-                        get_agent_graph_service,
-                        set_agent_graph_service,
-                    )
                     from src.infrastructure.llm.initializer import (
                         initialize_default_llm_providers,
                     )
@@ -1295,23 +1291,6 @@ class AgentRuntimeBootstrapper:
                         await initialize_default_llm_providers()
                     except Exception as e:
                         logger.warning("[AgentService] LLM provider init failed: %s", e)
-
-                    if not get_agent_graph_service():
-                        try:
-                            graph_service = await create_native_graph_adapter()
-                            set_agent_graph_service(graph_service)
-                            logger.info(
-                                "[AgentService] Graph service bootstrapped for local execution"
-                            )
-                        except NoActiveProviderError:
-                            logger.warning(
-                                "[AgentService] No active LLM provider configured "
-                                "-- graph service disabled for local execution. "
-                                "Agent will work without knowledge graph features."
-                            )
-                        except Exception as e:
-                            logger.error("[AgentService] Graph service init failed: %s", e)
-                            raise
 
                     AgentRuntimeBootstrapper._local_bootstrapped = True
 

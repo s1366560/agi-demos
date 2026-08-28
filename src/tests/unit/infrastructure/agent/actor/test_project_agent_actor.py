@@ -22,14 +22,30 @@ from src.infrastructure.agent.orchestration.orchestrator import (
 from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
-from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.runtime_host import (
+    DataPlaneGenerationAdmissionV2,
+    PlatformPluginRuntimeHostV2,
+)
 
 _ROOT = Path(__file__).resolve().parents[6]
 
 
+class _TestGraphService:
+    async def close(self) -> None:
+        return None
+
+
+async def _test_graph_factory() -> Any:
+    return _TestGraphService()
+
+
 def _actor_instance() -> Any:
     actor_class = ProjectAgentActor.__ray_metadata__.modified_class
-    return actor_class()
+    actor = actor_class()
+    actor._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
+        builtin_runtime_definitions_v2(graph_runtime_factory=_test_graph_factory)
+    )
+    return actor
 
 
 @pytest.mark.unit

@@ -531,6 +531,11 @@
           ],
           "requires": [
             {
+              "alias": "graph_runtime",
+              "service": "service:graph.runtime",
+              "version": "1.0.0"
+            },
+            {
               "alias": "sandbox_runtime",
               "service": "service:sandbox.runtime",
               "version": "1.0.0"
@@ -558,9 +563,9 @@
           }
         }
       },
-      "contract_digest": "sha256:918bb424c49603e328fbb2c436905d8bbd2192dfe0b4d825daecb5743fd27d96",
+      "contract_digest": "sha256:1b1cf74cc4ae310c5a98980c2ead856ce25cee10573fa9f87e2997caa64b130b",
       "artifact": {
-        "digest": "sha256:8c2b34e1aac40ce3da353440189e7853e3cc53284da8a30d6ea7d3e2bbfed8b7",
+        "digest": "sha256:53557bbc3735b03f67fff14e47eb4b03d9721d9f53342f0c223e58540e62f59f",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },

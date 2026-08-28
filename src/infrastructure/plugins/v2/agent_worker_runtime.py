@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from src.configuration.config import get_settings
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.agent.canvas.manager import CanvasManager
@@ -19,6 +20,7 @@ from .agent_orchestration_runtime import (
     AgentSessionTurnExecutorV2,
     AgentSpawnExecutorV2,
 )
+from .graph_runtime import GraphRuntimeFactoryV2, GraphRuntimeServiceV2
 from .runtime import (
     ContextV2,
     OperationContextV2,
@@ -30,6 +32,7 @@ from .sandbox_runtime import SandboxRuntimeServiceV2
 
 AGENT_WORKER_RUNTIME_MODULE_V2 = "builtin://memstack/agent/worker-runtime"
 AGENT_WORKER_RUNTIME_SERVICE_V2 = "service:agent.worker-runtime"
+AGENT_WORKER_GRAPH_RUNTIME_INJECT_V2 = "graph_runtime"
 AGENT_WORKER_SANDBOX_RUNTIME_INJECT_V2 = "sandbox_runtime"
 AGENT_WORKER_SUBAGENT_RUNS_INJECT_V2 = "subagent_runs"
 AGENT_WORKER_ORCHESTRATION_RUNTIME_INJECT_V2 = "orchestration_runtime"
@@ -42,6 +45,7 @@ logger = logging.getLogger(__name__)
 class AgentWorkerRuntimeServicesV2:
     """Runtime capabilities resolved from one exact generation."""
 
+    graph_runtime: GraphRuntimeServiceV2
     sandbox_adapter: MCPSandboxAdapter | None
     canvas_manager: CanvasManager
     subagent_run_registry: SubAgentRunRegistry
@@ -60,6 +64,7 @@ class AgentWorkerRuntimeResolverProtocolV2(Protocol):
 class AgentWorkerRuntimeResolverV2:
     """Project generation-owned sandbox state into an Agent Worker operation."""
 
+    graph_runtime: GraphRuntimeServiceV2
     sandbox_runtime: SandboxRuntimeServiceV2
     canvas_manager: CanvasManager
     subagent_run_registry: SubAgentRunRegistry
@@ -70,6 +75,7 @@ class AgentWorkerRuntimeResolverV2:
         sandbox_services = self.sandbox_runtime.services
         if sandbox_services is None:
             return AgentWorkerRuntimeServicesV2(
+                graph_runtime=self.graph_runtime,
                 sandbox_adapter=None,
                 canvas_manager=self.canvas_manager,
                 subagent_run_registry=self.subagent_run_registry,
@@ -79,6 +85,7 @@ class AgentWorkerRuntimeResolverV2:
                 ),
             )
         return AgentWorkerRuntimeServicesV2(
+            graph_runtime=self.graph_runtime,
             sandbox_adapter=sandbox_services.adapter,
             canvas_manager=self.canvas_manager,
             subagent_run_registry=self.subagent_run_registry,
@@ -186,6 +193,28 @@ def agent_worker_sandbox_runtime_factory_v2() -> MCPSandboxAdapter | None:
         return None
 
 
+def agent_worker_graph_runtime_factory_v2(
+    tenant_id: str | None,
+) -> GraphRuntimeFactoryV2:
+    """Build a tenant-bound graph factory for one Agent data-plane generation."""
+
+    async def factory() -> GraphStorePort:
+        from src.configuration.factories import create_native_graph_adapter
+        from src.infrastructure.llm.initializer import initialize_default_llm_providers
+
+        try:
+            await initialize_default_llm_providers()
+        except Exception as exc:
+            logger.warning(
+                "Agent Worker LLM provider initialization failed before graph activation: "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+        return await create_native_graph_adapter(tenant_id=tenant_id)
+
+    return factory
+
+
 def agent_worker_runtime_definition_v2(
     *,
     canvas_manager: CanvasManager | None = None,
@@ -196,6 +225,12 @@ def agent_worker_runtime_definition_v2(
     def apply(context: ContextV2, config: Mapping[str, Any]) -> None:
         if config.get("strategy") != "generation-sandbox-runtime":
             raise ValueError("agent worker runtime requires strategy generation-sandbox-runtime")
+        graph_runtime = context.require(AGENT_WORKER_GRAPH_RUNTIME_INJECT_V2)
+        if not isinstance(graph_runtime, GraphRuntimeServiceV2):
+            raise RuntimeV2Error(
+                "invalid_agent_worker_graph_runtime",
+                "Agent Worker graph runtime inject has an invalid implementation",
+            )
         sandbox_runtime = context.require(AGENT_WORKER_SANDBOX_RUNTIME_INJECT_V2)
         if not isinstance(sandbox_runtime, SandboxRuntimeServiceV2):
             raise RuntimeV2Error(
@@ -217,6 +252,7 @@ def agent_worker_runtime_definition_v2(
         _ = context.provide(
             AGENT_WORKER_RUNTIME_SERVICE_V2,
             AgentWorkerRuntimeResolverV2(
+                graph_runtime=graph_runtime,
                 sandbox_runtime=sandbox_runtime,
                 canvas_manager=host_canvas_manager,
                 subagent_run_registry=subagent_run_registry,
@@ -234,6 +270,7 @@ def agent_worker_runtime_definition_v2(
 
 __all__ = [
     "AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2",
+    "AGENT_WORKER_GRAPH_RUNTIME_INJECT_V2",
     "AGENT_WORKER_ORCHESTRATION_RUNTIME_INJECT_V2",
     "AGENT_WORKER_RUNTIME_MODULE_V2",
     "AGENT_WORKER_RUNTIME_SERVICE_V2",
@@ -242,6 +279,7 @@ __all__ = [
     "AgentWorkerRuntimeResolverProtocolV2",
     "AgentWorkerRuntimeResolverV2",
     "AgentWorkerRuntimeServicesV2",
+    "agent_worker_graph_runtime_factory_v2",
     "agent_worker_runtime_definition_v2",
     "agent_worker_sandbox_runtime_factory_v2",
     "bind_current_agent_orchestrator_v2",

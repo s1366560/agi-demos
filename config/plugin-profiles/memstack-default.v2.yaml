@@ -140,6 +140,7 @@ profile:
       config:
         strategy: generation-sandbox-runtime
       inject:
+        graph_runtime: service:graph.runtime
         sandbox_runtime: service:sandbox.runtime
         subagent_runs: service:agent.subagent-run-registry
         orchestration_runtime: service:agent.orchestration-runtime
