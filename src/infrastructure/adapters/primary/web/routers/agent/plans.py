@@ -56,6 +56,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
     ensure_plan_run_authority,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    current_agent_worker_redis_client_v2,
+)
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -711,7 +714,6 @@ def _approval_response(
 
 async def _publish_plan_run_status(
     *,
-    base_container: DIContainer,
     run: AgentPlanRunModel,
 ) -> None:
     """Publish terminal plan-run authority after its database commit."""
@@ -748,20 +750,19 @@ async def _publish_plan_run_status(
         "event_counter": 0,
     }
 
-    redis_client = base_container.redis_client
-    if redis_client is not None:
-        try:
-            await RedisEventBusAdapter(redis_client).publish_to_stream(
-                run.conversation_id,
-                event,
-            )
-        except Exception:
-            logger.exception(
-                "Failed to persist plan run status event: run_id=%s status=%s revision=%s",
-                run.id,
-                run.status,
-                run.revision,
-            )
+    redis_client = current_agent_worker_redis_client_v2()
+    try:
+        await RedisEventBusAdapter(redis_client).publish_to_stream(
+            run.conversation_id,
+            event,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist plan run status event: run_id=%s status=%s revision=%s",
+            run.id,
+            run.status,
+            run.revision,
+        )
     try:
         await get_connection_manager().broadcast_to_conversation(
             run.conversation_id,
@@ -792,35 +793,35 @@ async def _execute_approved_plan(
         if run is None:
             return
         started_at = datetime.now(UTC)
-        try:
-            run.status = "running"
-            run.updated_at = started_at
-            await session.commit()
-            container = base_container.with_db(session)
-            llm = await create_llm_client(tenant_id)
-            service = container.agent_service(llm)
-            async with pin_agent_turn_operation_v2(
-                operation_id=f"approved-plan:{run_id}",
-                tenant_id=tenant_id,
-                project_id=project_id,
-                session_id=conversation_id,
-                services={
-                    OPERATION_DB_SESSION_SERVICE_V2: session,
-                    OPERATION_IDENTITY_SERVICE_V2: {
-                        "tenant_id": tenant_id,
-                        "user_id": user_id,
-                        "project_id": project_id,
-                    },
-                    OPERATION_METADATA_SERVICE_V2: {
-                        "kind": "agent-turn",
-                        "channel": "approved-plan",
-                        "conversation_id": conversation_id,
-                        "run_id": run_id,
-                        "message_id": message_id,
-                    },
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"approved-plan:{run_id}",
+            tenant_id=tenant_id,
+            project_id=project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: session,
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "project_id": project_id,
                 },
-                force_process_host_lease=True,
-            ):
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-turn",
+                    "channel": "approved-plan",
+                    "conversation_id": conversation_id,
+                    "run_id": run_id,
+                    "message_id": message_id,
+                },
+            },
+            force_process_host_lease=True,
+        ):
+            try:
+                run.status = "running"
+                run.updated_at = started_at
+                await session.commit()
+                container = base_container.with_db(session)
+                llm = await create_llm_client(tenant_id)
+                service = container.agent_service(llm)
                 agent_stream = cast(
                     AsyncGenerator[dict[str, Any], None],
                     service.stream_chat_v2(
@@ -836,47 +837,41 @@ async def _execute_approved_plan(
                 async with aclosing(agent_stream) as events:
                     async for _event in events:
                         pass
-            await session.refresh(run)
-            run.status = "ready_review"
-            run.revision += 1
-            completed_at = datetime.now(UTC)
-            run.completed_at = completed_at
-            run.updated_at = completed_at
-            await settle_agent_plan_run(
-                session,
-                run=run,
-                tenant_id=tenant_id,
-                started_at=started_at,
-                succeeded=True,
-                completed_at=completed_at,
-            )
-            await session.commit()
-            await _publish_plan_run_status(
-                base_container=base_container,
-                run=run,
-            )
-        except Exception as exc:
-            logger.exception("Approved plan execution failed: run_id=%s", run_id)
-            await session.rollback()
-            failed = await session.get(AgentPlanRunModel, run_id)
-            if failed is not None:
-                await session.refresh(failed)
-                failed.status = "failed"
-                failed.revision += 1
-                failed.error = str(exc)[:2000]
+                await session.refresh(run)
+                run.status = "ready_review"
+                run.revision += 1
                 completed_at = datetime.now(UTC)
-                failed.completed_at = completed_at
-                failed.updated_at = completed_at
+                run.completed_at = completed_at
+                run.updated_at = completed_at
                 await settle_agent_plan_run(
                     session,
-                    run=failed,
+                    run=run,
                     tenant_id=tenant_id,
                     started_at=started_at,
-                    succeeded=False,
+                    succeeded=True,
                     completed_at=completed_at,
                 )
                 await session.commit()
-                await _publish_plan_run_status(
-                    base_container=base_container,
-                    run=failed,
-                )
+                await _publish_plan_run_status(run=run)
+            except Exception as exc:
+                logger.exception("Approved plan execution failed: run_id=%s", run_id)
+                await session.rollback()
+                failed = await session.get(AgentPlanRunModel, run_id)
+                if failed is not None:
+                    await session.refresh(failed)
+                    failed.status = "failed"
+                    failed.revision += 1
+                    failed.error = str(exc)[:2000]
+                    completed_at = datetime.now(UTC)
+                    failed.completed_at = completed_at
+                    failed.updated_at = completed_at
+                    await settle_agent_plan_run(
+                        session,
+                        run=failed,
+                        tenant_id=tenant_id,
+                        started_at=started_at,
+                        succeeded=False,
+                        completed_at=completed_at,
+                    )
+                    await session.commit()
+                    await _publish_plan_run_status(run=failed)

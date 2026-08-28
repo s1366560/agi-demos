@@ -1,12 +1,18 @@
 """Canonical Cloud run-input, summary and Activity authority contracts."""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
-from fastapi import status
+import pytest
+from fastapi import FastAPI, status
 from sqlalchemy import select
 
+from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+    initialize_plugin_runtime_v2,
+    shutdown_plugin_runtime_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.agent_run_settlement import (
     apply_run_input_applied_projection,
 )
@@ -19,6 +25,46 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentRunInputModel,
     Conversation,
 )
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
+
+pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+async def _agent_run_authority_v2_runtime(test_app: FastAPI) -> AsyncIterator[None]:
+    """Exercise Agent run authority through the production V2 route and Redis host."""
+
+    class ProviderAdapter:
+        async def wait_until_idle(self) -> None:
+            return None
+
+    async def workspace_core_runtime_factory() -> WorkspaceCoreRuntimeServiceV2:
+        marker = cast(Any, object())
+        return WorkspaceCoreRuntimeServiceV2(
+            settings=marker,
+            client=marker,
+            authority=test_app.state.workspace_authority,
+            context_judge=marker,
+            plan_judge=marker,
+            autonomy_judge=marker,
+            access_verifier=marker,
+            event_sink=marker,
+            agent_runtime_provider=marker,
+            provider_adapter=cast(Any, ProviderAdapter()),
+        )
+
+    redis_client = AsyncMock()
+    test_app.state.container._redis_client = redis_client
+    await initialize_plugin_runtime_v2(
+        test_app,
+        sandbox_redis_client=redis_client,
+        workspace_core_runtime_factory=workspace_core_runtime_factory,
+    )
+    assert "agent" in test_app.state.platform_plugin_route_graph_v2.v2_owned_row_ids
+    try:
+        yield
+    finally:
+        await shutdown_plugin_runtime_v2(test_app)
 
 
 async def _add_run(test_db, test_project_db, test_user) -> AgentPlanRunModel:

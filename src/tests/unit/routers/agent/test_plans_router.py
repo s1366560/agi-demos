@@ -47,6 +47,7 @@ from src.infrastructure.plugins.v2.boundary import (
     current_operation_context_v2,
     install_process_generation_host_v2,
     pin_generation_v2,
+    pin_operation_context_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import (
     RUNTIME_BOUNDARY_SERVICE_V2,
@@ -394,6 +395,7 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
 ) -> None:
     import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
 
+    lifecycle: list[str] = []
     run = SimpleNamespace(
         status="queued",
         revision=1,
@@ -422,6 +424,16 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
             received.update(kwargs)
             yield {"type": "complete"}
 
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object) -> AsyncIterator[None]:
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-generation-release")
+
+    async def publish_status(**_kwargs: object) -> None:
+        lifecycle.append("status-publish")
+
     scoped_container = SimpleNamespace(agent_service=lambda _llm: Service())
     base_container = SimpleNamespace(with_db=lambda _session: scoped_container)
     monkeypatch.setattr(plans_router, "async_session_factory", SessionContext)
@@ -429,10 +441,10 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
     monkeypatch.setattr(
         plans_router,
         "pin_agent_turn_operation_v2",
-        _noop_agent_turn_operation,
+        operation_context,
     )
     monkeypatch.setattr(plans_router, "settle_agent_plan_run", AsyncMock())
-    publish_run_status = AsyncMock()
+    publish_run_status = AsyncMock(side_effect=publish_status)
     monkeypatch.setattr(
         plans_router,
         "_publish_plan_run_status",
@@ -454,10 +466,8 @@ async def test_execute_approved_plan_propagates_canonical_run_identity(
     assert received["execution_message_id"] == "client-message-1"
     assert received["canonical_run_id"] == "plan-run-1"
     session.refresh.assert_awaited_once_with(run)
-    publish_run_status.assert_awaited_once_with(
-        base_container=base_container,
-        run=run,
-    )
+    publish_run_status.assert_awaited_once_with(run=run)
+    assert lifecycle.index("status-publish") < lifecycle.index("operation-generation-release")
     assert run.status == "ready_review"
     assert run.revision == 2
 
@@ -588,6 +598,7 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
 ) -> None:
     import src.infrastructure.adapters.primary.web.routers.agent.plans as plans_router
 
+    lifecycle: list[str] = []
     run = SimpleNamespace(
         status="queued",
         revision=1,
@@ -614,6 +625,16 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
             yield {"type": "start"}
             raise RuntimeError("stream failed")
 
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object) -> AsyncIterator[None]:
+        try:
+            yield None
+        finally:
+            lifecycle.append("operation-generation-release")
+
+    async def publish_status(**_kwargs: object) -> None:
+        lifecycle.append("status-publish")
+
     scoped_container = SimpleNamespace(agent_service=lambda _llm: Service())
     base_container = SimpleNamespace(with_db=lambda _session: scoped_container)
     settle = AsyncMock()
@@ -622,10 +643,10 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
     monkeypatch.setattr(
         plans_router,
         "pin_agent_turn_operation_v2",
-        _noop_agent_turn_operation,
+        operation_context,
     )
     monkeypatch.setattr(plans_router, "settle_agent_plan_run", settle)
-    publish_run_status = AsyncMock()
+    publish_run_status = AsyncMock(side_effect=publish_status)
     monkeypatch.setattr(
         plans_router,
         "_publish_plan_run_status",
@@ -649,10 +670,8 @@ async def test_execute_approved_plan_refreshes_authority_after_stream_failure(
     assert run.status == "failed"
     assert run.revision == 2
     settle.assert_awaited_once()
-    publish_run_status.assert_awaited_once_with(
-        base_container=base_container,
-        run=run,
-    )
+    publish_run_status.assert_awaited_once_with(run=run)
+    assert lifecycle.index("status-publish") < lifecycle.index("operation-generation-release")
 
 
 @pytest.mark.unit
@@ -831,9 +850,35 @@ async def test_publish_plan_run_status_persists_and_broadcasts_authority(
 
     published: list[tuple[str, dict[str, Any]]] = []
 
+    class TrackedRedis:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.close_calls = 0
+
+        async def aclose(self) -> None:
+            self.close_calls += 1
+
+    first_redis = TrackedRedis("first")
+    second_redis = TrackedRedis("second")
+    redis_clients = iter((first_redis, second_redis))
+
+    async def redis_factory() -> TrackedRedis:
+        return next(redis_clients)
+
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(redis_runtime_factory=redis_factory)
+    )
+    first = await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=901,
+        version=901,
+    )
+    assert first.accepted is True
+
     class EventBus:
         def __init__(self, redis_client: object) -> None:
-            assert redis_client is redis
+            assert redis_client is first_redis
 
         async def publish_to_stream(
             self,
@@ -841,9 +886,18 @@ async def test_publish_plan_run_status_persists_and_broadcasts_authority(
             event: dict[str, Any],
         ) -> str:
             published.append((conversation_id, event))
+            second = await host.bootstrap(
+                profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+                manifest_paths=(
+                    _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+                ),
+                generation=902,
+                version=902,
+            )
+            assert second.accepted is True
+            assert first_redis.close_calls == 0
             return "1-0"
 
-    redis = object()
     manager = SimpleNamespace(broadcast_to_conversation=AsyncMock(return_value=1))
     monkeypatch.setattr(plans_router, "RedisEventBusAdapter", EventBus, raising=False)
     monkeypatch.setattr(
@@ -876,10 +930,22 @@ async def test_publish_plan_run_status_persists_and_broadcasts_authority(
         },
     )
 
-    await plans_router._publish_plan_run_status(
-        base_container=SimpleNamespace(redis_client=redis),
-        run=run,
-    )
+    try:
+        async with pin_operation_context_v2(
+            host,
+            operation_id="plan-status-publication",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            await plans_router._publish_plan_run_status(run=run)
+            assert first_redis.close_calls == 0
+            assert second_redis.close_calls == 0
+
+        assert first_redis.close_calls == 1
+        assert second_redis.close_calls == 0
+    finally:
+        await host.close()
+
+    assert second_redis.close_calls == 1
 
     assert len(published) == 1
     conversation_id, event = published[0]

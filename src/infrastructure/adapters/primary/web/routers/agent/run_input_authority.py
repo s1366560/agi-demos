@@ -39,6 +39,16 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.agent.subagent.control_channel import RedisControlChannel
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    current_agent_worker_redis_client_v2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from .plans import _execute_approved_plan
 from .run_authority_common import _canonical_hash, _explicit_change_payloads, _load_scoped_run
@@ -263,24 +273,48 @@ async def _dispatch_persisted_steer(
 ) -> RunInputAck | JSONResponse:
     """Dispatch a committed steer row, then settle its retryable transport state."""
 
-    base_container = cast(DIContainer, request.app.state.container)
     accepted = False
     error_code = "control_channel_unavailable"
-    if base_container.redis_client is not None:
-        accepted = await RedisControlChannel(base_container.redis_client).send_control(
-            ControlMessage(
-                run_id=row.run_id,
-                message_type=ControlMessageType.STEER,
-                payload=row.message,
-                sender_id=current_user.id,
-                run_input_id=row.id,
-                delivery_mode="steer_now",
-                run_revision=row.expected_run_revision,
-                message_id=row.message_id,
-                idempotency_key=row.idempotency_key,
+    try:
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"run-input-dispatch:{row.id}",
+            tenant_id=row.tenant_id,
+            project_id=row.project_id,
+            session_id=row.conversation_id,
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: db,
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": row.tenant_id,
+                    "project_id": row.project_id,
+                    "user_id": current_user.id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-control",
+                    "channel": "run-input",
+                    "method": request.method,
+                    "path": request.url.path,
+                    "run_id": row.run_id,
+                    "run_input_id": row.id,
+                },
+            },
+        ):
+            redis_client = current_agent_worker_redis_client_v2()
+            accepted = await RedisControlChannel(redis_client).send_control(
+                ControlMessage(
+                    run_id=row.run_id,
+                    message_type=ControlMessageType.STEER,
+                    payload=row.message,
+                    sender_id=current_user.id,
+                    run_input_id=row.id,
+                    delivery_mode="steer_now",
+                    run_revision=row.expected_run_revision,
+                    message_id=row.message_id,
+                    idempotency_key=row.idempotency_key,
+                )
             )
-        )
-        error_code = "control_channel_rejected"
+            error_code = "control_channel_rejected"
+    except RuntimeV2Error:
+        accepted = False
 
     now = datetime.now(UTC)
     row.dispatch_lease_expires_at = None
