@@ -84,7 +84,6 @@ __all__ = [  # noqa: RUF022
     "get_cached_tools",
     "get_cached_tools_for_project",
     "get_custom_tool_diagnostics",
-    "get_hitl_response_listener",
     "current_mcp_sandbox_adapter_v2",
     # MCP Tools
     "get_mcp_tools_from_cache",
@@ -99,7 +98,6 @@ __all__ = [  # noqa: RUF022
     "get_or_create_tool_definitions",
     "get_or_create_tools",
     "get_pool_stats",
-    "get_session_registry",
     # SystemPromptManager
     "get_system_prompt_manager",
     "invalidate_agent_session",
@@ -112,8 +110,6 @@ __all__ = [  # noqa: RUF022
     # Prewarm
     "prewarm_agent_session",
     "set_agent_graph_service",
-    # HITL Response Listener (real-time delivery)
-    "set_hitl_response_listener",
     "update_mcp_tools_cache",
 ]
 
@@ -122,7 +118,6 @@ _agent_graph_service: Any | None = None
 _tenant_graph_services: dict[str, Any] = {}
 _tenant_graph_service_lock = asyncio.Lock()
 _redis_pool: redis.ConnectionPool | None = None
-_hitl_response_listener: Any | None = None  # HITLResponseListener (real-time)
 
 # Tool set cache (by project_id key)
 _tools_cache: dict[str, dict[str, Any]] = {}
@@ -3149,124 +3144,6 @@ async def prewarm_agent_session(
         logger.warning(
             f"Agent Worker: Prewarm failed for tenant={tenant_id}, project={project_id}: {e}"
         )
-
-
-# ============================================================================
-# HITL Response Listener State (Real-time Delivery)
-# ============================================================================
-
-
-def set_hitl_response_listener(listener: Any) -> None:
-    """Set the global HITL Response Listener instance for agent worker.
-
-    Called during Agent Worker initialization to enable real-time
-    HITL response delivery via Redis Streams.
-
-    Args:
-        listener: The HITLResponseListener instance
-    """
-    global _hitl_response_listener
-    _hitl_response_listener = listener
-    logger.info("Agent Worker: HITL Response Listener registered for Activities")
-
-
-def get_hitl_response_listener() -> Any | None:
-    """Get the global HITL Response Listener instance for agent worker.
-
-    Returns:
-        The HITLResponseListener instance or None if not initialized
-    """
-    return _hitl_response_listener
-
-
-def get_session_registry() -> Any:
-    """Get the AgentSessionRegistry for HITL waiter tracking.
-
-    Returns:
-        AgentSessionRegistry instance (singleton per worker)
-    """
-    from src.infrastructure.agent.hitl.session_registry import (
-        get_session_registry as _get_registry,
-    )
-
-    return _get_registry()
-
-
-async def register_hitl_waiter(
-    request_id: str,
-    conversation_id: str,
-    hitl_type: str,
-    tenant_id: str,
-    project_id: str,
-) -> bool:
-    """
-    Register an HITL waiter and add project to listener.
-
-    This is the main entry point for Activities to register
-    that they're waiting for an HITL response.
-
-    Args:
-        request_id: HITL request ID
-        conversation_id: Conversation ID
-        hitl_type: Type of HITL
-        tenant_id: Tenant ID
-        project_id: Project ID
-
-    Returns:
-        True if registered successfully
-    """
-    registry = get_session_registry()
-    await registry.register_waiter(
-        request_id=request_id,
-        conversation_id=conversation_id,
-        hitl_type=hitl_type,
-    )
-
-    # Ensure listener is monitoring this project
-    if _hitl_response_listener:
-        await _hitl_response_listener.add_project(tenant_id, project_id)
-
-    logger.debug(
-        f"Agent Worker: Registered HITL waiter: request={request_id}, project={project_id}"
-    )
-    return True
-
-
-async def unregister_hitl_waiter(request_id: str) -> bool:
-    """
-    Unregister an HITL waiter after response received or timeout.
-
-    Args:
-        request_id: HITL request ID
-
-    Returns:
-        True if unregistered successfully
-    """
-    registry = get_session_registry()
-    return cast(bool, await registry.unregister_waiter(request_id))
-
-
-async def wait_for_hitl_response_realtime(
-    request_id: str,
-    timeout: float = 5.0,
-) -> dict[str, Any] | None:
-    """
-    Wait for HITL response via real-time Redis Stream delivery.
-
-    This is a fast-path check before falling back to Temporal Signal.
-    Returns quickly if response arrives via Redis, or None if timeout.
-
-    Args:
-        request_id: HITL request ID
-        timeout: Max seconds to wait (should be short, e.g., 5s)
-
-    Returns:
-        Response data if delivered via Redis, None otherwise
-    """
-    registry = get_session_registry()
-    return cast(
-        dict[str, Any] | None, await registry.wait_for_response(request_id, timeout=timeout)
-    )
 
 
 # ============================================================================
