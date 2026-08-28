@@ -15,18 +15,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.infrastructure.agent.tools import executor as executor_module
 from src.infrastructure.agent.tools.executor import (
     ExecutionContext,
     ExecutionResult,
     PermissionAction,
     ToolExecutor,
     ToolState,
-    create_tool_executor,
     escape_control_chars,
-    get_tool_executor,
     is_hitl_tool,
     parse_raw_arguments,
-    set_tool_executor,
 )
 
 # ============================================================================
@@ -730,45 +728,14 @@ class TestHITLToolHandling:
 
 
 # ============================================================================
-# Test Singleton Functions
+# Retired Process-Global Authority
 # ============================================================================
 
 
 @pytest.mark.unit
-class TestSingletonFunctions:
-    """Test singleton getter/setter functions."""
-
-    def test_get_without_init_raises(self):
-        """Test getting executor without initialization raises."""
-        import src.infrastructure.agent.tools.executor as module
-
-        module._executor = None
-
-        with pytest.raises(RuntimeError, match="not initialized"):
-            get_tool_executor()
-
-    def test_set_and_get(self, mock_doom_loop_detector, mock_permission_manager):
-        """Test setting and getting executor."""
-        executor = ToolExecutor(
-            doom_loop_detector=mock_doom_loop_detector,
-            permission_manager=mock_permission_manager,
-        )
-        set_tool_executor(executor)
-
-        result = get_tool_executor()
-        assert result is executor
-
-    def test_create_tool_executor(self, mock_doom_loop_detector, mock_permission_manager):
-        """Test create_tool_executor function."""
-        executor = create_tool_executor(
-            doom_loop_detector=mock_doom_loop_detector,
-            permission_manager=mock_permission_manager,
-            debug_logging=True,
-        )
-
-        assert isinstance(executor, ToolExecutor)
-        assert executor._debug_logging is True
-
-        # Should be retrievable
-        result = get_tool_executor()
-        assert result is executor
+@pytest.mark.parametrize(
+    "authority_name",
+    ("_executor", "get_tool_executor", "set_tool_executor", "create_tool_executor"),
+)
+def test_process_global_executor_authority_is_retired(authority_name: str) -> None:
+    assert not hasattr(executor_module, authority_name)

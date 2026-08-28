@@ -497,7 +497,9 @@ class ToolExecutor:
         if "_error" in arguments and arguments.get("_error") == "truncated":
             error_msg = self._build_truncation_error_message(
                 tool_name,
-                arguments.get("_message", "Tool arguments were truncated. The content may be too large."),
+                arguments.get(
+                    "_message", "Tool arguments were truncated. The content may be too large."
+                ),
             )
             return arguments, error_msg
 
@@ -758,59 +760,3 @@ class ToolExecutor:
 
             except Exception as e:
                 logger.error(f"Failed to upload artifact: {e}", exc_info=True)
-
-
-# ============================================================================
-# Singleton Management
-# ============================================================================
-
-_executor: ToolExecutor | None = None
-
-
-def get_tool_executor() -> ToolExecutor:
-    """
-    Get singleton ToolExecutor instance.
-
-    Raises:
-        RuntimeError if executor not initialized
-    """
-    global _executor
-    if _executor is None:
-        raise RuntimeError(
-            "ToolExecutor not initialized. Call set_tool_executor() or create_tool_executor() first."
-        )
-    return _executor
-
-
-def set_tool_executor(executor: ToolExecutor) -> None:
-    """Set singleton ToolExecutor instance."""
-    global _executor
-    _executor = executor
-
-
-def create_tool_executor(
-    doom_loop_detector: DoomLoopDetectorProtocol,
-    permission_manager: PermissionManagerProtocol,
-    artifact_service: ArtifactServiceProtocol | None = None,
-    debug_logging: bool = False,
-) -> ToolExecutor:
-    """
-    Create and set singleton ToolExecutor.
-
-    Args:
-        doom_loop_detector: Doom loop detector instance
-        permission_manager: Permission manager instance
-        artifact_service: Optional artifact service
-        debug_logging: Enable debug logging
-
-    Returns:
-        Created ToolExecutor instance
-    """
-    global _executor
-    _executor = ToolExecutor(
-        doom_loop_detector=doom_loop_detector,
-        permission_manager=permission_manager,
-        artifact_service=artifact_service,
-        debug_logging=debug_logging,
-    )
-    return _executor

@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from src.infrastructure.agent.tools import tool_registry as tool_registry_module
 from src.infrastructure.agent.tools.tool_registry import (
     Tool,
     ToolExecutionResult,
@@ -15,9 +16,6 @@ from src.infrastructure.agent.tools.tool_registry import (
     ToolMetadata,
     ToolRegistry,
     ToolStatus,
-    get_tool_executor,
-    get_tool_registry,
-    set_tool_registry,
 )
 
 
@@ -429,29 +427,10 @@ class TestToolExecutor:
         assert results[1].success is False
 
 
-class TestGlobalToolRegistry:
-    """Tests for global tool registry singleton."""
-
-    def test_get_tool_registry_returns_singleton(self) -> None:
-        """Should return same instance across calls."""
-        registry1 = get_tool_registry()
-        registry2 = get_tool_registry()
-
-        assert registry1 is registry2
-
-    def test_set_tool_registry_changes_global(self) -> None:
-        """Should allow changing global registry."""
-        original = get_tool_registry()
-        custom = ToolRegistry()
-
-        set_tool_registry(custom)
-
-        assert get_tool_registry() is custom
-        assert get_tool_registry() is not original
-
-    def test_get_tool_executor(self) -> None:
-        """Should create executor with global registry."""
-        executor = get_tool_executor()
-
-        assert isinstance(executor, ToolExecutor)
-        assert executor._registry is get_tool_registry()
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "authority_name",
+    ("_global_registry", "get_tool_registry", "set_tool_registry", "get_tool_executor"),
+)
+def test_process_global_tool_registry_authority_is_retired(authority_name: str) -> None:
+    assert not hasattr(tool_registry_module, authority_name)
