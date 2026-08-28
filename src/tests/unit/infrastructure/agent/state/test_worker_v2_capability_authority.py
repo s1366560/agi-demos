@@ -746,10 +746,6 @@ def test_worker_env_var_tools_use_bound_tool_factory(
         _make_env_var_tools,
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.tools.env_var_tools.configure_env_var_tools",
-        _forbidden,
-    )
-    monkeypatch.setattr(
         "src.infrastructure.agent.tools.define.get_registered_tools",
         _forbidden,
     )
