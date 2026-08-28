@@ -1,6 +1,7 @@
 """Unit tests for GoalEvaluator goal-completion evaluation."""
 
 import json
+import logging
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
@@ -8,7 +9,9 @@ import pytest
 
 from src.infrastructure.agent.processor import ToolDefinition
 from src.infrastructure.agent.processor.goal_evaluator import (
+    GOAL_COMPLETION_JUDGE_TOOL_V2,
     GoalEvaluator,
+    GoalJudgmentAuditV2,
     TaskStateUnavailableError,
 )
 from src.infrastructure.agent.tools.context import ToolContext
@@ -77,6 +80,26 @@ def create_todoread_toolinfo_tool(tasks: list[dict[str, Any]]) -> ToolDefinition
     )
 
 
+def goal_judgment_response(*, achieved: bool, rationale: str) -> dict[str, Any]:
+    """Build one provider-neutral structured goal judgment tool call."""
+    return {
+        "tool_calls": [
+            {
+                "type": "function",
+                "function": {
+                    "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+                    "arguments": json.dumps(
+                        {
+                            "goal_achieved": achieved,
+                            "rationale": rationale,
+                        }
+                    ),
+                },
+            }
+        ]
+    }
+
+
 @pytest.mark.unit
 class TestProcessorGoalCompletion:
     """Goal-completion behavior for GoalEvaluator."""
@@ -115,12 +138,10 @@ class TestProcessorGoalCompletion:
     async def test_pending_task_goal_can_reconcile_with_llm_completion_evidence(self) -> None:
         llm_client = AsyncMock()
         llm_client.generate = AsyncMock(
-            return_value={
-                "content": (
-                    '{"goal_achieved": true, '
-                    '"reason": "The final report and verification evidence satisfy the request."}'
-                )
-            }
+            return_value=goal_judgment_response(
+                achieved=True,
+                rationale="The final report and verification evidence satisfy the request.",
+            )
         )
         evaluator = GoalEvaluator(
             llm_client=llm_client,
@@ -155,12 +176,10 @@ class TestProcessorGoalCompletion:
     ) -> None:
         llm_client = AsyncMock()
         llm_client.generate = AsyncMock(
-            return_value={
-                "content": (
-                    '{"goal_achieved": false, '
-                    '"reason": "The report is not present in the conversation."}'
-                )
-            }
+            return_value=goal_judgment_response(
+                achieved=False,
+                rationale="The report is not present in the conversation.",
+            )
         )
         evaluator = GoalEvaluator(
             llm_client=llm_client,
@@ -452,7 +471,7 @@ class TestProcessorGoalCompletion:
 
         assert result.achieved is False
         assert result.should_stop is False
-        assert result.source == "assistant_text"
+        assert result.source == "agent_judge"
 
     @pytest.mark.asyncio
     async def test_workspace_authority_empty_root_goal_marker_fails_closed(self) -> None:
@@ -535,7 +554,7 @@ class TestProcessorGoalCompletion:
         evaluator = evaluator_with_tasks([])
         evaluator._llm_client = AsyncMock()
         evaluator._llm_client.generate = AsyncMock(
-            return_value={"content": '{"goal_achieved": true, "reason": "all done"}'}
+            return_value=goal_judgment_response(achieved=True, rationale="all done")
         )
 
         result = await evaluator.evaluate_goal_completion(
@@ -548,6 +567,191 @@ class TestProcessorGoalCompletion:
 
         assert result.achieved is True
         assert result.source == "llm_self_check"
+
+        call = evaluator._llm_client.generate.await_args.kwargs
+        assert call["tool_choice"] == {
+            "type": "function",
+            "function": {"name": GOAL_COMPLETION_JUDGE_TOOL_V2},
+        }
+        assert call["tools"][0]["function"]["name"] == GOAL_COMPLETION_JUDGE_TOOL_V2
+
+    async def test_nested_provider_goal_judgment_tool_call_is_accepted(
+        self,
+        evaluator_with_tasks,
+    ) -> None:
+        evaluator = evaluator_with_tasks([])
+        evaluator._llm_client = AsyncMock()
+        evaluator._llm_client.generate = AsyncMock(
+            return_value={
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+                                        "arguments": json.dumps(
+                                            {
+                                                "goal_achieved": True,
+                                                "rationale": "All requested checks passed.",
+                                            }
+                                        ),
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        )
+
+        result = await evaluator.evaluate_goal_completion(
+            session_id="session-1",
+            messages=[{"role": "user", "content": "finish and verify"}],
+        )
+
+        assert result.achieved is True
+        assert result.reason == "All requested checks passed."
+        assert result.source == "llm_self_check"
+
+    async def test_malformed_goal_judgment_arguments_fail_closed(
+        self,
+        evaluator_with_tasks,
+    ) -> None:
+        audits: list[GoalJudgmentAuditV2] = []
+        evaluator = evaluator_with_tasks([])
+        evaluator._llm_client = AsyncMock()
+        evaluator._audit_sink = audits.append
+        evaluator._llm_client.generate = AsyncMock(
+            return_value={
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+                            "arguments": "{malformed-json",
+                        },
+                    }
+                ]
+            }
+        )
+
+        result = await evaluator.evaluate_goal_completion(
+            session_id="session-1",
+            messages=[{"role": "user", "content": "finish and verify"}],
+        )
+
+        assert result.achieved is False
+        assert result.reason == "Goal completion judge unavailable or invalid"
+        assert result.source == "agent_judge"
+        assert audits == []
+
+    @pytest.mark.parametrize(
+        "tool_calls",
+        [
+            [
+                {
+                    "type": "custom",
+                    "function": {
+                        "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+                        "arguments": json.dumps(
+                            {"goal_achieved": True, "rationale": "Invalid call type."}
+                        ),
+                    },
+                }
+            ],
+            [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+                        "arguments": json.dumps(
+                            {"goal_achieved": True, "rationale": "First judgment."}
+                        ),
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+                        "arguments": json.dumps(
+                            {"goal_achieved": True, "rationale": "Second judgment."}
+                        ),
+                    },
+                },
+            ],
+            [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": GOAL_COMPLETION_JUDGE_TOOL_V2,
+                        "arguments": json.dumps(
+                            {
+                                "goal_achieved": True,
+                                "rationale": "Unexpected fields are not contractual.",
+                                "confidence": 1.0,
+                            }
+                        ),
+                    },
+                }
+            ],
+        ],
+        ids=("wrong-call-type", "multiple-calls", "extra-arguments"),
+    )
+    async def test_noncanonical_goal_judgment_tool_calls_fail_closed(
+        self,
+        evaluator_with_tasks,
+        tool_calls: list[dict[str, Any]],
+    ) -> None:
+        evaluator = evaluator_with_tasks([])
+        evaluator._llm_client = AsyncMock()
+        evaluator._llm_client.generate = AsyncMock(return_value={"tool_calls": tool_calls})
+
+        result = await evaluator.evaluate_goal_completion(
+            session_id="session-1",
+            messages=[{"role": "user", "content": "finish and verify"}],
+        )
+
+        assert result.achieved is False
+        assert result.reason == "Goal completion judge unavailable or invalid"
+        assert result.source == "agent_judge"
+
+    async def test_default_goal_judgment_audit_redacts_sensitive_values(
+        self,
+        evaluator_with_tasks,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        evaluator = evaluator_with_tasks([])
+        evaluator._llm_client = AsyncMock()
+        evaluator._llm_client.generate = AsyncMock(
+            return_value=goal_judgment_response(
+                achieved=False,
+                rationale="Provider rejected Bearer private-token-value.",
+            )
+        )
+
+        with caplog.at_level(logging.INFO, logger="agent_decision_audit"):
+            result = await evaluator.evaluate_goal_completion(
+                session_id="session-1",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Retry https://example.test?api_key=private-query-value",
+                    }
+                ],
+            )
+
+        assert result.achieved is False
+        audit_record = next(
+            record for record in caplog.records if record.name == "agent_decision_audit"
+        )
+        redacted_fields = " ".join(
+            str(getattr(audit_record, field)) for field in ("input", "output", "rationale")
+        )
+        assert "private-query-value" not in redacted_fields
+        assert "private-token-value" not in redacted_fields
+        assert "<redacted>" in redacted_fields
 
     @pytest.mark.asyncio
     async def test_no_tasks_invalid_self_check_defaults_not_complete(self, evaluator_with_tasks):
@@ -564,10 +768,11 @@ class TestProcessorGoalCompletion:
         )
 
         assert result.achieved is False
-        assert result.source == "assistant_text"
+        assert result.source == "agent_judge"
+        assert result.reason == "Goal completion judge unavailable or invalid"
 
     @pytest.mark.asyncio
-    async def test_no_tasks_plain_text_self_check_is_parsed(self, evaluator_with_tasks):
+    async def test_no_tasks_plain_text_self_check_cannot_issue_verdict(self, evaluator_with_tasks):
         evaluator = evaluator_with_tasks([])
         evaluator._llm_client = AsyncMock()
         evaluator._llm_client.generate = AsyncMock(
@@ -585,37 +790,47 @@ class TestProcessorGoalCompletion:
         )
 
         assert result.achieved is False
-        assert result.source == "llm_self_check"
-        assert "remaining" in result.reason.lower()
-
-    def test_extract_goal_json_handles_braces_in_string(self):
-        evaluator = GoalEvaluator(llm_client=None, tools={})
-        parsed = evaluator._extract_goal_json(
-            'prefix {"goal_achieved": true, "reason": "keep } brace"} suffix'
-        )
-        assert parsed is not None
-        assert parsed.get("goal_achieved") is True
-
-    def test_extract_goal_from_plain_text_prefers_explicit_negative(self):
-        evaluator = GoalEvaluator(llm_client=None, tools={})
-        parsed = evaluator._extract_goal_from_plain_text(
-            "goal not achieved yet; some sub-goal achieved already"
-        )
-        assert parsed is not None
-        assert parsed.get("goal_achieved") is False
-
-    def test_extract_goal_from_plain_text_reason_is_line_bounded(self):
-        evaluator = GoalEvaluator(llm_client=None, tools={})
-        parsed = evaluator._extract_goal_from_plain_text(
-            "goal_achieved: true\nreason: done line one\nextra line"
-        )
-        assert parsed is not None
-        assert parsed.get("goal_achieved") is True
-        assert parsed.get("reason") == "done line one"
-
+        assert result.source == "agent_judge"
 
     @pytest.mark.asyncio
-    async def test_workspace_authority_rejects_terminal_children_without_attempt_evidence(self) -> None:
+    async def test_structured_goal_judgment_records_complete_audit_fields(self) -> None:
+        audits: list[GoalJudgmentAuditV2] = []
+        llm_client = AsyncMock()
+        llm_client.generate = AsyncMock(
+            return_value=goal_judgment_response(
+                achieved=False,
+                rationale="The requested verification evidence is still missing.",
+            )
+        )
+        evaluator = GoalEvaluator(
+            llm_client=llm_client,
+            tools={},
+            runtime_context={"selected_agent_id": "builtin:sisyphus"},
+            audit_sink=audits.append,
+        )
+
+        result = await evaluator.evaluate_goal_completion(
+            session_id="session-1",
+            messages=[{"role": "user", "content": "finish the implementation"}],
+        )
+
+        assert result.achieved is False
+        assert len(audits) == 1
+        audit = audits[0]
+        assert audit.agent_id == "builtin:sisyphus"
+        assert audit.tool_name == GOAL_COMPLETION_JUDGE_TOOL_V2
+        assert audit.input_json["context_summary"]
+        assert audit.output_json == {
+            "goal_achieved": False,
+            "rationale": "The requested verification evidence is still missing.",
+        }
+        assert audit.rationale == "The requested verification evidence is still missing."
+        assert audit.latency_ms >= 0
+
+    @pytest.mark.asyncio
+    async def test_workspace_authority_rejects_terminal_children_without_attempt_evidence(
+        self,
+    ) -> None:
         """Terminal-child evidence reads are retired to Avernet Core and fail closed."""
         evaluator = GoalEvaluator(
             llm_client=None,
