@@ -40,7 +40,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
@@ -350,13 +350,13 @@ class ProjectReActAgent:
         from src.infrastructure.agent.state.agent_worker_state import (
             get_or_create_llm_client,
             get_or_create_provider_config,
-            get_redis_client,
         )
         from src.infrastructure.plugins.v2.agent_worker_runtime import (
             current_agent_worker_runtime_services_v2,
         )
 
-        graph_runtime = current_agent_worker_runtime_services_v2().graph_runtime
+        worker_services = current_agent_worker_runtime_services_v2()
+        graph_runtime = worker_services.graph_runtime
         graph_service = graph_runtime.graph_service
         if not graph_service:
             logger.warning(
@@ -365,14 +365,21 @@ class ProjectReActAgent:
                 f"(reason={graph_runtime.unavailable_code or 'unavailable'})"
             )
 
-        redis_client = await get_redis_client()
+        redis_client = worker_services.redis_runtime.client
+        if redis_client is None:
+            raise RuntimeV2Error(
+                "agent_worker_redis_unavailable",
+                "Agent Worker requires the generation Redis runtime",
+            )
 
         try:
+            from redis.asyncio import Redis
+
             from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
                 RedisAgentMessageBusAdapter,
             )
 
-            self._message_bus = RedisAgentMessageBusAdapter(redis_client)
+            self._message_bus = RedisAgentMessageBusAdapter(cast(Redis, redis_client))
         except Exception as e:
             logger.warning(f"Could not initialize agent message bus: {e}")
             self._message_bus = None

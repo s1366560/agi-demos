@@ -141,7 +141,7 @@ async def test_runtime_continues_lifo_cleanup_after_disposer_failure() -> None:
     run_registry.close()
 
 
-async def test_default_factory_closes_db_session_when_redis_setup_fails() -> None:
+async def test_default_factory_closes_db_session_when_redis_runtime_is_unavailable() -> None:
     run_registry = SubAgentRunRegistry()
     db_session = MagicMock()
     db_session.close = AsyncMock()
@@ -151,11 +151,7 @@ async def test_default_factory_closes_db_session_when_redis_setup_fails() -> Non
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             return_value=db_session,
         ),
-        patch(
-            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-            new=AsyncMock(side_effect=RuntimeError("redis unavailable")),
-        ),
-        pytest.raises(RuntimeError, match="redis unavailable"),
+        pytest.raises(RuntimeV2Error) as error,
     ):
         await create_agent_orchestrator_resource_v2(
             run_registry,
@@ -163,5 +159,6 @@ async def test_default_factory_closes_db_session_when_redis_setup_fails() -> Non
             MagicMock(),
         )
 
+    assert error.value.code == "agent_orchestration_redis_unavailable"
     db_session.close.assert_awaited_once_with()
     run_registry.close()

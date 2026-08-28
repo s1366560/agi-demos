@@ -22,7 +22,7 @@ profile:
       module_ref: builtin://memstack/runtime/redis-client
       enabled: true
       config:
-        strategy: process-shared-projection
+        strategy: host-resource
       inject: {}
       isolate: {}
       scope:
@@ -141,6 +141,7 @@ profile:
         strategy: generation-sandbox-runtime
       inject:
         graph_runtime: service:graph.runtime
+        redis: service:runtime.redis-client
         sandbox_runtime: service:sandbox.runtime
         subagent_runs: service:agent.subagent-run-registry
         orchestration_runtime: service:agent.orchestration-runtime
@@ -158,6 +159,7 @@ profile:
       config:
         strategy: generation-owned
       inject:
+        redis: service:runtime.redis-client
         subagent_runs: service:agent.subagent-run-registry
       isolate: {}
       scope:

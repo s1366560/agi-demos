@@ -34,6 +34,7 @@ WORKER_RUNTIME_MODULE = "src.infrastructure.plugins.v2.agent_worker_runtime"
 
 def _worker_runtime_services(
     graph_service: object | None,
+    redis_client: object,
     *,
     unavailable_code: str | None = None,
 ) -> SimpleNamespace:
@@ -41,7 +42,8 @@ def _worker_runtime_services(
         graph_runtime=SimpleNamespace(
             graph_service=graph_service,
             unavailable_code=unavailable_code,
-        )
+        ),
+        redis_runtime=SimpleNamespace(client=redis_client),
     )
 
 
@@ -447,11 +449,7 @@ class TestProjectReActAgentLifecycleNotifications:
         with (
             patch(
                 f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
-                return_value=_worker_runtime_services(mock_graph_service),
-            ),
-            patch(
-                f"{WORKER_STATE_MODULE}.get_redis_client",
-                return_value=mock_redis_client,
+                return_value=_worker_runtime_services(mock_graph_service, mock_redis_client),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
@@ -578,12 +576,9 @@ class TestProjectReActAgentLifecycleNotifications:
                 f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
                 return_value=_worker_runtime_services(
                     None,
+                    mock_redis_client,
                     unavailable_code="no_active_provider",
                 ),
-            ),
-            patch(
-                f"{WORKER_STATE_MODULE}.get_redis_client",
-                return_value=mock_redis_client,
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
@@ -649,11 +644,7 @@ class TestProjectReActAgentLifecycleNotifications:
         with (
             patch(
                 f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
-                return_value=_worker_runtime_services(mock_graph_service),
-            ),
-            patch(
-                f"{WORKER_STATE_MODULE}.get_redis_client",
-                return_value=mock_redis_client,
+                return_value=_worker_runtime_services(mock_graph_service, mock_redis_client),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
@@ -1046,11 +1037,7 @@ class TestProjectReActAgentNotificationContent:
         with (
             patch(
                 f"{WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
-                return_value=_worker_runtime_services(mock_graph_service),
-            ),
-            patch(
-                f"{WORKER_STATE_MODULE}.get_redis_client",
-                return_value=mock_redis_client,
+                return_value=_worker_runtime_services(mock_graph_service, mock_redis_client),
             ),
             patch(
                 f"{WORKER_STATE_MODULE}.get_or_create_provider_config",

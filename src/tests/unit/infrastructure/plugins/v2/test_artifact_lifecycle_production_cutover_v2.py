@@ -35,12 +35,13 @@ _WORKER_STATE_MODULE = "src.infrastructure.agent.state.agent_worker_state"
 _WORKER_RUNTIME_MODULE = "src.infrastructure.plugins.v2.agent_worker_runtime"
 
 
-def _worker_runtime_services(graph_service: object) -> SimpleNamespace:
+def _worker_runtime_services(graph_service: object, redis_client: object) -> SimpleNamespace:
     return SimpleNamespace(
         graph_runtime=SimpleNamespace(
             graph_service=graph_service,
             unavailable_code=None,
-        )
+        ),
+        redis_runtime=SimpleNamespace(client=redis_client),
     )
 
 
@@ -88,12 +89,7 @@ async def test_project_agent_resolves_artifacts_only_from_the_pinned_generation(
     with (
         patch(
             f"{_WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
-            return_value=_worker_runtime_services(MagicMock()),
-        ),
-        patch(
-            f"{_WORKER_STATE_MODULE}.get_redis_client",
-            new_callable=AsyncMock,
-            return_value=AsyncMock(),
+            return_value=_worker_runtime_services(MagicMock(), AsyncMock()),
         ),
         patch(
             f"{_WORKER_STATE_MODULE}.get_or_create_provider_config",
@@ -129,12 +125,7 @@ async def test_project_agent_propagates_missing_required_artifact_service() -> N
     with (
         patch(
             f"{_WORKER_RUNTIME_MODULE}.current_agent_worker_runtime_services_v2",
-            return_value=_worker_runtime_services(MagicMock()),
-        ),
-        patch(
-            f"{_WORKER_STATE_MODULE}.get_redis_client",
-            new_callable=AsyncMock,
-            return_value=AsyncMock(),
+            return_value=_worker_runtime_services(MagicMock(), AsyncMock()),
         ),
         patch(
             "src.infrastructure.agent.core.project_react_agent."

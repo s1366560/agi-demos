@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:41f6842f6b68b50049ae63b1a791c7cabde40c9fa18a62564f1c03979924f4ac",
+        "digest": "sha256:d489c13c1dab7c8eba6b74b990444c98a39d9fd18a9d2001f6eca02a4106cb3e",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -276,13 +276,13 @@
           "additionalProperties": false,
           "required": ["strategy"],
           "properties": {
-            "strategy": { "const": "process-shared-projection", "type": "string" }
+            "strategy": { "const": "host-resource", "type": "string" }
           }
         }
       },
-      "contract_digest": "sha256:66834005a34a1fcca7b0a55f7ce28e99851fe8e78701970066d26174d1f873ca",
+      "contract_digest": "sha256:2776b95c2860ef728c83b30c05def11aa9299bf1a8b98a446166941b3b151499",
       "artifact": {
-        "digest": "sha256:cdd38da7b22a24060d8c3dab1caae2685bf3b79e0950520d297cf8e5239cfce3",
+        "digest": "sha256:589709f588092f5960d685a0429855884aeee3e3dcd46c998c8039a8c2fb6ba3",
         "source": "repo+python://src/infrastructure/plugins/v2/redis_runtime.py"
       }
     },
@@ -536,6 +536,11 @@
               "version": "1.0.0"
             },
             {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            },
+            {
               "alias": "sandbox_runtime",
               "service": "service:sandbox.runtime",
               "version": "1.0.0"
@@ -563,9 +568,9 @@
           }
         }
       },
-      "contract_digest": "sha256:1b1cf74cc4ae310c5a98980c2ead856ce25cee10573fa9f87e2997caa64b130b",
+      "contract_digest": "sha256:4661b355f90a336a8c26ea3f9cbf11c84fb7aee80847e109245a0bbb150d739c",
       "artifact": {
-        "digest": "sha256:53557bbc3735b03f67fff14e47eb4b03d9721d9f53342f0c223e58540e62f59f",
+        "digest": "sha256:9f4da1b27992316393123b6712f29999fd52dd7f8d87cb301c43812d5ff2e0c0",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },
@@ -4498,6 +4503,11 @@
           ],
           "requires": [
             {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            },
+            {
               "alias": "subagent_runs",
               "service": "service:agent.subagent-run-registry",
               "version": "1.0.0"
@@ -4515,9 +4525,9 @@
           }
         }
       },
-      "contract_digest": "sha256:c914c37b44d66cd1d9e5b399f752509063429a3b317ad2a2fb95b498f0c0a999",
+      "contract_digest": "sha256:1ebbc48941dde702b3e9c436d32ce2751b068751e844fdad19504c7630f8b61b",
       "artifact": {
-        "digest": "sha256:0b19d8d38a052d61148ed70f4f4c87d9ae49d6d33dd926686a3f480f34afebbf",
+        "digest": "sha256:2a885eb80f53b0023a47a98561262f490be816d666df309e6a0dc55d4913f7b7",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_orchestration_runtime.py"
       }
     },

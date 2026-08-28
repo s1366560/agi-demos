@@ -35,15 +35,27 @@ class _TestGraphService:
         return None
 
 
+class _TestRedisClient:
+    async def aclose(self) -> None:
+        return None
+
+
 async def _test_graph_factory() -> Any:
     return _TestGraphService()
+
+
+async def _test_redis_factory() -> Any:
+    return _TestRedisClient()
 
 
 def _actor_instance() -> Any:
     actor_class = ProjectAgentActor.__ray_metadata__.modified_class
     actor = actor_class()
     actor._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
-        builtin_runtime_definitions_v2(graph_runtime_factory=_test_graph_factory)
+        builtin_runtime_definitions_v2(
+            graph_runtime_factory=_test_graph_factory,
+            redis_runtime_factory=_test_redis_factory,
+        )
     )
     return actor
 

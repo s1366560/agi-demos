@@ -31,6 +31,7 @@ from src.infrastructure.agent.core.project_react_agent import (
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     agent_worker_graph_runtime_factory_v2,
+    agent_worker_redis_runtime_factory_v2,
     agent_worker_sandbox_runtime_factory_v2,
 )
 from src.infrastructure.plugins.v2.boundary import (
@@ -71,6 +72,7 @@ class ProjectAgentActor:
         self._plugin_admission_v2 = DataPlaneGenerationAdmissionV2(
             builtin_runtime_definitions_v2(
                 graph_runtime_factory=self._create_graph_runtime_v2,
+                redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
                 sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
             )
         )

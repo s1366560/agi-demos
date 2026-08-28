@@ -93,7 +93,7 @@ from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
 from .notification_services import notification_service_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
-from .redis_runtime import redis_runtime_definition_v2
+from .redis_runtime import RedisRuntimeFactoryV2, redis_runtime_definition_v2
 from .reflection_runtime import ReflectionRuntimeManagerV2, reflection_runtime_definition_v2
 from .reflection_services import reflection_service_definitions_v2
 from .retrieval_runtime import RetrievalRuntimeFactoryV2, retrieval_runtime_definition_v2
@@ -177,6 +177,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
     agent_pool_runtime_factory: AgentPoolRuntimeFactoryV2 | None = None,
     graph_runtime_factory: GraphRuntimeFactoryV2 | None = None,
     retrieval_runtime_factory: RetrievalRuntimeFactoryV2 | None = None,
+    redis_runtime_factory: RedisRuntimeFactoryV2 | None = None,
     sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
     sandbox_redis_client: object | None = None,
     workflow_runtime_factory: WorkflowRuntimeFactoryV2 | None = None,
@@ -303,7 +304,10 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
             contract_digest=generated_contract_digest_v2(RUNTIME_BOUNDARY_MODULE_V2),
             apply=_apply_runtime_boundary,
         ),
-        redis_runtime_definition_v2(sandbox_redis_client),
+        redis_runtime_definition_v2(
+            sandbox_redis_client,
+            factory=redis_runtime_factory,
+        ),
         workspace_wtp_publisher_definition_v2(),
         telemetry_runtime_definition_v2(telemetry_runtime_manager),
         workspace_core_runtime_definition_v2(workspace_core_runtime_factory),

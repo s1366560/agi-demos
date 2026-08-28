@@ -19,6 +19,10 @@ from src.infrastructure.plugins.v2.admin_dlq_services import (
     ADMIN_DLQ_PROVIDER_MODULE_V2,
     AdminDlqApplicationResolverV2,
 )
+from src.infrastructure.plugins.v2.agent_orchestration_runtime import (
+    AGENT_ORCHESTRATION_RUNTIME_MODULE_V2,
+)
+from src.infrastructure.plugins.v2.agent_worker_runtime import AGENT_WORKER_RUNTIME_MODULE_V2
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
@@ -151,6 +155,8 @@ async def test_provider_rejects_missing_redis_runtime_inject_without_fallback() 
             replace(entry, enabled=False)
             if entry.module_ref
             in {
+                AGENT_ORCHESTRATION_RUNTIME_MODULE_V2,
+                AGENT_WORKER_RUNTIME_MODULE_V2,
                 REDIS_RUNTIME_MODULE_V2,
                 ADMIN_DLQ_APPLICATION_MODULE_V2,
             }

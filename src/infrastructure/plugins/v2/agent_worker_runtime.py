@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+import redis.asyncio as redis
+
 from src.configuration.config import get_settings
 from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.sandbox_port import SandboxConnectionError
@@ -21,6 +23,7 @@ from .agent_orchestration_runtime import (
     AgentSpawnExecutorV2,
 )
 from .graph_runtime import GraphRuntimeFactoryV2, GraphRuntimeServiceV2
+from .redis_runtime import RedisRuntimeServiceV2
 from .runtime import (
     ContextV2,
     OperationContextV2,
@@ -33,6 +36,7 @@ from .sandbox_runtime import SandboxRuntimeServiceV2
 AGENT_WORKER_RUNTIME_MODULE_V2 = "builtin://memstack/agent/worker-runtime"
 AGENT_WORKER_RUNTIME_SERVICE_V2 = "service:agent.worker-runtime"
 AGENT_WORKER_GRAPH_RUNTIME_INJECT_V2 = "graph_runtime"
+AGENT_WORKER_REDIS_RUNTIME_INJECT_V2 = "redis"
 AGENT_WORKER_SANDBOX_RUNTIME_INJECT_V2 = "sandbox_runtime"
 AGENT_WORKER_SUBAGENT_RUNS_INJECT_V2 = "subagent_runs"
 AGENT_WORKER_ORCHESTRATION_RUNTIME_INJECT_V2 = "orchestration_runtime"
@@ -46,6 +50,7 @@ class AgentWorkerRuntimeServicesV2:
     """Runtime capabilities resolved from one exact generation."""
 
     graph_runtime: GraphRuntimeServiceV2
+    redis_runtime: RedisRuntimeServiceV2
     sandbox_adapter: MCPSandboxAdapter | None
     canvas_manager: CanvasManager
     subagent_run_registry: SubAgentRunRegistry
@@ -65,6 +70,7 @@ class AgentWorkerRuntimeResolverV2:
     """Project generation-owned sandbox state into an Agent Worker operation."""
 
     graph_runtime: GraphRuntimeServiceV2
+    redis_runtime: RedisRuntimeServiceV2
     sandbox_runtime: SandboxRuntimeServiceV2
     canvas_manager: CanvasManager
     subagent_run_registry: SubAgentRunRegistry
@@ -76,6 +82,7 @@ class AgentWorkerRuntimeResolverV2:
         if sandbox_services is None:
             return AgentWorkerRuntimeServicesV2(
                 graph_runtime=self.graph_runtime,
+                redis_runtime=self.redis_runtime,
                 sandbox_adapter=None,
                 canvas_manager=self.canvas_manager,
                 subagent_run_registry=self.subagent_run_registry,
@@ -86,6 +93,7 @@ class AgentWorkerRuntimeResolverV2:
             )
         return AgentWorkerRuntimeServicesV2(
             graph_runtime=self.graph_runtime,
+            redis_runtime=self.redis_runtime,
             sandbox_adapter=sandbox_services.adapter,
             canvas_manager=self.canvas_manager,
             subagent_run_registry=self.subagent_run_registry,
@@ -215,6 +223,16 @@ def agent_worker_graph_runtime_factory_v2(
     return factory
 
 
+async def agent_worker_redis_runtime_factory_v2() -> redis.Redis:
+    """Create one Redis client owned by an Agent data-plane generation."""
+    settings = get_settings()
+    return redis.Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        max_connections=50,
+    )
+
+
 def agent_worker_runtime_definition_v2(
     *,
     canvas_manager: CanvasManager | None = None,
@@ -230,6 +248,12 @@ def agent_worker_runtime_definition_v2(
             raise RuntimeV2Error(
                 "invalid_agent_worker_graph_runtime",
                 "Agent Worker graph runtime inject has an invalid implementation",
+            )
+        redis_runtime = context.require(AGENT_WORKER_REDIS_RUNTIME_INJECT_V2)
+        if not isinstance(redis_runtime, RedisRuntimeServiceV2):
+            raise RuntimeV2Error(
+                "invalid_agent_worker_redis_runtime",
+                "Agent Worker Redis runtime inject has an invalid implementation",
             )
         sandbox_runtime = context.require(AGENT_WORKER_SANDBOX_RUNTIME_INJECT_V2)
         if not isinstance(sandbox_runtime, SandboxRuntimeServiceV2):
@@ -253,6 +277,7 @@ def agent_worker_runtime_definition_v2(
             AGENT_WORKER_RUNTIME_SERVICE_V2,
             AgentWorkerRuntimeResolverV2(
                 graph_runtime=graph_runtime,
+                redis_runtime=redis_runtime,
                 sandbox_runtime=sandbox_runtime,
                 canvas_manager=host_canvas_manager,
                 subagent_run_registry=subagent_run_registry,
@@ -272,6 +297,7 @@ __all__ = [
     "AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2",
     "AGENT_WORKER_GRAPH_RUNTIME_INJECT_V2",
     "AGENT_WORKER_ORCHESTRATION_RUNTIME_INJECT_V2",
+    "AGENT_WORKER_REDIS_RUNTIME_INJECT_V2",
     "AGENT_WORKER_RUNTIME_MODULE_V2",
     "AGENT_WORKER_RUNTIME_SERVICE_V2",
     "AGENT_WORKER_SANDBOX_RUNTIME_INJECT_V2",
@@ -280,6 +306,7 @@ __all__ = [
     "AgentWorkerRuntimeResolverV2",
     "AgentWorkerRuntimeServicesV2",
     "agent_worker_graph_runtime_factory_v2",
+    "agent_worker_redis_runtime_factory_v2",
     "agent_worker_runtime_definition_v2",
     "agent_worker_sandbox_runtime_factory_v2",
     "bind_current_agent_orchestrator_v2",
