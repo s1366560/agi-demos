@@ -2998,6 +2998,22 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-agent-persisted-definition-contribution
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/persisted-definition-contribution
+      enabled: true
+      config:
+        strategy: operation-agent-registry
+        source_id: persisted-agent-definitions
+      inject:
+        catalog: service:agent-definition-catalog
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-agent-definition-all-access
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

@@ -20,7 +20,14 @@ from src.infrastructure.plugins.v2.agent_definition import (
     AgentDefinitionCatalogV2,
     AgentDefinitionResolverV2,
 )
-from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
+from src.infrastructure.plugins.v2.agent_persisted_definition import (
+    AGENT_PERSISTED_DEFINITION_MODULE_V2,
+    AGENT_PERSISTED_DEFINITION_SOURCE_V2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    pin_operation_context_v2,
+)
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
@@ -31,6 +38,7 @@ _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 _STREAM_MIXIN_PATH = _ROOT / "src/infrastructure/agent/core/react_agent_stream_mixin.py"
+_PROMPT_MIXIN_PATH = _ROOT / "src/infrastructure/agent/core/react_agent_prompt_mixin.py"
 
 
 class _AlternativeAgentDefinitionResolver:
@@ -77,17 +85,36 @@ async def test_agent_definition_contribution_disposer_removes_exact_entry() -> N
 
 
 @pytest.mark.unit
+async def test_agent_definition_provider_disposer_removes_dynamic_source() -> None:
+    catalog = AgentDefinitionCatalogV2()
+    provider = AsyncMock(return_value=SimpleNamespace(id="agent-a"))
+    disposer = catalog.register_provider("persisted-agent-definitions", provider)
+
+    resolved = await catalog.resolve_provider(
+        agent_id="agent-a",
+        tenant_id="tenant-a",
+        project_id="project-a",
+    )
+    assert resolved is not None
+    assert resolved.id == "agent-a"
+
+    await disposer()
+
+    assert (
+        await catalog.resolve_provider(
+            agent_id="agent-a",
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
+        is None
+    )
+
+
+@pytest.mark.unit
 async def test_agent_definition_requires_pinned_v2_operation_without_native_fallback() -> None:
     agent = ReActAgent(model="test-model", tools={})
 
-    with (
-        patch.object(
-            agent,
-            "_load_selected_agent_native",
-            new_callable=AsyncMock,
-        ) as native_loader,
-        pytest.raises(RuntimeV2Error) as error,
-    ):
+    with pytest.raises(RuntimeV2Error) as error:
         await agent._load_selected_agent(
             agent_id="agent-v2",
             tenant_id="tenant-a",
@@ -95,7 +122,6 @@ async def test_agent_definition_requires_pinned_v2_operation_without_native_fall
         )
 
     assert error.value.code == "operation_context_not_pinned"
-    native_loader.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -112,11 +138,6 @@ async def test_agent_definition_propagates_missing_v2_service_without_native_fal
             "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
             return_value=operation,
         ),
-        patch.object(
-            agent,
-            "_load_selected_agent_native",
-            new_callable=AsyncMock,
-        ) as native_loader,
         pytest.raises(RuntimeV2Error) as error,
     ):
         await agent._load_selected_agent(
@@ -127,7 +148,6 @@ async def test_agent_definition_propagates_missing_v2_service_without_native_fal
 
     assert error.value.code == "missing_service"
     operation.require.assert_called_once_with(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
-    native_loader.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -150,48 +170,21 @@ async def test_agent_definition_accepts_structural_non_builtin_provider() -> Non
 
     assert result is selected
     operation.require.assert_called_once_with(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
-    assert provider.calls[0]["loader"] == agent._load_selected_agent_native
+    assert provider.calls == [
+        {
+            "agent_id": "agent-v2",
+            "tenant_id": "tenant-a",
+            "project_id": "project-a",
+        }
+    ]
 
 
 @pytest.mark.unit
-async def test_native_agent_loader_has_no_builtin_lookup_branch() -> None:
-    agent = ReActAgent(model="test-model", tools={})
-    agent._session_factory = None
+def test_prompt_mixin_has_no_native_agent_definition_loader() -> None:
+    source = _PROMPT_MIXIN_PATH.read_text(encoding="utf-8")
 
-    with (
-        patch(
-            "src.infrastructure.agent.core.react_agent_prompt_mixin.get_builtin_agent_by_id",
-            side_effect=AssertionError("builtin lookup must be a V2 contribution"),
-            create=True,
-        ) as builtin_lookup,
-        patch(
-            "src.infrastructure.plugins.v2.agent_worker_runtime.current_agent_orchestrator_v2",
-            return_value=SimpleNamespace(get_agent=AsyncMock(return_value=None)),
-        ),
-    ):
-        result = await agent._load_selected_agent_native(
-            agent_id=BUILTIN_ALL_ACCESS_ID,
-            tenant_id="tenant-a",
-            project_id="project-a",
-        )
-
-    assert result is None
-    builtin_lookup.assert_not_called()
-
-
-@pytest.mark.unit
-async def test_native_agent_loader_requires_operation_orchestrator() -> None:
-    agent = ReActAgent(model="test-model", tools={})
-    agent._session_factory = None
-
-    with pytest.raises(RuntimeV2Error) as error:
-        await agent._load_selected_agent_native(
-            agent_id="agent-v2",
-            tenant_id="tenant-a",
-            project_id="project-a",
-        )
-
-    assert error.value.code == "operation_context_not_pinned"
+    assert "_load_selected_agent_native" not in source
+    assert "SqlAgentRegistryRepository" not in source
 
 
 @pytest.mark.unit
@@ -302,23 +295,83 @@ async def test_react_agent_consumes_generation_agent_definition_provider() -> No
         operation_id="agent-definition-consumer",
         scope=ScopeV2(kind=ScopeKindV2.ROOT),
     ):
-        with patch.object(
-            agent,
-            "_load_selected_agent_native",
-            new_callable=AsyncMock,
-        ) as native_loader:
-            result = await agent._load_selected_agent(
-                agent_id=BUILTIN_ALL_ACCESS_ID,
-                tenant_id="tenant-a",
-                project_id="project-a",
-            )
+        result = await agent._load_selected_agent(
+            agent_id=BUILTIN_ALL_ACCESS_ID,
+            tenant_id="tenant-a",
+            project_id="project-a",
+        )
 
     assert result is not None
     assert result.id == BUILTIN_ALL_ACCESS_ID
     assert result.tenant_id == "tenant-a"
     assert result.project_id == "project-a"
-    native_loader.assert_not_awaited()
     await host.close()
+
+
+@pytest.mark.unit
+async def test_react_agent_resolves_persisted_definition_from_profile_provider() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=1,
+        version=1,
+    )
+    selected = SimpleNamespace(
+        id="persisted-agent",
+        tenant_id="tenant-a",
+        project_id="project-a",
+    )
+    repository = SimpleNamespace(get_by_id=AsyncMock(return_value=selected))
+    agent = ReActAgent(model="test-model", tools={})
+
+    try:
+        with patch(
+            "src.infrastructure.plugins.v2.agent_persisted_definition._build_agent_registry_v2",
+            return_value=repository,
+        ):
+            async with pin_operation_context_v2(
+                host,
+                operation_id="persisted-agent-definition-consumer",
+                scope=ScopeV2(
+                    kind=ScopeKindV2.SESSION,
+                    tenant_id="tenant-a",
+                    project_id="project-a",
+                    session_id="conversation-a",
+                ),
+                services={OPERATION_DB_SESSION_SERVICE_V2: object()},
+            ):
+                result = await agent._load_selected_agent(
+                    agent_id="persisted-agent",
+                    tenant_id="tenant-a",
+                    project_id="project-a",
+                )
+    finally:
+        await host.close()
+
+    assert result is selected
+    repository.get_by_id.assert_awaited_once_with(
+        agent_id="persisted-agent",
+        tenant_id="tenant-a",
+        project_id="project-a",
+    )
+
+
+@pytest.mark.unit
+def test_profile_declares_persisted_definition_provider() -> None:
+    document = load_profile_document_v2(_PROFILE_PATH)
+    entries = [
+        entry
+        for entry in document.entries
+        if entry.module_ref == AGENT_PERSISTED_DEFINITION_MODULE_V2
+    ]
+
+    assert len(entries) == 1
+    assert entries[0].config == {
+        "strategy": "operation-agent-registry",
+        "source_id": AGENT_PERSISTED_DEFINITION_SOURCE_V2,
+    }
+    assert entries[0].inject == {"catalog": "service:agent-definition-catalog"}
 
 
 @pytest.mark.unit
@@ -355,19 +408,76 @@ async def test_disabling_builtin_agent_entry_removes_capability_without_fallback
     generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
     manager = GenerationManagerV2()
     await manager.publish(generation)
-    native_loader = AsyncMock(return_value=SimpleNamespace(id=BUILTIN_ALL_ACCESS_ID))
+    persisted_provider_factory = Mock()
+
+    try:
+        with patch(
+            "src.infrastructure.plugins.v2.agent_persisted_definition._build_agent_registry_v2",
+            persisted_provider_factory,
+        ):
+            async with pin_operation_context_v2(
+                manager,
+                operation_id="disabled-builtin-agent",
+                scope=ScopeV2(
+                    kind=ScopeKindV2.SESSION,
+                    tenant_id="tenant-a",
+                    project_id="project-a",
+                    session_id="conversation-a",
+                ),
+                services={OPERATION_DB_SESSION_SERVICE_V2: object()},
+            ) as operation:
+                resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+                assert isinstance(resolver, AgentDefinitionResolverV2)
+                result = await resolver.resolve(
+                    agent_id=BUILTIN_ALL_ACCESS_ID,
+                    tenant_id="tenant-a",
+                    project_id="project-a",
+                )
+    finally:
+        await manager.close()
+
+    assert result is None
+    persisted_provider_factory.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_disabling_persisted_provider_removes_custom_definitions() -> None:
+    document = load_profile_document_v2(_PROFILE_PATH)
+    disabled = replace(
+        document,
+        entries=tuple(
+            replace(entry, enabled=False)
+            if entry.module_ref == AGENT_PERSISTED_DEFINITION_MODULE_V2
+            else entry
+            for entry in document.entries
+        ),
+    )
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    snapshot = compose_profile_v2(
+        disabled,
+        {manifest.plugin_id: manifest},
+        generation=3,
+    )
+    generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
+    manager = GenerationManagerV2()
+    await manager.publish(generation)
 
     try:
         async with pin_operation_context_v2(
             manager,
-            operation_id="disabled-builtin-agent",
-            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+            operation_id="disabled-persisted-agent-provider",
+            scope=ScopeV2(
+                kind=ScopeKindV2.SESSION,
+                tenant_id="tenant-a",
+                project_id="project-a",
+                session_id="conversation-a",
+            ),
+            services={OPERATION_DB_SESSION_SERVICE_V2: object()},
         ) as operation:
             resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, AgentDefinitionResolverV2)
             result = await resolver.resolve(
-                loader=native_loader,
-                agent_id=BUILTIN_ALL_ACCESS_ID,
+                agent_id="persisted-agent",
                 tenant_id="tenant-a",
                 project_id="project-a",
             )
@@ -375,7 +485,6 @@ async def test_disabling_builtin_agent_entry_removes_capability_without_fallback
         await manager.close()
 
     assert result is None
-    native_loader.assert_not_awaited()
 
 
 @pytest.mark.unit

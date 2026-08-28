@@ -1,7 +1,6 @@
 """Tests for ReActAgent runtime profile max-step resolution."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -113,31 +112,6 @@ class TestModelRouteRef:
 
 @pytest.mark.unit
 class TestReActAgentRuntimeProfile:
-    async def test_load_selected_agent_scopes_orchestrator_lookup(self, monkeypatch) -> None:
-        from src.infrastructure.plugins.v2 import agent_worker_runtime
-
-        agent = _make_react_agent()
-        selected_agent = SimpleNamespace(id="agent-123", name="Scoped Agent")
-        orchestrator = SimpleNamespace(get_agent=AsyncMock(return_value=selected_agent))
-        monkeypatch.setattr(
-            agent_worker_runtime,
-            "current_agent_orchestrator_v2",
-            lambda: orchestrator,
-        )
-
-        result = await agent._load_selected_agent_native(
-            agent_id="agent-123",
-            tenant_id="tenant-1",
-            project_id="project-1",
-        )
-
-        assert result is selected_agent
-        orchestrator.get_agent.assert_awaited_once_with(
-            "agent-123",
-            tenant_id="tenant-1",
-            project_id="project-1",
-        )
-
     def test_uses_tenant_max_steps_for_legacy_default_agent_iterations(self) -> None:
         agent = _make_react_agent()
         tenant_config = TenantAgentConfig.create_default("tenant-1")

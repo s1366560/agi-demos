@@ -8,7 +8,6 @@ inheritance.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -71,7 +70,6 @@ class _PromptAgent(Protocol):
     prompt_manager: Any
     _enable_subagent_as_tool: bool
     _workspace_manager: Any
-    _session_factory: Any
     _sisyphus_prompt_builder: SisyphusPromptBuilder
     _tool_policy_layers: dict[str, dict[str, Any]]
     _tool_selection_max_tools: int
@@ -110,14 +108,6 @@ class _PromptAgent(Protocol):
         selected_agent: Agent | None,
         tenant_agent_config: TenantAgentConfig,
     ) -> str: ...
-
-    async def _load_selected_agent_native(
-        self,
-        *,
-        agent_id: str,
-        tenant_id: str,
-        project_id: str,
-    ) -> Agent | None: ...
 
 
 class PromptMixin:
@@ -358,66 +348,11 @@ class PromptMixin:
         return cast(
             Agent | None,
             await resolver.resolve(
-                loader=self._load_selected_agent_native,
                 agent_id=agent_id,
                 tenant_id=tenant_id,
                 project_id=project_id,
             ),
         )
-
-    async def _load_selected_agent_native(
-        self: _PromptAgent,
-        *,
-        agent_id: str,
-        tenant_id: str,
-        project_id: str,
-    ) -> Agent | None:
-        """Load one persisted runtime agent from the orchestrator or database."""
-        from src.infrastructure.plugins.v2.agent_worker_runtime import (
-            current_agent_orchestrator_v2,
-        )
-
-        orchestrator = current_agent_orchestrator_v2()
-        try:
-            agent_def = await orchestrator.get_agent(
-                agent_id,
-                tenant_id=tenant_id,
-                project_id=project_id,
-            )
-            if agent_def is not None:
-                return agent_def
-        except RuntimeV2Error:
-            raise
-        except Exception:
-            logger.exception("[ReActAgent] Failed orchestrator lookup for agent %s", agent_id)
-
-        session_factory = self._session_factory
-        if session_factory is None:
-            logger.debug("[ReActAgent] No session_factory available for agent lookup: %s", agent_id)
-            return None
-
-        from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
-            SqlAgentRegistryRepository,
-        )
-
-        session = session_factory()
-        try:
-            repository = SqlAgentRegistryRepository(session)
-            agent_def = await repository.get_by_id(
-                agent_id,
-                tenant_id=tenant_id,
-                project_id=project_id,
-            )
-            if agent_def is None:
-                logger.warning("[ReActAgent] Agent definition not found: %s", agent_id)
-            return agent_def
-        except Exception:
-            logger.exception("[ReActAgent] Failed DB lookup for agent definition: %s", agent_id)
-            return None
-        finally:
-            with contextlib.suppress(Exception):
-                await session.rollback()
-            await session.close()
 
     def _build_runtime_profile(
         self: _PromptAgent,

@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from src.domain.model.agent.agent_definition import Agent
-from src.domain.ports.agent.agent_registry import AgentRegistryPort
 from src.domain.ports.agent.binding_repository import AgentBindingRepositoryPort
 
 from .agent_definition import AgentDefinitionResolverProtocolV2
@@ -17,7 +16,6 @@ AGENT_ROUTING_MODULE_V2 = "builtin://memstack/agent/routing"
 AGENT_ROUTE_RESOLVER_SERVICE_V2 = "service:agent-route-resolver"
 
 type AgentBindingRepositoryFactoryV2 = Callable[[object], AgentBindingRepositoryPort]
-type AgentRegistryFactoryV2 = Callable[[object], AgentRegistryPort]
 type AgentRouteSourceV2 = Literal["binding", "profile-default"]
 
 
@@ -62,21 +60,6 @@ def _build_binding_repository_v2(db_session: object) -> AgentBindingRepositoryPo
     return SqlAgentBindingRepository(db_session)
 
 
-def _build_agent_registry_v2(db_session: object) -> AgentRegistryPort:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
-        SqlAgentRegistryRepository,
-    )
-
-    if not isinstance(db_session, AsyncSession):
-        raise RuntimeV2Error(
-            "invalid_operation_db_session",
-            "agent routing requires an AsyncSession operation service",
-        )
-    return SqlAgentRegistryRepository(db_session)
-
-
 @dataclass(frozen=True, kw_only=True)
 class AgentRouteResolverV2:
     """Resolve bindings and Profile default through one generation-owned definition seam."""
@@ -84,7 +67,6 @@ class AgentRouteResolverV2:
     default_agent_id: str
     definition_resolver: AgentDefinitionResolverProtocolV2
     binding_repository_factory: AgentBindingRepositoryFactoryV2
-    agent_registry_factory: AgentRegistryFactoryV2
 
     async def resolve(
         self,
@@ -113,7 +95,6 @@ class AgentRouteResolverV2:
 
         db_session = operation.require(OPERATION_DB_SESSION_SERVICE_V2)
         binding_repository = self.binding_repository_factory(db_session)
-        agent_registry = self.agent_registry_factory(db_session)
         binding = await binding_repository.resolve_binding(
             tenant_id=tenant_id,
             channel_type=channel_type,
@@ -128,21 +109,7 @@ class AgentRouteResolverV2:
             )
 
         selected_agent_id = binding.agent_id if binding is not None else self.default_agent_id
-
-        async def load_definition(
-            *,
-            agent_id: str,
-            tenant_id: str,
-            project_id: str,
-        ) -> Agent | None:
-            return await agent_registry.get_by_id(
-                agent_id=agent_id,
-                tenant_id=tenant_id,
-                project_id=project_id,
-            )
-
         selected = await self.definition_resolver.resolve(
-            loader=load_definition,
             agent_id=selected_agent_id,
             tenant_id=tenant_id,
             project_id=project_id,
@@ -195,7 +162,6 @@ def _apply_agent_routing_v2(
             default_agent_id=default_agent_id,
             definition_resolver=definition_resolver,
             binding_repository_factory=_build_binding_repository_v2,
-            agent_registry_factory=_build_agent_registry_v2,
         ),
         label="agent-route-resolver",
     )

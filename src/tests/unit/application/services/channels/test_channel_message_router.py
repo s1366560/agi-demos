@@ -1233,8 +1233,6 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
             return None
 
     binding_repository = BindingRepository()
-    agent_registry = SimpleNamespace(get_by_id=AsyncMock())
-
     class AgentService:
         async def stream_chat_v2(self, **kwargs: object):
             operation = current_operation_context_v2()
@@ -1265,9 +1263,8 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
             return_value=binding_repository,
         ),
         patch(
-            "src.infrastructure.plugins.v2.agent_routing._build_agent_registry_v2",
-            return_value=agent_registry,
-        ),
+            "src.infrastructure.plugins.v2.agent_persisted_definition._build_agent_registry_v2"
+        ) as build_persisted_registry,
     ):
         await host.bootstrap(
             profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
@@ -1301,7 +1298,7 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
         assert isinstance(distribution, dict)
         assert distribution["descriptor"]["generation"] == 1
         assert observed["routing_distribution"] == distribution
-        agent_registry.get_by_id.assert_not_awaited()
+        build_persisted_registry.assert_not_called()
         router._send_response.assert_awaited_once_with(
             message,
             "conv-1",

@@ -34,8 +34,8 @@ BUILTIN_AGENT_DEFINITION_IDS_V2 = (
     BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
 )
 
-type AgentDefinitionLoaderV2 = Callable[..., object | Awaitable[object | None] | None]
 type AgentDefinitionFactoryV2 = Callable[[str, str], object]
+type AgentDefinitionProviderV2 = Callable[..., object | Awaitable[object | None] | None]
 type AgentDefinitionDisposerV2 = Callable[[], None | Awaitable[None]]
 
 
@@ -49,7 +49,21 @@ class AgentDefinitionCatalogProtocolV2(Protocol):
         factory: AgentDefinitionFactoryV2,
     ) -> AgentDefinitionDisposerV2: ...
 
+    def register_provider(
+        self,
+        source_id: str,
+        provider: AgentDefinitionProviderV2,
+    ) -> AgentDefinitionDisposerV2: ...
+
     def resolve(
+        self,
+        *,
+        agent_id: str,
+        tenant_id: str,
+        project_id: str,
+    ) -> object | None: ...
+
+    async def resolve_provider(
         self,
         *,
         agent_id: str,
@@ -63,6 +77,7 @@ class AgentDefinitionCatalogV2:
 
     def __init__(self) -> None:
         self._factories: dict[str, AgentDefinitionFactoryV2] = {}
+        self._provider: tuple[str, AgentDefinitionProviderV2] | None = None
 
     def register(
         self,
@@ -88,6 +103,31 @@ class AgentDefinitionCatalogV2:
 
         return dispose
 
+    def register_provider(
+        self,
+        source_id: str,
+        provider: AgentDefinitionProviderV2,
+    ) -> AgentDefinitionDisposerV2:
+        normalized_source_id = source_id.strip()
+        if not normalized_source_id or not callable(provider):
+            raise RuntimeV2Error(
+                "invalid_agent_definition_provider",
+                "agent definition provider requires a non-empty source_id and callable provider",
+            )
+        if self._provider is not None:
+            raise RuntimeV2Error(
+                "agent_definition_provider_conflict",
+                f"agent definition provider {self._provider[0]} is already registered",
+            )
+        binding = (normalized_source_id, provider)
+        self._provider = binding
+
+        async def dispose() -> None:
+            if self._provider == binding:
+                self._provider = None
+
+        return dispose
+
     def resolve(
         self,
         *,
@@ -106,6 +146,30 @@ class AgentDefinitionCatalogV2:
             )
         return result
 
+    async def resolve_provider(
+        self,
+        *,
+        agent_id: str,
+        tenant_id: str,
+        project_id: str,
+    ) -> object | None:
+        if self._provider is None:
+            return None
+        source_id, provider = self._provider
+        result = provider(
+            agent_id=agent_id,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        if inspect.isawaitable(result):
+            result = await result
+        if result is not None and getattr(result, "id", None) != agent_id:
+            raise RuntimeV2Error(
+                "invalid_agent_definition_provider",
+                f"agent definition provider {source_id} returned a different id",
+            )
+        return result
+
 
 @runtime_checkable
 class AgentDefinitionResolverProtocolV2(Protocol):
@@ -114,7 +178,6 @@ class AgentDefinitionResolverProtocolV2(Protocol):
     async def resolve(
         self,
         *,
-        loader: AgentDefinitionLoaderV2,
         agent_id: str,
         tenant_id: str,
         project_id: str,
@@ -123,7 +186,7 @@ class AgentDefinitionResolverProtocolV2(Protocol):
 
 @dataclass(frozen=True, kw_only=True)
 class AgentDefinitionResolverV2:
-    """Resolve an explicit agent ID through the active native definition loader."""
+    """Resolve an explicit agent ID only through active Profile contributions."""
 
     strategy: str
     catalog: AgentDefinitionCatalogProtocolV2
@@ -131,7 +194,6 @@ class AgentDefinitionResolverV2:
     async def resolve(
         self,
         *,
-        loader: AgentDefinitionLoaderV2,
         agent_id: str,
         tenant_id: str,
         project_id: str,
@@ -147,14 +209,11 @@ class AgentDefinitionResolverV2:
         )
         if contributed is not None or agent_id in BUILTIN_AGENT_DEFINITION_IDS_V2:
             return contributed
-        result = loader(
+        return await self.catalog.resolve_provider(
             agent_id=agent_id,
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        if inspect.isawaitable(result):
-            result = await result
-        return result
 
 
 def _apply_agent_definition_resolver_v2(

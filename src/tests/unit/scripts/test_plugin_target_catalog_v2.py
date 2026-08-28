@@ -14,8 +14,18 @@ _CATALOG = _ROOT / "shared/catalogs/plugin-module-catalog.v2.json"
 _BOOTSTRAP = _ROOT / "shared/profiles/memstack-default-bootstrap.v2.json"
 
 _EXPECTED_TARGET_MODULES = {
-    "rust-server": frozenset({"builtin://memstack/rust-server/generation-host"}),
-    "desktop-sidecar": frozenset({"builtin://memstack/desktop-sidecar/local-capability"}),
+    "rust-server": frozenset(
+        {
+            "builtin://memstack/rust-server/generation-host",
+            "builtin://memstack/rust-server/http-routes",
+        }
+    ),
+    "desktop-sidecar": frozenset(
+        {
+            "builtin://memstack/desktop-sidecar/http-routes",
+            "builtin://memstack/desktop-sidecar/local-capability",
+        }
+    ),
     "web": frozenset(
         {
             "builtin://memstack/web/renderer-host",
@@ -82,7 +92,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-workbench-surface"
     )
-    assert len(entries) == 258
+    assert len(entries) == 266
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",

@@ -85,12 +85,10 @@ async def test_no_binding_resolves_explicit_profile_default_definition() -> None
     _ = catalog.register(BUILTIN_SISYPHUS_ID, lambda _tenant, _project: default_agent)
     definition_resolver = AgentDefinitionResolverV2(strategy="explicit-id", catalog=catalog)
     binding_repository = SimpleNamespace(resolve_binding=AsyncMock(return_value=None))
-    agent_registry = SimpleNamespace(get_by_id=AsyncMock())
     resolver = AgentRouteResolverV2(
         default_agent_id=BUILTIN_SISYPHUS_ID,
         definition_resolver=definition_resolver,
         binding_repository_factory=lambda _db: binding_repository,
-        agent_registry_factory=lambda _db: agent_registry,
     )
     operation = _operation()
 
@@ -111,7 +109,6 @@ async def test_no_binding_resolves_explicit_profile_default_definition() -> None
     assert result.agent_id == BUILTIN_SISYPHUS_ID
     assert result.binding_id is None
     assert result.source == "profile-default"
-    agent_registry.get_by_id.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -124,15 +121,16 @@ async def test_binding_and_custom_definition_share_generation_resolver() -> None
     )
     selected = _agent("custom-agent", project_id="project-a")
     binding_repository = SimpleNamespace(resolve_binding=AsyncMock(return_value=binding))
-    agent_registry = SimpleNamespace(get_by_id=AsyncMock(return_value=selected))
+    provider = AsyncMock(return_value=selected)
+    catalog = AgentDefinitionCatalogV2()
+    _ = catalog.register_provider("persisted-agent-definitions", provider)
     resolver = AgentRouteResolverV2(
         default_agent_id=BUILTIN_SISYPHUS_ID,
         definition_resolver=AgentDefinitionResolverV2(
             strategy="explicit-id",
-            catalog=AgentDefinitionCatalogV2(),
+            catalog=catalog,
         ),
         binding_repository_factory=lambda _db: binding_repository,
-        agent_registry_factory=lambda _db: agent_registry,
     )
     operation = _operation()
 
@@ -150,7 +148,7 @@ async def test_binding_and_custom_definition_share_generation_resolver() -> None
     assert result.agent_id == "custom-agent"
     assert result.binding_id == "binding-a"
     assert result.source == "binding"
-    agent_registry.get_by_id.assert_awaited_once_with(
+    provider.assert_awaited_once_with(
         agent_id="custom-agent",
         tenant_id="tenant-a",
         project_id="project-a",
@@ -175,15 +173,18 @@ async def test_invalid_bound_definition_fails_without_default_fallback(
         agent_id="disabled-agent",
     )
     binding_repository = SimpleNamespace(resolve_binding=AsyncMock(return_value=binding))
-    agent_registry = SimpleNamespace(get_by_id=AsyncMock(return_value=selected))
+    catalog = AgentDefinitionCatalogV2()
+    _ = catalog.register_provider(
+        "persisted-agent-definitions",
+        AsyncMock(return_value=selected),
+    )
     resolver = AgentRouteResolverV2(
         default_agent_id=BUILTIN_SISYPHUS_ID,
         definition_resolver=AgentDefinitionResolverV2(
             strategy="explicit-id",
-            catalog=AgentDefinitionCatalogV2(),
+            catalog=catalog,
         ),
         binding_repository_factory=lambda _db: binding_repository,
-        agent_registry_factory=lambda _db: agent_registry,
     )
 
     with (
@@ -201,7 +202,6 @@ async def test_invalid_bound_definition_fails_without_default_fallback(
 @pytest.mark.unit
 async def test_operation_scope_mismatch_is_rejected_before_repository_access() -> None:
     binding_repository_factory = Mock()
-    agent_registry_factory = Mock()
     resolver = AgentRouteResolverV2(
         default_agent_id=BUILTIN_SISYPHUS_ID,
         definition_resolver=AgentDefinitionResolverV2(
@@ -209,7 +209,6 @@ async def test_operation_scope_mismatch_is_rejected_before_repository_access() -
             catalog=AgentDefinitionCatalogV2(),
         ),
         binding_repository_factory=binding_repository_factory,
-        agent_registry_factory=agent_registry_factory,
     )
 
     with (
@@ -223,7 +222,6 @@ async def test_operation_scope_mismatch_is_rejected_before_repository_access() -
 
     assert error.value.code == "agent_route_scope_mismatch"
     binding_repository_factory.assert_not_called()
-    agent_registry_factory.assert_not_called()
 
 
 @pytest.mark.unit
@@ -280,7 +278,7 @@ async def test_disabling_profile_default_definition_removes_routing_capability()
         generation=2,
     )
     binding_repository = SimpleNamespace(resolve_binding=AsyncMock(return_value=None))
-    agent_registry = SimpleNamespace(get_by_id=AsyncMock())
+    persisted_provider_factory = Mock()
 
     with (
         patch(
@@ -288,8 +286,8 @@ async def test_disabling_profile_default_definition_removes_routing_capability()
             return_value=binding_repository,
         ),
         patch(
-            "src.infrastructure.plugins.v2.agent_routing._build_agent_registry_v2",
-            return_value=agent_registry,
+            "src.infrastructure.plugins.v2.agent_persisted_definition._build_agent_registry_v2",
+            persisted_provider_factory,
         ),
     ):
         generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
@@ -318,4 +316,4 @@ async def test_disabling_profile_default_definition_removes_routing_capability()
             await manager.close()
 
     assert error.value.code == "agent_route_definition_not_found"
-    agent_registry.get_by_id.assert_not_awaited()
+    persisted_provider_factory.assert_not_called()

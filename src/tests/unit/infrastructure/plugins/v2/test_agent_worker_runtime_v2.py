@@ -471,7 +471,7 @@ def test_agent_orchestrator_has_no_process_global_authority() -> None:
         getsource(execution._update_spawn_status),
         getsource(execution._resolve_child_terminal_status),
         getsource(react_agent_profile._register_selected_agent_session),
-        getsource(react_agent_prompt_mixin.PromptMixin._load_selected_agent_native),
+        getsource(react_agent_prompt_mixin.PromptMixin._load_selected_agent),
         getsource(project_agent_actor.ProjectAgentActor._ensure_agent_orchestrator_v2),
         getsource(AgentRuntimeBootstrapper._bootstrap_agent_orchestrator),
     ):
