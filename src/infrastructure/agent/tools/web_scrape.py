@@ -21,17 +21,6 @@ from src.infrastructure.agent.tools.result import ToolResult
 logger = logging.getLogger(__name__)
 
 
-# === New @tool_define based implementation ===
-
-
-def configure_web_scrape() -> None:
-    """Configure the web scrape tool.
-
-    Placeholder configurator for consistency with other tools.
-    Web scrape reads settings inline via get_settings().
-    """
-
-
 # ---------------------------------------------------------------------------
 # Helper constants (extracted from class attributes)
 # ---------------------------------------------------------------------------
