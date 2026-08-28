@@ -20,16 +20,13 @@ class TestRefactoredArchitectureIntegration:
         converter2 = EventConverter()
         assert converter1 is not converter2
 
-    def test_attachment_processor_singleton(self):
-        """Test AttachmentProcessor singleton pattern."""
-        from src.infrastructure.agent.attachment.processor import (
-            AttachmentProcessor,
-            get_attachment_processor,
-        )
+    def test_attachment_processor_is_explicitly_constructed(self):
+        """Test AttachmentProcessor has no implicit process-global identity."""
+        from src.infrastructure.agent.attachment.processor import AttachmentProcessor
 
-        processor = get_attachment_processor()
-        assert processor is not None
-        assert isinstance(processor, AttachmentProcessor)
+        processor1 = AttachmentProcessor()
+        processor2 = AttachmentProcessor()
+        assert processor1 is not processor2
 
     def test_llm_invoker_class_exists(self):
         """Test LLMInvoker class exists with expected structure."""

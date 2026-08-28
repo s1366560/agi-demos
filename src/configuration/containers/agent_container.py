@@ -387,12 +387,6 @@ class AgentContainer:
             redis_client=self._redis_client,
         )
 
-    def attachment_processor(self) -> Any:
-        """Get AttachmentProcessor for handling chat attachments."""
-        from src.infrastructure.agent.attachment.processor import get_attachment_processor
-
-        return get_attachment_processor()
-
     # === Context Management ===
 
     def message_builder(self) -> Any:
