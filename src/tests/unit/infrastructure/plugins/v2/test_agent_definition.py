@@ -30,6 +30,7 @@ from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHost
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+_STREAM_MIXIN_PATH = _ROOT / "src/infrastructure/agent/core/react_agent_stream_mixin.py"
 
 
 class _AlternativeAgentDefinitionResolver:
@@ -194,7 +195,46 @@ async def test_native_agent_loader_requires_operation_orchestrator() -> None:
 
 
 @pytest.mark.unit
-async def test_stream_rejects_missing_selected_agent_without_builtin_fallback(monkeypatch) -> None:
+async def test_stream_requires_upstream_agent_id_before_route_side_effects(monkeypatch) -> None:
+    agent = ReActAgent(model="test-model", tools={})
+
+    async def no_plan_events(_user_message: str, _conversation_id: str):
+        if False:
+            yield {}
+
+    plan_detector = Mock(side_effect=no_plan_events)
+    route_parser = Mock(return_value=(None, "hello"))
+    route_decider = Mock(return_value=(object(), "route", "trace", {}, None, {"type": "route"}))
+    skill_loader = AsyncMock()
+    definition_loader = AsyncMock()
+    monkeypatch.setattr(agent, "_stream_detect_plan_mode", plan_detector)
+    monkeypatch.setattr(agent, "_stream_parse_forced_subagent", route_parser)
+    monkeypatch.setattr(agent, "_stream_decide_route", route_decider)
+    monkeypatch.setattr(agent, "_load_filesystem_skills", skill_loader)
+    monkeypatch.setattr(agent, "_load_selected_agent", definition_loader)
+
+    events = agent.stream(
+        conversation_id="conversation-a",
+        user_message="hello",
+        project_id="project-a",
+        user_id="user-a",
+        tenant_id="tenant-a",
+    )
+    with pytest.raises(RuntimeV2Error) as error:
+        await anext(events)
+
+    assert error.value.code == "agent_id_not_resolved"
+    plan_detector.assert_not_called()
+    route_parser.assert_not_called()
+    route_decider.assert_not_called()
+    skill_loader.assert_not_awaited()
+    definition_loader.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_stream_rejects_explicit_missing_definition_without_builtin_fallback(
+    monkeypatch,
+) -> None:
     agent = ReActAgent(model="test-model", tools={})
     route_event = {"type": "route"}
 
@@ -203,11 +243,7 @@ async def test_stream_rejects_missing_selected_agent_without_builtin_fallback(mo
             yield {}
 
     monkeypatch.setattr(agent, "_stream_detect_plan_mode", no_plan_events)
-    monkeypatch.setattr(
-        agent,
-        "_stream_parse_forced_subagent",
-        Mock(return_value=(None, "hello")),
-    )
+    monkeypatch.setattr(agent, "_stream_parse_forced_subagent", Mock(return_value=(None, "hello")))
     monkeypatch.setattr(
         agent,
         "_stream_decide_route",
@@ -232,6 +268,7 @@ async def test_stream_rejects_missing_selected_agent_without_builtin_fallback(mo
             project_id="project-a",
             user_id="user-a",
             tenant_id="tenant-a",
+            agent_id="missing-agent",
         )
         assert await anext(events) == route_event
         with pytest.raises(RuntimeV2Error) as error:
@@ -239,6 +276,14 @@ async def test_stream_rejects_missing_selected_agent_without_builtin_fallback(mo
 
     assert error.value.code == "agent_definition_not_found"
     builtin_fallback.assert_not_called()
+
+
+@pytest.mark.unit
+def test_react_agent_stream_source_has_no_hardcoded_default_agent() -> None:
+    source = _STREAM_MIXIN_PATH.read_text(encoding="utf-8")
+
+    assert "DEFAULT_GENERAL_AGENT_ID" not in source
+    assert "resolved_agent_id = agent_id or" not in source
 
 
 @pytest.mark.unit

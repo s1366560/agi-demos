@@ -59,7 +59,6 @@ from src.infrastructure.plugins.v2.tool_set import (
 from ..i18n import directive_for, resolve_response_language
 from ..plugins.selection_pipeline import ToolSelectionContext, ToolSelectionTraceStep
 from ..routing import ExecutionPath, RoutingDecision
-from ..sisyphus.builtin_agent import DEFAULT_GENERAL_AGENT_ID
 from ..skill import SkillProtocol
 from ..workspace.runtime_role_contract import (
     WORKSPACE_ROLE_CONTRACT,
@@ -1697,6 +1696,13 @@ class StreamMixin:
             - {"type": "complete", "data": {...}}
             - {"type": "error", "data": {...}}
         """
+        resolved_agent_id = (agent_id or "").strip()
+        if not resolved_agent_id:
+            raise RuntimeV2Error(
+                "agent_id_not_resolved",
+                "agent stream requires an explicit agent ID resolved by the pinned generation",
+            )
+
         conversation_context = conversation_context or []
         resolved_model_route_override = _resolve_model_route_override(
             model_override=model_override,
@@ -1741,7 +1747,6 @@ class StreamMixin:
         available_skills = list(runtime_capabilities.skills)
         available_subagents = list(runtime_capabilities.subagents)
 
-        resolved_agent_id = agent_id or DEFAULT_GENERAL_AGENT_ID
         selected_agent = await self._load_selected_agent(
             agent_id=resolved_agent_id,
             tenant_id=tenant_id,
