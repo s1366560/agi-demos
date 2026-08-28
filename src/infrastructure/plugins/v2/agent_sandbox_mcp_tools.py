@@ -15,6 +15,7 @@ from .runtime import (
     generated_contract_digest_v2,
 )
 from .tool_set import (
+    PreparedToolProviderV2,
     ToolContributionDisposerV2,
     ToolSetCatalogProtocolV2,
     ToolSetV2,
@@ -30,41 +31,12 @@ def _agent_sandbox_mcp_tool_set_v2(
     *,
     agent: object,
     selection_context: object | None,
+    prepared_tool_provider: PreparedToolProviderV2,
     required_tags: frozenset[str],
 ) -> ToolSetV2:
     """Select exact Worker-prepared tools declaring the sandbox MCP contract tags."""
-    get_current_tools = getattr(agent, "_get_current_tools", None)
-    if not callable(get_current_tools):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "sandbox MCP tool contribution requires callable _get_current_tools",
-        )
-    _ = selection_context
-    result: object = get_current_tools(selection_context=None)
-    if not isinstance(result, tuple):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "sandbox MCP tool contribution requires a two-item prepared tool set",
-        )
-    prepared_result = cast("tuple[object, ...]", result)
-    if len(prepared_result) != 2:
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "sandbox MCP tool contribution requires a two-item prepared tool set",
-        )
-    raw_tools: object = prepared_result[0]
-    raw_definitions: object = prepared_result[1]
-    if (
-        not isinstance(raw_tools, Mapping)
-        or not isinstance(raw_definitions, Sequence)
-        or isinstance(raw_definitions, (str, bytes))
-    ):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "sandbox MCP tool contribution received invalid prepared tool collections",
-        )
-
-    prepared_tools = cast("Mapping[str, Any]", raw_tools)
+    _ = agent, selection_context
+    prepared_tools = prepared_tool_provider.tools
     selected_tools = {
         name: tool
         for name, tool in prepared_tools.items()
@@ -112,6 +84,7 @@ def _apply_agent_sandbox_mcp_tool_contribution_v2(
         return _agent_sandbox_mcp_tool_set_v2(
             agent=kwargs["agent"],
             selection_context=kwargs.get("selection_context"),
+            prepared_tool_provider=cast("PreparedToolProviderV2", kwargs["prepared_tool_provider"]),
             required_tags=required_tags,
         )
 

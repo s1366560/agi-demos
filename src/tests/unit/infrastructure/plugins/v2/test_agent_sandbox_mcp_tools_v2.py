@@ -12,7 +12,6 @@ from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.core.react_agent_stream_mixin import (
     _resolve_current_tools_from_runtime_v2,
 )
-from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.plugins.v2.agent_sandbox_mcp_tools import (
@@ -71,8 +70,7 @@ class _ToolAgent:
     def __init__(
         self,
         *,
-        raw_tools: dict[str, object] | None = None,
-        prepared_result: object | None = None,
+        raw_tools: object | None = None,
     ) -> None:
         self.raw_tools = (
             raw_tools
@@ -84,7 +82,6 @@ class _ToolAgent:
                 _SANDBOX_CUSTOM_TOOL.name: _SANDBOX_CUSTOM_TOOL,
             }
         )
-        self.prepared_result = prepared_result
         self._tool_selection_pipeline = None
         self._last_tool_selection_trace: tuple[object, ...] = ()
 
@@ -93,10 +90,8 @@ class _ToolAgent:
         *,
         selection_context: object,
     ) -> object:
-        assert selection_context is None
-        if self.prepared_result is not None:
-            return self.prepared_result
-        return self.raw_tools, list(convert_tools(self.raw_tools))
+        _ = selection_context
+        raise AssertionError("V2 contributions must not read legacy agent tools")
 
 
 def _snapshot(
@@ -258,17 +253,17 @@ async def test_sandbox_mcp_config_rejects_wrong_tags_before_activation() -> None
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "prepared_result",
-    [([], []), ({}, object()), object()],
+    "raw_tools",
+    [[], object(), {1: _BUILTIN_SANDBOX_MCP_TOOL}],
 )
-async def test_sandbox_mcp_contribution_rejects_invalid_prepared_collections(
-    prepared_result: object,
+async def test_sandbox_mcp_contribution_rejects_invalid_prepared_provider_tools(
+    raw_tools: object,
 ) -> None:
     manager = await _manager(
         generation=105,
         sandbox_mcp_enabled=True,
     )
-    agent = _ToolAgent(prepared_result=prepared_result)
+    agent = _ToolAgent(raw_tools=raw_tools)
     try:
         async with pin_operation_context_v2(
             manager,
@@ -284,4 +279,4 @@ async def test_sandbox_mcp_contribution_rejects_invalid_prepared_collections(
     finally:
         await manager.close()
 
-    assert error.value.code == "invalid_tool_contribution"
+    assert error.value.code == "invalid_prepared_tool_provider"

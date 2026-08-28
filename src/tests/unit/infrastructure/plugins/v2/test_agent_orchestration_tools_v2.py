@@ -26,6 +26,7 @@ from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2,
 from src.infrastructure.plugins.v2.tool_set import (
     TOOL_SET_MODULE_V2,
     TOOL_SET_RESOLVER_SERVICE_V2,
+    PreparedToolProviderV2,
     ToolSetResolverProtocolV2,
 )
 
@@ -65,6 +66,7 @@ _EXPECTED_TOOL_NAMES = frozenset(
         "workspace_health_verdict",
     }
 )
+_EMPTY_PREPARED_TOOL_PROVIDER = PreparedToolProviderV2(tools={})
 
 
 def _snapshot(*, generation: int, contribution_enabled: bool):
@@ -140,7 +142,11 @@ async def test_orchestration_tool_contribution_resolves_exact_profile_set() -> N
         ) as operation:
             resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, ToolSetResolverProtocolV2)
-            tool_set = resolver.resolve(agent=object(), selection_context=None)
+            tool_set = resolver.resolve(
+                agent=object(),
+                selection_context=None,
+                prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+            )
     finally:
         await manager.close()
 
@@ -160,7 +166,11 @@ async def test_disabling_orchestration_tool_entry_removes_tools() -> None:
         ) as operation:
             resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, ToolSetResolverProtocolV2)
-            tool_set = resolver.resolve(agent=object(), selection_context=None)
+            tool_set = resolver.resolve(
+                agent=object(),
+                selection_context=None,
+                prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+            )
     finally:
         await manager.close()
 
@@ -187,7 +197,11 @@ async def test_orchestration_tool_execution_resolves_pinned_operation_service() 
             )
             resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, ToolSetResolverProtocolV2)
-            tool_set = resolver.resolve(agent=object(), selection_context=None)
+            tool_set = resolver.resolve(
+                agent=object(),
+                selection_context=None,
+                prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+            )
             result = await tool_set.tools["agent_list"].execute(_tool_context())
     finally:
         await manager.close()
@@ -213,7 +227,11 @@ async def test_orchestration_tool_execution_rejects_missing_operation_service() 
         ) as operation:
             resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
             assert isinstance(resolver, ToolSetResolverProtocolV2)
-            tool_set = resolver.resolve(agent=object(), selection_context=None)
+            tool_set = resolver.resolve(
+                agent=object(),
+                selection_context=None,
+                prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+            )
             with pytest.raises(RuntimeV2Error) as error:
                 await tool_set.tools["agent_list"].execute(_tool_context())
     finally:

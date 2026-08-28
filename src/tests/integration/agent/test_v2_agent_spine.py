@@ -97,6 +97,7 @@ from src.infrastructure.plugins.v2.session_event_log import (
     SessionEventRecordV2,
 )
 from src.infrastructure.plugins.v2.tool_set import (
+    PreparedToolProviderV2,
     ToolSetCatalogV2,
     bind_operation_tool_set_catalog_v2,
 )
@@ -729,6 +730,7 @@ async def test_operation_cleanup_covers_processor_error_cancellation_and_generat
         resolved = ToolSetCatalogV2().resolve(
             agent=object(),
             selection_context=None,
+            prepared_tool_provider=PreparedToolProviderV2(tools={}),
             operation_catalog=catalog,
         )
         definition = resolved.definitions[0]

@@ -19,6 +19,7 @@ from src.infrastructure.plugins.v2.agent_operation_tool_contributions import (
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.tool_set import (
+    PreparedToolProviderV2,
     ToolSetCatalogV2,
     ToolSetResolverV2,
     ToolSetV2,
@@ -26,6 +27,8 @@ from src.infrastructure.plugins.v2.tool_set import (
 )
 
 pytestmark = pytest.mark.unit
+
+_EMPTY_PREPARED_TOOL_PROVIDER = PreparedToolProviderV2(tools={})
 
 
 class _Operation:
@@ -183,6 +186,7 @@ async def test_operation_contributions_merge_before_one_selection_and_preserve_s
     tool_set = resolver.resolve(
         agent=SimpleNamespace(_tool_selection_pipeline=pipeline),
         selection_context=object(),
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
         operation_catalog=operation_catalog,
     )
 
@@ -196,6 +200,7 @@ async def test_operation_contributions_merge_before_one_selection_and_preserve_s
     after_dispose = resolver.resolve(
         agent=object(),
         selection_context=None,
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
         operation_catalog=operation_catalog,
     )
     assert tuple(after_dispose.tools) == ("base_tool",)
@@ -229,11 +234,13 @@ async def test_two_operation_catalogs_never_mix_contributions() -> None:
     first = resolver.resolve(
         agent=object(),
         selection_context=None,
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
         operation_catalog=first_catalog,
     )
     second = resolver.resolve(
         agent=object(),
         selection_context=None,
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
         operation_catalog=second_catalog,
     )
 
@@ -275,6 +282,7 @@ async def test_skill_mcp_and_subagent_share_one_preselection_tool_set() -> None:
     resolved = resolver.resolve(
         agent=SimpleNamespace(_tool_selection_pipeline=pipeline),
         selection_context=object(),
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
         operation_catalog=operation_catalog,
     )
 
@@ -311,6 +319,7 @@ async def test_skill_mcp_activation_is_owned_and_released_by_operation_effect() 
     resolved = ToolSetCatalogV2().resolve(
         agent=object(),
         selection_context=None,
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
         operation_catalog=catalog,
     )
     assert [definition.name for definition in resolved.definitions] == ["mcp_echo"]
@@ -458,11 +467,13 @@ async def test_concurrent_skill_operations_keep_activation_and_catalogs_isolated
     first = ToolSetCatalogV2().resolve(
         agent=object(),
         selection_context=None,
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
         operation_catalog=first_catalog,
     )
     second = ToolSetCatalogV2().resolve(
         agent=object(),
         selection_context=None,
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
         operation_catalog=second_catalog,
     )
     assert [definition.name for definition in first.definitions] == ["mcp_echo"]

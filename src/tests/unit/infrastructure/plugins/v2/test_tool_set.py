@@ -31,8 +31,10 @@ from src.infrastructure.plugins.v2.runtime import (
     RuntimeV2Error,
 )
 from src.infrastructure.plugins.v2.tool_set import (
+    PREPARED_TOOL_PROVIDER_SERVICE_V2,
     TOOL_SET_MODULE_V2,
     TOOL_SET_RESOLVER_SERVICE_V2,
+    PreparedToolProviderV2,
     ToolSetCatalogV2,
     ToolSetResolverV2,
     ToolSetV2,
@@ -42,6 +44,7 @@ _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 _RETIRED_GENERIC_TOOL_CONTRIBUTION_MODULE_V2 = "builtin://memstack/agent/tool-contribution"
+_EMPTY_PREPARED_TOOL_PROVIDER = PreparedToolProviderV2(tools={})
 
 
 def _snapshot(*, generation: int):
@@ -95,7 +98,7 @@ class _ToolAgent:
 
 class _AlternativeToolSetResolver:
     def __init__(self) -> None:
-        self.calls: list[tuple[object, object, object]] = []
+        self.calls: list[tuple[object, object, object, object]] = []
 
     def resolve(
         self,
@@ -103,8 +106,9 @@ class _AlternativeToolSetResolver:
         agent: object,
         selection_context: object,
         operation_catalog: object,
+        prepared_tool_provider: PreparedToolProviderV2,
     ) -> ToolSetV2:
-        self.calls.append((agent, selection_context, operation_catalog))
+        self.calls.append((agent, selection_context, operation_catalog, prepared_tool_provider))
         definition = SimpleNamespace(name="alternative", description="Alternative tool")
         return ToolSetV2(
             tools=MappingProxyType({"alternative": object()}),
@@ -178,7 +182,11 @@ def test_tool_set_accepts_structural_non_builtin_provider() -> None:
     selection = ToolSelectionContext(tenant_id="tenant-a", project_id="project-a")
     provider = _AlternativeToolSetResolver()
     operation = Mock()
-    operation.require.return_value = provider
+    operation.require.side_effect = (
+        lambda service: provider
+        if service == TOOL_SET_RESOLVER_SERVICE_V2
+        else (_ for _ in ()).throw(RuntimeV2Error("missing_service", f"{service} is unavailable"))
+    )
     operation_catalog = ToolSetCatalogV2()
 
     with patch(
@@ -193,8 +201,129 @@ def test_tool_set_accepts_structural_non_builtin_provider() -> None:
 
     assert set(tool_set.tools) == {"alternative"}
     assert len(tool_set.definitions) == 1
-    assert provider.calls == [(agent, selection, operation_catalog)]
+    assert len(provider.calls) == 1
+    resolved_agent, resolved_selection, resolved_catalog, prepared_provider = provider.calls[0]
+    assert (resolved_agent, resolved_selection, resolved_catalog) == (
+        agent,
+        selection,
+        operation_catalog,
+    )
+    assert isinstance(prepared_provider, PreparedToolProviderV2)
+    assert prepared_provider.tools == agent.raw_tools
+    assert prepared_provider.tools is not agent.raw_tools
     assert agent.contexts == []
+
+
+@pytest.mark.unit
+async def test_prepared_tool_provider_is_one_immutable_snapshot_per_operation() -> None:
+    manager = await _manager(generation=2)
+    agent = _ToolAgent()
+    original_tool = agent.raw_tools["read"]
+    replacement_tool = _Tool()
+    operation_catalog = ToolSetCatalogV2()
+    _ = operation_catalog.register_tools(
+        "prepared-tools",
+        lambda **kwargs: ToolSetV2(
+            tools=kwargs["prepared_tool_provider"].tools,
+            definitions=(),
+        ),
+    )
+
+    try:
+        async with pin_operation_context_v2(
+            manager,
+            operation_id="prepared-tool-provider-snapshot",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            first = _resolve_current_tools_from_runtime_v2(
+                agent,
+                ToolSelectionContext(),
+                operation_catalog=operation_catalog,
+            )
+            agent.raw_tools["read"] = replacement_tool
+            agent.raw_tools["write"] = _Tool()
+            second = _resolve_current_tools_from_runtime_v2(
+                agent,
+                ToolSelectionContext(),
+                operation_catalog=operation_catalog,
+            )
+    finally:
+        await manager.close()
+
+    assert first.tools == {"read": original_tool}
+    assert second.tools == {"read": original_tool}
+    with pytest.raises(TypeError):
+        second.tools["write"] = object()
+
+
+@pytest.mark.unit
+async def test_prepared_tool_provider_rejects_non_mapping_agent_tools() -> None:
+    manager = await _manager(generation=3)
+    agent = SimpleNamespace(raw_tools=[])
+
+    try:
+        async with pin_operation_context_v2(
+            manager,
+            operation_id="invalid-agent-prepared-tools",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ):
+            with pytest.raises(RuntimeV2Error) as error:
+                _resolve_current_tools_from_runtime_v2(
+                    agent,
+                    ToolSelectionContext(),
+                    operation_catalog=ToolSetCatalogV2(),
+                )
+    finally:
+        await manager.close()
+
+    assert error.value.code == "invalid_prepared_tool_provider"
+
+
+@pytest.mark.unit
+async def test_prepared_tool_provider_rejects_invalid_operation_service() -> None:
+    manager = await _manager(generation=4)
+    agent = _ToolAgent()
+
+    try:
+        async with pin_operation_context_v2(
+            manager,
+            operation_id="invalid-prepared-tool-provider-service",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ) as operation:
+            _ = operation.provide(
+                PREPARED_TOOL_PROVIDER_SERVICE_V2,
+                object(),
+                label="invalid-prepared-tool-provider",
+            )
+            with pytest.raises(RuntimeV2Error) as error:
+                _resolve_current_tools_from_runtime_v2(
+                    agent,
+                    ToolSelectionContext(),
+                    operation_catalog=ToolSetCatalogV2(),
+                )
+    finally:
+        await manager.close()
+
+    assert error.value.code == "invalid_prepared_tool_provider"
+
+
+@pytest.mark.unit
+def test_v2_profile_tool_contributions_do_not_read_legacy_agent_tools() -> None:
+    contribution_paths = (
+        "agent_canvas_tools.py",
+        "agent_custom_tools.py",
+        "agent_hitl_tools.py",
+        "agent_memory_tools.py",
+        "agent_model_awareness_tools.py",
+        "agent_runtime_utility_tools.py",
+        "agent_sandbox_mcp_tools.py",
+        "agent_system_api_tool.py",
+        "agent_task_session_tools.py",
+    )
+
+    for filename in contribution_paths:
+        source = (_ROOT / "src/infrastructure/plugins/v2" / filename).read_text(encoding="utf-8")
+        assert "_get_current_tools" not in source, filename
 
 
 @pytest.mark.unit
@@ -242,6 +371,7 @@ def test_tool_set_snapshots_selection_trace_without_mutating_agent() -> None:
             tenant_id="tenant-a",
             project_id="project-a",
         ),
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
     )
 
     assert resolved.tools == {"enabled": kept_tool}
@@ -261,12 +391,20 @@ async def test_tool_contribution_disposer_removes_exact_source() -> None:
         lambda **_kwargs: ToolSetV2(tools={"read": tool}, definitions=()),
     )
 
-    before = catalog.resolve(agent=object(), selection_context=None)
+    before = catalog.resolve(
+        agent=object(),
+        selection_context=None,
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+    )
     assert before.tools == {"read": tool}
 
     await dispose()
 
-    after = catalog.resolve(agent=object(), selection_context=None)
+    after = catalog.resolve(
+        agent=object(),
+        selection_context=None,
+        prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+    )
     assert after.tools == {}
     assert after.definitions == ()
 
@@ -284,7 +422,11 @@ def test_tool_catalog_rejects_duplicate_names_across_sources() -> None:
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        catalog.resolve(agent=object(), selection_context=None)
+        catalog.resolve(
+            agent=object(),
+            selection_context=None,
+            prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+        )
 
     assert error.value.code == "tool_contribution_conflict"
 
@@ -312,7 +454,11 @@ def test_tool_catalog_rejects_invalid_contribution_result() -> None:
     _ = catalog.register_tools("invalid-tools", lambda **_kwargs: object())
 
     with pytest.raises(RuntimeV2Error) as error:
-        catalog.resolve(agent=object(), selection_context=None)
+        catalog.resolve(
+            agent=object(),
+            selection_context=None,
+            prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+        )
 
     assert error.value.code == "invalid_tool_contribution"
 

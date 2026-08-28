@@ -20,6 +20,7 @@ TOOL_SET_MODULE_V2 = "builtin://memstack/agent/tool-set"
 TOOL_SET_CATALOG_SERVICE_V2 = "service:tool-set-catalog"
 TOOL_SET_RESOLVER_SERVICE_V2 = "service:tool-set-resolver"
 OPERATION_TOOL_SET_CATALOG_SERVICE_V2 = "service:operation.tool-set-contributions"
+PREPARED_TOOL_PROVIDER_SERVICE_V2 = "service:operation.prepared-tool-provider"
 
 type ToolContributionDisposerV2 = Callable[[], None | Awaitable[None]]
 type ToolContributionV2 = Callable[..., object]
@@ -40,6 +41,31 @@ class ToolSetV2:
     tools: Mapping[str, Any]
     definitions: tuple[Any, ...]
     selection_trace: tuple[Any, ...] = ()
+
+
+@dataclass(frozen=True, kw_only=True, init=False)
+class PreparedToolProviderV2:
+    """Immutable Worker-prepared tool snapshot owned by one operation."""
+
+    tools: Mapping[str, Any]
+
+    def __init__(self, *, tools: object) -> None:
+        super().__init__()
+        if not isinstance(tools, Mapping):
+            raise RuntimeV2Error(
+                "invalid_prepared_tool_provider",
+                "prepared tool provider requires a mapping of tools",
+            )
+        raw_tools = cast("Mapping[object, Any]", tools)
+        snapshot: dict[str, Any] = {}
+        for name, tool in raw_tools.items():
+            if not isinstance(name, str) or not name.strip():
+                raise RuntimeV2Error(
+                    "invalid_prepared_tool_provider",
+                    "prepared tool provider contains an invalid tool name",
+                )
+            snapshot[name] = tool
+        object.__setattr__(self, "tools", MappingProxyType(snapshot))
 
 
 @runtime_checkable
@@ -64,6 +90,7 @@ class ToolSetCatalogProtocolV2(ToolSetContributionCatalogProtocolV2, Protocol):
         *,
         agent: object,
         selection_context: object | None,
+        prepared_tool_provider: PreparedToolProviderV2,
         operation_catalog: ToolSetContributionCatalogProtocolV2 | None = None,
     ) -> ToolSetV2: ...
 
@@ -108,6 +135,7 @@ class ToolSetCatalogV2:
         *,
         agent: object,
         selection_context: object | None,
+        prepared_tool_provider: PreparedToolProviderV2,
         operation_catalog: ToolSetContributionCatalogProtocolV2 | None = None,
     ) -> ToolSetV2:
         resolved_tools: dict[str, Any] = {}
@@ -134,6 +162,7 @@ class ToolSetCatalogV2:
             raw_result: object = contribution(
                 agent=agent,
                 selection_context=selection_context,
+                prepared_tool_provider=prepared_tool_provider,
             )
             if inspect.isawaitable(raw_result):
                 if inspect.iscoroutine(raw_result):
@@ -198,6 +227,7 @@ class ToolSetResolverProtocolV2(Protocol):
         *,
         agent: object,
         selection_context: object | None,
+        prepared_tool_provider: PreparedToolProviderV2,
         operation_catalog: ToolSetContributionCatalogProtocolV2 | None = None,
     ) -> ToolSetV2: ...
 
@@ -214,13 +244,44 @@ class ToolSetResolverV2:
         *,
         agent: object,
         selection_context: object | None,
+        prepared_tool_provider: PreparedToolProviderV2,
         operation_catalog: ToolSetContributionCatalogProtocolV2 | None = None,
     ) -> ToolSetV2:
         return self.catalog.resolve(
             agent=agent,
             selection_context=selection_context,
+            prepared_tool_provider=prepared_tool_provider,
             operation_catalog=operation_catalog,
         )
+
+
+def bind_prepared_tool_provider_v2(
+    agent: object,
+    operation: OperationContextV2 | None = None,
+) -> PreparedToolProviderV2:
+    """Bind one immutable Worker-prepared tool snapshot to an operation."""
+    if operation is None:
+        from .boundary import current_operation_context_v2
+
+        operation = current_operation_context_v2()
+    try:
+        existing = operation.require(PREPARED_TOOL_PROVIDER_SERVICE_V2)
+    except RuntimeV2Error as exc:
+        if exc.code != "missing_service":
+            raise
+        provider = PreparedToolProviderV2(tools=getattr(agent, "raw_tools", None))
+        _ = operation.provide(
+            PREPARED_TOOL_PROVIDER_SERVICE_V2,
+            provider,
+            label="prepared-tool-provider",
+        )
+        return provider
+    if not isinstance(existing, PreparedToolProviderV2):
+        raise RuntimeV2Error(
+            "invalid_prepared_tool_provider",
+            "operation prepared tool provider has an invalid implementation",
+        )
+    return existing
 
 
 def bind_operation_tool_set_catalog_v2(
@@ -358,9 +419,11 @@ def builtin_tool_set_definition_v2() -> PluginDefinitionV2:
 
 __all__ = [
     "OPERATION_TOOL_SET_CATALOG_SERVICE_V2",
+    "PREPARED_TOOL_PROVIDER_SERVICE_V2",
     "TOOL_SET_CATALOG_SERVICE_V2",
     "TOOL_SET_MODULE_V2",
     "TOOL_SET_RESOLVER_SERVICE_V2",
+    "PreparedToolProviderV2",
     "ToolSetCatalogProtocolV2",
     "ToolSetCatalogV2",
     "ToolSetContributionCatalogProtocolV2",
@@ -368,6 +431,7 @@ __all__ = [
     "ToolSetResolverV2",
     "ToolSetV2",
     "bind_operation_tool_set_catalog_v2",
+    "bind_prepared_tool_provider_v2",
     "builtin_tool_set_definition_v2",
     "restrict_tool_set_v2",
 ]

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, cast
+from typing import Any
 
 from src.infrastructure.agent.core.tool_converter import convert_tools
 
@@ -14,7 +14,12 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
-from .tool_set import ToolContributionDisposerV2, ToolSetCatalogProtocolV2, ToolSetV2
+from .tool_set import (
+    PreparedToolProviderV2,
+    ToolContributionDisposerV2,
+    ToolSetCatalogProtocolV2,
+    ToolSetV2,
+)
 
 AGENT_MEMORY_TOOLS_MODULE_V2 = "builtin://memstack/agent/tool/memory"
 AGENT_MEMORY_TOOLS_SOURCE_V2 = "builtin-agent-memory-tools"
@@ -33,34 +38,11 @@ def _agent_memory_tool_set_v2(
     *,
     agent: object,
     selection_context: object | None,
+    prepared_tool_provider: PreparedToolProviderV2,
 ) -> ToolSetV2:
     """Select the exact memory ToolInfos prepared for this Agent instance."""
-    get_current_tools = getattr(agent, "_get_current_tools", None)
-    if not callable(get_current_tools):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "memory tool contribution requires callable _get_current_tools",
-        )
-    _ = selection_context
-    result: object = get_current_tools(selection_context=None)
-    if not isinstance(result, tuple) or len(result) != 2:
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "memory tool contribution requires a two-item prepared tool set",
-        )
-    raw_tools: object = result[0]
-    raw_definitions: object = result[1]
-    if (
-        not isinstance(raw_tools, Mapping)
-        or not isinstance(raw_definitions, Sequence)
-        or isinstance(raw_definitions, (str, bytes))
-    ):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "memory tool contribution received invalid prepared tool collections",
-        )
-
-    prepared_tools = cast("Mapping[str, Any]", raw_tools)
+    _ = agent, selection_context
+    prepared_tools = prepared_tool_provider.tools
     missing = sorted(AGENT_MEMORY_TOOL_NAMES_V2.difference(prepared_tools))
     if missing:
         raise RuntimeV2Error(

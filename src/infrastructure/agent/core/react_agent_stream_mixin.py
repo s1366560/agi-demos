@@ -53,6 +53,7 @@ from src.infrastructure.plugins.v2.tool_set import (
     ToolSetContributionCatalogProtocolV2,
     ToolSetV2,
     bind_operation_tool_set_catalog_v2,
+    bind_prepared_tool_provider_v2,
     restrict_tool_set_v2,
 )
 
@@ -221,9 +222,11 @@ def _resolve_current_tools_from_runtime_v2(
     resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
     if not isinstance(resolver, ToolSetResolverProtocolV2):
         raise RuntimeError("v2 tool-set resolver has an invalid implementation")
+    prepared_tool_provider = bind_prepared_tool_provider_v2(agent, operation)
     raw_tool_set: object = resolver.resolve(
         agent=agent,
         selection_context=selection_context,
+        prepared_tool_provider=prepared_tool_provider,
         operation_catalog=operation_catalog,
     )
     if not isinstance(raw_tool_set, ToolSetV2):

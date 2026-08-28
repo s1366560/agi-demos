@@ -6781,7 +6781,7 @@
       },
       "contract_digest": "sha256:c45f9c8ba00b7d68570a0ca5a269f62d0ef202b389d0f689755bada1e4ba9608",
       "artifact": {
-        "digest": "sha256:9817bb10c05244362fdbcfcd8d5edd6c93d06aefebead7f2f1b88bab8ede5fae",
+        "digest": "sha256:de55c097ccb7341fce918da0c952e6544f16861f1e5e52df1a4b2a1baf5bc875",
         "source": "repo+python://src/infrastructure/plugins/v2/tool_set.py"
       }
     },
@@ -6880,7 +6880,7 @@
       },
       "contract_digest": "sha256:7b2d77250586cce57d88f89fb77f1c374bd27ed3e95a21909f0c5b34909d88e2",
       "artifact": {
-        "digest": "sha256:8c0a22ef52a4266d8718c59095b074199fa64d130a13bf346aaf5bebbab634aa",
+        "digest": "sha256:fbf0f259788248cbbccfd82d0b82b90de63fff7d9596b59500f745702d5f7d22",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_canvas_tools.py"
       }
     },
@@ -6945,7 +6945,7 @@
       },
       "contract_digest": "sha256:5aa2066d4eaea2d096a867061f49a6080c4af68abece7017d6f4a1b526c54f5d",
       "artifact": {
-        "digest": "sha256:92bd84c33e76f70539a0b06036e08e1f28db1718396acbdad72e40d0efc2aa7a",
+        "digest": "sha256:28465cc099baaacb59cfd45e63ae31a36b84515088685a5487340c99505c09e2",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_custom_tools.py"
       }
     },
@@ -6985,7 +6985,7 @@
       },
       "contract_digest": "sha256:df809779d5f6273eb37fb7b9461fc22907680834c79ca0b4f8c9ac34c95ecb17",
       "artifact": {
-        "digest": "sha256:77d04f22ebdadf507b29a4b5f99bf11cb4fa12615dcfcf96e9646aa150a48aa8",
+        "digest": "sha256:c5de35a4111fec810907c3bae1577efcdf8cbb01cd8fc18ce1c31cf404b99d6e",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_sandbox_mcp_tools.py"
       }
     },
@@ -7020,7 +7020,7 @@
       },
       "contract_digest": "sha256:c7f342838f75dd6bee53fd5c61cc830829457ed01ca6cfa6500fde3bf38d7faf",
       "artifact": {
-        "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
+        "digest": "sha256:5051d900de4b1bc988ce0ca9aa5a3198aa730531e16a311d86fcfd6a485e5de6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
       }
     },
@@ -7055,7 +7055,7 @@
       },
       "contract_digest": "sha256:d1f02208a75b0805a735716f763a321664e9956162d84f6ed2f602a0f56e4d65",
       "artifact": {
-        "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
+        "digest": "sha256:5051d900de4b1bc988ce0ca9aa5a3198aa730531e16a311d86fcfd6a485e5de6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
       }
     },
@@ -7090,7 +7090,7 @@
       },
       "contract_digest": "sha256:ae723500afbb5b55019d73549550c3673094928ffca4d89eaaf35ec205986a94",
       "artifact": {
-        "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
+        "digest": "sha256:5051d900de4b1bc988ce0ca9aa5a3198aa730531e16a311d86fcfd6a485e5de6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
       }
     },
@@ -7125,7 +7125,7 @@
       },
       "contract_digest": "sha256:3c2c2c6fc501462d25895dbf5220a0cec33e98c18256c1e811aec7954eb454d6",
       "artifact": {
-        "digest": "sha256:89ea119edbc25ed04013bdae6b029d9c379c9d0c2f78e74dae7ca962d55e77c5",
+        "digest": "sha256:5051d900de4b1bc988ce0ca9aa5a3198aa730531e16a311d86fcfd6a485e5de6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
       }
     },
@@ -7160,7 +7160,7 @@
       },
       "contract_digest": "sha256:9df8c6d2f1105f11301e861410149bcf2ca7e8d8bf3290d7fb0bf86c569a4db0",
       "artifact": {
-        "digest": "sha256:a6b7507159ff2b39711bfeccb890ab1defaf7f6ab5769a307f413c75b433e77a",
+        "digest": "sha256:46d8aac81c368f4f94301f3e49d164ad1b7a2cbf016f7417008aec123965abe3",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
       }
     },
@@ -7195,7 +7195,7 @@
       },
       "contract_digest": "sha256:c1c0ed37855da0ac3d57a1c882a3887a8f50f86e4cf43bee0425010446c57556",
       "artifact": {
-        "digest": "sha256:a6b7507159ff2b39711bfeccb890ab1defaf7f6ab5769a307f413c75b433e77a",
+        "digest": "sha256:46d8aac81c368f4f94301f3e49d164ad1b7a2cbf016f7417008aec123965abe3",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
       }
     },
@@ -7230,7 +7230,7 @@
       },
       "contract_digest": "sha256:419fe8ca2c47ce089c983a79a3b057a50fb48c45c3659718a27f80af93d1f7be",
       "artifact": {
-        "digest": "sha256:a6b7507159ff2b39711bfeccb890ab1defaf7f6ab5769a307f413c75b433e77a",
+        "digest": "sha256:46d8aac81c368f4f94301f3e49d164ad1b7a2cbf016f7417008aec123965abe3",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
       }
     },
@@ -7265,7 +7265,7 @@
       },
       "contract_digest": "sha256:70ad9b343b81405a671ab0b1cf48a5024fb895d0f7951475f6e2f73aa10d02e1",
       "artifact": {
-        "digest": "sha256:a6b7507159ff2b39711bfeccb890ab1defaf7f6ab5769a307f413c75b433e77a",
+        "digest": "sha256:46d8aac81c368f4f94301f3e49d164ad1b7a2cbf016f7417008aec123965abe3",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
       }
     },
@@ -7300,7 +7300,7 @@
       },
       "contract_digest": "sha256:af6130be8419f134c4fd690e48ece451299ed45123c2d4d7738600e600b6a972",
       "artifact": {
-        "digest": "sha256:3307d3ea020b36e4c8eb1d363d48f07b51b664a1a1a24aa876cc89a88f122f82",
+        "digest": "sha256:2013fe61387205fe2b9d075d5660c503dbdfc80d30fa8a06f46f262e18a2f288",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_hitl_tools.py"
       }
     },
@@ -7335,7 +7335,7 @@
       },
       "contract_digest": "sha256:f9bf8907c6094fbf908726c66e6e44c0490673f2ec88cad79049e15c58a65696",
       "artifact": {
-        "digest": "sha256:f319f9c30e81dc36b1e0907bd2608984e574dd41cb2e281bc5a6b298dd7251de",
+        "digest": "sha256:bad6feaf3a883a3f34f15081292e5bfa670c900ca4d43110675be434c07b469f",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_memory_tools.py"
       }
     },
@@ -7370,7 +7370,7 @@
       },
       "contract_digest": "sha256:56048baa10b5cc5e5de9128655b59053b1eef92912ed239240deb7abc6d06e96",
       "artifact": {
-        "digest": "sha256:9b0f67f61575b295673bce554b12afc19a0a1a0fd86316a0059904aa1eaf92d0",
+        "digest": "sha256:ffc418957096ba5e2cd7da5bf3716c42b92a7988201a3f9c307c215d14b6ab28",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_model_awareness_tools.py"
       }
     },
@@ -7405,7 +7405,7 @@
       },
       "contract_digest": "sha256:606f4420f80ef82dd1e8072e384100cc9e2e824e672078a995a3a6b3ff63c9cb",
       "artifact": {
-        "digest": "sha256:fe3d06b4d2ab21279c627f2f285177fe6b4bfaeb742a1ad9d1879e97c797ab93",
+        "digest": "sha256:b5357aab1cc97e714bb45598fe6abb75bd55650f98009bede3599df3d39bc78e",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_system_api_tool.py"
       }
     },

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any, cast
 
@@ -15,6 +15,7 @@ from .runtime import (
     generated_contract_digest_v2,
 )
 from .tool_set import (
+    PreparedToolProviderV2,
     ToolContributionDisposerV2,
     ToolSetCatalogProtocolV2,
     ToolSetV2,
@@ -30,36 +31,13 @@ def _agent_custom_tool_set_v2(
     *,
     agent: object,
     selection_context: object | None,
+    prepared_tool_provider: PreparedToolProviderV2,
     source_tag: str,
     required_tool: str,
 ) -> ToolSetV2:
     """Select exact custom ToolInfos prepared for this Agent instance."""
-    get_current_tools = getattr(agent, "_get_current_tools", None)
-    if not callable(get_current_tools):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "custom tool contribution requires callable _get_current_tools",
-        )
-    _ = selection_context
-    result: object = get_current_tools(selection_context=None)
-    if not isinstance(result, tuple) or len(result) != 2:
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "custom tool contribution requires a two-item prepared tool set",
-        )
-    raw_tools: object = result[0]
-    raw_definitions: object = result[1]
-    if (
-        not isinstance(raw_tools, Mapping)
-        or not isinstance(raw_definitions, Sequence)
-        or isinstance(raw_definitions, (str, bytes))
-    ):
-        raise RuntimeV2Error(
-            "invalid_tool_contribution",
-            "custom tool contribution received invalid prepared tool collections",
-        )
-
-    prepared_tools = cast("Mapping[str, Any]", raw_tools)
+    _ = agent, selection_context
+    prepared_tools = prepared_tool_provider.tools
     tools = {
         name: tool
         for name, tool in prepared_tools.items()
@@ -101,6 +79,7 @@ def _apply_agent_custom_tool_contribution_v2(
         return _agent_custom_tool_set_v2(
             agent=kwargs["agent"],
             selection_context=kwargs.get("selection_context"),
+            prepared_tool_provider=cast("PreparedToolProviderV2", kwargs["prepared_tool_provider"]),
             source_tag=source_tag,
             required_tool=required_tool,
         )
