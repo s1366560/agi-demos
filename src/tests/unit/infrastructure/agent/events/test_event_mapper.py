@@ -10,14 +10,14 @@ import json
 from datetime import datetime
 
 from src.domain.events.types import AgentEventType
+from src.infrastructure.agent import events as events_package
+from src.infrastructure.agent.events import event_mapper as event_mapper_module
 from src.infrastructure.agent.events.event_mapper import (
     AgentDomainEvent,
     EventBus,
     EventMapper,
     EventType,  # Alias for AgentEventType
     SSEEvent,
-    get_event_bus,
-    set_event_bus,
 )
 
 
@@ -484,25 +484,11 @@ class TestEventBus:
         assert len(history) <= 1000
 
 
-class TestGlobalEventBus:
-    """Tests for global event bus singleton."""
-
-    def test_get_event_bus_returns_singleton(self) -> None:
-        """Should return same instance across calls."""
-        bus1 = get_event_bus()
-        bus2 = get_event_bus()
-
-        assert bus1 is bus2
-
-    def test_set_event_bus_changes_global(self) -> None:
-        """Should allow changing global event bus."""
-        original = get_event_bus()
-        custom = EventBus()
-
-        set_event_bus(custom)
-
-        assert get_event_bus() is custom
-        assert get_event_bus() is not original
+def test_process_global_event_bus_authority_is_retired() -> None:
+    for authority_name in ("_global_event_bus", "get_event_bus", "set_event_bus"):
+        assert not hasattr(event_mapper_module, authority_name)
+        if not authority_name.startswith("_"):
+            assert not hasattr(events_package, authority_name)
 
 
 class TestEventIntegration:

@@ -6,11 +6,11 @@ REFACTORED: This module now uses AgentEventType from src.domain.events.types
 as the single source of truth. The legacy EventType is provided as an alias
 for backward compatibility.
 
-DEPRECATED (Wave 6b): EventMapper, EventBus, and get_event_bus() are dead code
-in production. The actual event pipeline uses EventConverter (converter.py)
-in react_agent.py and _relay_event() in SubAgentProcess. These classes are
-retained only for backward compatibility with test code. New code should NOT
-use EventMapper or EventBus -- use EventConverter instead.
+DEPRECATED (Wave 6b): EventMapper and EventBus are dead code in production.
+The actual event pipeline uses EventConverter (converter.py) in react_agent.py
+and _relay_event() in SubAgentProcess. These classes are retained only for
+backward compatibility with test code. New code should NOT use EventMapper or
+EventBus -- use EventConverter instead.
 """
 
 import contextlib
@@ -348,37 +348,3 @@ class EventBus:
     def set_mapper(self, mapper: EventMapper) -> None:
         """Set a new event mapper."""
         self._mapper = mapper
-
-
-# Global event bus instance
-_global_event_bus: EventBus | None = None
-
-
-def get_event_bus() -> EventBus:
-    """Get the global event bus.
-
-    .. deprecated:: Wave 6b
-        Dead code in production. Use EventConverter instead.
-
-    Returns:
-        The global EventBus instance
-    """
-    warnings.warn(
-        "get_event_bus() is deprecated (Wave 6b). Use EventConverter instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    global _global_event_bus
-    if _global_event_bus is None:
-        _global_event_bus = EventBus()
-    return _global_event_bus
-
-
-def set_event_bus(event_bus: EventBus) -> None:
-    """Set the global event bus.
-
-    Args:
-        event_bus: The event bus to use globally
-    """
-    global _global_event_bus
-    _global_event_bus = event_bus
