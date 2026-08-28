@@ -58,7 +58,6 @@ async def test_bound_session_status_runtimes_are_isolated_during_interleaved_awa
 ) -> None:
     from src.infrastructure.agent.tools import session_status as session_status_module
     from src.infrastructure.agent.tools.session_status import (
-        configure_session_status,
         make_session_status_tool,
     )
 
@@ -89,7 +88,6 @@ async def test_bound_session_status_runtimes_are_isolated_during_interleaved_awa
     )
     tool_a = make_session_status_tool(session_factory=_factory(session_a))
     tool_b = make_session_status_tool(session_factory=_factory(session_b))
-    configure_session_status(_Repository("legacy"))  # type: ignore[arg-type]
 
     result_a, result_b = await asyncio.gather(
         tool_a.execute(_context("a")),
@@ -102,3 +100,18 @@ async def test_bound_session_status_runtimes_are_isolated_during_interleaved_awa
     assert "Generation b" in result_b.output
     assert session_a.exits == 1
     assert session_b.exits == 1
+
+
+@pytest.mark.unit
+def test_unbound_session_status_template_rejects_legacy_runtime_fallback() -> None:
+    from src.infrastructure.agent.tools import session_status as session_status_module
+
+    with pytest.raises(RuntimeError, match="generation-bound runtime"):
+        session_status_module._repo()
+
+
+@pytest.mark.unit
+def test_session_status_module_has_no_legacy_configure_seam() -> None:
+    from src.infrastructure.agent.tools import session_status as session_status_module
+
+    assert not hasattr(session_status_module, "configure_session_status")

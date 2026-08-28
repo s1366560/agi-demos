@@ -2,7 +2,7 @@
 
 Displays conversation metadata (title, mode, message count, timestamps)
 and agent identity. Worker contributions bind a scoped repository to each
-invocation; ``configure_session_status()`` remains as a direct-call fallback.
+invocation.
 
 Inspired by OpenClaw's session-status-tool.ts, adapted for MemStack's
 DDD + Hexagonal Architecture.
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Generation-bound runtime with module-level compatibility fallback
+# Generation-bound runtime
 # ---------------------------------------------------------------------------
 
 type SessionStatusSessionFactory = Callable[[], AbstractAsyncContextManager[Any]]
@@ -40,29 +40,13 @@ _session_status_runtime: ContextVar[ConversationRepository | None] = ContextVar(
     f"{__name__}.session_status_runtime",
     default=None,
 )
-_conversation_repo: ConversationRepository | None = None
-
-
-def configure_session_status(
-    conversation_repo: ConversationRepository,
-) -> None:
-    """Inject the ``ConversationRepository`` at agent startup.
-
-    Args:
-        conversation_repo: A fully constructed ``ConversationRepository``.
-    """
-    global _conversation_repo
-    _conversation_repo = conversation_repo
 
 
 def _repo() -> ConversationRepository:
-    """Return the configured repository or raise."""
-    runtime_repo = _session_status_runtime.get()
-    repository = runtime_repo if runtime_repo is not None else _conversation_repo
+    """Return the invocation-bound repository or raise."""
+    repository = _session_status_runtime.get()
     if repository is None:
-        raise RuntimeError(
-            "session_status tool not configured -- call configure_session_status() first"
-        )
+        raise RuntimeError("session_status requires a generation-bound runtime")
     return repository
 
 

@@ -500,11 +500,6 @@ def test_worker_session_status_uses_bound_factory(
         _make_session_status_tool,
         raising=False,
     )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.session_status.configure_session_status",
-        _forbidden,
-    )
-
     tools: dict[str, object] = {}
     agent_worker_state._add_session_status_tool(tools, project_id="project-a")
 
