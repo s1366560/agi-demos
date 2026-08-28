@@ -179,11 +179,6 @@ def _require_control_runtime() -> SubAgentControlRuntime:
     return runtime
 
 
-def _set_compatibility_runtime(**changes: Any) -> None:
-    current = _session_tool_runtime.get() or SubAgentSessionToolRuntime()
-    _ = _session_tool_runtime.set(replace(current, **changes))
-
-
 def _resolve_spawn_callback_signature(
     callback: Callable[..., Awaitable[str]],
 ) -> tuple[set[str] | None, bool]:
@@ -282,46 +277,6 @@ def _build_lifecycle_metadata(
 # ---------------------------------------------------------------------------
 # @tool_define decorator-based session tools (migrate batch 1 of 2)
 # ---------------------------------------------------------------------------
-
-
-def configure_session_tools(  # noqa: PLR0913
-    run_registry: SubAgentRunRegistry,
-    spawn_callback: Callable[..., Awaitable[str]] | None = None,
-    max_active_runs: int = 3,
-    *,
-    max_spawn_retries: int = 2,
-    retry_delay_ms: int = 200,
-    subagent_names: list[str] | None = None,
-    subagent_descriptions: dict[str, str] | None = None,
-    conversation_id: str = "",
-    requester_session_key: str = "",
-    delegation_depth: int = 0,
-    max_delegation_depth: int = 1,
-    max_active_runs_per_lineage: int = 16,
-    max_children_per_requester: int = 16,
-    visibility_default: str = "tree",
-) -> None:
-    """Bind a compatibility core runtime in the current context."""
-    _set_compatibility_runtime(
-        core=SessionCoreRuntime(
-            run_registry=run_registry,
-            spawn_callback=spawn_callback,
-            max_active_runs=max(1, max_active_runs),
-            max_spawn_retries=max(0, max_spawn_retries),
-            retry_delay_ms=max(1, retry_delay_ms),
-            subagent_names=tuple(subagent_names or ()),
-            subagent_descriptions=MappingProxyType(dict(subagent_descriptions or {})),
-            conversation_id=conversation_id,
-            requester_session_key=(requester_session_key or conversation_id).strip(),
-            delegation_depth=max(0, delegation_depth),
-            max_delegation_depth=max(1, max_delegation_depth),
-            max_active_runs_per_lineage=max(1, max_active_runs_per_lineage),
-            max_children_per_requester=max(1, max_children_per_requester),
-            visibility_default=(
-                visibility_default if visibility_default in {"self", "tree", "all"} else "tree"
-            ),
-        )
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1025,54 +980,6 @@ async def sessions_timeline_tool(
 # ---------------------------------------------------------------------------
 
 
-def configure_sessions_overview(
-    run_registry: SubAgentRunRegistry,
-    conversation_id: str,
-    requester_session_key: str | None = None,
-    visibility_default: str = "tree",
-    observability_provider: Callable[[], dict[str, Any]] | None = None,
-) -> None:
-    """Bind a compatibility overview runtime in the current context."""
-    valid = {"self", "tree", "all"}
-    _set_compatibility_runtime(
-        overview=SessionOverviewRuntime(
-            run_registry=run_registry,
-            conversation_id=conversation_id,
-            requester_session_key=(requester_session_key or conversation_id).strip(),
-            visibility_default=(visibility_default if visibility_default in valid else "tree"),
-            observability_provider=observability_provider,
-        )
-    )
-
-
-def configure_sessions_wait(
-    run_registry: SubAgentRunRegistry,
-    conversation_id: str,
-) -> None:
-    """Bind a compatibility wait runtime in the current context."""
-    _set_compatibility_runtime(
-        wait=SessionWaitRuntime(
-            run_registry=run_registry,
-            conversation_id=conversation_id,
-        )
-    )
-
-
-def configure_sessions_ack(
-    run_registry: SubAgentRunRegistry,
-    conversation_id: str,
-    requester_session_key: str | None = None,
-) -> None:
-    """Bind a compatibility acknowledgement runtime in the current context."""
-    _set_compatibility_runtime(
-        ack=SessionAckRuntime(
-            run_registry=run_registry,
-            conversation_id=conversation_id,
-            requester_session_key=(requester_session_key or conversation_id).strip(),
-        )
-    )
-
-
 # -- Shared constants --
 
 _TERMINAL_STATUSES: set[SubAgentRunStatus] = {
@@ -1528,44 +1435,6 @@ def _ack_prepare_events(run: SubAgentRun) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def configure_sessions_send(
-    run_registry: SubAgentRunRegistry,
-    conversation_id: str,
-    spawn_callback: Callable[..., Awaitable[str]] | None = None,
-    *,
-    max_active_runs: int = 16,
-    max_active_runs_per_lineage: int | None = None,
-    max_children_per_requester: int | None = None,
-    requester_session_key: str | None = None,
-    delegation_depth: int = 0,
-    max_delegation_depth: int = 1,
-    max_spawn_retries: int = 2,
-    retry_delay_ms: int = 200,
-) -> None:
-    """Bind a compatibility send runtime in the current context."""
-    if spawn_callback is None:
-        _set_compatibility_runtime(send=None)
-        return
-    params, accepts_kw = _resolve_spawn_callback_signature(spawn_callback)
-    _set_compatibility_runtime(
-        send=SessionSendRuntime(
-            run_registry=run_registry,
-            conversation_id=conversation_id,
-            spawn_callback=spawn_callback,
-            max_active_runs=max(1, max_active_runs),
-            max_active_runs_per_lineage=max(1, max_active_runs_per_lineage or max_active_runs),
-            max_children_per_requester=max(1, max_children_per_requester or max_active_runs),
-            requester_session_key=(requester_session_key or conversation_id).strip(),
-            delegation_depth=max(0, delegation_depth),
-            max_delegation_depth=max(1, max_delegation_depth),
-            max_spawn_retries=max(0, max_spawn_retries),
-            retry_delay_ms=max(1, retry_delay_ms),
-            spawn_callback_params=frozenset(params) if params is not None else None,
-            spawn_callback_accepts_kwargs=accepts_kw,
-        )
-    )
-
-
 # ---------------------------------------------------------------------------
 # sessions_send helpers
 # ---------------------------------------------------------------------------
@@ -1883,44 +1752,6 @@ async def sessions_send_tool(
 
 
 # ---------------------------------------------------------------------------
-def configure_subagents_control(  # noqa: PLR0913
-    run_registry: SubAgentRunRegistry,
-    conversation_id: str,
-    subagent_names: list[str],
-    subagent_descriptions: dict[str, str],
-    cancel_callback: Callable[[str], Awaitable[bool]],
-    *,
-    restart_callback: (Callable[[str, str, str], Awaitable[str]] | None) = None,
-    control_channel: ControlChannelPort | None = None,
-    steer_rate_limit_ms: int = 2000,
-    max_active_runs: int = 16,
-    max_active_runs_per_lineage: int | None = None,
-    max_children_per_requester: int | None = None,
-    requester_session_key: str | None = None,
-    delegation_depth: int = 0,
-    max_delegation_depth: int = 1,
-) -> None:
-    """Bind a compatibility control runtime in the current context."""
-    _set_compatibility_runtime(
-        control=SubAgentControlRuntime(
-            run_registry=run_registry,
-            conversation_id=conversation_id,
-            subagent_names=tuple(subagent_names),
-            subagent_descriptions=MappingProxyType(dict(subagent_descriptions)),
-            cancel_callback=cancel_callback,
-            restart_callback=restart_callback,
-            control_channel=control_channel,
-            steer_rate_limit_ms=max(1, steer_rate_limit_ms),
-            max_active_runs=max(1, max_active_runs),
-            max_active_runs_per_lineage=max(1, max_active_runs_per_lineage or max_active_runs),
-            max_children_per_requester=max(1, max_children_per_requester or max_active_runs),
-            requester_session_key=(requester_session_key or conversation_id).strip(),
-            delegation_depth=max(0, delegation_depth),
-            max_delegation_depth=max(1, max_delegation_depth),
-        )
-    )
-
-
 # ---------------------------------------------------------------------------
 # subagents_control helpers
 # ---------------------------------------------------------------------------

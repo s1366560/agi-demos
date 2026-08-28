@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.domain.model.agent.tool_policy import ControlMessageType
 from src.domain.ports.agent.control_channel_port import ControlMessage
+from src.infrastructure.agent.tools import subagent_sessions as subagent_sessions_module
 
 
 def _make_tool_context() -> MagicMock:
@@ -48,19 +50,40 @@ def _configure_control_runtime(
     restart_callback: AsyncMock | None = None,
     conversation_id: str = "conv-1",
 ) -> None:
-    from src.infrastructure.agent.tools.subagent_sessions import (
-        configure_subagents_control,
+    runtime = subagent_sessions_module.SubAgentSessionToolRuntime(
+        control=subagent_sessions_module.SubAgentControlRuntime(
+            run_registry=registry or MagicMock(),
+            conversation_id=conversation_id,
+            subagent_names=("test-agent",),
+            subagent_descriptions=MappingProxyType({"test-agent": "Test agent"}),
+            cancel_callback=cancel_callback or AsyncMock(return_value=True),
+            restart_callback=restart_callback,
+            control_channel=channel,
+            steer_rate_limit_ms=2000,
+            max_active_runs=16,
+            max_active_runs_per_lineage=16,
+            max_children_per_requester=16,
+            requester_session_key=conversation_id,
+            delegation_depth=0,
+            max_delegation_depth=1,
+        )
+    )
+    _ = subagent_sessions_module._session_tool_runtime.set(  # pyright: ignore[reportPrivateUsage]
+        runtime
     )
 
-    configure_subagents_control(
-        run_registry=registry or MagicMock(),
-        conversation_id=conversation_id,
-        subagent_names=["test-agent"],
-        subagent_descriptions={"test-agent": "Test agent"},
-        cancel_callback=cancel_callback or AsyncMock(return_value=True),
-        restart_callback=restart_callback,
-        control_channel=channel,
+
+@pytest.fixture(autouse=True)
+def _reset_control_runtime() -> object:
+    token = subagent_sessions_module._session_tool_runtime.set(  # pyright: ignore[reportPrivateUsage]
+        None
     )
+    try:
+        yield
+    finally:
+        subagent_sessions_module._session_tool_runtime.reset(  # pyright: ignore[reportPrivateUsage]
+            token
+        )
 
 
 @pytest.mark.unit

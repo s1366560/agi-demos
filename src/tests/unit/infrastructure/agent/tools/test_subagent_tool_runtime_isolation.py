@@ -12,7 +12,10 @@ from src.infrastructure.agent.core.subagent_tools import (
 )
 from src.infrastructure.agent.processor.processor import ToolDefinition
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
-from src.infrastructure.agent.tools import delegate_subagent as delegate_subagent_module
+from src.infrastructure.agent.tools import (
+    delegate_subagent as delegate_subagent_module,
+    subagent_sessions as subagent_sessions_module,
+)
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.delegate_subagent import make_nested_delegate_tool_defs
@@ -23,6 +26,23 @@ from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 @pytest.mark.unit
 def test_delegate_process_context_configure_seam_is_retired() -> None:
     assert not hasattr(delegate_subagent_module, "configure_delegate_subagent")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "seam_name",
+    (
+        "_set_compatibility_runtime",
+        "configure_session_tools",
+        "configure_sessions_overview",
+        "configure_sessions_wait",
+        "configure_sessions_ack",
+        "configure_sessions_send",
+        "configure_subagents_control",
+    ),
+)
+def test_session_process_context_configure_seams_are_retired(seam_name: str) -> None:
+    assert not hasattr(subagent_sessions_module, seam_name)
 
 
 def _context(conversation_id: str) -> ToolContext:
