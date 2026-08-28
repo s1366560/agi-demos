@@ -6,6 +6,7 @@ import asyncio
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,7 +19,10 @@ from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
     bind_workspace_wtp_publisher_v2,
     current_workspace_wtp_publisher_v2,
 )
-from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_IDENTITY_SERVICE_V2,
+    pin_operation_context_v2,
+)
 from src.infrastructure.plugins.v2.builtin_modules import (
     RUNTIME_BOUNDARY_MODULE_V2,
     builtin_runtime_definitions_v2,
@@ -201,8 +205,10 @@ async def test_detached_worker_retains_exact_generation_publisher(
             assert generation.descriptor == descriptor
             return await manager.retain(generation)
 
-        def distribution_for_generation(self, _generation: RuntimeGenerationV2) -> object:
-            raise AssertionError("reserved worker generation does not request a distribution")
+        def distribution_for_generation(self, generation: RuntimeGenerationV2) -> object:
+            return SimpleNamespace(
+                to_payload=lambda: {"descriptor": generation.descriptor.to_payload()}
+            )
 
     started = asyncio.Event()
     continue_launch = asyncio.Event()
@@ -220,6 +226,7 @@ async def test_detached_worker_retains_exact_generation_publisher(
         host,
         operation_id="detached-worker-publisher",
         scope=_ROOT_SCOPE,
+        services={OPERATION_IDENTITY_SERVICE_V2: {"user_id": "user-1"}},
     ) as operation:
         publisher = operation.require(WORKSPACE_WTP_PUBLISHER_SERVICE_V2)
         assert isinstance(publisher, WorkspaceWtpPublisherProtocolV2)

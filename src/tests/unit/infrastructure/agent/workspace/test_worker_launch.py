@@ -2215,8 +2215,16 @@ class TestScheduleWorkerSession:
                 self.released = False
 
             @asynccontextmanager
-            async def admit(self):
-                lifecycle.append("generation-entered")
+            async def admit(self, *, operation_id, metadata):
+                assert operation_id == "workspace-worker-launch:task-1"
+                assert metadata == {
+                    "kind": "workspace-worker-launch",
+                    "workspace_id": "w",
+                    "task_id": "task-1",
+                    "worker_agent_id": "agent-X",
+                    "attempt_id": "att-1",
+                }
+                lifecycle.append("operation-entered")
                 try:
                     yield object()
                 finally:
@@ -2230,8 +2238,8 @@ class TestScheduleWorkerSession:
 
         reservation = _Reservation()
 
-        async def _reserve_generation() -> _Reservation:
-            lifecycle.append("generation-reserved")
+        async def _fork_operation() -> _Reservation:
+            lifecycle.append("operation-reserved")
             return reservation
 
         async def _fake_launch(**kwargs: object) -> dict[str, object]:
@@ -2240,8 +2248,8 @@ class TestScheduleWorkerSession:
             return {"launched": True, "conversation_id": "cid", "reason": "launched"}
 
         monkeypatch.setattr(
-            "src.infrastructure.plugins.v2.boundary.reserve_current_generation_v2",
-            _reserve_generation,
+            "src.infrastructure.plugins.v2.boundary.fork_current_agent_operation_v2",
+            _fork_operation,
         )
         monkeypatch.setattr(wl, "launch_worker_session", _fake_launch)
         task = _make_task()
@@ -2265,8 +2273,8 @@ class TestScheduleWorkerSession:
         assert called["reuse_conversation_id"] == "conv-reuse"
         assert called["repair_brief_prompt"] == "[repair-turn]{}[/repair-turn]"
         assert lifecycle == [
-            "generation-reserved",
-            "generation-entered",
+            "operation-reserved",
+            "operation-entered",
             "launch-started",
             "generation-released",
         ]
@@ -2281,7 +2289,8 @@ class TestScheduleWorkerSession:
 
         class _Reservation:
             @asynccontextmanager
-            async def admit(self):
+            async def admit(self, *, operation_id, metadata):
+                del operation_id, metadata
                 yield object()
 
             async def release(self) -> None:
@@ -2289,15 +2298,15 @@ class TestScheduleWorkerSession:
                 release_calls += 1
                 release_observed.set()
 
-        async def _reserve_generation() -> _Reservation:
+        async def _fork_operation() -> _Reservation:
             return _Reservation()
 
         async def _blocked_launch(**_kwargs: object) -> None:
             await asyncio.Event().wait()
 
         monkeypatch.setattr(
-            "src.infrastructure.plugins.v2.boundary.reserve_current_generation_v2",
-            _reserve_generation,
+            "src.infrastructure.plugins.v2.boundary.fork_current_agent_operation_v2",
+            _fork_operation,
         )
         monkeypatch.setattr(wl, "launch_worker_session", _blocked_launch)
         before = set(wl._background_tasks)

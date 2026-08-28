@@ -74,10 +74,15 @@ logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
 
 
-class _GenerationReservationV2(Protocol):
-    """Exact generation retained for one detached worker launch."""
+class _WorkerOperationReservationV2(Protocol):
+    """Exact generation and child operation retained for one worker launch."""
 
-    def admit(self) -> contextlib.AbstractAsyncContextManager[object]: ...
+    def admit(
+        self,
+        *,
+        operation_id: str,
+        metadata: Mapping[str, object],
+    ) -> contextlib.AbstractAsyncContextManager[object]: ...
 
     async def release(self) -> None: ...
 
@@ -4193,16 +4198,22 @@ async def _terminal_report_recorded_for_attempt(
 
 
 async def _run_reserved_worker_session(
-    reservation: _GenerationReservationV2,
+    reservation: _WorkerOperationReservationV2,
     launch: _WorkerLaunchFactory,
+    *,
+    operation_id: str,
+    metadata: Mapping[str, object],
 ) -> None:
-    async with reservation.admit():
+    async with reservation.admit(
+        operation_id=operation_id,
+        metadata=metadata,
+    ):
         _ = await launch()
 
 
 def _finish_reserved_worker_session(
     completed: asyncio.Task[None],
-    reservation: _GenerationReservationV2,
+    reservation: _WorkerOperationReservationV2,
 ) -> None:
     _background_tasks.discard(completed)
     cleanup = asyncio.create_task(
@@ -4227,17 +4238,26 @@ async def schedule_worker_session(
     preferred_language: str | None = None,
     attempt_worktree_context: Mapping[str, Any] | None = None,
 ) -> None:
-    """Reserve the active generation and schedule ``launch_worker_session``.
+    """Fork the active Agent operation and schedule ``launch_worker_session``.
 
     Reservation failures are surfaced before returning to the caller. Errors
     during the launched coroutine are logged inside ``launch_worker_session``.
     """
     from src.infrastructure.plugins.v2.boundary import (
         detached_operation_task_context_v2,
-        reserve_current_generation_v2,
+        fork_current_agent_operation_v2,
     )
 
-    reservation = await reserve_current_generation_v2()
+    reservation = await fork_current_agent_operation_v2()
+    operation_id = f"workspace-worker-launch:{task.id}"
+    operation_metadata: dict[str, object] = {
+        "kind": "workspace-worker-launch",
+        "workspace_id": workspace_id,
+        "task_id": task.id,
+        "worker_agent_id": worker_agent_id,
+    }
+    if attempt_id:
+        operation_metadata["attempt_id"] = attempt_id
 
     def launch() -> Awaitable[dict[str, Any]]:
         return launch_worker_session(
@@ -4254,11 +4274,16 @@ async def schedule_worker_session(
             attempt_worktree_context=attempt_worktree_context,
         )
 
-    drive_launch = _run_reserved_worker_session(reservation, launch)
+    drive_launch = _run_reserved_worker_session(
+        reservation,
+        launch,
+        operation_id=operation_id,
+        metadata=operation_metadata,
+    )
     try:
         bg = asyncio.create_task(
             drive_launch,
-            name=f"workspace-worker-launch:{task.id}",
+            name=operation_id,
             context=detached_operation_task_context_v2(),
         )
     except BaseException:
