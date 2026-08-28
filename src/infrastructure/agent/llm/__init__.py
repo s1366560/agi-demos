@@ -28,9 +28,6 @@ __all__ = [
     # Token sampling
     "TokenDeltaSampler",
     "TokenUsage",
-    "create_llm_invoker",
-    "get_llm_invoker",
-    "set_llm_invoker",
 ]
 
 
@@ -59,9 +56,6 @@ def __getattr__(name: str) -> object:
         "InvocationResult",
         "InvokerState",
         "TokenUsage",
-        "get_llm_invoker",
-        "set_llm_invoker",
-        "create_llm_invoker",
     ):
         from src.infrastructure.agent.llm import invoker
 

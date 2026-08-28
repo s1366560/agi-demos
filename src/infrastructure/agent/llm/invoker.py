@@ -296,7 +296,8 @@ class LLMInvoker:
             try:
                 # Build step-specific langfuse context
                 step_langfuse_context = self._build_step_langfuse_context(
-                    context, config.model,
+                    context,
+                    config.model,
                 )
 
                 async for event in llm_stream.generate(
@@ -353,13 +354,11 @@ class LLMInvoker:
                     break
 
                 # -- Standard retry logic --
-                if (
-                    self._retry_policy.is_retryable(e)
-                    and attempt < config.max_attempts
-                ):
+                if self._retry_policy.is_retryable(e) and attempt < config.max_attempts:
                     attempt += 1
                     delay_ms = self._retry_policy.calculate_delay(
-                        attempt, e,
+                        attempt,
+                        e,
                     )
                     self._state = InvokerState.RETRYING
                     yield AgentRetryEvent(
@@ -415,9 +414,7 @@ class LLMInvoker:
         execute_tool_callback: Callable[..., Any],
         result: InvocationResult,
         current_plan_step: int | None,
-    ) -> AsyncIterator[
-        AgentDomainEvent | _FailoverSuccess
-    ]:
+    ) -> AsyncIterator[AgentDomainEvent | _FailoverSuccess]:
         """Try failover to alternate providers on error.
 
         Yields domain events from failover attempts.
@@ -505,14 +502,13 @@ class LLMInvoker:
         """
         # Lazy import to avoid circular dependency
         from src.infrastructure.agent.core.llm_stream import StreamEventType
+
         if event.type in (
             StreamEventType.TEXT_START,
             StreamEventType.TEXT_DELTA,
             StreamEventType.TEXT_END,
         ):
-            async for text_event in self._handle_text_event(
-                event, result, current_message
-            ):
+            async for text_event in self._handle_text_event(event, result, current_message):
                 yield text_event
 
         elif event.type in (
@@ -776,9 +772,9 @@ class LLMInvoker:
 
         # Skip the primary (index 0) — it already failed.
         alternates = [
-            (p, m) for p, m in healthy_seq
-            if not (p == config.model.split("/")[0]
-                    if "/" in config.model else False)
+            (p, m)
+            for p, m in healthy_seq
+            if not (p == config.model.split("/")[0] if "/" in config.model else False)
         ]
         if not alternates:
             alternates = healthy_seq[1:] if len(healthy_seq) > 1 else []
@@ -803,11 +799,7 @@ class LLMInvoker:
                 ),
             )
 
-            tools_for_llm = (
-                [t.to_openai_format() for t in tools.values()]
-                if tools
-                else None
-            )
+            tools_for_llm = [t.to_openai_format() for t in tools.values()] if tools else None
             fo_stream_config = StreamConfig(
                 model=fo_model,
                 api_key=config.api_key,
@@ -874,66 +866,4 @@ class LLMInvoker:
                 )
                 continue
 
-        logger.warning(
-            "[LLMInvoker] All failover providers exhausted"
-        )
-
-
-# ============================================================================
-# Singleton Management
-# ============================================================================
-
-_invoker: LLMInvoker | None = None
-
-
-def get_llm_invoker() -> LLMInvoker:
-    """
-    Get singleton LLMInvoker instance.
-
-    Returns:
-        LLMInvoker instance
-
-    Raises:
-        RuntimeError if invoker not initialized
-    """
-    global _invoker
-    if _invoker is None:
-        raise RuntimeError(
-            "LLMInvoker not initialized. Call set_llm_invoker() first "
-            "or pass retry_policy and cost_tracker to create_llm_invoker()."
-        )
-    return _invoker
-
-
-def set_llm_invoker(invoker: LLMInvoker) -> None:
-    """Set singleton LLMInvoker instance."""
-    global _invoker
-    _invoker = invoker
-
-
-def create_llm_invoker(
-    retry_policy: RetryPolicyProtocol,
-    cost_tracker: CostTrackerProtocol,
-    debug_logging: bool = False,
-    failover_chain: Any | None = None,
-) -> LLMInvoker:
-    """
-    Create and set singleton LLMInvoker.
-
-    Args:
-        retry_policy: Retry policy instance
-        cost_tracker: Cost tracker instance
-        debug_logging: Enable debug logging
-        failover_chain: Optional FailoverChain for multi-provider failover
-
-    Returns:
-        Created LLMInvoker instance
-    """
-    global _invoker
-    _invoker = LLMInvoker(
-        retry_policy=retry_policy,
-        cost_tracker=cost_tracker,
-        debug_logging=debug_logging,
-        failover_chain=failover_chain,
-    )
-    return _invoker
+        logger.warning("[LLMInvoker] All failover providers exhausted")
