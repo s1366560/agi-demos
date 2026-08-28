@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from src.infrastructure.adapters.primary.web.websocket.handlers import control_handler
 from src.infrastructure.adapters.primary.web.websocket.handlers.control_handler import (
     KillRunHandler,
     SteerSubAgentHandler,
@@ -42,6 +44,26 @@ class _FakeRedis:
         return int(self.values.pop(key, None) is not None)
 
 
+class _StaticContainerRedisProbe:
+    def __init__(self, redis: _FakeRedis) -> None:
+        self.redis = redis
+        self.accesses = 0
+
+    @property
+    def redis_client(self) -> _FakeRedis:
+        self.accesses += 1
+        return self.redis
+
+
+def _bind_v2_redis(monkeypatch: pytest.MonkeyPatch, redis: _FakeRedis) -> None:
+    @asynccontextmanager
+    async def operation_context(**_kwargs: object):
+        yield None
+
+    monkeypatch.setattr(control_handler, "pin_agent_turn_operation_v2", operation_context)
+    monkeypatch.setattr(control_handler, "current_agent_worker_redis_client_v2", lambda: redis)
+
+
 def _context(*, participants: list[str] | None = None):
     conversation = SimpleNamespace(
         id="conversation-1",
@@ -74,7 +96,7 @@ def _context(*, participants: list[str] | None = None):
         user_id="user-1",
         tenant_id="tenant-1",
         db=db,
-        container=SimpleNamespace(redis_client=redis),
+        container=_StaticContainerRedisProbe(redis),
         send_json=AsyncMock(),
     )
     return context, redis
@@ -83,6 +105,7 @@ def _context(*, participants: list[str] | None = None):
 @pytest.mark.unit
 async def test_steer_is_revision_bound_and_exact_replay_returns_same_receipt(monkeypatch) -> None:
     context, _redis = _context()
+    _bind_v2_redis(monkeypatch, _redis)
     send_control = AsyncMock(return_value=True)
     monkeypatch.setattr(
         "src.infrastructure.adapters.primary.web.websocket.handlers.control_handler."
@@ -119,11 +142,13 @@ async def test_steer_is_revision_bound_and_exact_replay_returns_same_receipt(mon
     assert control.run_id == "execution-1"
     assert control.target_agent_id == "agent-1"
     assert control.idempotency_key == "control-key-1"
+    assert context.container.accesses == 0
 
 
 @pytest.mark.unit
 async def test_control_rejects_roster_mismatch_before_dispatch(monkeypatch) -> None:
     context, _redis = _context(participants=["different-agent"])
+    _bind_v2_redis(monkeypatch, _redis)
     send_control = AsyncMock(return_value=True)
     monkeypatch.setattr(
         "src.infrastructure.adapters.primary.web.websocket.handlers.control_handler."
@@ -151,8 +176,11 @@ async def test_control_rejects_roster_mismatch_before_dispatch(monkeypatch) -> N
 
 
 @pytest.mark.unit
-async def test_control_rejects_stale_revision_with_authority_revision() -> None:
+async def test_control_rejects_stale_revision_with_authority_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     context, _redis = _context()
+    _bind_v2_redis(monkeypatch, _redis)
     await SteerSubAgentHandler().handle(
         context,
         {
