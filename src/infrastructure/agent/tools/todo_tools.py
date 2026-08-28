@@ -11,11 +11,11 @@ import inspect
 import json
 import logging
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from src.application.services.workspace_task_service import (
     WorkspaceTaskAuthorityContext,
@@ -37,6 +37,26 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
 from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from src.application.services.workspace_task_event_publisher import (
+        PendingWorkspaceTaskEvent,
+    )
+
+
+async def _publish_workspace_task_events_v2(
+    events: Iterable[PendingWorkspaceTaskEvent],
+) -> None:
+    """Publish through the exact Redis service pinned to this Agent operation."""
+    from src.application.services.workspace_task_event_publisher import (
+        WorkspaceTaskEventPublisher,
+    )
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
+
+    publisher = WorkspaceTaskEventPublisher(current_agent_worker_redis_client_v2())
+    await publisher.publish_pending_events(events)
 
 
 def _workspace_authority_markers(ctx: ToolContext) -> tuple[str, str] | None:
@@ -223,6 +243,7 @@ _todo_tool_runtime: ContextVar[TodoToolRuntime | None] = ContextVar(
     default=None,
 )
 
+
 def _current_todoread_session_factory() -> Callable[..., Any] | None:
     runtime = _todo_tool_runtime.get()
     return runtime.session_factory if runtime is not None else None
@@ -319,6 +340,7 @@ async def todoread_tool(
 # ---------------------------------------------------------------------------
 # @tool_define version of TodoWriteTool
 # ---------------------------------------------------------------------------
+
 
 def _current_todowrite_session_factory() -> Callable[..., Any] | None:
     runtime = _todo_tool_runtime.get()
@@ -1091,15 +1113,9 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     raise
                 await session.commit()
                 try:
-                    from src.application.services.workspace_task_event_publisher import (
-                        WorkspaceTaskEventPublisher,
+                    await _publish_workspace_task_events_v2(
+                        command_service.consume_pending_events()
                     )
-                    from src.infrastructure.agent.state.agent_worker_state import (
-                        get_redis_client,
-                    )
-
-                    publisher = WorkspaceTaskEventPublisher(await get_redis_client())
-                    await publisher.publish_pending_events(command_service.consume_pending_events())
                 except Exception:
                     logger.warning(
                         "todowrite.workspace_authority publish_pending_events failed",
@@ -1182,15 +1198,7 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                             )
                             await session.commit()
                             try:
-                                from src.application.services.workspace_task_event_publisher import (
-                                    WorkspaceTaskEventPublisher,
-                                )
-                                from src.infrastructure.agent.state.agent_worker_state import (
-                                    get_redis_client,
-                                )
-
-                                publisher = WorkspaceTaskEventPublisher(await get_redis_client())
-                                await publisher.publish_pending_events(
+                                await _publish_workspace_task_events_v2(
                                     command_service.consume_pending_events()
                                 )
                             except Exception:
