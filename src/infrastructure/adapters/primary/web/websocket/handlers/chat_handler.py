@@ -39,12 +39,14 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
     ensure_chat_run_authority,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
     pin_agent_turn_operation_v2,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.session_event_log import TURN_ADMITTED_EVENT_V2
 
 if TYPE_CHECKING:
@@ -59,6 +61,13 @@ logger = logging.getLogger(__name__)
 
 _CLIENT_MESSAGE_ID_MAX_LENGTH = 255
 _PERMISSION_MODES = frozenset({"ask", "automatic", "full_access"})
+
+
+def _agent_turn_error_data(exc: Exception) -> dict[str, str]:
+    data = {"message": str(exc)}
+    if isinstance(exc, RuntimeV2Error):
+        data["code"] = exc.code
+    return data
 
 
 def _client_message_id_extra(message_id: str | None) -> dict[str, str] | None:
@@ -1454,12 +1463,7 @@ async def _stream_agent_with_scoped_session(  # noqa: PLR0913
             return
 
     try:
-        from src.configuration.factories import create_llm_client
-
-        llm = await create_llm_client(stream_context.tenant_id)
-        agent_service = stream_context.get_scoped_container().agent_service(llm)
         await stream_agent_to_websocket(
-            agent_service=agent_service,
             context=stream_context,
             conversation_id=conversation_id,
             user_message=user_message,
@@ -1482,7 +1486,6 @@ async def _stream_agent_with_scoped_session(  # noqa: PLR0913
 
 
 async def stream_agent_to_websocket(  # noqa: PLR0913
-    agent_service: AgentService,
     context: MessageContext,
     conversation_id: str,
     user_message: str,
@@ -1522,7 +1525,6 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
             },
         ):
             await _stream_agent_to_websocket_pinned(
-                agent_service=agent_service,
                 context=context,
                 conversation_id=conversation_id,
                 user_message=user_message,
@@ -1546,13 +1548,12 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
             {
                 "type": "error",
                 "conversation_id": conversation_id,
-                "data": {"message": str(exc)},
+                "data": _agent_turn_error_data(exc),
             },
         )
 
 
 async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
-    agent_service: AgentService,
     context: MessageContext,
     conversation_id: str,
     user_message: str,
@@ -1604,6 +1605,7 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
             )
             return
 
+        agent_service = await current_agent_turn_service_v2()
         agent_stream = cast(
             AsyncGenerator[dict[str, Any], None],
             agent_service.stream_chat_v2(
@@ -1665,7 +1667,7 @@ async def _stream_agent_to_websocket_pinned(  # noqa: PLR0913
             {
                 "type": "error",
                 "conversation_id": conversation_id,
-                "data": {"message": str(e)},
+                "data": _agent_turn_error_data(e),
             },
         )
 

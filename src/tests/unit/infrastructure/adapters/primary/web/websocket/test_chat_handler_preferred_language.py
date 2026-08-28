@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -317,12 +318,18 @@ class FakeCancelMethod:
         return False
 
 
-async def test_stream_agent_to_websocket_passes_preferred_language() -> None:
+async def test_stream_agent_to_websocket_passes_preferred_language(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     agent_service = FakeAgentService()
     context = FakeMessageContext()
+    monkeypatch.setattr(
+        chat_handler_module,
+        "current_agent_turn_service_v2",
+        AsyncMock(return_value=agent_service),
+    )
 
     await stream_agent_to_websocket(
-        agent_service=agent_service,  # type: ignore[arg-type]
         context=context,  # type: ignore[arg-type]
         conversation_id="conv-1",
         user_message="你好",
@@ -336,12 +343,18 @@ async def test_stream_agent_to_websocket_passes_preferred_language() -> None:
     assert context.connection_manager.broadcasts[0][0] == "conv-1"
 
 
-async def test_stream_agent_to_websocket_strips_client_workspace_runtime_context() -> None:
+async def test_stream_agent_to_websocket_strips_client_workspace_runtime_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     agent_service = FakeAgentService()
     context = FakeMessageContext()
+    monkeypatch.setattr(
+        chat_handler_module,
+        "current_agent_turn_service_v2",
+        AsyncMock(return_value=agent_service),
+    )
 
     await stream_agent_to_websocket(
-        agent_service=agent_service,  # type: ignore[arg-type]
         context=context,  # type: ignore[arg-type]
         conversation_id="conv-1",
         user_message="hello",

@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.websocket.handlers import chat_handler
+from src.infrastructure.plugins.v2.agent_turn_services import (
+    AGENT_TURN_MODULE_V2,
+    AGENT_TURN_SERVICE_V2,
+    AgentTurnResolverV2,
+)
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -20,6 +27,7 @@ from src.infrastructure.plugins.v2.boundary import (
     pin_generation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[8]
@@ -81,10 +89,23 @@ async def test_websocket_agent_turn_reuses_outer_generation_and_publishes_comple
             observed["distribution"] = operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
             yield {"type": "complete", "data": {"content": "done"}}
 
+    async def resolve_turn(
+        self: AgentTurnResolverV2,
+        operation: object,
+    ) -> AgentService:
+        observed["resolver"] = self
+        observed["resolved_operation"] = operation
+        return AgentService()
+
+    monkeypatch.setattr(AgentTurnResolverV2, "resolve", resolve_turn)
     monkeypatch.setattr(chat_handler, "_load_external_acp_backend", AsyncMock(return_value=None))
 
     try:
         async with pin_generation_v2(host) as outer_generation:
+            outer_turn_resolver = outer_generation.resolve(
+                AGENT_TURN_SERVICE_V2,
+                ScopeV2(kind=ScopeKindV2.ROOT),
+            )
             await host.bootstrap(
                 profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
                 manifest_paths=(
@@ -95,7 +116,6 @@ async def test_websocket_agent_turn_reuses_outer_generation_and_publishes_comple
                 nonce="websocket-turn-2",
             )
             await chat_handler.stream_agent_to_websocket(
-                agent_service=AgentService(),  # type: ignore[arg-type]
                 context=context,  # type: ignore[arg-type]
                 conversation_id="conversation-1",
                 user_message="hello",
@@ -105,6 +125,7 @@ async def test_websocket_agent_turn_reuses_outer_generation_and_publishes_comple
 
             assert observed["generation"] == outer_generation.generation == 1
         assert observed["db"] is context.db
+        assert observed["resolver"] is outer_turn_resolver
         assert observed["identity"] == {
             "tenant_id": "tenant-1",
             "user_id": "user-1",
@@ -137,16 +158,15 @@ async def test_websocket_agent_turn_fails_closed_without_process_host(
     context = _TurnContext()
     called = False
 
-    class AgentService:
-        async def stream_chat_v2(self, **_kwargs: Any):
-            nonlocal called
-            called = True
-            yield {"type": "complete"}
+    async def resolve_turn() -> object:
+        nonlocal called
+        called = True
+        return object()
 
+    monkeypatch.setattr(chat_handler, "current_agent_turn_service_v2", resolve_turn)
     monkeypatch.setattr(chat_handler, "_load_external_acp_backend", AsyncMock(return_value=None))
 
     await chat_handler.stream_agent_to_websocket(
-        agent_service=AgentService(),  # type: ignore[arg-type]
         context=context,  # type: ignore[arg-type]
         conversation_id="conversation-1",
         user_message="hello",
@@ -159,6 +179,52 @@ async def test_websocket_agent_turn_fails_closed_without_process_host(
     assert len(context.connection_manager.errors) == 1
     error = context.connection_manager.errors[0][1]
     assert error["data"]["message"] == "plugin generation host is not configured for this process"
+
+
+@pytest.mark.unit
+async def test_websocket_agent_turn_rejects_missing_v2_service_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def disable_turn_service(document: ProfileDocumentV2) -> ProfileDocumentV2:
+        return replace(
+            document,
+            entries=tuple(
+                replace(entry, enabled=False) if entry.module_ref == AGENT_TURN_MODULE_V2 else entry
+                for entry in document.entries
+            ),
+        )
+
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    publication = await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=3,
+        version=3,
+        nonce="websocket-turn-missing-service",
+        profile_projector=disable_turn_service,
+    )
+    assert publication.accepted is True
+    install_process_generation_host_v2(host)
+    context = _TurnContext()
+    monkeypatch.setattr(chat_handler, "_load_external_acp_backend", AsyncMock(return_value=None))
+
+    try:
+        await chat_handler.stream_agent_to_websocket(
+            context=context,  # type: ignore[arg-type]
+            conversation_id="conversation-1",
+            user_message="hello",
+            project_id="project-1",
+            execution_message_id="turn-missing-service",
+        )
+
+        assert context.connection_manager.broadcasts == []
+        assert len(context.connection_manager.errors) == 1
+        error = context.connection_manager.errors[0][1]
+        assert error["data"]["code"] == "missing_service"
+        assert "service:agent.turn-service" in error["data"]["message"]
+    finally:
+        clear_process_generation_host_v2(host)
+        await host.close()
 
 
 @pytest.mark.unit
@@ -179,9 +245,13 @@ async def test_websocket_unsubscribe_closes_agent_stream(
                 closed = True
 
     monkeypatch.setattr(chat_handler, "_load_external_acp_backend", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        chat_handler,
+        "current_agent_turn_service_v2",
+        AsyncMock(return_value=AgentService()),
+    )
 
     await chat_handler._stream_agent_to_websocket_pinned(
-        agent_service=AgentService(),  # type: ignore[arg-type]
         context=context,  # type: ignore[arg-type]
         conversation_id="conversation-1",
         user_message="hello",
