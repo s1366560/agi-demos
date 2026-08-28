@@ -38,7 +38,7 @@ async def my_tool(ctx: ToolContext, **kwargs) -> ToolResult: ...
 | Environment | `env_var_tools.py` | Get/request env vars |
 | Plugin | `plugin_manager.py`, `plugin_tools.py` | Plugin CRUD |
 | MCP | `register_mcp_server.py`, `debug_mcp_server.py` | MCP server management |
-| Skill | `skill_tool.py`, `skill_loader.py`, `skill_installer.py` | Skill CRUD |
+| Skill | `skill_loader.py`, `skill_installer.py`, `skill_sync.py` | Skill load/install/sync |
 | Workspace planning | `workspace_plan_contract_tools.py`, `workspace_planning_contract.py` | Planning contracts and workspace plan state |
 | Self-modifying | `tool_mutation_guard.py`, custom tool loaders | Guardrails around runtime tool changes |
 

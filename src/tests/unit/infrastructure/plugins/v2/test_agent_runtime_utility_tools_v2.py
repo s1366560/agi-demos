@@ -46,6 +46,13 @@ _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
+@pytest.mark.unit
+def test_legacy_process_global_skill_tool_module_is_retired() -> None:
+    assert not (_ROOT / "src/infrastructure/agent/tools/skill_tool.py").exists()
+    assert "skill" not in AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2
+    assert "skill_loader" in AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2
+
+
 @dataclass(frozen=True, kw_only=True)
 class _ToolGroupCase:
     label: str
