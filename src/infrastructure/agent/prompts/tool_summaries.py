@@ -69,7 +69,6 @@ TOOL_SUMMARIES: dict[str, str] = {
     ),
     "decision": ("Present options to the user and request a decision before proceeding."),
     # --- Skill & Plugin ---
-    "skill": ("Load a specific skill by name to gain specialized knowledge and instructions."),
     "skill_loader": ("List available skills or load a skill's full content for reference."),
     "skill_installer": (
         "Install a skill from a remote source (e.g. GitHub) into the local skill directory."
@@ -160,7 +159,6 @@ TOOL_ORDER: list[str] = [
     "peer_sessions_history",
     "peer_sessions_send",
     # Skills & plugins
-    "skill",
     "skill_loader",
     "skill_installer",
     "plugin_manager",

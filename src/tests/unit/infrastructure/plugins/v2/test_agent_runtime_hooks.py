@@ -210,6 +210,32 @@ async def test_runtime_hook_modules_return_typed_instruction_contributions() -> 
 
 
 @pytest.mark.unit
+async def test_retired_skill_tool_does_not_trigger_sisyphus_followup() -> None:
+    generation = await _stage(_document(), generation=20)
+    operation = OperationContextV2(
+        generation=generation,
+        operation_id="turn-a",
+        scope=_session_scope(),
+    )
+
+    async with operation:
+        results = await operation.dispatch(
+            TOOLS_AFTER_EXECUTE_EVENT_V2,
+            _event_payload(
+                generation,
+                event_id="after-retired-skill-tool",
+                tool_name="skill",
+            ),
+        )
+
+    assert results[0] is None
+    assert [result["source_entry_id"] for result in results if result is not None] == [
+        "builtin-workspace-after-tool-execute"
+    ]
+    await generation.dispose()
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("event", "payload_field", "payload_value"),
     [

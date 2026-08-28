@@ -51,6 +51,8 @@ _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.
 def test_legacy_process_global_skill_tool_module_is_retired() -> None:
     assert not (_ROOT / "src/infrastructure/agent/tools/skill_tool.py").exists()
     assert "skill" not in AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2
+    assert "skill" not in TOOL_SUMMARIES
+    assert "skill" not in TOOL_ORDER
     assert "skill_loader" in AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2
 
 

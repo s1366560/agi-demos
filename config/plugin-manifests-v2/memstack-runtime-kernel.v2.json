@@ -8400,7 +8400,7 @@
       },
       "contract_digest": "sha256:2d9dbaf0d5d2509af0b403021965b7a29d653a592fb2105d81f726c94cd44347",
       "artifact": {
-        "digest": "sha256:d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be",
+        "digest": "sha256:e78af99c41ba56609ee9f2a0ab571ec2129668c308aac66ec05b857dc41e398d",
         "source": "repo+python://src/infrastructure/plugins/v2/sisyphus_runtime.py"
       }
     },
@@ -8671,7 +8671,7 @@
       },
       "contract_digest": "sha256:29e2c0b8432306acaf86adf0c811a5d04b6663e253a0458e91f4450796baeb3f",
       "artifact": {
-        "digest": "sha256:d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be",
+        "digest": "sha256:e78af99c41ba56609ee9f2a0ab571ec2129668c308aac66ec05b857dc41e398d",
         "source": "repo+python://src/infrastructure/plugins/v2/sisyphus_runtime.py"
       }
     },
@@ -8948,7 +8948,7 @@
       },
       "contract_digest": "sha256:7ac8e6c22ec3840534f3ee71a2e8662ed8a6227bfc197cacc6404ccd36e0bb76",
       "artifact": {
-        "digest": "sha256:d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be",
+        "digest": "sha256:e78af99c41ba56609ee9f2a0ab571ec2129668c308aac66ec05b857dc41e398d",
         "source": "repo+python://src/infrastructure/plugins/v2/sisyphus_runtime.py"
       }
     },

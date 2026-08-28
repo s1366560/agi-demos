@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:23423d67ac2468753e0ffabf45341098c001f31da156897729106f33b92965'
-    '78","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:efd91304e9d75fccd6ef89e659f5d525260475e42fc87d4b448e9dfdd5b6f5'
+    '0d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -206,7 +206,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '8aee55495e105c049ab","entrypoint":"src.infrastructure.plugins.v2.agent_routing:_apply_ag'
     'ent_routing_v2","module_ref":"builtin://memstack/agent/routing","plugin_id":"memstack-ru'
     'ntime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:'
-    'd2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be","artifact_source":"rep'
+    'e78af99c41ba56609ee9f2a0ab571ec2129668c308aac66ec05b857dc41e398d","artifact_source":"rep'
     'o+python://src/infrastructure/plugins/v2/sisyphus_runtime.py","contract":{"config_schema'
     '":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false'
     ',"properties":{"tool_followup_reminder":{"maxLength":2000,"minLength":1,"type":"string"}'
@@ -232,7 +232,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'rc.infrastructure.plugins.v2.sisyphus_runtime:_apply_sisyphus_after_tool_execute_v2","mo'
     'dule_ref":"builtin://memstack/agent/sisyphus/after-tool-execute","plugin_id":"memstack-r'
     'untime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256'
-    ':d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be","artifact_source":"re'
+    ':e78af99c41ba56609ee9f2a0ab571ec2129668c308aac66ec05b857dc41e398d","artifact_source":"re'
     'po+python://src/infrastructure/plugins/v2/sisyphus_runtime.py","contract":{"config_schem'
     'a":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":fals'
     'e,"properties":{"require_direct_outcome":{"type":"boolean"},"response_reminder":{"maxLen'
@@ -257,7 +257,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '"entrypoint":"src.infrastructure.plugins.v2.sisyphus_runtime:_apply_sisyphus_before_requ'
     'est_v2","module_ref":"builtin://memstack/agent/sisyphus/before-request","plugin_id":"mem'
     'stack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":'
-    '"sha256:d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be","artifact_sour'
+    '"sha256:e78af99c41ba56609ee9f2a0ab571ec2129668c308aac66ec05b857dc41e398d","artifact_sour'
     'ce":"repo+python://src/infrastructure/plugins/v2/sisyphus_runtime.py","contract":{"confi'
     'g_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPropertie'
     's":false,"properties":{"startup_reminder":{"maxLength":2000,"minLength":1,"type":"string'
@@ -2852,7 +2852,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'time-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:23423d67ac2468753e0ffabf45341098c001f31da156897729106f33b9296578"
+    "sha256:efd91304e9d75fccd6ef89e659f5d525260475e42fc87d4b448e9dfdd5b6f50d"
 )
 # fmt: on
 

@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:23423d67ac2468753e0ffabf45341098c001f31da156897729106f33b9',
-  '296578","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:efd91304e9d75fccd6ef89e659f5d525260475e42fc87d4b448e9dfdd5',
+  'b6f50d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -232,8 +232,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '594fb6b9e3d118e53761b25ed48716848aee55495e105c049ab","entrypoint":"src.infrastructur',
   'e.plugins.v2.agent_routing:_apply_agent_routing_v2","module_ref":"builtin://memstack',
   '/agent/routing","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targ',
-  'ets":["python"]},{"artifact_digest":"sha256:d2632985e897fa715314299ab58e6a87479264e8',
-  '9d0fadc0c80d57df6a2395be","artifact_source":"repo+python://src/infrastructure/plugin',
+  'ets":["python"]},{"artifact_digest":"sha256:e78af99c41ba56609ee9f2a0ab571ec2129668c3',
+  '08aac66ec05b857dc41e398d","artifact_source":"repo+python://src/infrastructure/plugin',
   's/v2/sisyphus_runtime.py","contract":{"config_schema":{"$schema":"https://json-schem',
   'a.org/draft/2020-12/schema","additionalProperties":false,"properties":{"tool_followu',
   'p_reminder":{"maxLength":2000,"minLength":1,"type":"string"}},"required":["tool_foll',
@@ -259,8 +259,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '62ed8a6227bfc197cacc6404ccd36e0bb76","entrypoint":"src.infrastructure.plugins.v2.sis',
   'yphus_runtime:_apply_sisyphus_after_tool_execute_v2","module_ref":"builtin://memstac',
   'k/agent/sisyphus/after-tool-execute","plugin_id":"memstack-runtime-kernel","plugin_v',
-  'ersion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:d2632985e897fa71531',
-  '4299ab58e6a87479264e89d0fadc0c80d57df6a2395be","artifact_source":"repo+python://src/',
+  'ersion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:e78af99c41ba56609ee',
+  '9f2a0ab571ec2129668c308aac66ec05b857dc41e398d","artifact_source":"repo+python://src/',
   'infrastructure/plugins/v2/sisyphus_runtime.py","contract":{"config_schema":{"$schema',
   '":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"prope',
   'rties":{"require_direct_outcome":{"type":"boolean"},"response_reminder":{"maxLength"',
@@ -286,7 +286,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'c.infrastructure.plugins.v2.sisyphus_runtime:_apply_sisyphus_before_request_v2","mod',
   'ule_ref":"builtin://memstack/agent/sisyphus/before-request","plugin_id":"memstack-ru',
   'ntime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha',
-  '256:d2632985e897fa715314299ab58e6a87479264e89d0fadc0c80d57df6a2395be","artifact_sour',
+  '256:e78af99c41ba56609ee9f2a0ab571ec2129668c308aac66ec05b857dc41e398d","artifact_sour',
   'ce":"repo+python://src/infrastructure/plugins/v2/sisyphus_runtime.py","contract":{"c',
   'onfig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalP',
   'roperties":false,"properties":{"startup_reminder":{"maxLength":2000,"minLength":1,"t',
@@ -3010,4 +3010,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:23423d67ac2468753e0ffabf45341098c001f31da156897729106f33b9296578' as const;
+  'sha256:efd91304e9d75fccd6ef89e659f5d525260475e42fc87d4b448e9dfdd5b6f50d' as const;

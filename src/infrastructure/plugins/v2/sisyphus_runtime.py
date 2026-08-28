@@ -26,7 +26,6 @@ SISYPHUS_RUNTIME_MODULES_V2: Final[tuple[str, ...]] = (
 _FOLLOWUP_TOOLS = frozenset(
     {
         "delegate_to_subagent",
-        "skill",
         "skill_loader",
         "todowrite",
     }
