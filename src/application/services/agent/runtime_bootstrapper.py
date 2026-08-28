@@ -22,7 +22,6 @@ from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.domain.model.agent import Conversation
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-from src.infrastructure.agent.sisyphus.builtin_agent import DEFAULT_GENERAL_AGENT_ID
 from src.infrastructure.llm.provider_credentials import resolve_persisted_provider_credential
 
 if TYPE_CHECKING:
@@ -236,6 +235,30 @@ class AgentRuntimeBootstrapper:
         return await resolver.load(tenant_id)
 
     @staticmethod
+    def _resolve_agent_id_v2(
+        *,
+        conversation: Conversation,
+        explicit_agent_id: str | None,
+    ) -> str:
+        """Resolve explicit, persisted, then Profile-owned default selection."""
+        resolved_explicit = _non_empty_string(explicit_agent_id)
+        if resolved_explicit is not None:
+            return resolved_explicit
+        persisted_agent_id = _selected_agent_id_from_conversation(conversation)
+        if persisted_agent_id is not None:
+            return persisted_agent_id
+
+        from src.infrastructure.plugins.v2.agent_default_selection_consumer import (
+            resolve_current_agent_default_selection_v2,
+        )
+
+        resolution = resolve_current_agent_default_selection_v2(
+            tenant_id=conversation.tenant_id,
+            project_id=conversation.project_id,
+        )
+        return resolution.agent_id
+
+    @staticmethod
     async def ensure_spawned_agent_conversation(
         *,
         child_session_id: str,
@@ -411,10 +434,9 @@ class AgentRuntimeBootstrapper:
             conversation,
             app_model_context,
         )
-        resolved_agent_id = (
-            agent_id
-            or _selected_agent_id_from_conversation(conversation)
-            or DEFAULT_GENERAL_AGENT_ID
+        resolved_agent_id = self._resolve_agent_id_v2(
+            conversation=conversation,
+            explicit_agent_id=agent_id,
         )
         runtime_mode = self._resolve_runtime_mode(
             configured_mode=settings.agent_runtime_mode,

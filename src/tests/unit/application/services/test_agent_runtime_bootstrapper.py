@@ -27,7 +27,11 @@ def _reset_local_task_tracking() -> None:
     AgentRuntimeBootstrapper._local_subprocesses.clear()
     AgentRuntimeBootstrapper._local_subprocess_request_paths.clear()
     AgentRuntimeBootstrapper._local_subprocess_superseded.clear()
-    yield
+    with patch(
+        "src.application.services.agent.runtime_bootstrapper._current_plugin_distribution_v2",
+        return_value=(None, None),
+    ):
+        yield
     AgentRuntimeBootstrapper._local_chat_tasks.clear()
     AgentRuntimeBootstrapper._local_chat_abort_signals.clear()
     AgentRuntimeBootstrapper._local_chat_queues.clear()
@@ -88,6 +92,7 @@ def conversation() -> SimpleNamespace:
         project_id="proj-1",
         user_id="user-1",
         is_in_plan_mode=False,
+        agent_config={"selected_agent_id": "builtin:all-access"},
     )
 
 

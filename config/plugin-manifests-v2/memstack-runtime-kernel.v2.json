@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:30b2694db30b44446d0bbae718114bb63ef6f0ed7774f9dda095863edfca0a12",
+        "digest": "sha256:4c1a49da68756f6f0c088eb16338f345d3bf16b5cb3f7a768fa2174c422c565c",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -7616,6 +7616,40 @@
       "artifact": {
         "digest": "sha256:10994c124a162a858c9735555319e71ef840c48a3cf9f36b963bc61ec2507619",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/default-selection",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_default_selection:_apply_agent_default_selection_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:agent-default-selection", "version": "1.0.0" }
+          ],
+          "requires": [
+            {
+              "alias": "catalog",
+              "service": "service:agent-definition-catalog",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default_agent_id"],
+          "properties": {
+            "default_agent_id": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "contract_digest": "sha256:a6eaebe223fa43d5584443bd9a0e37096a592555f9b7c64d5888047d7a9579ad",
+      "artifact": {
+        "digest": "sha256:7231871744b43bf73bf596ea925c786b446d88b5db3d3dbdc801052c4881b32a",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_default_selection.py"
       }
     },
     {
