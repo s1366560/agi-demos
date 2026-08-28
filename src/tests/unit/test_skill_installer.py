@@ -13,12 +13,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.infrastructure.agent.tools import skill_installer as skill_installer_module
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.skill_installer import (
+    SkillInstallerRuntime,
     _inst_fetch_file,
     _inst_get_install_path,
     _inst_parse_skill_source,
-    configure_skill_installer,
     skill_installer_tool,
 )
 
@@ -37,6 +38,37 @@ def _make_ctx(**overrides: Any) -> ToolContext:
 
 class TestSkillInstallerTool:
     """Test cases for skill_installer @tool_define implementation."""
+
+    @pytest.fixture(autouse=True)
+    def _bind_template_runtime_for_unit_tests(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Adapt direct template tests without restoring a production fallback."""
+        defaults: dict[str, object | None] = {
+            "_skill_inst_project_path": None,
+            "_skill_inst_tenant_id": "",
+            "_skill_inst_project_id": "",
+            "_skill_inst_permission_manager": None,
+            "_skill_inst_session_id": "",
+        }
+        for name, value in defaults.items():
+            monkeypatch.setattr(skill_installer_module, name, value, raising=False)
+
+        def current_runtime() -> SkillInstallerRuntime:
+            return SkillInstallerRuntime(
+                project_path=skill_installer_module._skill_inst_project_path,
+                tenant_id=skill_installer_module._skill_inst_tenant_id,
+                project_id=skill_installer_module._skill_inst_project_id,
+                permission_manager=skill_installer_module._skill_inst_permission_manager,
+                session_id=skill_installer_module._skill_inst_session_id,
+            )
+
+        monkeypatch.setattr(skill_installer_module, "_current_skill_installer_runtime", current_runtime)
+
+    @staticmethod
+    def _configure_runtime(*, project_path: Path | None = None) -> None:
+        skill_installer_module._skill_inst_project_path = project_path
 
     def test_tool_info_name_and_description(self) -> None:
         """Test that the ToolInfo has correct name and description."""
@@ -102,7 +134,7 @@ class TestSkillInstallerTool:
         self, tmp_path: Path,
     ) -> None:
         """Test execute with empty skill_source."""
-        configure_skill_installer(project_path=tmp_path)
+        self._configure_runtime(project_path=tmp_path)
         ctx = _make_ctx()
         result = await skill_installer_tool.execute(ctx, skill_source="")
         assert (
@@ -115,7 +147,7 @@ class TestSkillInstallerTool:
         self, tmp_path: Path,
     ) -> None:
         """Test execute with invalid install_location."""
-        configure_skill_installer(project_path=tmp_path)
+        self._configure_runtime(project_path=tmp_path)
         ctx = _make_ctx()
         result = await skill_installer_tool.execute(
             ctx,
@@ -129,7 +161,7 @@ class TestSkillInstallerTool:
         self, tmp_path: Path,
     ) -> None:
         """Test execute when skill already exists."""
-        configure_skill_installer(project_path=tmp_path)
+        self._configure_runtime(project_path=tmp_path)
         # Create existing skill directory
         skill_dir = tmp_path / ".memstack" / "skills" / "my-skill"
         skill_dir.mkdir(parents=True)
@@ -153,7 +185,7 @@ class TestSkillInstallerTool:
     )
     async def test_execute_successful_install(self, mock_fetch: AsyncMock, tmp_path: Path) -> None:
         """Test successful skill installation."""
-        configure_skill_installer(project_path=tmp_path)
+        self._configure_runtime(project_path=tmp_path)
         skill_content = "# Test Skill\n\nThis is a test skill."
         mock_fetch.return_value = skill_content
 
@@ -188,7 +220,7 @@ class TestSkillInstallerTool:
     )
     async def test_execute_skill_not_found(self, mock_fetch: AsyncMock, tmp_path: Path) -> None:
         """Test execute when skill is not found."""
-        configure_skill_installer(project_path=tmp_path)
+        self._configure_runtime(project_path=tmp_path)
         mock_fetch.return_value = None
 
         ctx = _make_ctx()
@@ -209,7 +241,7 @@ class TestSkillInstallerTool:
         self, mock_discover: AsyncMock, tmp_path: Path
     ) -> None:
         """Test execute discovering multiple skills in repo."""
-        configure_skill_installer(project_path=tmp_path)
+        self._configure_runtime(project_path=tmp_path)
         mock_discover.return_value = ["skill-a", "skill-b", "skill-c"]
 
         ctx = _make_ctx()

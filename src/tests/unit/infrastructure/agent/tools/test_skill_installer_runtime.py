@@ -28,7 +28,6 @@ async def test_bound_skill_installer_runtimes_are_isolated_during_interleaved_aw
 ) -> None:
     from src.infrastructure.agent.tools import skill_installer as skill_installer_module
     from src.infrastructure.agent.tools.skill_installer import (
-        configure_skill_installer,
         make_skill_installer_tool,
     )
 
@@ -81,12 +80,6 @@ async def test_bound_skill_installer_runtimes_are_isolated_during_interleaved_aw
         tenant_id="tenant-b",
         project_id="project-b",
     )
-    configure_skill_installer(
-        project_path=tmp_path / "legacy",
-        tenant_id="legacy-tenant",
-        project_id="legacy-project",
-    )
-
     result_a, result_b = await asyncio.gather(
         tool_a.execute(
             _context("a"),
@@ -106,3 +99,18 @@ async def test_bound_skill_installer_runtimes_are_isolated_during_interleaved_aw
     assert result_b.output == (
         f"tenant-b/project-b/{project_b / '.memstack' / 'skills' / 'shared-skill'}"
     )
+
+
+@pytest.mark.unit
+def test_unbound_skill_installer_template_rejects_legacy_runtime_fallback() -> None:
+    from src.infrastructure.agent.tools import skill_installer as skill_installer_module
+
+    with pytest.raises(RuntimeError, match="generation-bound runtime"):
+        skill_installer_module._current_skill_installer_runtime()
+
+
+@pytest.mark.unit
+def test_skill_installer_module_has_no_legacy_configure_seam() -> None:
+    from src.infrastructure.agent.tools import skill_installer as skill_installer_module
+
+    assert not hasattr(skill_installer_module, "configure_skill_installer")

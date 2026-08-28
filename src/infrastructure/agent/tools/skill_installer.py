@@ -64,45 +64,13 @@ _skill_installer_runtime: ContextVar[SkillInstallerRuntime | None] = ContextVar(
     default=None,
 )
 
-_skill_inst_project_path: Path | None = None
-_skill_inst_tenant_id: str = ""
-_skill_inst_project_id: str = ""
-_skill_inst_permission_manager: Any = None
-_skill_inst_session_id: str = ""
-
-
-def configure_skill_installer(
-    project_path: Path | None = None,
-    tenant_id: str = "",
-    project_id: str = "",
-    permission_manager: Any = None,
-    session_id: str = "",
-) -> None:
-    """Configure dependencies for the skill_installer tool.
-
-    Called at agent startup to inject services needed by the tool.
-    """
-    global _skill_inst_project_path, _skill_inst_tenant_id
-    global _skill_inst_project_id, _skill_inst_permission_manager
-    global _skill_inst_session_id
-    _skill_inst_project_path = project_path
-    _skill_inst_tenant_id = tenant_id
-    _skill_inst_project_id = project_id
-    _skill_inst_permission_manager = permission_manager
-    _skill_inst_session_id = session_id
-
-
 def _current_skill_installer_runtime() -> SkillInstallerRuntime:
     runtime = _skill_installer_runtime.get()
-    if runtime is not None:
-        return runtime
-    return SkillInstallerRuntime(
-        project_path=_skill_inst_project_path,
-        tenant_id=_skill_inst_tenant_id,
-        project_id=_skill_inst_project_id,
-        permission_manager=_skill_inst_permission_manager,
-        session_id=_skill_inst_session_id,
-    )
+    if runtime is None:
+        raise RuntimeError(
+            "skill_installer requires a generation-bound runtime",
+        )
+    return runtime
 
 
 # ---------------------------------------------------------------------------

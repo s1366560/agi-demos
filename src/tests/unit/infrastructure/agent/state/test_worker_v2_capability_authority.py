@@ -417,10 +417,6 @@ def test_worker_skill_installer_binds_project_without_global_mutation(
         raising=False,
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.tools.skill_installer.configure_skill_installer",
-        _forbidden,
-    )
-    monkeypatch.setattr(
         agent_worker_state,
         "resolve_project_base_path",
         lambda project_id: Path(f"/projects/{project_id}"),
