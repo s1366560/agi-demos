@@ -64,6 +64,16 @@ def test_orphan_mcp_server_template_tool_is_retired() -> None:
     assert tool_name not in TOOL_ORDER
 
 
+@pytest.mark.unit
+def test_orphan_debug_mcp_server_tool_is_retired() -> None:
+    tool_name = "debug_mcp_server"
+
+    assert not (_ROOT / "src/infrastructure/agent/tools/debug_mcp_server.py").exists()
+    assert tool_name not in AGENT_MCP_REGISTRATION_TOOL_NAMES_V2
+    assert tool_name not in TOOL_SUMMARIES
+    assert tool_name not in TOOL_ORDER
+
+
 @dataclass(frozen=True, kw_only=True)
 class _ToolGroupCase:
     label: str

@@ -104,9 +104,6 @@ TOOL_SUMMARIES: dict[str, str] = {
     "check_env_vars": ("Check availability of environment variables required by specific tools."),
     # --- MCP ---
     "register_mcp_server": ("Install, start, or discover tools from an MCP server in the sandbox."),
-    "debug_mcp_server": (
-        "Inspect MCP server status, logs, and available tools for troubleshooting."
-    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -173,7 +170,6 @@ TOOL_ORDER: list[str] = [
     "check_env_vars",
     # MCP
     "register_mcp_server",
-    "debug_mcp_server",
 ]
 
 
