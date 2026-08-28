@@ -169,9 +169,11 @@ async def create_workspace_contract_agent_service(
         return app_container.with_db(db).agent_service(llm)
 
     from src.configuration.di_container import DIContainer
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
 
-    redis_client = await get_redis_client()
+    redis_client = current_agent_worker_redis_client_v2()
     return DIContainer(db=db, redis_client=redis_client).agent_service(llm)
 
 

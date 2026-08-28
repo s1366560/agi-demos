@@ -192,7 +192,7 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     async def fake_create_llm_client(tenant_id: str) -> str:
         return f"llm:{tenant_id}"
 
-    async def fake_get_redis_client() -> str:
+    def fake_current_agent_worker_redis_client_v2() -> str:
         return "redis:test"
 
     class FakeSessionContext:
@@ -232,11 +232,11 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     from src.configuration import di_container, factories
     from src.infrastructure.adapters.primary.web.startup import container as startup_container
     from src.infrastructure.adapters.secondary.persistence import database
-    from src.infrastructure.agent.state import agent_worker_state
     from src.infrastructure.agent.workspace import (
         contract_agent_runtime,
         session_conversations,
     )
+    from src.infrastructure.plugins.v2 import agent_worker_runtime
 
     monkeypatch.setattr(startup_container, "get_app_container", lambda: None)
     monkeypatch.setattr(
@@ -262,7 +262,11 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     monkeypatch.setattr(database, "async_session_factory", fake_async_session_factory)
     monkeypatch.setattr(factories, "create_llm_client", fake_create_llm_client)
     monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
-    monkeypatch.setattr(agent_worker_state, "get_redis_client", fake_get_redis_client)
+    monkeypatch.setattr(
+        agent_worker_runtime,
+        "current_agent_worker_redis_client_v2",
+        fake_current_agent_worker_redis_client_v2,
+    )
 
 
 async def test_workspace_contract_agent_service_uses_app_container_scope(
@@ -313,13 +317,17 @@ async def test_workspace_contract_agent_service_fallback_injects_redis(
 
     from src.configuration import di_container
     from src.infrastructure.adapters.primary.web.startup import container as startup_container
-    from src.infrastructure.agent.state import agent_worker_state
+    from src.infrastructure.plugins.v2 import agent_worker_runtime
 
-    async def fake_get_redis_client() -> str:
+    def fake_current_agent_worker_redis_client_v2() -> str:
         return "redis:fallback"
 
     monkeypatch.setattr(startup_container, "get_app_container", lambda: None)
-    monkeypatch.setattr(agent_worker_state, "get_redis_client", fake_get_redis_client)
+    monkeypatch.setattr(
+        agent_worker_runtime,
+        "current_agent_worker_redis_client_v2",
+        fake_current_agent_worker_redis_client_v2,
+    )
     monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
 
     assert await create_workspace_contract_agent_service(db=db, llm="llm:tenant-1") is agent_service
@@ -687,8 +695,7 @@ async def test_runtime_workspace_planner_uses_stream_chat_v2_with_actor_user(
     assert stream_calls[0]["agent_id"] == BUILTIN_WORKSPACE_PLANNER_ID
     assert stream_calls[0]["app_model_context"]["context_type"] == "workspace_worker_runtime"
     assert (
-        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY]
-        == WORKSPACE_ROLE_CONTRACT
+        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY] == WORKSPACE_ROLE_CONTRACT
     )
     assert stream_calls[0]["app_model_context"]["workspace_binding"]["workspace_id"] == "ws-1"
     assert stream_calls[0]["app_model_context"]["code_context"] == {"repo": "agi-demos"}
@@ -830,8 +837,7 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
     assert stream_calls[0]["agent_id"] == BUILTIN_WORKSPACE_VERIFIER_ID
     assert stream_calls[0]["app_model_context"]["context_type"] == "workspace_worker_runtime"
     assert (
-        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY]
-        == WORKSPACE_ROLE_CONTRACT
+        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY] == WORKSPACE_ROLE_CONTRACT
     )
     assert stream_calls[0]["app_model_context"]["runtime_limits"] == {"max_tokens": 8192}
     assert (
@@ -1091,8 +1097,7 @@ async def test_runtime_iteration_reviewer_persists_linked_workspace_task(
     assert stream_calls[0]["agent_id"] == BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID
     assert stream_calls[0]["app_model_context"]["context_type"] == "workspace_worker_runtime"
     assert (
-        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY]
-        == WORKSPACE_ROLE_CONTRACT
+        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY] == WORKSPACE_ROLE_CONTRACT
     )
     assert stream_calls[0]["app_model_context"]["runtime_limits"] == {"max_tokens": 8192}
     assert (
@@ -1153,8 +1158,7 @@ async def test_runtime_worktree_manager_persists_linked_workspace_task(
     assert stream_calls[0]["agent_id"] == BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID
     assert stream_calls[0]["app_model_context"]["context_type"] == "workspace_worker_runtime"
     assert (
-        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY]
-        == WORKSPACE_ROLE_CONTRACT
+        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY] == WORKSPACE_ROLE_CONTRACT
     )
     assert (
         stream_calls[0]["app_model_context"]["workspace_binding"]["linked_workspace_task_id"]
