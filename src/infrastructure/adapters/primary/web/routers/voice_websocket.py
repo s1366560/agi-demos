@@ -20,19 +20,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.config import get_settings
-from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.primary.web.websocket.auth import (
     authenticate_websocket,
     extract_websocket_api_key,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
     pin_agent_turn_operation_v2,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
 logger = logging.getLogger(__name__)
@@ -140,8 +141,8 @@ async def voice_chat_endpoint(
         await _send_error(
             websocket,
             "Volcengine Speech credentials not configured "
-            "(set speech_app_id + speech_access_token in provider config "
-            "or SPEECH_APP_ID + SPEECH_ACCESS_TOKEN env vars)",
+            + "(set speech_app_id + speech_access_token in provider config "
+            + "or SPEECH_APP_ID + SPEECH_ACCESS_TOKEN env vars)",
         )
         await websocket.close(code=4000)
         return
@@ -161,12 +162,6 @@ async def voice_chat_endpoint(
         proxy=speech_ws_proxy,
     )
     tts_client: AsyncTTSStreamingClient | None = None
-
-    # 5. Build base container and LLM (agent_service built per-request in _agent_bridge)
-    from src.configuration.factories import create_llm_client
-
-    base_container = cast(DIContainer, websocket.app.state.container)
-    llm = await create_llm_client(tenant_id)
 
     # Shared state between tasks
     asr_final_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -191,8 +186,6 @@ async def voice_chat_endpoint(
             asyncio.create_task(
                 _agent_bridge(
                     websocket,
-                    base_container,
-                    llm,
                     asr_final_queue,
                     tts_text_queue,
                     conversation_id,
@@ -242,10 +235,10 @@ async def voice_chat_endpoint(
         shutdown_event.set()
         for task in tasks:
             if not task.done():
-                task.cancel()
+                _ = task.cancel()
         # Wait for cancellation to propagate
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Close ASR client
         try:
@@ -443,8 +436,6 @@ async def _asr_processor(
 
 async def _agent_bridge(
     websocket: WebSocket,
-    base_container: Any,
-    llm: Any,
     asr_final_queue: asyncio.Queue[str],
     tts_text_queue: asyncio.Queue[str | None],
     conversation_id: str,
@@ -508,10 +499,9 @@ async def _agent_bridge(
                             },
                         )
                     )
-                    container = base_container.with_db(fresh_db)
-                    agent_service = container.agent_service(llm)
+                    agent_service = await current_agent_turn_service_v2()
                     logger.info(
-                        "[Voice WS] Built fresh agent_service, calling stream_chat_v2",
+                        "[Voice WS] Resolved generation Agent turn service, calling stream_chat_v2",
                     )
 
                     # Stream agent response
@@ -600,7 +590,17 @@ async def _agent_bridge(
                         inner_err,
                         exc_info=True,
                     )
-                    await _send_error(websocket, f"Agent error: {inner_err}")
+                    if isinstance(inner_err, RuntimeV2Error):
+                        await _send_json(
+                            websocket,
+                            {
+                                "type": "error",
+                                "message": str(inner_err),
+                                "code": inner_err.code,
+                            },
+                        )
+                    else:
+                        await _send_error(websocket, f"Agent error: {inner_err}")
                     await tts_text_queue.put(None)
                 finally:
                     await turn_stack.aclose()
