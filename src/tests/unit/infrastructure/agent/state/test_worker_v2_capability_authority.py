@@ -226,9 +226,7 @@ async def test_builtin_tool_builder_does_not_use_global_registry_or_configurator
     def _forbidden(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("worker base tools must not use process-global configuration")
 
-    for target in (
-        "src.infrastructure.agent.tools.define.get_registered_tools",
-    ):
+    for target in ("src.infrastructure.agent.tools.define.get_registered_tools",):
         monkeypatch.setattr(target, _forbidden)
 
     tools = await agent_worker_state._get_or_create_builtin_tools(
@@ -697,10 +695,6 @@ def test_worker_skill_sync_uses_bound_tool_factory(
     monkeypatch.setattr(
         "src.infrastructure.agent.tools.skill_sync.make_skill_sync_tool",
         _make_skill_sync_tool,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.skill_sync.configure_skill_sync",
-        _forbidden,
     )
     monkeypatch.setattr(
         "src.infrastructure.agent.tools.define.get_registered_tools",

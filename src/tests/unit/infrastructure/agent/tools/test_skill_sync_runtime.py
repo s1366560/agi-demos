@@ -282,3 +282,38 @@ async def test_bound_skill_sync_fails_closed_without_skill_loader_contribution(
         "error": "skill_availability_service_missing",
         "service": "skill_loader",
     }
+
+
+@pytest.mark.unit
+async def test_unbound_skill_sync_template_rejects_legacy_runtime_fallback() -> None:
+    from src.infrastructure.agent.tools import skill_sync as skill_sync_module
+
+    result = await skill_sync_module.skill_sync_tool.execute(
+        _context("unbound"),
+        skill_name="new-skill",
+    )
+
+    assert result.is_error is True
+    assert result.metadata == {
+        "error": "skill_sync_runtime_unavailable",
+        "service": "skill_sync",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "seam_name",
+    (
+        "configure_skill_sync",
+        "_skill_sync_tenant_id",
+        "_skill_sync_project_id",
+        "_skill_sync_sandbox_adapter",
+        "_skill_sync_sandbox_id",
+        "_skill_sync_session_factory",
+        "_skill_sync_skill_loader_tool",
+    ),
+)
+def test_skill_sync_module_has_no_legacy_runtime_seams(seam_name: str) -> None:
+    from src.infrastructure.agent.tools import skill_sync as skill_sync_module
+
+    assert not hasattr(skill_sync_module, seam_name)

@@ -56,50 +56,9 @@ _skill_sync_runtime: ContextVar[SkillSyncRuntime | None] = ContextVar(
     default=None,
 )
 
-_skill_sync_tenant_id: str | None = None
-_skill_sync_project_id: str | None = None
-_skill_sync_sandbox_adapter: Any | None = None
-_skill_sync_sandbox_id: str | None = None
-_skill_sync_session_factory: Callable[..., Any] | None = None
-_skill_sync_skill_loader_tool: Any | None = None
 
-
-def configure_skill_sync(
-    tenant_id: str,
-    project_id: str | None = None,
-    sandbox_adapter: Any | None = None,
-    sandbox_id: str | None = None,
-    session_factory: Any | None = None,
-    skill_loader_tool: Any | None = None,
-) -> None:
-    """Configure dependencies for the skill_sync tool.
-
-    Called at agent startup to inject required context.
-    """
-    global _skill_sync_tenant_id, _skill_sync_project_id
-    global _skill_sync_sandbox_adapter, _skill_sync_sandbox_id
-    global _skill_sync_session_factory, _skill_sync_skill_loader_tool
-    _skill_sync_tenant_id = tenant_id
-    _skill_sync_project_id = project_id
-    _skill_sync_sandbox_adapter = sandbox_adapter
-    _skill_sync_sandbox_id = sandbox_id
-    _skill_sync_session_factory = session_factory
-    _skill_sync_skill_loader_tool = skill_loader_tool
-
-
-def _current_skill_sync_runtime() -> SkillSyncRuntime:
-    runtime = _skill_sync_runtime.get()
-    if runtime is not None:
-        return runtime
-    return SkillSyncRuntime(
-        tenant_id=_skill_sync_tenant_id,
-        project_id=_skill_sync_project_id,
-        sandbox_adapter=_skill_sync_sandbox_adapter,
-        sandbox_id=_skill_sync_sandbox_id,
-        session_factory=_skill_sync_session_factory,
-        skill_loader_tool=_skill_sync_skill_loader_tool,
-        generation_bound=False,
-    )
+def _current_skill_sync_runtime() -> SkillSyncRuntime | None:
+    return _skill_sync_runtime.get()
 
 
 def _skill_sync_invalidate_caches(
@@ -318,6 +277,15 @@ async def skill_sync_tool(
 ) -> ToolResult:
     """Sync a skill from the sandbox to the system."""
     runtime = _current_skill_sync_runtime()
+    if runtime is None:
+        return ToolResult(
+            output="Skill sync requires a generation-bound runtime.",
+            is_error=True,
+            metadata={
+                "error": "skill_sync_runtime_unavailable",
+                "service": TOOL_NAME,
+            },
+        )
     skill_name = skill_name.strip()
     if not skill_name:
         return ToolResult(
