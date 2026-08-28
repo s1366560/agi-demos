@@ -116,9 +116,11 @@ async def ensure_workspace_llm_conversation(
 async def _invalidate_conversation_list_cache(project_id: str) -> None:
     """Keep background workspace sessions visible in cached conversation lists."""
     try:
-        from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+        from src.infrastructure.plugins.v2.agent_worker_runtime import (
+            current_agent_worker_redis_client_v2,
+        )
 
-        redis_client = await get_redis_client()
+        redis_client = current_agent_worker_redis_client_v2()
         for prefix in ("conv_list:", "conv_count:"):
             keys = await redis_client.keys(f"{prefix}{project_id}:*")
             if keys:
