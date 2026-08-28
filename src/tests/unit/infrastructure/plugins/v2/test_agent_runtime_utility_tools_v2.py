@@ -14,6 +14,7 @@ from src.infrastructure.agent.core.react_agent_stream_mixin import (
 )
 from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
+from src.infrastructure.agent.prompts.tool_summaries import TOOL_ORDER, TOOL_SUMMARIES
 from src.infrastructure.plugins.v2.agent_runtime_utility_tools import (
     AGENT_ENV_VAR_TOOL_NAMES_V2,
     AGENT_ENV_VAR_TOOLS_MODULE_V2,
@@ -51,6 +52,16 @@ def test_legacy_process_global_skill_tool_module_is_retired() -> None:
     assert not (_ROOT / "src/infrastructure/agent/tools/skill_tool.py").exists()
     assert "skill" not in AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2
     assert "skill_loader" in AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2
+
+
+@pytest.mark.unit
+def test_orphan_mcp_server_template_tool_is_retired() -> None:
+    tool_name = "create_mcp_server_from_template"
+
+    assert not (_ROOT / "src/infrastructure/agent/tools/mcp_server_templates.py").exists()
+    assert tool_name not in AGENT_MCP_REGISTRATION_TOOL_NAMES_V2
+    assert tool_name not in TOOL_SUMMARIES
+    assert tool_name not in TOOL_ORDER
 
 
 @dataclass(frozen=True, kw_only=True)

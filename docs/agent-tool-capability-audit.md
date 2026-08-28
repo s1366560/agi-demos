@@ -32,8 +32,8 @@ policy-aware tools rather than ad hoc code or manual API workarounds.
 | System API | `system_api` for listing, describing, and invoking `/api/*` OpenAPI operations through normal route auth |
 | Memory and graph | `memory_search`, `memory_get`, `memory_create`, `memory_update`, `memory_delete`, plus memory runtime/plugin tools when enabled |
 | Files, shell, code, terminal, desktop | Sandbox MCP wrappers and environment tools such as `terminal` and `desktop` |
-| Skills | `skill`, `skill_loader`, `skill_installer`, `skill_sync` |
-| Plugins and MCP | `plugin_manager`, `register_mcp_server`, `debug_mcp_server`, `create_mcp_server_from_template`, dynamic MCP tool adapters |
+| Skills | `skill_loader`, `skill_installer`, `skill_sync` |
+| Plugins and MCP | `plugin_manager`, `register_mcp_server`, `debug_mcp_server`, dynamic MCP tool adapters |
 | Human input and secrets | `ask_clarification`, `request_decision`, `request_env_var`, `get_env_var`, `check_env_vars` |
 | Tasks and workspace orchestration | Todo tools, workspace WTP tools, workspace chat tools, multi-agent action tools |
 | Agents and subagents | `agent_definition_manage`, agent/session tools, delegation tools, subagent session tools |

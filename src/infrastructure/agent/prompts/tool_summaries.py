@@ -107,9 +107,6 @@ TOOL_SUMMARIES: dict[str, str] = {
     "debug_mcp_server": (
         "Inspect MCP server status, logs, and available tools for troubleshooting."
     ),
-    "create_mcp_server_from_template": (
-        "Generate a new MCP server project from a built-in template."
-    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -177,7 +174,6 @@ TOOL_ORDER: list[str] = [
     # MCP
     "register_mcp_server",
     "debug_mcp_server",
-    "create_mcp_server_from_template",
 ]
 
 
