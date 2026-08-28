@@ -63,7 +63,7 @@ plugin tools, MCP server tools, and sandbox tools without editing the static bui
 | Skills | `skill_loader`, `skill_installer`, `skill_sync` | Load, install, or sync skills. |
 | Plugins | `plugin_manager`, generation-provided tools | Read the pinned V2 generation inventory; legacy mutation actions return the protocol-retired error. |
 | MCP server management | `register_mcp_server`, `mcp_server_install`, `mcp_server_start`, `mcp_server_discover_tools`, `mcp_server_status`, `mcp_server_logs`, `mcp_server_list` | Register, install, start, and inspect MCP servers; separate from MCP tools discovered from those servers. |
-| Runtime/model | `list_available_models`, `switch_model_next_turn`, `session_status`, `structured_output`, `reflect_friction`, `verdict`, `handoff`, `cron`, `custom_tools_status` | Runtime introspection, structured outputs, review/verdicts, scheduled actions, and custom-tool loading diagnostics. |
+| Runtime/model | `list_available_models`, `switch_model_next_turn`, `session_status`, `reflect_friction`, `verdict`, `cron`, `custom_tools_status` | Runtime introspection, review/verdicts, scheduled actions, and custom-tool loading diagnostics. |
 | Environment UI | `terminal`, `desktop` | Web terminal and remote desktop service management. |
 
 ## Multi-Agent Tool Semantics

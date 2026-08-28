@@ -22,12 +22,10 @@ def test_execute_step_use_case_does_not_mutate_process_tool_runtime() -> None:
             "src.infrastructure.plugins.v2.sandbox_projection."
             "current_sandbox_application_services_v2"
         ) as sandbox_projection,
-        patch("src.infrastructure.agent.tools.handoff_tool.configure_handoff") as handoff,
         patch.object(container, "graph_orchestrator") as graph_orchestrator,
     ):
         use_case = container.execute_step_use_case(llm)
 
     assert isinstance(use_case, ExecuteStepUseCase)
     sandbox_projection.assert_not_called()
-    handoff.assert_not_called()
     graph_orchestrator.assert_not_called()

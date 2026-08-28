@@ -37,7 +37,7 @@ policy-aware tools rather than ad hoc code or manual API workarounds.
 | Human input and secrets | `ask_clarification`, `request_decision`, `request_env_var`, `get_env_var`, `check_env_vars` |
 | Tasks and workspace orchestration | Todo tools, workspace WTP tools, workspace chat tools, multi-agent action tools |
 | Agents and subagents | `agent_definition_manage`, agent/session tools, delegation tools, subagent session tools |
-| Runtime/model control | `list_available_models`, `switch_model_next_turn`, `session_status`, `structured_output`, verdict/reflection tools |
+| Runtime/model control | `list_available_models`, `switch_model_next_turn`, `session_status`, verdict/reflection tools |
 
 ## Remaining Caveats
 

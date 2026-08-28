@@ -69,6 +69,12 @@ _EXPECTED_TOOL_NAMES = frozenset(
 _EMPTY_PREPARED_TOOL_PROVIDER = PreparedToolProviderV2(tools={})
 
 
+@pytest.mark.unit
+def test_orphan_swarm_handoff_tool_is_retired() -> None:
+    assert not (_ROOT / "src/infrastructure/agent/tools/handoff_tool.py").exists()
+    assert "handoff" not in _EXPECTED_TOOL_NAMES
+
+
 def _snapshot(*, generation: int, contribution_enabled: bool):
     manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
     document = load_profile_document_v2(_PROFILE_PATH)

@@ -16,6 +16,7 @@ from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
 from src.infrastructure.agent.tools.model_availability_tool import make_model_awareness_tools
 from src.infrastructure.plugins.v2.agent_model_awareness_tools import (
+    AGENT_MODEL_AWARENESS_TOOL_NAMES_V2,
     AGENT_MODEL_AWARENESS_TOOLS_MODULE_V2,
     AGENT_MODEL_AWARENESS_TOOLS_SOURCE_V2,
 )
@@ -50,6 +51,12 @@ _MODEL_AWARENESS_TOOLS = make_model_awareness_tools(
     provider_resolver=_provider_resolver,
     persist_model_override=_persist_model_override,
 )
+
+
+@pytest.mark.unit
+def test_orphan_structured_output_tool_is_retired() -> None:
+    assert not (_ROOT / "src/infrastructure/agent/tools/structured_output.py").exists()
+    assert "structured_output" not in AGENT_MODEL_AWARENESS_TOOL_NAMES_V2
 
 
 class _ReadTool:
