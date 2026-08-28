@@ -20,7 +20,6 @@ from src.application.schemas.agent_run_authority import (
     RunInputListResponse,
     RunInputReceipt,
 )
-from src.configuration.di_container import DIContainer
 from src.domain.model.agent.run_input import AgentRunInputDelivery, AgentRunInputStatus
 from src.domain.model.agent.tool_policy import ControlMessageType
 from src.domain.ports.agent.control_channel_port import ControlMessage
@@ -686,10 +685,8 @@ async def promote_run_input(
     row.updated_at = now
     await db.commit()
 
-    base_container = cast(DIContainer, request.app.state.container)
     task = asyncio.create_task(
         _execute_approved_plan(
-            base_container=base_container,
             run_id=promoted.id,
             conversation_id=promoted.conversation_id,
             project_id=promoted.project_id,

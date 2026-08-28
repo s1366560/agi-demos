@@ -18,8 +18,6 @@ from sqlalchemy import exists, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.di_container import DIContainer
-from src.configuration.factories import create_llm_client
 from src.domain.model.auth.user import User
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -56,6 +54,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
     ensure_plan_run_authority,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     current_agent_worker_redis_client_v2,
 )
@@ -583,7 +582,6 @@ async def approve_plan_and_start(
         current_user=current_user,
     )
     now = datetime.now(UTC)
-    base_container = cast(DIContainer, request.app.state.container)
     environment = await _resolve_cloud_run_environment(
         project_id=conversation.project_id,
         tenant_id=conversation.tenant_id,
@@ -629,7 +627,6 @@ async def approve_plan_and_start(
     response = _approval_response(conversation, plan, run, created=True)
     task = asyncio.create_task(
         _execute_approved_plan(
-            base_container=base_container,
             run_id=run.id,
             conversation_id=conversation.id,
             project_id=conversation.project_id,
@@ -779,7 +776,6 @@ async def _publish_plan_run_status(
 
 async def _execute_approved_plan(
     *,
-    base_container: DIContainer,
     run_id: str,
     conversation_id: str,
     project_id: str,
@@ -819,9 +815,7 @@ async def _execute_approved_plan(
                 run.status = "running"
                 run.updated_at = started_at
                 await session.commit()
-                container = base_container.with_db(session)
-                llm = await create_llm_client(tenant_id)
-                service = container.agent_service(llm)
+                service = await current_agent_turn_service_v2()
                 agent_stream = cast(
                     AsyncGenerator[dict[str, Any], None],
                     service.stream_chat_v2(
