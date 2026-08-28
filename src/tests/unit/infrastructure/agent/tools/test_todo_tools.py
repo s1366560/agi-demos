@@ -58,8 +58,6 @@ class TestTodoReadTool:
         assert set(schema["properties"]["status"]["enum"]) >= {"pending", "in_progress"}
 
     async def test_read_uses_conversation_id_scope(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
-
         captured: dict[str, Any] = {}
 
         class _FakeRepo:
@@ -73,17 +71,13 @@ class TestTodoReadTool:
                 return []
 
         monkeypatch.setattr(
-            todo_tools_module,
-            "_todoread_session_factory",
-            lambda: _DummySession(),
-        )
-        monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository."
             "SqlAgentTaskRepository",
             _FakeRepo,
         )
+        bound_tool = make_todo_tools(session_factory=lambda: _DummySession())["todoread"]
 
-        result = await todoread_tool.execute(
+        result = await bound_tool.execute(
             _make_ctx(session_id="session-ephemeral", conversation_id="conv-persisted")
         )
 
@@ -92,18 +86,12 @@ class TestTodoReadTool:
         assert "exact todos[].id" in json.loads(result.output)["update_instruction"]
 
     async def test_workspace_read_fails_closed_without_legacy_repository(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
     ) -> None:
-        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
-
-        monkeypatch.setattr(
-            todo_tools_module,
-            "_todoread_session_factory",
-            lambda: _DummySession(),
-        )
+        bound_tool = make_todo_tools(session_factory=lambda: _DummySession())["todoread"]
 
         with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
-            await todoread_tool.execute(
+            await bound_tool.execute(
                 _make_ctx(
                     runtime_context={
                         "task_authority": "workspace",
@@ -193,8 +181,6 @@ class TestTodoWriteTool:
         assert _make_ctx().consume_pending_events() == []
 
     async def test_write_uses_conversation_id_scope(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
-
         captured: dict[str, Any] = {}
 
         class _FakeRepo:
@@ -205,17 +191,13 @@ class TestTodoWriteTool:
                 captured.update(conversation_id=conversation_id, task_count=len(tasks))
 
         monkeypatch.setattr(
-            todo_tools_module,
-            "_todowrite_session_factory",
-            lambda: _DummySession(),
-        )
-        monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository."
             "SqlAgentTaskRepository",
             _FakeRepo,
         )
+        bound_tool = make_todo_tools(session_factory=lambda: _DummySession())["todowrite"]
 
-        result = await todowrite_tool.execute(
+        result = await bound_tool.execute(
             _make_ctx(session_id="session-ephemeral", conversation_id="conv-persisted"),
             action="replace",
             todos=[{"content": "Task A", "status": "pending", "priority": "high"}],
@@ -227,8 +209,6 @@ class TestTodoWriteTool:
     async def test_numeric_list_position_is_rejected_before_lookup(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
-
         class _FakeRepo:
             def __init__(self, session: Any) -> None:
                 del session
@@ -237,17 +217,13 @@ class TestTodoWriteTool:
                 raise AssertionError(f"numeric id {task_id} must not reach persistence")
 
         monkeypatch.setattr(
-            todo_tools_module,
-            "_todowrite_session_factory",
-            lambda: _DummySession(),
-        )
-        monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository."
             "SqlAgentTaskRepository",
             _FakeRepo,
         )
+        bound_tool = make_todo_tools(session_factory=lambda: _DummySession())["todowrite"]
 
-        result = await todowrite_tool.execute(
+        result = await bound_tool.execute(
             _make_ctx(),
             action="update",
             todo_id="1",
@@ -262,18 +238,11 @@ class TestTodoWriteTool:
     async def test_workspace_write_fails_closed_without_legacy_repository(
         self,
         action: str,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
-
-        monkeypatch.setattr(
-            todo_tools_module,
-            "_todowrite_session_factory",
-            lambda: _DummySession(),
-        )
+        bound_tool = make_todo_tools(session_factory=lambda: _DummySession())["todowrite"]
 
         with pytest.raises(LegacyWorkspaceRuntimeRetiredError, match="Avernet Workspace Core"):
-            await todowrite_tool.execute(
+            await bound_tool.execute(
                 _make_ctx(
                     runtime_context={
                         "task_authority": "workspace",
@@ -290,17 +259,10 @@ class TestTodoWriteTool:
     async def test_worker_scope_blocks_structural_workspace_writes_before_storage(
         self,
         action: str,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
+        bound_tool = make_todo_tools(session_factory=lambda: _DummySession())["todowrite"]
 
-        monkeypatch.setattr(
-            todo_tools_module,
-            "_todowrite_session_factory",
-            lambda: _DummySession(),
-        )
-
-        result = await todowrite_tool.execute(
+        result = await bound_tool.execute(
             _make_ctx(
                 runtime_context={
                     "task_authority": "workspace",
@@ -319,3 +281,18 @@ class TestTodoWriteTool:
         assert payload["success"] is False
         assert payload["workspace_scope"] == "worker"
         assert "workspace_report_progress/complete/blocked" in payload["blocked_reason"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "configure_todoread",
+        "configure_todowrite",
+        "_todoread_session_factory",
+        "_todowrite_session_factory",
+    ],
+)
+def test_todo_tools_module_has_no_legacy_runtime_seams(name: str) -> None:
+    import src.infrastructure.agent.tools.todo_tools as todo_tools_module
+
+    assert not hasattr(todo_tools_module, name)

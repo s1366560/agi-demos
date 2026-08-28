@@ -36,14 +36,6 @@ class TestToolContextRegistration:
             _fake_make_todo_tools,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.tools.todo_tools.configure_todoread",
-            _forbidden,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.agent.tools.todo_tools.configure_todowrite",
-            _forbidden,
-        )
-        monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
             _forbidden,
         )

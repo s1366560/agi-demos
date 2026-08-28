@@ -223,23 +223,9 @@ _todo_tool_runtime: ContextVar[TodoToolRuntime | None] = ContextVar(
     default=None,
 )
 
-_todoread_session_factory: Callable[..., Any] | None = None
-
-
-def configure_todoread(
-    session_factory: Callable[..., Any],
-) -> None:
-    """Configure the session factory used by the todoread tool.
-
-    Called at agent startup to inject the DB session factory.
-    """
-    global _todoread_session_factory
-    _todoread_session_factory = session_factory
-
-
 def _current_todoread_session_factory() -> Callable[..., Any] | None:
     runtime = _todo_tool_runtime.get()
-    return runtime.session_factory if runtime is not None else _todoread_session_factory
+    return runtime.session_factory if runtime is not None else None
 
 
 @tool_define(
@@ -334,23 +320,9 @@ async def todoread_tool(
 # @tool_define version of TodoWriteTool
 # ---------------------------------------------------------------------------
 
-_todowrite_session_factory: Callable[..., Any] | None = None
-
-
-def configure_todowrite(
-    session_factory: Callable[..., Any],
-) -> None:
-    """Configure the session factory used by the todowrite tool.
-
-    Called at agent startup to inject the DB session factory.
-    """
-    global _todowrite_session_factory
-    _todowrite_session_factory = session_factory
-
-
 def _current_todowrite_session_factory() -> Callable[..., Any] | None:
     runtime = _todo_tool_runtime.get()
-    return runtime.session_factory if runtime is not None else _todowrite_session_factory
+    return runtime.session_factory if runtime is not None else None
 
 
 async def _todowrite_handle_update(
