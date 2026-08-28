@@ -19,9 +19,9 @@ from src.domain.model.agent import (
     MessageRole,
     MessageType,
 )
+from src.infrastructure.agent.tools import session_comm_tools as session_comm_module
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.session_comm_tools import (
-    configure_session_comm,
     sessions_history_tool,
     sessions_list_tool,
     sessions_send_tool,
@@ -30,6 +30,24 @@ from src.infrastructure.agent.tools.session_comm_tools import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _bind_template_runtime_for_unit_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Adapt direct template tests without restoring a production fallback."""
+    monkeypatch.setattr(session_comm_module, "_session_comm_service", None, raising=False)
+
+    def current_service() -> SessionCommService:
+        service = session_comm_module._session_comm_service
+        if service is None:
+            raise RuntimeError("session_comm tools require a generation-bound runtime")
+        return service
+
+    monkeypatch.setattr(session_comm_module, "_svc", current_service)
+
+
+def _configure_session_comm_for_test(service: SessionCommService) -> None:
+    session_comm_module._session_comm_service = service
 
 
 def _make_conversation(
@@ -511,7 +529,7 @@ class TestSessionsHistoryMetadataConsistency:
         msg_repo = AsyncMock()
         msg_repo.list_by_conversation.return_value = [_make_message(msg_id="m1")]
         svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_history_tool.execute(ctx, conversation_id="conv-1")
@@ -527,7 +545,7 @@ class TestSessionsHistoryMetadataConsistency:
         msg_repo = AsyncMock()
         msg_repo.list_by_conversation.return_value = [_make_message(msg_id="m1")]
         svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_history_tool.execute(ctx, conversation_id="conv-1")
@@ -577,7 +595,7 @@ class TestSessionsListTool:
             _make_conversation(conv_id="c1"),
         ]
         svc = _build_service(conv_repo=conv_repo)
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_list_tool.execute(ctx)
@@ -589,7 +607,7 @@ class TestSessionsListTool:
 
     async def test_error_when_no_project_id(self) -> None:
         svc = _build_service()
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx(project_id="")
 
         result = await sessions_list_tool.execute(ctx)
@@ -615,7 +633,7 @@ class TestSessionsHistoryTool:
             _make_message(msg_id="m1"),
         ]
         svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_history_tool.execute(ctx, conversation_id="conv-1")
@@ -636,7 +654,7 @@ class TestSessionsHistoryTool:
             _make_event(message_id="evt-user", content="Hi from events")
         ]
         svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo, event_repo=event_repo)
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_history_tool.execute(ctx, conversation_id="conv-1")
@@ -650,7 +668,7 @@ class TestSessionsHistoryTool:
         conv_repo = AsyncMock()
         conv_repo.find_by_id.return_value = conv
         svc = _build_service(conv_repo=conv_repo)
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_history_tool.execute(ctx, conversation_id="conv-1")
@@ -661,7 +679,7 @@ class TestSessionsHistoryTool:
 
     async def test_error_when_missing_conversation_id(self) -> None:
         svc = _build_service()
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_history_tool.execute(ctx, conversation_id="")
@@ -683,7 +701,7 @@ class TestSessionsSendTool:
         msg_repo = AsyncMock()
         msg_repo.save.return_value = _make_message(msg_id="new")
         svc = _build_service(conv_repo=conv_repo, msg_repo=msg_repo)
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_send_tool.execute(ctx, conversation_id="conv-1", content="Hi!")
@@ -694,7 +712,7 @@ class TestSessionsSendTool:
 
     async def test_error_on_empty_content(self) -> None:
         svc = _build_service()
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_send_tool.execute(ctx, conversation_id="conv-1", content="   ")
@@ -708,7 +726,7 @@ class TestSessionsSendTool:
         conv_repo = AsyncMock()
         conv_repo.find_by_id.return_value = conv
         svc = _build_service(conv_repo=conv_repo)
-        configure_session_comm(svc)
+        _configure_session_comm_for_test(svc)
         ctx = _make_ctx()
 
         result = await sessions_send_tool.execute(ctx, conversation_id="conv-1", content="sneaky")

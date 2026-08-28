@@ -465,11 +465,6 @@ def test_worker_session_comm_uses_bound_factory(
         _make_session_comm_tools,
         raising=False,
     )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.session_comm_tools.configure_session_comm",
-        _forbidden,
-    )
-
     tools: dict[str, object] = {}
     agent_worker_state._add_session_comm_tools(
         tools,

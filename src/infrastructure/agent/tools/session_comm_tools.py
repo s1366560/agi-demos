@@ -5,7 +5,6 @@ history, and send messages -- enabling multi-agent collaboration
 within the same project scope.
 
 Worker contributions bind a fresh database session to each invocation.
-``configure_session_comm()`` remains as a compatibility fallback for direct callers.
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ from src.infrastructure.agent.tools.result import ToolResult
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Generation-bound runtime with module-level compatibility fallback
+# Generation-bound runtime
 # ---------------------------------------------------------------------------
 
 type SessionCommSessionFactory = Callable[[], AbstractAsyncContextManager[Any]]
@@ -37,27 +36,13 @@ _session_comm_runtime: ContextVar[SessionCommService | None] = ContextVar(
     f"{__name__}.session_comm_runtime",
     default=None,
 )
-_session_comm_service: SessionCommService | None = None
-
-
-def configure_session_comm(service: SessionCommService) -> None:
-    """Inject the ``SessionCommService`` at agent startup.
-
-    Args:
-        service: A fully constructed ``SessionCommService``.
-    """
-    global _session_comm_service
-    _session_comm_service = service
 
 
 def _svc() -> SessionCommService:
-    """Return the configured service or raise."""
-    runtime_service = _session_comm_runtime.get()
-    service = runtime_service if runtime_service is not None else _session_comm_service
+    """Return the invocation-bound service or raise."""
+    service = _session_comm_runtime.get()
     if service is None:
-        raise RuntimeError(
-            "session_comm tools not configured -- call configure_session_comm() first"
-        )
+        raise RuntimeError("session_comm tools require a generation-bound runtime")
     return service
 
 

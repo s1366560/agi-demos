@@ -52,7 +52,6 @@ async def test_bound_session_comm_runtimes_are_isolated_during_interleaved_await
 ) -> None:
     from src.infrastructure.agent.tools import session_comm_tools as session_comm_module
     from src.infrastructure.agent.tools.session_comm_tools import (
-        configure_session_comm,
         make_session_comm_tools,
     )
 
@@ -83,8 +82,6 @@ async def test_bound_session_comm_runtimes_are_isolated_during_interleaved_await
     )
     tool_a = make_session_comm_tools(session_factory=_factory(session_a))["peer_sessions_list"]
     tool_b = make_session_comm_tools(session_factory=_factory(session_b))["peer_sessions_list"]
-    configure_session_comm(_Service("legacy"))  # type: ignore[arg-type]
-
     result_a, result_b = await asyncio.gather(
         tool_a.execute(_context("a")),
         tool_b.execute(_context("b")),
@@ -100,6 +97,21 @@ async def test_bound_session_comm_runtimes_are_isolated_during_interleaved_await
     assert session_b.commits == 1
     assert session_a.rollbacks == 0
     assert session_b.rollbacks == 0
+
+
+@pytest.mark.unit
+def test_unbound_session_comm_template_rejects_legacy_runtime_fallback() -> None:
+    from src.infrastructure.agent.tools import session_comm_tools as session_comm_module
+
+    with pytest.raises(RuntimeError, match="generation-bound runtime"):
+        session_comm_module._svc()
+
+
+@pytest.mark.unit
+def test_session_comm_module_has_no_legacy_configure_seam() -> None:
+    from src.infrastructure.agent.tools import session_comm_tools as session_comm_module
+
+    assert not hasattr(session_comm_module, "configure_session_comm")
 
 
 @pytest.mark.unit
