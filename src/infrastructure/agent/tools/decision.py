@@ -34,7 +34,6 @@ from src.infrastructure.agent.tools.result import ToolResult
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "configure_decision",
     "decision_tool",
     "make_decision_tool",
 ]
@@ -44,11 +43,8 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
-# Module-level state
+# Operation-bound runtime
 # ---------------------------------------------------------------------------
-
-_decision_hitl_handler: Any = None
-
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class DecisionToolRuntime:
@@ -63,18 +59,9 @@ _decision_tool_runtime: ContextVar[DecisionToolRuntime | None] = ContextVar(
 )
 
 
-def configure_decision(hitl_handler: Any) -> None:
-    """Configure the HITL handler used by the decision tool.
-
-    Called at agent startup to inject the RayHITLHandler instance.
-    """
-    global _decision_hitl_handler
-    _decision_hitl_handler = hitl_handler
-
-
 def _current_decision_hitl_handler() -> Any:
     runtime = _decision_tool_runtime.get()
-    return runtime.hitl_handler if runtime is not None else _decision_hitl_handler
+    return runtime.hitl_handler if runtime is not None else None
 
 
 def _build_decision_request_id(

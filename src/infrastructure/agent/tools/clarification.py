@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "clarification_tool",
-    "configure_clarification",
     "make_clarification_tool",
 ]
 
@@ -44,11 +43,8 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
-# Module-level state
+# Operation-bound runtime
 # ---------------------------------------------------------------------------
-
-_clarification_hitl_handler: Any = None
-
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ClarificationToolRuntime:
@@ -63,18 +59,9 @@ _clarification_tool_runtime: ContextVar[ClarificationToolRuntime | None] = Conte
 )
 
 
-def configure_clarification(hitl_handler: Any) -> None:
-    """Configure the HITL handler used by the clarification tool.
-
-    Called at agent startup to inject the RayHITLHandler instance.
-    """
-    global _clarification_hitl_handler
-    _clarification_hitl_handler = hitl_handler
-
-
 def _current_clarification_hitl_handler() -> Any:
     runtime = _clarification_tool_runtime.get()
-    return runtime.hitl_handler if runtime is not None else _clarification_hitl_handler
+    return runtime.hitl_handler if runtime is not None else None
 
 
 def _build_clarification_request_id(

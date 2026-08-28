@@ -10,11 +10,10 @@ import pytest
 
 from src.infrastructure.agent.state import agent_worker_state
 from src.infrastructure.agent.tools.clarification import (
-    configure_clarification,
     make_clarification_tool,
 )
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.decision import configure_decision, make_decision_tool
+from src.infrastructure.agent.tools.decision import make_decision_tool
 
 
 def _context(name: str) -> ToolContext:
@@ -30,20 +29,13 @@ def _context(name: str) -> ToolContext:
 
 
 @pytest.mark.unit
-async def test_bound_hitl_tools_ignore_process_global_handlers() -> None:
-    global_handler = SimpleNamespace(
-        request_clarification=AsyncMock(side_effect=AssertionError("global clarification used")),
-        request_decision=AsyncMock(side_effect=AssertionError("global decision used")),
-    )
+async def test_bound_hitl_tools_use_captured_handlers() -> None:
     clarification_handler = SimpleNamespace(
         request_clarification=AsyncMock(return_value="bound clarification"),
     )
     decision_handler = SimpleNamespace(
         request_decision=AsyncMock(return_value="bound decision"),
     )
-    configure_clarification(global_handler)
-    configure_decision(global_handler)
-
     clarification = make_clarification_tool(hitl_handler=clarification_handler)
     decision = make_decision_tool(hitl_handler=decision_handler)
 
@@ -59,8 +51,6 @@ async def test_bound_hitl_tools_ignore_process_global_handlers() -> None:
 
     assert clarification_result.output == "bound clarification"
     assert decision_result.output == "bound decision"
-    global_handler.request_clarification.assert_not_awaited()
-    global_handler.request_decision.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -135,3 +125,26 @@ async def test_worker_builds_hitl_tools_from_bound_factories(
         ("clarification", None),
         ("decision", None),
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("module_name", "seam_name"),
+    [
+        ("clarification", "configure_clarification"),
+        ("clarification", "_clarification_hitl_handler"),
+        ("decision", "configure_decision"),
+        ("decision", "_decision_hitl_handler"),
+    ],
+)
+def test_hitl_tool_modules_have_no_legacy_runtime_seams(
+    module_name: str,
+    seam_name: str,
+) -> None:
+    from src.infrastructure.agent.tools import (
+        clarification as clarification_module,
+        decision as decision_module,
+    )
+
+    module = clarification_module if module_name == "clarification" else decision_module
+    assert not hasattr(module, seam_name)

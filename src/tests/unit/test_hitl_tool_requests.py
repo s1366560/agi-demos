@@ -8,11 +8,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.infrastructure.agent.tools.clarification import (
-    clarification_tool,
-    configure_clarification,
+    make_clarification_tool,
 )
 from src.infrastructure.agent.tools.context import ToolContext
-from src.infrastructure.agent.tools.decision import configure_decision, decision_tool
+from src.infrastructure.agent.tools.decision import make_decision_tool
 from src.infrastructure.agent.tools.result import ToolResult
 
 
@@ -41,13 +40,13 @@ class TestHitlToolRequests:
             project_id="project-ctx",
             request_clarification=AsyncMock(return_value="<b>Approved</b>\x01"),
         )
-        configure_clarification(base_handler)
+        bound_tool = make_clarification_tool(hitl_handler=base_handler)
 
         with patch(
             "src.infrastructure.agent.tools.clarification._scope_hitl_handler",
             return_value=scoped_handler,
         ) as scope_mock:
-            result = await clarification_tool.execute(
+            result = await bound_tool.execute(
                 tool_ctx,
                 question=" <b>Need input?</b>\x01 ",
                 context="<script>alert(1)</script>\x02",
@@ -82,15 +81,15 @@ class TestHitlToolRequests:
             project_id="project-ctx",
             request_clarification=AsyncMock(return_value="ok"),
         )
-        configure_clarification(base_handler)
+        bound_tool = make_clarification_tool(hitl_handler=base_handler)
 
         with patch(
             "src.infrastructure.agent.tools.clarification._scope_hitl_handler",
             return_value=scoped_handler,
         ):
-            await clarification_tool.execute(tool_ctx, question="Need input?", context="ctx-one")
+            await bound_tool.execute(tool_ctx, question="Need input?", context="ctx-one")
             first_request_id = scoped_handler.request_clarification.await_args.kwargs["request_id"]
-            await clarification_tool.execute(tool_ctx, question="Need input?", context="ctx-two")
+            await bound_tool.execute(tool_ctx, question="Need input?", context="ctx-two")
             second_request_id = scoped_handler.request_clarification.await_args.kwargs["request_id"]
 
         assert first_request_id != second_request_id
@@ -105,13 +104,13 @@ class TestHitlToolRequests:
             project_id="project-ctx",
             request_decision=AsyncMock(return_value=["<b>Option A</b>\x01", "Option B"]),
         )
-        configure_decision(base_handler)
+        bound_tool = make_decision_tool(hitl_handler=base_handler)
 
         with patch(
             "src.infrastructure.agent.tools.decision._scope_hitl_handler",
             return_value=scoped_handler,
         ) as scope_mock:
-            result = await decision_tool.execute(
+            result = await bound_tool.execute(
                 tool_ctx,
                 question=" <b>Choose</b>\x01 ",
                 options=["<i>Option A</i>\x02", "Option B"],
@@ -154,13 +153,13 @@ class TestHitlToolRequests:
             project_id="project-ctx",
             request_decision=AsyncMock(return_value="done"),
         )
-        configure_decision(base_handler)
+        bound_tool = make_decision_tool(hitl_handler=base_handler)
 
         with patch(
             "src.infrastructure.agent.tools.decision._scope_hitl_handler",
             return_value=scoped_handler,
         ):
-            await decision_tool.execute(
+            await bound_tool.execute(
                 tool_ctx,
                 question="Choose",
                 options=["A", "B"],
@@ -168,7 +167,7 @@ class TestHitlToolRequests:
                 max_selections=1,
             )
             first_request_id = scoped_handler.request_decision.await_args.kwargs["request_id"]
-            await decision_tool.execute(
+            await bound_tool.execute(
                 tool_ctx,
                 question="Choose",
                 options=["A", "B"],
@@ -189,13 +188,13 @@ class TestHitlToolRequests:
             project_id="project-ctx",
             request_decision=AsyncMock(return_value="free-form answer"),
         )
-        configure_decision(base_handler)
+        bound_tool = make_decision_tool(hitl_handler=base_handler)
 
         with patch(
             "src.infrastructure.agent.tools.decision._scope_hitl_handler",
             return_value=scoped_handler,
         ):
-            result = await decision_tool.execute(
+            result = await bound_tool.execute(
                 tool_ctx,
                 question="How should we proceed?",
                 options=[],
@@ -212,9 +211,9 @@ class TestHitlToolRequests:
         self,
         tool_ctx: ToolContext,
     ) -> None:
-        configure_decision(object())
+        bound_tool = make_decision_tool(hitl_handler=object())
 
-        result = await decision_tool.execute(
+        result = await bound_tool.execute(
             tool_ctx,
             question="Choose",
             options=["A", "B"],
@@ -229,9 +228,9 @@ class TestHitlToolRequests:
         self,
         tool_ctx: ToolContext,
     ) -> None:
-        configure_decision(object())
+        bound_tool = make_decision_tool(hitl_handler=object())
 
-        result = await decision_tool.execute(
+        result = await bound_tool.execute(
             tool_ctx,
             question="Choose",
             options=["A", "B"],

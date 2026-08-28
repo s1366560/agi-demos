@@ -227,8 +227,6 @@ async def test_builtin_tool_builder_does_not_use_global_registry_or_configurator
         raise AssertionError("worker base tools must not use process-global configuration")
 
     for target in (
-        "src.infrastructure.agent.tools.clarification.configure_clarification",
-        "src.infrastructure.agent.tools.decision.configure_decision",
         "src.infrastructure.agent.tools.define.get_registered_tools",
     ):
         monkeypatch.setattr(target, _forbidden)
@@ -593,14 +591,6 @@ def test_worker_hitl_tools_use_declared_tool_infos(
             "worker HITL tools must not use global configuration or registry lookup"
         )
 
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.clarification.configure_clarification",
-        _forbidden,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.tools.decision.configure_decision",
-        _forbidden,
-    )
     monkeypatch.setattr(
         "src.infrastructure.agent.tools.define.get_registered_tools",
         _forbidden,
