@@ -136,31 +136,11 @@ async def _execute_memory_get(
 # @tool_define version of MemorySearchTool
 # ---------------------------------------------------------------------------
 
-_memory_chunk_search: Any = None
-_memory_graph_service: Any = None
-_memory_project_id: str = ""
-
-
-def configure_memory_search(
-    chunk_search: Any,
-    graph_service: Any = None,
-    project_id: str = "",
-) -> None:
-    """Configure dependencies for the memory_search tool.
-
-    Called at agent startup to inject search services.
-    """
-    global _memory_chunk_search, _memory_graph_service, _memory_project_id
-    _memory_chunk_search = chunk_search
-    _memory_graph_service = graph_service
-    _memory_project_id = project_id
-
-
 def _current_memory_search_runtime() -> tuple[Any, Any, str]:
     runtime = _memory_tool_runtime.get()
     if runtime is not None:
         return runtime.chunk_search, runtime.graph_service, runtime.project_id
-    return _memory_chunk_search, _memory_graph_service, _memory_project_id
+    return None, None, ""
 
 
 def _format_citations(results: list[dict[str, Any]]) -> None:
@@ -338,28 +318,11 @@ async def memory_search_tool(
 # @tool_define version of MemoryGetTool
 # ---------------------------------------------------------------------------
 
-_memget_session_factory: Callable[..., Any] | None = None
-_memget_project_id: str = ""
-
-
-def configure_memory_get(
-    session_factory: Callable[..., Any],
-    project_id: str = "",
-) -> None:
-    """Configure dependencies for the memory_get tool.
-
-    Called at agent startup to inject the DB session factory.
-    """
-    global _memget_session_factory, _memget_project_id
-    _memget_session_factory = session_factory
-    _memget_project_id = project_id
-
-
 def _current_memory_get_runtime() -> tuple[Callable[..., Any] | None, str]:
     runtime = _memory_tool_runtime.get()
     if runtime is not None:
         return runtime.session_factory, runtime.project_id
-    return _memget_session_factory, _memget_project_id
+    return None, ""
 
 
 @tool_define(
@@ -422,49 +385,16 @@ async def memory_get_tool(
 # MemoryCreateTool (class-based) + @tool_define memory_create_tool
 # ---------------------------------------------------------------------------
 
-_memcreate_session_factory: Callable[..., Any] | None = None
-_memcreate_graph_service: Any = None
-_memcreate_embedding_service: Any = None
-_memcreate_project_id: str = ""
-_memcreate_tenant_id: str = ""
-_memcreate_user_id: str = ""
-
-
-def configure_memory_create(
-    session_factory: Callable[..., Any],
-    graph_service: Any,
-    project_id: str = "",
-    tenant_id: str = "",
-    user_id: str = "",
-    embedding_service: Any = None,
-) -> None:
-    """Configure dependencies for the memory_create tool.
-
-    Called at agent startup to inject the DB session factory and graph service.
-    """
-    global _memcreate_session_factory, _memcreate_graph_service
-    global _memcreate_project_id, _memcreate_tenant_id, _memcreate_user_id
-    global _memcreate_embedding_service
-    _memcreate_session_factory = session_factory
-    _memcreate_graph_service = graph_service
-    _memcreate_embedding_service = embedding_service
-    _memcreate_project_id = project_id
-    _memcreate_tenant_id = tenant_id
-    _memcreate_user_id = user_id
-
-
 def _current_memory_write_runtime() -> MemoryToolRuntime:
     runtime = _memory_tool_runtime.get()
     if runtime is not None:
         return runtime
     return MemoryToolRuntime(
-        session_factory=_memcreate_session_factory,
-        graph_service=_memcreate_graph_service,
-        chunk_search=_memory_chunk_search,
-        project_id=_memcreate_project_id,
-        tenant_id=_memcreate_tenant_id,
-        embedding_service=_memcreate_embedding_service,
-        user_id=_memcreate_user_id,
+        session_factory=None,
+        graph_service=None,
+        chunk_search=None,
+        project_id="",
+        tenant_id="",
     )
 
 

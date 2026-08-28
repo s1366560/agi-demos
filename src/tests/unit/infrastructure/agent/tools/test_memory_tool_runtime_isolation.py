@@ -37,9 +37,6 @@ def test_memory_provider_uses_bound_factory_without_global_configuration(
     expected = {"memory_search": object()}
     captured: dict[str, object] = {}
 
-    def _forbidden(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("memory provider must not mutate process-global tool state")
-
     def _make_memory_tools(**kwargs: object) -> dict[str, object]:
         captured.update(kwargs)
         return expected
@@ -57,12 +54,6 @@ def test_memory_provider_uses_bound_factory_without_global_configuration(
         lambda *_args, **_kwargs: chunk_search,
     )
     monkeypatch.setattr(memory_tools_module, "make_memory_tools", _make_memory_tools, raising=False)
-    for name in (
-        "configure_memory_get",
-        "configure_memory_create",
-        "configure_memory_search",
-    ):
-        monkeypatch.setattr(memory_tools_module, name, _forbidden)
 
     result = build_memory_tools(
         tenant_id="tenant-a",
@@ -121,13 +112,6 @@ async def test_memory_tool_runtime_isolated_between_concurrent_generations(
         return json.dumps({"status": "created", "content": content})
 
     monkeypatch.setattr(memory_tools_module, "_execute_memory_create", _execute_memory_create)
-    memory_tools_module.configure_memory_create(
-        session_factory=lambda: None,
-        graph_service="poison-graph",
-        project_id="poison-project",
-        tenant_id="poison-tenant",
-        embedding_service="poison-embedding",
-    )
 
     first_runtime = {
         "session_factory": object(),
@@ -168,3 +152,27 @@ async def test_memory_tool_runtime_isolated_between_concurrent_generations(
         "first": first_runtime,
         "second": second_runtime,
     }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "name",
+    [
+        "configure_memory_search",
+        "configure_memory_get",
+        "configure_memory_create",
+        "_memory_chunk_search",
+        "_memory_graph_service",
+        "_memory_project_id",
+        "_memget_session_factory",
+        "_memget_project_id",
+        "_memcreate_session_factory",
+        "_memcreate_graph_service",
+        "_memcreate_embedding_service",
+        "_memcreate_project_id",
+        "_memcreate_tenant_id",
+        "_memcreate_user_id",
+    ],
+)
+def test_memory_tools_module_has_no_legacy_runtime_seams(name: str) -> None:
+    assert not hasattr(memory_tools_module, name)
