@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:1fa885231d30a71df96821c65e9cc07e4bc0042f470e4836f14be9e8deade6'
-    '3a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:5ff2cfc69532c5fd92a09f350b4bbf01d4dfb6e9a7f7de11edb9193bcfa24e'
+    '70","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -126,8 +126,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '9e2ba46ca8e978cb3699ab3b4d1686201f2a6917e8b9942a3f003075e84d","entrypoint":"src.infrastr'
     'ucture.plugins.v2.agent_lifecycle_notifier:agent_lifecycle_notifier_definition_v2","modu'
     'le_ref":"builtin://memstack/agent/lifecycle-notifier","plugin_id":"memstack-runtime-kern'
-    'el","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:95b78700f7'
-    'f5d14a065e6e21de14f9b9b82a676e80861413d51b988708a56ebc","artifact_source":"repo+python:/'
+    'el","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:a8e95eb753'
+    'c011a7de5940cbd42aee58e7fe5cc26f529b6dbe33fd68ab244abd","artifact_source":"repo+python:/'
     '/src/infrastructure/plugins/v2/agent_loop.py","contract":{"config_schema":{"$schema":"ht'
     'tps://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"'
     'loop_id":{"const":"builtin-react","type":"string"}},"required":["loop_id"],"type":"objec'
@@ -2841,7 +2841,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'ma_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:1fa885231d30a71df96821c65e9cc07e4bc0042f470e4836f14be9e8deade63a"
+    "sha256:5ff2cfc69532c5fd92a09f350b4bbf01d4dfb6e9a7f7de11edb9193bcfa24e70"
 )
 # fmt: on
 

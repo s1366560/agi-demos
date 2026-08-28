@@ -15,7 +15,10 @@ from src.infrastructure.agent.processor.processor import (
     ToolDefinition,
 )
 from src.infrastructure.agent.tools.result import ToolResult
-from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
+from src.infrastructure.plugins.v2.agent_loop import (
+    AgentLoopRunContextV2,
+    BuiltinAgentLoopResolverV2,
+)
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     AgentRuntimeDispatchResultV2,
 )
@@ -26,11 +29,17 @@ from src.infrastructure.plugins.v2.system_prompt import (
 )
 
 
+class _NativeLoop:
+    @staticmethod
+    def run(context: AgentLoopRunContextV2):
+        return context.run_native()
+
+
 def _builtin_loop_resolver() -> BuiltinAgentLoopResolverV2:
     return BuiltinAgentLoopResolverV2(
         loop_id="builtin-react",
         plugin_id="memstack-kernel",
-        implementation=object(),
+        implementation=_NativeLoop(),
         lifecycle_notifier=MagicMock(),
     )
 

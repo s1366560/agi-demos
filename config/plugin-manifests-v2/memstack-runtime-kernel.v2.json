@@ -6718,7 +6718,7 @@
       },
       "contract_digest": "sha256:4874c76612f591967e039cf7e4db516b4fcc93c068d16e8d7e9f1a97adeffe6a",
       "artifact": {
-        "digest": "sha256:95b78700f7f5d14a065e6e21de14f9b9b82a676e80861413d51b988708a56ebc",
+        "digest": "sha256:a8e95eb753c011a7de5940cbd42aee58e7fe5cc26f529b6dbe33fd68ab244abd",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_loop.py"
       }
     },

@@ -29,6 +29,7 @@ from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Optional, Protocol, cast, runtime_checkable
 
 from src.domain.events.agent_events import (
@@ -1397,7 +1398,7 @@ class SessionProcessor:
 
         return ui_metadata
 
-    async def process(  # noqa: PLR0912,PLR0915
+    async def process(
         self,
         session_id: str,
         messages: list[dict[str, Any]],
@@ -1466,19 +1467,23 @@ class SessionProcessor:
         # runs cannot see each other's state.
         set_current_run_context(run_ctx)
 
-        # Resolve this turn through the required v2 seam. A non-builtin
-        # selection takes over; only an explicit builtin selection continues
-        # through the native ReAct path below.
+        # Every selected loop, including builtin ReAct, executes through the
+        # same generation-owned implementation contract.
         self._loop_selection = self._resolve_agent_loop()
-        if self._loop_selection is not None and self._loop_selection.scope != "builtin":
-            async for loop_event in self._dispatch_external_loop(
-                self._loop_selection, session_id, messages, run_ctx
-            ):
-                yield loop_event
-            return
+        async for loop_event in self._dispatch_external_loop(
+            self._loop_selection,
+            session_id,
+            messages,
+            run_ctx,
+        ):
+            yield loop_event
 
-        # Emit start event
-        yield AgentStartEvent()
+    async def _run_native_loop(  # noqa: PLR0912
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Execute the repository builtin ReAct driver selected by the V2 loop plugin."""
         self._state = ProcessorState.THINKING
 
         await self._notify_plugin_hook(
@@ -2190,23 +2195,27 @@ class SessionProcessor:
         messages: list[dict[str, Any]],
         run_ctx: RunContext,
     ) -> AsyncIterator[Any]:
-        """Run one turn through a resolved non-builtin agent loop capability.
+        """Run one turn through the generation-selected agent loop implementation.
 
         The driver contract is structural (callable ``run``); its outcome may
         be an async iterator of events, an awaitable resolving to one, or a
         single event/value.
         """
-        from src.infrastructure.plugins.v2.agent_loop import validate_loop_implementation
+        from src.infrastructure.plugins.v2.agent_loop import (
+            AgentLoopRunContextV2,
+            validate_loop_implementation,
+        )
 
         validate_loop_implementation(selection.implementation)
         yield AgentStartEvent()
-        context = {
-            "session_id": session_id,
-            "messages": messages,
-            "run_ctx": run_ctx,
-            "config": self.config,
-            "tools": self.tools,
-        }
+        context = AgentLoopRunContextV2(
+            session_id=session_id,
+            messages=messages,
+            run_context=run_ctx,
+            config=self.config,
+            tools=MappingProxyType(dict(self.tools)),
+            run_native=lambda: self._run_native_loop(session_id, messages),
+        )
         outcome = selection.implementation.run(context)
         if inspect.isawaitable(outcome):
             outcome = await outcome

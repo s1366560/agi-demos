@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -139,7 +139,9 @@ class TestAgentLoopWiring:
         assert selection.scope == "builtin"
         assert selection.implementation is loop
 
-    async def test_process_keeps_explicit_v2_builtin_selection_on_native_path(self) -> None:
+    async def test_process_dispatches_explicit_v2_builtin_selection_through_implementation(
+        self,
+    ) -> None:
         loop = _ExternalLoop()
         resolver = BuiltinAgentLoopResolverV2(
             loop_id="builtin-react",
@@ -155,15 +157,19 @@ class TestAgentLoopWiring:
             ),
             tools=[],
         )
+        processor._try_intercept_command = AsyncMock(return_value=[{"type": "legacy_native_path"}])
 
-        events = processor.process("s1", [{"role": "user", "content": "hi"}])
-        first = await anext(events)
-        await events.aclose()
+        events = [
+            event async for event in processor.process("s1", [{"role": "user", "content": "hi"}])
+        ]
 
-        assert isinstance(first, AgentStartEvent)
+        assert isinstance(events[0], AgentStartEvent)
+        assert {"type": "external_loop_event"} in events
+        assert {"type": "legacy_native_path"} not in events
         assert processor._loop_selection is not None
         assert processor._loop_selection.scope == "builtin"
-        assert loop.contexts == []
+        assert len(loop.contexts) == 1
+        processor._try_intercept_command.assert_not_awaited()
 
     async def test_process_dispatches_external_loop(self) -> None:
         loop = _ExternalLoop()
@@ -184,8 +190,8 @@ class TestAgentLoopWiring:
         assert {"type": "external_loop_event"} in events
         assert loop.contexts, "external loop driver was not invoked"
         context = loop.contexts[0]
-        assert context["session_id"] == "s1"
-        assert context["messages"] == [{"role": "user", "content": "hi"}]
+        assert context.session_id == "s1"
+        assert context.messages == [{"role": "user", "content": "hi"}]
         assert processor._loop_selection is not None
         assert processor._loop_selection.scope == "model"
 

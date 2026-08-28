@@ -10,7 +10,16 @@ from src.infrastructure.agent.processor import (
     ProcessorConfig,
     SessionProcessor,
 )
-from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
+from src.infrastructure.plugins.v2.agent_loop import (
+    AgentLoopRunContextV2,
+    BuiltinAgentLoopResolverV2,
+)
+
+
+class _NativeLoop:
+    @staticmethod
+    def run(context: AgentLoopRunContextV2):
+        return context.run_native()
 
 
 def _processor_config() -> ProcessorConfig:
@@ -21,7 +30,7 @@ def _processor_config() -> ProcessorConfig:
         loop_resolver=BuiltinAgentLoopResolverV2(
             loop_id="builtin-react",
             plugin_id="memstack-kernel",
-            implementation=object(),
+            implementation=_NativeLoop(),
             lifecycle_notifier=MagicMock(),
         ),
     )

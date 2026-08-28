@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -22,6 +22,18 @@ class AgentLoopSelectionV2:
     implementation: object
 
 
+@dataclass(frozen=True, kw_only=True)
+class AgentLoopRunContextV2:
+    """Typed host capabilities exposed to one generation-selected loop implementation."""
+
+    session_id: str
+    messages: list[dict[str, Any]]
+    run_context: object
+    config: object
+    tools: Mapping[str, object]
+    run_native: Callable[[], AsyncIterator[object]]
+
+
 @runtime_checkable
 class AgentLoopResolverProtocolV2(Protocol):
     """Stable service contract exposed to Agent-loop Consumers."""
@@ -32,8 +44,13 @@ class AgentLoopResolverProtocolV2(Protocol):
 
 
 class _BuiltinReActLoopV2:
-    async def run(self, _context: object) -> None:
-        raise NotImplementedError("builtin ReAct executes through the native processor path")
+    def run(self, context: object) -> AsyncIterator[object]:
+        if not isinstance(context, AgentLoopRunContextV2):
+            raise RuntimeV2Error(
+                "agent_loop_context_invalid",
+                "builtin ReAct requires an AgentLoopRunContextV2",
+            )
+        return context.run_native()
 
 
 def validate_loop_implementation(implementation: object) -> None:
@@ -103,6 +120,7 @@ __all__ = [
     "AGENT_LOOP_MODULE_V2",
     "AGENT_LOOP_RESOLVER_SERVICE_V2",
     "AgentLoopResolverProtocolV2",
+    "AgentLoopRunContextV2",
     "AgentLoopSelectionV2",
     "BuiltinAgentLoopResolverV2",
     "builtin_agent_loop_definition_v2",

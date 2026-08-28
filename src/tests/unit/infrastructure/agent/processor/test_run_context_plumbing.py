@@ -17,11 +17,20 @@ import pytest
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.processor.processor import ProcessorConfig, SessionProcessor
 from src.infrastructure.agent.processor.run_context import RunContext
-from src.infrastructure.plugins.v2.agent_loop import BuiltinAgentLoopResolverV2
+from src.infrastructure.plugins.v2.agent_loop import (
+    AgentLoopRunContextV2,
+    BuiltinAgentLoopResolverV2,
+)
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
+
+class _NativeLoop:
+    @staticmethod
+    def run(context: AgentLoopRunContextV2):
+        return context.run_native()
 
 
 @pytest.fixture
@@ -34,7 +43,7 @@ def minimal_config() -> ProcessorConfig:
         loop_resolver=BuiltinAgentLoopResolverV2(
             loop_id="builtin-react",
             plugin_id="memstack-kernel",
-            implementation=object(),
+            implementation=_NativeLoop(),
             lifecycle_notifier=MagicMock(),
         ),
     )
