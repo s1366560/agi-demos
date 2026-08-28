@@ -14,6 +14,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import src.infrastructure.agent.core.tool_selector as tool_selector_module
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("authority_name", ("_selector", "get_tool_selector"))
+def test_process_global_tool_selector_authority_is_retired(authority_name: str) -> None:
+    assert not hasattr(tool_selector_module, authority_name)
+
 
 class TestToolSelectionContext:
     """Test ToolSelectionContext dataclass."""

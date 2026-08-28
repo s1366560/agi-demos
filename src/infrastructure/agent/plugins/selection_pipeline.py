@@ -13,7 +13,7 @@ from src.infrastructure.agent.core.tool_selector import (
     SKILL_TOOLS,
     SemanticToolRanker,
     ToolSelectionContext as CoreToolSelectionContext,
-    get_tool_selector,
+    ToolSelector,
 )
 from src.infrastructure.agent.plugins.policy_context import (
     DEFAULT_POLICY_LAYER_ORDER,
@@ -207,7 +207,7 @@ def semantic_ranker_stage(
     skill_pinned = set(_read_str_list(context.metadata, "skill_pinned_tools"))
     always_include = set(CORE_TOOLS) | SKILL_TOOLS | skill_pinned
 
-    selector = get_tool_selector()
+    selector = ToolSelector()
     semantic_backend = (
         str(context.metadata.get("semantic_backend", "agent_decision")).strip().lower()
     )

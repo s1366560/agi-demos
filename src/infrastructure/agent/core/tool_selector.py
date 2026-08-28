@@ -257,19 +257,3 @@ def _redacted_audit_json_v2(value: Mapping[str, Any]) -> str:
     return redact_sensitive_log_text(
         json.dumps(dict(value), ensure_ascii=False, sort_keys=True, default=str)
     )
-
-
-# Global selector instance
-_selector: ToolSelector | None = None
-
-
-def get_tool_selector() -> ToolSelector:
-    """Get the global tool selector instance.
-
-    Returns:
-        ToolSelector singleton
-    """
-    global _selector
-    if _selector is None:
-        _selector = ToolSelector()
-    return _selector
