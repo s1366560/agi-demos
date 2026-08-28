@@ -12,6 +12,7 @@ import pytest
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
 from src.infrastructure.agent.tools.context import ToolContext
+from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
 )
@@ -22,12 +23,16 @@ from src.infrastructure.plugins.v2.builtin_modules import (
 )
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
+from src.infrastructure.plugins.v2.redis_runtime import REDIS_RUNTIME_MODULE_V2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.tool_set import (
     TOOL_SET_MODULE_V2,
     TOOL_SET_RESOLVER_SERVICE_V2,
     PreparedToolProviderV2,
     ToolSetResolverProtocolV2,
+)
+from src.infrastructure.plugins.v2.workspace_wtp_publisher import (
+    WORKSPACE_WTP_PUBLISHER_MODULE_V2,
 )
 
 _ROOT = Path(__file__).resolve().parents[6]
@@ -80,8 +85,10 @@ def _snapshot(*, generation: int, contribution_enabled: bool):
     document = load_profile_document_v2(_PROFILE_PATH)
     selected_modules = {
         RUNTIME_BOUNDARY_MODULE_V2,
+        REDIS_RUNTIME_MODULE_V2,
         TOOL_SET_MODULE_V2,
         _ORCHESTRATION_TOOL_MODULE_V2,
+        WORKSPACE_WTP_PUBLISHER_MODULE_V2,
     }
     entries = tuple(
         replace(
@@ -102,10 +109,18 @@ def _snapshot(*, generation: int, contribution_enabled: bool):
     )
 
 
-async def _manager(*, generation: int, contribution_enabled: bool) -> GenerationManagerV2:
-    runtime_generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(
-        _snapshot(generation=generation, contribution_enabled=contribution_enabled)
-    )
+async def _manager(
+    *,
+    generation: int,
+    contribution_enabled: bool,
+    redis_client: object | None = None,
+) -> GenerationManagerV2:
+    if redis_client is None:
+        redis_client = MagicMock()
+        redis_client.xadd = AsyncMock(return_value="test-stream-entry")
+    runtime_generation = await LoaderV2(
+        builtin_runtime_definitions_v2(sandbox_redis_client=redis_client)
+    ).stage(_snapshot(generation=generation, contribution_enabled=contribution_enabled))
     manager = GenerationManagerV2()
     await manager.publish(runtime_generation)
     return manager
@@ -133,7 +148,10 @@ def test_agent_orchestration_tools_are_an_explicit_profile_entry() -> None:
 
     assert len(matching) == 1
     assert matching[0].enabled is True
-    assert matching[0].inject == {"catalog": "service:tool-set-catalog"}
+    assert matching[0].inject == {
+        "catalog": "service:tool-set-catalog",
+        "publisher": "service:agent.workspace-wtp-publisher",
+    }
 
 
 @pytest.mark.unit
@@ -219,6 +237,52 @@ async def test_orchestration_tool_execution_resolves_pinned_operation_service() 
         tenant_id="tenant-1",
         discoverable_only=True,
     )
+
+
+@pytest.mark.unit
+async def test_workspace_wtp_tool_uses_profile_injected_generation_publisher() -> None:
+    redis = MagicMock()
+    redis.xadd = AsyncMock(return_value="9-0")
+    manager = await _manager(
+        generation=305,
+        contribution_enabled=True,
+        redis_client=redis,
+    )
+
+    try:
+        async with pin_operation_context_v2(
+            manager,
+            operation_id="orchestration-wtp-publisher",
+            scope=ScopeV2(kind=ScopeKindV2.ROOT),
+        ) as operation:
+            resolver = operation.require(TOOL_SET_RESOLVER_SERVICE_V2)
+            assert isinstance(resolver, ToolSetResolverProtocolV2)
+            tool_set = resolver.resolve(
+                agent=object(),
+                selection_context=None,
+                prepared_tool_provider=_EMPTY_PREPARED_TOOL_PROVIDER,
+            )
+            context = _tool_context()
+            context.runtime_context.update(
+                {
+                    "selected_agent_id": "worker-1",
+                    "workspace_id": "workspace-1",
+                    "workspace_session_role": "worker",
+                }
+            )
+            result = await tool_set.tools["workspace_report_progress"].execute(
+                context,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                summary="still working",
+            )
+    finally:
+        await manager.close()
+
+    assert result.is_error is False
+    assert json.loads(result.output)["message_id"] == "9-0"
+    redis.xadd.assert_awaited_once()
 
 
 @pytest.mark.unit

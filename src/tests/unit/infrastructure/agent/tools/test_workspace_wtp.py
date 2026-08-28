@@ -17,6 +17,9 @@ from src.infrastructure.agent.orchestration.send_denied import (
     SendDeniedCode,
 )
 from src.infrastructure.agent.tools import workspace_wtp as wtp_tools
+from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
+    bind_workspace_wtp_publisher_v2,
+)
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
@@ -73,8 +76,11 @@ def leader_ctx() -> Any:
 def mock_orchestrator(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     orch = MagicMock()
     orch.send_message = AsyncMock()
+    publisher = MagicMock()
+    publisher.publish = AsyncMock(return_value="supervisor-stream-1")
     monkeypatch.setattr(wtp_tools, "_current_agent_orchestrator_v2", lambda: orch)
-    yield orch
+    with bind_workspace_wtp_publisher_v2(publisher):
+        yield orch
 
 
 def _ok_send(verb: str = "task.progress") -> SendResult:
@@ -235,7 +241,7 @@ class TestProgress:
         assert published.extra_metadata["worker_agent_id"] == "worker-agent-id"
         assert published.extra_metadata["workspace_agent_binding_id"] == "binding-1"
 
-    async def test_supervisor_publish_falls_back_to_redis_client(self):
+    async def test_supervisor_publish_requires_explicit_v2_binding(self):
         envelope = WtpEnvelope(
             verb=WtpVerb.TASK_PROGRESS,
             workspace_id="ws-1",
@@ -244,27 +250,10 @@ class TestProgress:
             payload={"summary": "Still working"},
             root_goal_task_id="root-1",
         )
-        redis_client = MagicMock()
+        with pytest.raises(RuntimeV2Error) as error:
+            await wtp_tools._publish_envelope_for_supervisor(envelope)
 
-        with (
-            patch(
-                "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-                new=AsyncMock(return_value=None),
-            ) as mock_default,
-            patch(
-                "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope",
-                new=AsyncMock(return_value="fallback-stream-1"),
-            ) as mock_publish,
-            patch(
-                "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-                new=AsyncMock(return_value=redis_client),
-            ),
-        ):
-            entry_id = await wtp_tools._publish_envelope_for_supervisor(envelope)
-
-        assert entry_id == "fallback-stream-1"
-        mock_default.assert_awaited_once_with(envelope)
-        mock_publish.assert_awaited_once_with(redis_client, envelope)
+        assert error.value.code == "workspace_wtp_publisher_not_bound"
 
 
 class TestComplete:

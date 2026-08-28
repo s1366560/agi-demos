@@ -342,23 +342,6 @@ class TestSupervisorDispatch:
         assert not supervisor.is_running
 
 
-class TestPublisherInjection:
-    async def test_publish_envelope_default_uses_configured_redis(self) -> None:
-        redis = _FakeRedis()
-        sup_mod.configure_wtp_publisher(redis)
-        try:
-            entry = await sup_mod.publish_envelope_default(_completed_envelope())
-            assert entry == "1-0"
-            assert redis.entries[0][1]["data"]
-        finally:
-            sup_mod.configure_wtp_publisher(None)
-
-    async def test_publish_envelope_default_no_redis(self) -> None:
-        sup_mod.configure_wtp_publisher(None)
-        result = await sup_mod.publish_envelope_default(_completed_envelope())
-        assert result is None
-
-
 def test_constants_exposed() -> None:
     assert WORKSPACE_WTP_INBOX_STREAM == "workspace:wtp:inbox"
 

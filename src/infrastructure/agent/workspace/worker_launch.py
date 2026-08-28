@@ -73,6 +73,17 @@ logger = logging.getLogger(__name__)
 
 _background_tasks: set[asyncio.Task[Any]] = set()
 
+
+class _GenerationReservationV2(Protocol):
+    """Exact generation retained for one detached worker launch."""
+
+    def admit(self) -> contextlib.AbstractAsyncContextManager[object]: ...
+
+    async def release(self) -> None: ...
+
+
+type _WorkerLaunchFactory = Callable[[], Awaitable[dict[str, Any]]]
+
 # Cooldown TTL — long enough to avoid double-launch on transient retries
 # but short enough that a genuine re-assignment after rework can re-fire.
 WORKER_LAUNCH_COOLDOWN_SECONDS = 300
@@ -2818,8 +2829,8 @@ async def _publish_worker_launch_heartbeat(
         return
     try:
         from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpVerb
-        from src.infrastructure.agent.workspace.workspace_supervisor import (
-            publish_envelope_default,
+        from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
+            current_workspace_wtp_publisher_v2,
         )
 
         metadata: dict[str, Any] = {
@@ -2841,7 +2852,7 @@ async def _publish_worker_launch_heartbeat(
             payload={},
             extra_metadata=metadata,
         )
-        await publish_envelope_default(envelope)
+        _ = await current_workspace_wtp_publisher_v2().publish(envelope)
         await _refresh_launch_cooldown(conversation_id)
         await _refresh_worker_agent_running_marker(conversation_id, attempt_id)
     except Exception:
@@ -2879,8 +2890,8 @@ async def _publish_worker_launch_progress(
         return
     try:
         from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpVerb
-        from src.infrastructure.agent.workspace.workspace_supervisor import (
-            publish_envelope_default,
+        from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
+            current_workspace_wtp_publisher_v2,
         )
 
         metadata: dict[str, Any] = {
@@ -2902,7 +2913,7 @@ async def _publish_worker_launch_progress(
             payload={"summary": summary, "phase": phase},
             extra_metadata=metadata,
         )
-        await publish_envelope_default(envelope)
+        _ = await current_workspace_wtp_publisher_v2().publish(envelope)
     except Exception:
         logger.debug(
             "workspace_worker_launch.progress_publish_failed",
@@ -4173,7 +4184,28 @@ async def _terminal_report_recorded_for_attempt(
     legacy_workspace_runtime_retired("Workspace terminal-report projection lookup")
 
 
-def schedule_worker_session(
+async def _run_reserved_worker_session(
+    reservation: _GenerationReservationV2,
+    launch: _WorkerLaunchFactory,
+) -> None:
+    async with reservation.admit():
+        _ = await launch()
+
+
+def _finish_reserved_worker_session(
+    completed: asyncio.Task[None],
+    reservation: _GenerationReservationV2,
+) -> None:
+    _background_tasks.discard(completed)
+    cleanup = asyncio.create_task(
+        reservation.release(),
+        name=f"{completed.get_name()}:release-generation",
+    )
+    _background_tasks.add(cleanup)
+    cleanup.add_done_callback(_background_tasks.discard)
+
+
+async def schedule_worker_session(
     *,
     workspace_id: str,
     task: WorkspaceTask,
@@ -4187,46 +4219,20 @@ def schedule_worker_session(
     preferred_language: str | None = None,
     attempt_worktree_context: Mapping[str, Any] | None = None,
 ) -> None:
-    """Fire-and-forget scheduler for ``launch_worker_session``.
+    """Reserve the active generation and schedule ``launch_worker_session``.
 
-    Mirrors the pattern of :func:`schedule_autonomy_tick`: failures during
-    scheduling are silently absorbed; errors during the launched coroutine
-    are logged inside ``launch_worker_session``.
+    Reservation failures are surfaced before returning to the caller. Errors
+    during the launched coroutine are logged inside ``launch_worker_session``.
     """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # No running loop — caller is sync. Spin one up just for this launch.
-        try:
-            asyncio.run(
-                launch_worker_session(
-                    workspace_id=workspace_id,
-                    task=task,
-                    worker_agent_id=worker_agent_id,
-                    actor_user_id=actor_user_id,
-                    leader_agent_id=leader_agent_id,
-                    attempt_id=attempt_id,
-                    extra_instructions=extra_instructions,
-                    reuse_conversation_id=reuse_conversation_id,
-                    repair_brief_prompt=repair_brief_prompt,
-                    preferred_language=preferred_language,
-                    attempt_worktree_context=attempt_worktree_context,
-                )
-            )
-        except Exception:
-            logger.warning(
-                "workspace_worker_launch.schedule_sync_failed",
-                extra={
-                    "event": "workspace_worker_launch.schedule_sync_failed",
-                    "workspace_id": workspace_id,
-                    "task_id": task.id,
-                },
-                exc_info=True,
-            )
-        return
+    from src.infrastructure.plugins.v2.boundary import (
+        detached_operation_task_context_v2,
+        reserve_current_generation_v2,
+    )
 
-    bg = loop.create_task(
-        launch_worker_session(
+    reservation = await reserve_current_generation_v2()
+
+    def launch() -> Awaitable[dict[str, Any]]:
+        return launch_worker_session(
             workspace_id=workspace_id,
             task=task,
             worker_agent_id=worker_agent_id,
@@ -4239,9 +4245,23 @@ def schedule_worker_session(
             preferred_language=preferred_language,
             attempt_worktree_context=attempt_worktree_context,
         )
-    )
+
+    drive_launch = _run_reserved_worker_session(reservation, launch)
+    try:
+        bg = asyncio.create_task(
+            drive_launch,
+            name=f"workspace-worker-launch:{task.id}",
+            context=detached_operation_task_context_v2(),
+        )
+    except BaseException:
+        drive_launch.close()
+        await reservation.release()
+        raise
+
     _background_tasks.add(bg)
-    bg.add_done_callback(_background_tasks.discard)
+    bg.add_done_callback(
+        lambda completed: _finish_reserved_worker_session(completed, reservation)
+    )
 
 
 __all__ = [

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -207,11 +208,13 @@ class TestWorkerLaunchHeartbeat:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         publish = AsyncMock(return_value="1-0")
+        publisher = MagicMock()
+        publisher.publish = publish
         redis = AsyncMock()
         redis.exists.side_effect = [0, 1]
         monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
+            "src.infrastructure.agent.workspace.wtp_publisher_runtime.current_workspace_wtp_publisher_v2",
+            lambda: publisher,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
@@ -260,11 +263,13 @@ class TestWorkerLaunchHeartbeat:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         publish = AsyncMock(return_value="1-0")
+        publisher = MagicMock()
+        publisher.publish = publish
         redis = AsyncMock()
         redis.exists.return_value = 1
         monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
+            "src.infrastructure.agent.workspace.wtp_publisher_runtime.current_workspace_wtp_publisher_v2",
+            lambda: publisher,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
@@ -295,9 +300,11 @@ class TestWorkerLaunchHeartbeat:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         publish = AsyncMock()
+        publisher = MagicMock()
+        publisher.publish = publish
         monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
+            "src.infrastructure.agent.workspace.wtp_publisher_runtime.current_workspace_wtp_publisher_v2",
+            lambda: publisher,
         )
 
         await wl._publish_worker_launch_heartbeat(
@@ -318,9 +325,11 @@ class TestWorkerLaunchHeartbeat:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         publish = AsyncMock(return_value="1-0")
+        publisher = MagicMock()
+        publisher.publish = publish
         monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
+            "src.infrastructure.agent.workspace.wtp_publisher_runtime.current_workspace_wtp_publisher_v2",
+            lambda: publisher,
         )
 
         await wl._publish_worker_launch_progress(
@@ -354,9 +363,11 @@ class TestWorkerLaunchHeartbeat:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         publish = AsyncMock()
+        publisher = MagicMock()
+        publisher.publish = publish
         monkeypatch.setattr(
-            "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
-            publish,
+            "src.infrastructure.agent.workspace.wtp_publisher_runtime.current_workspace_wtp_publisher_v2",
+            lambda: publisher,
         )
 
         await wl._publish_worker_launch_progress(
@@ -2195,14 +2206,44 @@ class TestScheduleWorkerSession:
     @pytest.mark.asyncio
     async def test_schedules_background_task(self, monkeypatch: pytest.MonkeyPatch) -> None:
         called: dict[str, object] = {}
+        lifecycle: list[str] = []
+
+        class _Reservation:
+            def __init__(self) -> None:
+                self.released = False
+
+            @asynccontextmanager
+            async def admit(self):
+                lifecycle.append("generation-entered")
+                try:
+                    yield object()
+                finally:
+                    await self.release()
+
+            async def release(self) -> None:
+                if self.released:
+                    return
+                self.released = True
+                lifecycle.append("generation-released")
+
+        reservation = _Reservation()
+
+        async def _reserve_generation() -> _Reservation:
+            lifecycle.append("generation-reserved")
+            return reservation
 
         async def _fake_launch(**kwargs: object) -> dict[str, object]:
+            lifecycle.append("launch-started")
             called.update(kwargs)
             return {"launched": True, "conversation_id": "cid", "reason": "launched"}
 
+        monkeypatch.setattr(
+            "src.infrastructure.plugins.v2.boundary.reserve_current_generation_v2",
+            _reserve_generation,
+        )
         monkeypatch.setattr(wl, "launch_worker_session", _fake_launch)
         task = _make_task()
-        wl.schedule_worker_session(
+        await wl.schedule_worker_session(
             workspace_id="w",
             task=task,
             worker_agent_id="agent-X",
@@ -2221,3 +2262,53 @@ class TestScheduleWorkerSession:
         assert called["attempt_id"] == "att-1"
         assert called["reuse_conversation_id"] == "conv-reuse"
         assert called["repair_brief_prompt"] == "[repair-turn]{}[/repair-turn]"
+        assert lifecycle == [
+            "generation-reserved",
+            "generation-entered",
+            "launch-started",
+            "generation-released",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_cancelled_unstarted_task_releases_reserved_generation(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        release_calls = 0
+        release_observed = asyncio.Event()
+
+        class _Reservation:
+            @asynccontextmanager
+            async def admit(self):
+                yield object()
+
+            async def release(self) -> None:
+                nonlocal release_calls
+                release_calls += 1
+                release_observed.set()
+
+        async def _reserve_generation() -> _Reservation:
+            return _Reservation()
+
+        async def _blocked_launch(**_kwargs: object) -> None:
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(
+            "src.infrastructure.plugins.v2.boundary.reserve_current_generation_v2",
+            _reserve_generation,
+        )
+        monkeypatch.setattr(wl, "launch_worker_session", _blocked_launch)
+        before = set(wl._background_tasks)
+
+        await wl.schedule_worker_session(
+            workspace_id="w",
+            task=_make_task(),
+            worker_agent_id="agent-X",
+            actor_user_id="u1",
+        )
+        scheduled = tuple(set(wl._background_tasks) - before)
+        assert len(scheduled) == 1
+        scheduled[0].cancel()
+        await release_observed.wait()
+
+        assert release_calls == 1

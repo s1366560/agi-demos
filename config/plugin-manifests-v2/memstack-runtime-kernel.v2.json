@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:420f6c59b1c24a75b28661899f13bea43da0c091857ffaf9eeb4d01583a593fc",
+        "digest": "sha256:41f6842f6b68b50049ae63b1a791c7cabde40c9fa18a62564f1c03979924f4ac",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -7421,6 +7421,11 @@
               "alias": "catalog",
               "service": "service:tool-set-catalog",
               "version": "1.0.0"
+            },
+            {
+              "alias": "publisher",
+              "service": "service:agent.workspace-wtp-publisher",
+              "version": "1.0.0"
             }
           ]
         },
@@ -7438,9 +7443,9 @@
           }
         }
       },
-      "contract_digest": "sha256:487408b53999e8cdbf9ee329565c8e086903fbc005882480b9cadce7d46e62f3",
+      "contract_digest": "sha256:ed92c9a549713927a32ce134371125c03104f7a6ee98062c191f566d79e819f8",
       "artifact": {
-        "digest": "sha256:03d14ba3b7e2dcc20df71611e0926212df32bcf791970ddb6612b226debc8ccc",
+        "digest": "sha256:9ca5a563da1b301085832032a0ebe030aa2ba6c03e9ff1ded01c640c12078b32",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_orchestration_tools.py"
       }
     },
@@ -9089,6 +9094,43 @@
       "artifact": {
         "digest": "sha256:f129bead081802c7558531782f58ac020b7e6eb95cd18a0b5c6cfe8c70b0fa81",
         "source": "repo+python://src/infrastructure/plugins/v2/workspace_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/workspace/wtp-publisher",
+      "entrypoint": "src.infrastructure.plugins.v2.workspace_wtp_publisher:_apply_workspace_wtp_publisher_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:agent.workspace-wtp-publisher",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "generation-redis-adapter", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:576e628ba4bb0c556f959dd20f395d9ce759b3aacadc4ec61f3234fc233cdac6",
+      "artifact": {
+        "digest": "sha256:177b54d6167ca11881ed583e09f9a8afb8bc3e26e9453bb675c131d717611d60",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_wtp_publisher.py"
       }
     }
   ],

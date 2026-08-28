@@ -15,6 +15,9 @@ from src.infrastructure.agent.orchestration.send_denied import (
     SendDeniedCode,
 )
 from src.infrastructure.agent.tools import workspace_leader_wtp as lwtp
+from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
+    bind_workspace_wtp_publisher_v2,
+)
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit
@@ -66,8 +69,11 @@ def _worker_ctx() -> Any:
 def mock_orchestrator(monkeypatch: pytest.MonkeyPatch):
     orch = MagicMock()
     orch.send_message = AsyncMock()
+    publisher = MagicMock()
+    publisher.publish = AsyncMock(return_value="supervisor-stream-1")
     monkeypatch.setattr(lwtp, "_current_agent_orchestrator_v2", lambda: orch)
-    yield orch
+    with bind_workspace_wtp_publisher_v2(publisher):
+        yield orch
 
 
 def _ok_send() -> SendResult:

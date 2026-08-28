@@ -2894,6 +2894,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-workspace-wtp-publisher
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/workspace/wtp-publisher
+      enabled: true
+      config:
+        strategy: generation-redis-adapter
+      inject:
+        redis: service:runtime.redis-client
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-agent-orchestration-tools
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -2903,6 +2918,7 @@ profile:
         source_id: builtin-agent-orchestration-tools
       inject:
         catalog: service:tool-set-catalog
+        publisher: service:agent.workspace-wtp-publisher
       isolate: {}
       scope:
         kind: root

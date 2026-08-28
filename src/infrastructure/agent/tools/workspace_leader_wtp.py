@@ -139,8 +139,8 @@ async def _send_envelope(
     assert isinstance(result, SendResult)
 
     # Fan-in to the Phase 2 WorkspaceSupervisor stream for observability.
-    from src.infrastructure.agent.workspace.workspace_supervisor import (
-        publish_envelope_default,
+    from src.infrastructure.agent.workspace.wtp_publisher_runtime import (
+        current_workspace_wtp_publisher_v2,
     )
 
     try:
@@ -166,7 +166,7 @@ async def _send_envelope(
     except Exception:
         logger.debug("workspace_leader_wtp: enrichment failed; publishing raw")
         enriched_envelope = envelope
-    _ = await publish_envelope_default(enriched_envelope)
+    _ = await current_workspace_wtp_publisher_v2().publish(enriched_envelope)
 
     await ctx.emit(
         AgentMessageSentEvent(
@@ -324,7 +324,7 @@ async def workspace_assign_task_tool(
             launch_info = {"scheduled": False, "reason": "task_not_found"}
         else:
             actor_user_id = _runtime_string(ctx, "user_id") or ctx.user_id or ""
-            schedule_worker_session(
+            await schedule_worker_session(
                 workspace_id=workspace_id,
                 task=task,
                 worker_agent_id=worker_agent_id,

@@ -132,6 +132,7 @@ from .workspace_core_runtime import (
 )
 from .workspace_pipeline import builtin_workspace_drone_pipeline_provider_definition_v2
 from .workspace_runtime import workspace_runtime_definitions_v2
+from .workspace_wtp_publisher import workspace_wtp_publisher_definition_v2
 
 if TYPE_CHECKING:
     from .agent_pool_runtime import AgentPoolRuntimeFactoryV2
@@ -303,6 +304,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
             apply=_apply_runtime_boundary,
         ),
         redis_runtime_definition_v2(sandbox_redis_client),
+        workspace_wtp_publisher_definition_v2(),
         telemetry_runtime_definition_v2(telemetry_runtime_manager),
         workspace_core_runtime_definition_v2(workspace_core_runtime_factory),
         graph_runtime_definition_v2(graph_runtime_factory),

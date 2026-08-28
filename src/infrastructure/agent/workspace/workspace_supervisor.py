@@ -565,27 +565,6 @@ class WorkspaceSupervisor:
             )
 
 
-# Redis client injected separately so the WTP tools can publish even when
-# the supervisor itself is disabled (degraded-mode: worker still delivers
-# A2A + direct apply; supervisor fan-in just doesn't run).
-_publish_redis: _RedisLike | None = None
-
-
-def configure_wtp_publisher(redis_client: _RedisLike | None) -> None:
-    """Inject the Redis client used by :func:`publish_envelope_default`."""
-    global _publish_redis
-    _publish_redis = redis_client
-
-
-def get_wtp_publisher_redis() -> _RedisLike | None:
-    return _publish_redis
-
-
-async def publish_envelope_default(envelope: WtpEnvelope) -> str | None:
-    """Convenience wrapper used by the worker WTP tools."""
-    return await publish_envelope(_publish_redis, envelope)
-
-
 def _is_deadlock_error(exc: Exception) -> bool:
     text_parts = [str(exc).lower()]
     original = getattr(exc, "orig", None)
@@ -603,8 +582,5 @@ __all__ = [
     "DEFAULT_MAXLEN",
     "WORKSPACE_WTP_INBOX_STREAM",
     "WorkspaceSupervisor",
-    "configure_wtp_publisher",
-    "get_wtp_publisher_redis",
     "publish_envelope",
-    "publish_envelope_default",
 ]
