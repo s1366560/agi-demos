@@ -230,7 +230,6 @@ async def test_builtin_tool_builder_does_not_use_global_registry_or_configurator
         "src.infrastructure.agent.tools.clarification.configure_clarification",
         "src.infrastructure.agent.tools.decision.configure_decision",
         "src.infrastructure.agent.tools.web_scrape.configure_web_scrape",
-        "src.infrastructure.agent.tools.web_search.configure_web_search",
         "src.infrastructure.agent.tools.define.get_registered_tools",
     ):
         monkeypatch.setattr(target, _forbidden)

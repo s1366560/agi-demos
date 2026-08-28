@@ -74,15 +74,6 @@ _web_search_runtime: ContextVar[WebSearchRuntime | None] = ContextVar(
 )
 
 
-def configure_web_search(redis_client: Any = None) -> None:
-    """Bind a compatibility runtime in the current context.
-
-    Production composition uses :func:`make_web_search_tool`, which captures
-    the cache dependency on the returned ToolInfo.
-    """
-    _ = _web_search_runtime.set(WebSearchRuntime(redis_client=redis_client))
-
-
 def _current_web_search_redis() -> Any:
     runtime = _web_search_runtime.get()
     return runtime.redis_client if runtime is not None else None
