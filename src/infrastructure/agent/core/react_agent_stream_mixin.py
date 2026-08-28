@@ -238,6 +238,28 @@ def _resolve_current_tools_from_runtime_v2(
     return raw_tool_set
 
 
+def _pin_selection_context_tools_v2(
+    selection_context: ToolSelectionContext,
+    tool_names: Sequence[str],
+) -> ToolSelectionContext:
+    """Return a context with stable, de-duplicated model-visible tool pins."""
+    raw_existing = selection_context.metadata.get("skill_pinned_tools", ())
+    existing = (
+        raw_existing
+        if isinstance(raw_existing, Sequence) and not isinstance(raw_existing, (str, bytes))
+        else ()
+    )
+    pinned: list[str] = []
+    for name in (*existing, *tool_names):
+        if isinstance(name, str) and name and name not in pinned:
+            pinned.append(name)
+    if not pinned:
+        return selection_context
+    metadata = dict(selection_context.metadata)
+    metadata["skill_pinned_tools"] = tuple(pinned)
+    return replace(selection_context, metadata=metadata)
+
+
 def _finalize_turn_tool_set_v2(
     tool_set: ToolSetV2,
     *,
@@ -1257,6 +1279,7 @@ class StreamMixin:
         conversation_context: list[dict[str, str]],
         allow_tools: list[str] | None = None,
         deny_tools: list[str] | None = None,
+        forced_operation_tool_names: Sequence[str] = (),
     ) -> tuple[str, ToolSelectionContext]:
         """Resolve effective mode and build selection context.
 
@@ -1280,6 +1303,10 @@ class StreamMixin:
             routing_metadata=routing_metadata,
             allow_tools=allow_tools,
             deny_tools=deny_tools,
+        )
+        selection_context = _pin_selection_context_tools_v2(
+            selection_context,
+            forced_operation_tool_names,
         )
         if effective_mode == "plan":
             self.permission_manager.set_mode(AgentPermissionMode.PLAN)
@@ -1912,8 +1939,11 @@ class StreamMixin:
         # Phase 6b: Inject matched skill's declared tools into selection context
         # so the tool selection pipeline can pin them (survive semantic budget + deny lists)
         if matched_skill and matched_skill.tools:
-            skill_pinned = list(matched_skill.tools)
-            cast(dict[str, Any], selection_context.metadata)["skill_pinned_tools"] = skill_pinned
+            selection_context = _pin_selection_context_tools_v2(
+                selection_context,
+                matched_skill.tools,
+            )
+            skill_pinned = selection_context.metadata["skill_pinned_tools"]
             logger.info(
                 f"[ReActAgent] Skill '{matched_skill.name}' declares tools={skill_pinned}, "
                 f"injecting into selection context for pipeline pinning"

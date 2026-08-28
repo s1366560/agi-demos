@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from inspect import getsource
 from types import MappingProxyType, SimpleNamespace
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +22,7 @@ from src.infrastructure.agent.plugins.selection_pipeline import (
     ToolSelectionTraceStep,
 )
 from src.infrastructure.agent.processor import ProcessorConfig, ToolDefinition
+from src.infrastructure.agent.routing import ExecutionPath, RoutingDecision
 from src.infrastructure.plugins.v2.agent_runtime_dispatcher import (
     PinnedAgentRuntimeDispatcherV2,
 )
@@ -159,6 +161,48 @@ def test_turn_policy_filters_dynamic_contributions_with_the_base_tool_set() -> N
 
     assert tuple(forced.tools) == ("mcp_echo",)
     assert tuple(ordinary.tools) == ("base_tool", "mcp_echo")
+
+
+@pytest.mark.unit
+def test_mode_resolution_pins_forced_operation_tools_without_mutating_context() -> None:
+    original_context = ToolSelectionContext(
+        tenant_id="tenant-a",
+        project_id="project-a",
+        metadata={"skill_pinned_tools": ("declared_tool",)},
+    )
+    permission_modes: list[object] = []
+    agent = cast(
+        Any,
+        SimpleNamespace(
+            agent_mode="build",
+            permission_manager=SimpleNamespace(set_mode=permission_modes.append),
+            _build_tool_selection_context=lambda **_kwargs: original_context,
+        ),
+    )
+
+    effective_mode, selection_context = StreamMixin._stream_resolve_mode(
+        agent,
+        plan_mode=False,
+        routing_decision=RoutingDecision(
+            path=ExecutionPath.REACT_LOOP,
+            confidence=1.0,
+            reason="test",
+        ),
+        routing_metadata={},
+        tenant_id="tenant-a",
+        project_id="project-a",
+        processed_user_message="run the skill",
+        conversation_context=[],
+        forced_operation_tool_names=("mcp_echo", "mcp_echo", ""),
+    )
+
+    assert effective_mode == "build"
+    assert original_context.metadata["skill_pinned_tools"] == ("declared_tool",)
+    assert selection_context.metadata["skill_pinned_tools"] == (
+        "declared_tool",
+        "mcp_echo",
+    )
+    assert len(permission_modes) == 1
 
 
 @pytest.mark.unit
