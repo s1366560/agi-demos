@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -193,11 +193,16 @@ async def test_chat_serializes_same_conversation_turns_fifo() -> None:
 
 
 @pytest.mark.unit
-async def test_actor_initializes_once_per_generation_and_refreshes_on_switch() -> None:
+async def test_actor_initializes_one_runtime_per_generation_and_retires_previous() -> None:
     actor = _actor_instance()
-    agent = MagicMock()
-    agent.initialize = AsyncMock(return_value=True)
-    actor._agent = agent
+    actor._config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
+    first_agent = MagicMock()
+    first_agent.initialize = AsyncMock(return_value=True)
+    first_agent.stop = AsyncMock(return_value=True)
+    second_agent = MagicMock()
+    second_agent.initialize = AsyncMock(return_value=True)
+    second_agent.stop = AsyncMock(return_value=True)
+    actor._agent = first_agent
     first = PluginGenerationDescriptorV2(
         profile_id="memstack-default-v2",
         generation=1,
@@ -209,15 +214,145 @@ async def test_actor_initializes_once_per_generation_and_refreshes_on_switch() -
         digest="b" * 64,
     )
 
-    await actor._ensure_agent_initialized_v2(SimpleNamespace(descriptor=first))
-    await actor._ensure_agent_initialized_v2(SimpleNamespace(descriptor=first))
-    await actor._ensure_agent_initialized_v2(SimpleNamespace(descriptor=second))
+    with patch(
+        "src.infrastructure.agent.actor.project_agent_actor.ProjectReActAgent",
+        return_value=second_agent,
+    ):
+        first_runtime = await actor._ensure_agent_initialized_v2(SimpleNamespace(descriptor=first))
+        cached_runtime = await actor._ensure_agent_initialized_v2(SimpleNamespace(descriptor=first))
+        second_runtime = await actor._ensure_agent_initialized_v2(
+            SimpleNamespace(descriptor=second)
+        )
 
-    assert agent.initialize.await_args_list == [
-        call(force_refresh=False),
-        call(force_refresh=True),
-    ]
+    assert first_runtime is first_agent
+    assert cached_runtime is first_agent
+    assert second_runtime is second_agent
+    first_agent.initialize.assert_awaited_once_with(force_refresh=False)
+    second_agent.initialize.assert_awaited_once_with(force_refresh=False)
+    first_agent.stop.assert_awaited_once_with(
+        generation_descriptor=first,
+        notify_lifecycle=False,
+    )
+    second_agent.stop.assert_not_awaited()
     await actor._plugin_admission_v2.close()
+
+
+@pytest.mark.unit
+async def test_actor_keeps_generation_runtime_immutable_across_conversations() -> None:
+    source = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await source.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="concurrent-generation-1",
+    )
+    first = source.current_distribution
+    assert first is not None
+    await source.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=2,
+        version=2,
+        nonce="concurrent-generation-2",
+    )
+    second = source.current_distribution
+    assert second is not None
+
+    stopped: list[int] = []
+
+    class GenerationAgent:
+        def __init__(self, _config: object) -> None:
+            self.config = _config
+            self.generation = 0
+
+        async def initialize(self, force_refresh: bool = False) -> bool:
+            del force_refresh
+            self.generation = current_operation_context_v2().descriptor.generation
+            return True
+
+        async def stop(self, **_kwargs: object) -> bool:
+            stopped.append(self.generation)
+            return True
+
+    actor = _actor_instance()
+    actor._config = ProjectAgentActorConfig(tenant_id="tenant-a", project_id="project-a")
+    agents = [GenerationAgent(object())]
+    actor._agent = agents[0]
+    actor._ensure_agent_orchestrator_v2 = AsyncMock()
+    first_executing = asyncio.Event()
+    second_executing = asyncio.Event()
+    release_first = asyncio.Event()
+    observed: dict[str, tuple[int, int]] = {}
+
+    first_request = ProjectChatRequest(
+        conversation_id="conversation-1",
+        message_id="message-1",
+        user_message="first",
+        user_id="user-1",
+        plugin_generation=first.descriptor.to_payload(),
+        plugin_distribution=first.to_payload(),
+    )
+    second_request = ProjectChatRequest(
+        conversation_id="conversation-2",
+        message_id="message-2",
+        user_message="second",
+        user_id="user-1",
+        plugin_generation=second.descriptor.to_payload(),
+        plugin_distribution=second.to_payload(),
+    )
+
+    async def execute(
+        agent: GenerationAgent,
+        request: ProjectChatRequest,
+        abort_signal: asyncio.Event | None = None,
+    ) -> ProjectChatResult:
+        del abort_signal
+        if request.message_id == "message-1":
+            first_executing.set()
+            await second_executing.wait()
+            observed[request.message_id] = (id(agent), agent.generation)
+            assert stopped == []
+            await release_first.wait()
+        else:
+            observed[request.message_id] = (id(agent), agent.generation)
+            second_executing.set()
+            release_first.set()
+        return ProjectChatResult(
+            conversation_id=request.conversation_id,
+            message_id=request.message_id,
+            content="done",
+        )
+
+    def build_agent(config: object) -> GenerationAgent:
+        agent = GenerationAgent(config)
+        agents.append(agent)
+        return agent
+
+    try:
+        with (
+            patch(
+                "src.infrastructure.agent.actor.project_agent_actor.ProjectReActAgent",
+                side_effect=build_agent,
+            ),
+            patch(
+                "src.infrastructure.agent.actor.project_agent_actor.execute_project_chat",
+                side_effect=execute,
+            ),
+        ):
+            first_task = asyncio.create_task(actor._run_chat(first_request))
+            await first_executing.wait()
+            second_task = asyncio.create_task(actor._run_chat(second_request))
+            await asyncio.gather(first_task, second_task)
+
+        assert observed["message-1"][1] == 1
+        assert observed["message-2"][1] == 2
+        assert observed["message-1"][0] != observed["message-2"][0]
+        assert len(agents) == 2
+        assert stopped == [1]
+    finally:
+        await actor._plugin_admission_v2.close()
+        await source.close()
 
 
 @pytest.mark.unit
@@ -373,6 +508,39 @@ async def test_actor_shutdown_awaits_main_tasks_before_stopping_project_agent() 
     assert actor._task_conversations == {}
     assert actor._abort_signals == {}
     agent.stop.assert_awaited_once_with()
+
+
+@pytest.mark.unit
+async def test_actor_shutdown_stops_each_generation_runtime_once() -> None:
+    actor = _actor_instance()
+    first = PluginGenerationDescriptorV2(
+        profile_id="memstack-default-v2",
+        generation=1,
+        digest="a" * 64,
+    )
+    second = PluginGenerationDescriptorV2(
+        profile_id="memstack-default-v2",
+        generation=2,
+        digest="b" * 64,
+    )
+    first_agent = MagicMock()
+    first_agent.stop = AsyncMock(return_value=True)
+    second_agent = MagicMock()
+    second_agent.stop = AsyncMock(return_value=True)
+    actor._agent_runtime_entries_v2 = {
+        first: SimpleNamespace(agent=first_agent),
+        second: SimpleNamespace(agent=second_agent),
+    }
+    actor._agent = second_agent
+    actor._agent_generation_descriptor_v2 = second
+
+    assert await actor.shutdown() is True
+
+    first_agent.stop.assert_awaited_once_with()
+    second_agent.stop.assert_awaited_once_with()
+    assert actor._agent_runtime_entries_v2 == {}
+    assert actor._agent is None
+    assert actor._agent_generation_descriptor_v2 is None
 
 
 @pytest.mark.unit

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.configuration.config import get_settings
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
@@ -272,6 +273,50 @@ class TestProjectReActAgentLifecycleNotifications:
 
         supervisor.shutdown.assert_awaited_once_with()
         assert agent._react_agent is None
+
+    @pytest.mark.asyncio
+    async def test_stop_can_clear_only_the_retired_generation_without_notification(
+        self,
+        agent_config,
+    ):
+        agent = ProjectReActAgent(agent_config)
+        agent._initialized = True
+        descriptor = PluginGenerationDescriptorV2(
+            profile_id="memstack-default-v2",
+            generation=7,
+            digest="a" * 64,
+        )
+
+        with (
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier"
+            ) as notifier,
+            patch(
+                "src.infrastructure.agent.state.agent_session_pool.clear_session_cache",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as clear_session_cache,
+            patch(
+                "src.infrastructure.agent.state.agent_session_pool.invalidate_agent_session"
+            ) as invalidate_agent_session,
+        ):
+            assert (
+                await agent.stop(
+                    generation_descriptor=descriptor,
+                    notify_lifecycle=False,
+                )
+                is True
+            )
+
+        notifier.assert_not_called()
+        clear_session_cache.assert_awaited_once_with(
+            tenant_id="test-tenant",
+            project_id="test-project",
+            agent_mode="default",
+            grace_period_seconds=0,
+            generation_descriptor=descriptor,
+        )
+        invalidate_agent_session.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_stop_cancels_and_awaits_active_chat_before_detached_shutdown(

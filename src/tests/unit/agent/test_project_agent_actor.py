@@ -37,6 +37,7 @@ def _build_actor() -> object:
     actor._lease_owner_suffix = "lease-1"
     actor._init_lock = asyncio.Lock()
     actor._agent_generation_descriptor_v2 = None
+    actor._agent_runtime_entries_v2 = {}
     actor._config = SimpleNamespace(
         tenant_id="tenant-1",
         project_id="project-1",

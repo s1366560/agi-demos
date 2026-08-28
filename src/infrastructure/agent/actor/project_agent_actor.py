@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from contextlib import AbstractAsyncContextManager
-from dataclasses import replace
+from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -45,6 +46,15 @@ from src.infrastructure.plugins.v2.runtime_host import DataPlaneGenerationAdmiss
 logger = logging.getLogger(__name__)
 
 
+@dataclass(slots=True)
+class _AgentRuntimeEntryV2:
+    """One immutable ProjectReActAgent runtime owned by an exact generation."""
+
+    descriptor: PluginGenerationDescriptorV2
+    agent: ProjectReActAgent
+    active_leases: int = 0
+
+
 @ray.remote(max_restarts=5, max_task_retries=3, max_concurrency=10)  # type: ignore[call-overload]
 class ProjectAgentActor:
     """Ray Actor that runs a project-level agent instance."""
@@ -66,6 +76,9 @@ class ProjectAgentActor:
             )
         )
         self._agent_generation_descriptor_v2: PluginGenerationDescriptorV2 | None = None
+        self._agent_runtime_entries_v2: dict[
+            PluginGenerationDescriptorV2, _AgentRuntimeEntryV2
+        ] = {}
         self._tasks: dict[str, asyncio.Task[Any]] = {}
         self._task_conversations: dict[str, str] = {}
         self._abort_signals: dict[str, asyncio.Event] = {}
@@ -100,47 +113,67 @@ class ProjectAgentActor:
                 return {"status": "initialized", "cached": True}
 
             if self._agent and force_refresh:
-                await self._agent.stop()
+                if any(
+                    entry.active_leases > 0 for entry in self._agent_runtime_entries_v2.values()
+                ):
+                    raise RuntimeV2Error(
+                        "agent_runtime_refresh_in_use",
+                        "project agent runtime cannot be refreshed while generation leases are active",
+                    )
+                runtime_agents = {
+                    id(entry.agent): entry.agent
+                    for entry in self._agent_runtime_entries_v2.values()
+                }
+                runtime_agents[id(self._agent)] = self._agent
+                for runtime_agent in runtime_agents.values():
+                    await runtime_agent.stop()
+                self._agent_runtime_entries_v2.clear()
                 self._agent = None
                 self._agent_generation_descriptor_v2 = None
 
-            agent_config = ProjectAgentConfig(
-                tenant_id=config.tenant_id,
-                project_id=config.project_id,
-                agent_mode=config.agent_mode,
-                model=config.model,
-                api_key=config.api_key,
-                base_url=config.base_url,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
-                max_steps=config.max_steps,
-                persistent=config.persistent,
-                idle_timeout_seconds=config.idle_timeout_seconds,
-                max_concurrent_chats=config.max_concurrent_chats,
-                mcp_tools_ttl_seconds=config.mcp_tools_ttl_seconds,
-                enable_skills=config.enable_skills,
-                enable_subagents=config.enable_subagents,
-            )
-
-            self._agent = ProjectReActAgent(agent_config)
+            self._agent = self._build_agent_runtime_v2(config)
             self._agent_generation_descriptor_v2 = None
 
-            # Inject plan repository for Plan Mode awareness
-            try:
-                from src.infrastructure.adapters.primary.web.startup.container import (
-                    get_app_container,
-                )
-
-                container = get_app_container()
-                if container is not None:
-                    agent_container = getattr(container, "_agent", None)
-                    plan_repository_factory = getattr(agent_container, "plan_repository", None)
-                    if callable(plan_repository_factory):
-                        self._agent._plan_repo = plan_repository_factory()
-            except Exception:
-                pass  # Plan Mode awareness is optional
-
             return {"status": "initialized", "cached": False}
+
+    @staticmethod
+    def _build_agent_runtime_v2(config: ProjectAgentActorConfig) -> ProjectReActAgent:
+        """Construct one unbound runtime that will be pinned on its first lease."""
+        agent_config = ProjectAgentConfig(
+            tenant_id=config.tenant_id,
+            project_id=config.project_id,
+            agent_mode=config.agent_mode,
+            model=config.model,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            max_steps=config.max_steps,
+            persistent=config.persistent,
+            idle_timeout_seconds=config.idle_timeout_seconds,
+            max_concurrent_chats=config.max_concurrent_chats,
+            mcp_tools_ttl_seconds=config.mcp_tools_ttl_seconds,
+            enable_skills=config.enable_skills,
+            enable_subagents=config.enable_subagents,
+        )
+        agent = ProjectReActAgent(agent_config)
+
+        # Inject plan repository for Plan Mode awareness
+        try:
+            from src.infrastructure.adapters.primary.web.startup.container import (
+                get_app_container,
+            )
+
+            container = get_app_container()
+            if container is not None:
+                agent_container = getattr(container, "_agent", None)
+                plan_repository_factory = getattr(agent_container, "plan_repository", None)
+                if callable(plan_repository_factory):
+                    agent._plan_repo = plan_repository_factory()
+        except Exception:
+            pass  # Plan Mode awareness is optional
+
+        return agent
 
     def _require_task_registration_open(self) -> None:
         if self._shutting_down:
@@ -154,28 +187,128 @@ class ProjectAgentActor:
         operation: OperationContextV2,
         *,
         agent: ProjectReActAgent | None = None,
-    ) -> None:
-        """Initialize Agent state inside the exact admitted generation lease."""
-        target = agent if agent is not None else self._agent
+    ) -> ProjectReActAgent:
+        """Resolve one immutable runtime for the exact admitted generation."""
+        async with self._init_lock:
+            entry = await self._ensure_agent_runtime_entry_v2_locked(
+                operation,
+                preferred_agent=agent,
+            )
+            retired = self._take_retired_agent_runtimes_v2_locked()
+            await self._dispose_agent_runtimes_v2(retired)
+        return entry.agent
+
+    async def _ensure_agent_runtime_entry_v2_locked(
+        self,
+        operation: OperationContextV2,
+        *,
+        preferred_agent: ProjectReActAgent | None = None,
+    ) -> _AgentRuntimeEntryV2:
+        """Resolve or create a generation runtime while ``_init_lock`` is held."""
+        descriptor = operation.descriptor
+        cached = self._agent_runtime_entries_v2.get(descriptor)
+        if cached is not None:
+            return cached
+
+        target = preferred_agent
+        if target is None and not self._agent_runtime_entries_v2:
+            target = self._agent
         if target is None:
+            if self._config is None:
+                raise RuntimeV2Error(
+                    "agent_runtime_unavailable",
+                    "agent runtime is not configured for the admitted operation",
+                )
+            target = self._build_agent_runtime_v2(self._config)
+
+        if any(entry.agent is target for entry in self._agent_runtime_entries_v2.values()):
             raise RuntimeV2Error(
-                "agent_runtime_unavailable",
-                "agent runtime is not configured for the admitted operation",
+                "agent_runtime_generation_conflict",
+                "one agent runtime cannot be rebound to another plugin generation",
             )
 
-        descriptor = operation.descriptor
+        success = await target.initialize(force_refresh=False)
+        if not success:
+            await target.stop(
+                generation_descriptor=descriptor,
+                notify_lifecycle=False,
+            )
+            raise RuntimeV2Error(
+                "agent_initialization_failed",
+                "agent initialization failed for the admitted plugin generation",
+            )
+
+        entry = _AgentRuntimeEntryV2(descriptor=descriptor, agent=target)
+        self._agent_runtime_entries_v2[descriptor] = entry
+        if self._should_promote_agent_runtime_v2(descriptor):
+            self._agent = target
+            self._agent_generation_descriptor_v2 = descriptor
+        return entry
+
+    def _should_promote_agent_runtime_v2(
+        self,
+        descriptor: PluginGenerationDescriptorV2,
+    ) -> bool:
+        """Prefer the data-plane current descriptor, with a bootstrap fallback."""
+        host = getattr(self._plugin_admission_v2, "host", None)
+        manager = getattr(host, "manager", None)
+        current_generation = getattr(manager, "current", None)
+        published_descriptor = getattr(current_generation, "descriptor", None)
+        if published_descriptor is not None:
+            return descriptor == published_descriptor
+
+        current = self._agent_generation_descriptor_v2
+        return (
+            current is None or descriptor == current or descriptor.generation > current.generation
+        )
+
+    def _take_retired_agent_runtimes_v2_locked(self) -> tuple[_AgentRuntimeEntryV2, ...]:
+        """Detach inactive runtimes that no longer represent the current generation."""
+        current = self._agent_generation_descriptor_v2
+        retired = tuple(
+            entry
+            for descriptor, entry in self._agent_runtime_entries_v2.items()
+            if descriptor != current and entry.active_leases == 0
+        )
+        for entry in retired:
+            self._agent_runtime_entries_v2.pop(entry.descriptor, None)
+        return retired
+
+    @staticmethod
+    async def _dispose_agent_runtimes_v2(
+        entries: tuple[_AgentRuntimeEntryV2, ...],
+    ) -> None:
+        """Stop retired runtimes without invalidating another generation's cache."""
+        for entry in entries:
+            await entry.agent.stop(
+                generation_descriptor=entry.descriptor,
+                notify_lifecycle=False,
+            )
+
+    @asynccontextmanager
+    async def _lease_agent_runtime_v2(
+        self,
+        operation: OperationContextV2,
+        *,
+        preferred_agent: ProjectReActAgent | None = None,
+    ) -> AsyncIterator[ProjectReActAgent]:
+        """Keep one generation-owned runtime immutable for an operation."""
         async with self._init_lock:
-            current = self._agent_generation_descriptor_v2 if target is self._agent else None
-            if current == descriptor:
-                return
-            success = await target.initialize(force_refresh=current is not None)
-            if not success:
-                raise RuntimeV2Error(
-                    "agent_initialization_failed",
-                    "agent initialization failed for the admitted plugin generation",
-                )
-            if target is self._agent:
-                self._agent_generation_descriptor_v2 = descriptor
+            entry = await self._ensure_agent_runtime_entry_v2_locked(
+                operation,
+                preferred_agent=preferred_agent,
+            )
+            entry.active_leases += 1
+            retired = self._take_retired_agent_runtimes_v2_locked()
+            await self._dispose_agent_runtimes_v2(retired)
+
+        try:
+            yield entry.agent
+        finally:
+            async with self._init_lock:
+                entry.active_leases -= 1
+                retired = self._take_retired_agent_runtimes_v2_locked()
+                await self._dispose_agent_runtimes_v2(retired)
 
     async def chat(self, request: ProjectChatRequest) -> dict[str, Any]:
         """Start a chat execution in the background."""
@@ -326,9 +459,16 @@ class ProjectAgentActor:
         self._task_conversations.clear()
         self._abort_signals.clear()
 
-        if self._agent:
-            await self._agent.stop()
-            self._agent = None
+        runtime_agents = {
+            id(entry.agent): entry.agent for entry in self._agent_runtime_entries_v2.values()
+        }
+        if self._agent is not None:
+            runtime_agents[id(self._agent)] = self._agent
+        for runtime_agent in runtime_agents.values():
+            await runtime_agent.stop()
+        self._agent_runtime_entries_v2.clear()
+        self._agent = None
+        self._agent_generation_descriptor_v2 = None
         await self._plugin_admission_v2.close()
 
     def _admit_plugin_turn(
@@ -384,18 +524,18 @@ class ProjectAgentActor:
 
                 async with self._admit_plugin_turn(request) as operation:
                     await self._ensure_agent_orchestrator_v2()
-                    await self._ensure_agent_initialized_v2(operation)
-                    distribution = self._plugin_admission_v2.host.distribution_for_generation(
-                        operation.generation
-                    )
-                    result = await execute_project_chat(
-                        self._agent,
-                        replace(
-                            request,
-                            plugin_distribution=distribution.to_payload(),
-                        ),
-                        abort_signal=abort_signal,
-                    )
+                    async with self._lease_agent_runtime_v2(operation) as agent:
+                        distribution = self._plugin_admission_v2.host.distribution_for_generation(
+                            operation.generation
+                        )
+                        result = await execute_project_chat(
+                            agent,
+                            replace(
+                                request,
+                                plugin_distribution=distribution.to_payload(),
+                            ),
+                            abort_signal=abort_signal,
+                        )
                 if result.hitl_pending:
                     logger.info(
                         "[ProjectAgentActor] HITL pending: request_id=%s",
@@ -421,8 +561,6 @@ class ProjectAgentActor:
     ) -> dict[str, Any]:
         if not self._agent:
             return {"status": "unavailable", "request_id": request_id, "ack": False}
-        agent = self._agent
-
         from src.infrastructure.agent.hitl.coordinator import (
             ResolveResult,
             resolve_by_request_id,
@@ -464,7 +602,6 @@ class ProjectAgentActor:
             }
 
         return await self._resume_continue_request(
-            agent=agent,
             request_id=request_id,
             response_data=response_data,
             conversation_id=conversation_id,
@@ -555,20 +692,20 @@ class ProjectAgentActor:
                     },
                 ) as operation:
                     await self._ensure_agent_orchestrator_v2()
-                    await self._ensure_agent_initialized_v2(
+                    async with self._lease_agent_runtime_v2(
                         operation,
-                        agent=resume_agent,
-                    )
-                    result = await continue_project_chat(
-                        resume_agent,
-                        request_id,
-                        response_data,
-                        lease_owner=self._lease_owner(),
-                        tenant_id=state.tenant_id,
-                        project_id=state.project_id,
-                        conversation_id=state.conversation_id,
-                        message_id=state.message_id,
-                    )
+                        preferred_agent=agent,
+                    ) as resume_agent:
+                        result = await continue_project_chat(
+                            resume_agent,
+                            request_id,
+                            response_data,
+                            lease_owner=self._lease_owner(),
+                            tenant_id=state.tenant_id,
+                            project_id=state.project_id,
+                            conversation_id=state.conversation_id,
+                            message_id=state.message_id,
+                        )
         except Exception:
             await self._revert_continue_claim(request_id)
             raise

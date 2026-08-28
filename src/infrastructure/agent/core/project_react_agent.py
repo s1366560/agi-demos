@@ -44,6 +44,7 @@ from typing import Any
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.plugins.v2.agent_lifecycle_notifier import (
     AgentLifecycleNotifierProtocolV2,
 )
@@ -1093,7 +1094,12 @@ class ProjectReActAgent:
         logger.info(f"ProjectReActAgent[{self.project_key}]: Resumed")
         return True
 
-    async def stop(self) -> bool:
+    async def stop(
+        self,
+        *,
+        generation_descriptor: PluginGenerationDescriptorV2 | None = None,
+        notify_lifecycle: bool = True,
+    ) -> bool:
         """
         Stop the agent and clean up resources.
 
@@ -1101,8 +1107,9 @@ class ProjectReActAgent:
         1. Sets the shutdown flag so new chats and detached runs are rejected
         2. Cancels and awaits active chat tasks
         3. Cancels and awaits all project-owned detached SubAgent tasks
-        4. Clears caches and runtime references after task cleanup
-        5. Updates status
+        4. Clears the exact generation cache when a descriptor is provided
+        5. Clears runtime references after task cleanup
+        6. Updates status
 
         Returns:
             True if stopped successfully
@@ -1113,7 +1120,7 @@ class ProjectReActAgent:
             logger.info(f"ProjectReActAgent[{self.project_key}]: Stopping...")
 
         # Notify shutting down state
-        notifier = get_websocket_notifier() if was_initialized else None
+        notifier = get_websocket_notifier() if was_initialized and notify_lifecycle else None
         if notifier is not None:
             _ = await notifier.notify_shutting_down(
                 tenant_id=self.config.tenant_id,
@@ -1134,15 +1141,28 @@ class ProjectReActAgent:
         # Clear session cache
         if was_initialized:
             try:
-                from src.infrastructure.agent.state.agent_session_pool import (
-                    invalidate_agent_session,
-                )
+                if generation_descriptor is None:
+                    from src.infrastructure.agent.state.agent_session_pool import (
+                        invalidate_agent_session,
+                    )
 
-                invalidate_agent_session(
-                    tenant_id=self.config.tenant_id,
-                    project_id=self.config.project_id,
-                    agent_mode=self.config.agent_mode,
-                )
+                    _ = invalidate_agent_session(
+                        tenant_id=self.config.tenant_id,
+                        project_id=self.config.project_id,
+                        agent_mode=self.config.agent_mode,
+                    )
+                else:
+                    from src.infrastructure.agent.state.agent_session_pool import (
+                        clear_session_cache,
+                    )
+
+                    _ = await clear_session_cache(
+                        tenant_id=self.config.tenant_id,
+                        project_id=self.config.project_id,
+                        agent_mode=self.config.agent_mode,
+                        grace_period_seconds=0,
+                        generation_descriptor=generation_descriptor,
+                    )
             except Exception as e:
                 logger.warning(f"ProjectReActAgent[{self.project_key}]: Failed to clear cache: {e}")
 
