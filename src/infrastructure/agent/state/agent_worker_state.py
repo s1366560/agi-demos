@@ -98,7 +98,6 @@ __all__ = [  # noqa: RUF022
     # Tool Definitions
     "get_or_create_tool_definitions",
     "get_or_create_tools",
-    "get_pool_adapter",
     "get_pool_stats",
     "get_session_registry",
     # SystemPromptManager
@@ -110,14 +109,11 @@ __all__ = [  # noqa: RUF022
     "invalidate_tool_definitions_cache",
     "invalidate_tools_cache",
     "inject_discovered_mcp_tools_into_cache",
-    "is_pool_enabled",
     # Prewarm
     "prewarm_agent_session",
     "set_agent_graph_service",
     # HITL Response Listener (real-time delivery)
     "set_hitl_response_listener",
-    # Pool Manager (new 3-tier architecture)
-    "set_pool_adapter",
     "update_mcp_tools_cache",
 ]
 
@@ -126,7 +122,6 @@ _agent_graph_service: Any | None = None
 _tenant_graph_services: dict[str, Any] = {}
 _tenant_graph_service_lock = asyncio.Lock()
 _redis_pool: redis.ConnectionPool | None = None
-_pool_adapter: Any | None = None  # PooledAgentSessionAdapter (when enabled)
 _hitl_response_listener: Any | None = None  # HITLResponseListener (real-time)
 
 # Tool set cache (by project_id key)
@@ -242,43 +237,6 @@ def current_mcp_sandbox_adapter_v2() -> MCPSandboxAdapter | None:
             "agent worker runtime resolved an invalid sandbox adapter",
         )
     return adapter
-
-
-# ============================================================================
-# Agent Pool Adapter State (NEW: 3-tier architecture)
-# ============================================================================
-
-
-def set_pool_adapter(adapter: Any) -> None:
-    """Set the global Pool Adapter instance for agent worker.
-
-    Called during Agent Worker initialization when AGENT_POOL_ENABLED=true.
-    The adapter provides pooled instance management with tier-based isolation.
-
-    Args:
-        adapter: The PooledAgentSessionAdapter instance
-    """
-    global _pool_adapter
-    _pool_adapter = adapter
-    logger.info("Agent Worker: Pool Adapter registered for Activities")
-
-
-def get_pool_adapter() -> Any | None:
-    """Get the global Pool Adapter instance for agent worker.
-
-    Returns:
-        The PooledAgentSessionAdapter instance or None if not initialized/disabled
-    """
-    return _pool_adapter
-
-
-def is_pool_enabled() -> bool:
-    """Check if pool-based architecture is enabled.
-
-    Returns:
-        True if pool adapter is available and started
-    """
-    return _pool_adapter is not None and _pool_adapter._running
 
 
 async def get_redis_pool() -> redis.ConnectionPool:
