@@ -11,11 +11,75 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.infrastructure.agent.plugins import skill_evolution as skill_evolution_package
+from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
 from src.infrastructure.agent.plugins.skill_evolution.aggregation import (
     SkillSessionAggregator,
     SkillSessionGroup,
 )
 from src.infrastructure.agent.plugins.skill_evolution.config import SkillEvolutionConfig
+from src.infrastructure.agent.plugins.skill_evolution.plugin import SkillEvolutionPlugin
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "authority_name",
+    (
+        "_collector",
+        "_config",
+        "_session_factory",
+        "_scheduler",
+        "_loaded_skill_names_by_turn",
+        "_tool_events_by_turn",
+        "capture_skill_evolution_turn",
+        "record_skill_evolution_tool_event",
+        "configure_skill_evolution_capture",
+    ),
+)
+def test_process_global_skill_evolution_capture_authority_is_retired(
+    authority_name: str,
+) -> None:
+    assert not hasattr(plugin_module, authority_name)
+    if not authority_name.startswith("_"):
+        assert not hasattr(skill_evolution_package, authority_name)
+
+
+@pytest.mark.unit
+async def test_turn_capture_state_is_owned_by_each_plugin_instance() -> None:
+    plugin_a = SkillEvolutionPlugin(
+        config=SkillEvolutionConfig(enabled=False),
+        skill_service=MagicMock(),
+        llm_client_lease=MagicMock(),
+        session_factory="session-factory-a",
+    )
+    plugin_b = SkillEvolutionPlugin(
+        config=SkillEvolutionConfig(enabled=False),
+        skill_service=MagicMock(),
+        llm_client_lease=MagicMock(),
+        session_factory="session-factory-b",
+    )
+    plugin_a.collector.capture_from_hook = AsyncMock(return_value=[])
+    plugin_b.collector.capture_from_hook = AsyncMock(return_value=[])
+
+    await plugin_a.record_tool_event(
+        {
+            "conversation_id": "conversation-a",
+            "tool_name": "skill_loader",
+            "call_id": "call-a",
+            "result": "loaded",
+            "result_metadata": {"name": "review"},
+        }
+    )
+
+    await plugin_b.capture_turn({"conversation_id": "conversation-a"})
+    plugin_b_payload = plugin_b.collector.capture_from_hook.await_args.args[0]
+    assert "loaded_skill_names" not in plugin_b_payload
+    assert "tool_events" not in plugin_b_payload
+
+    await plugin_a.capture_turn({"conversation_id": "conversation-a"})
+    plugin_a_payload = plugin_a.collector.capture_from_hook.await_args.args[0]
+    assert plugin_a_payload["loaded_skill_names"] == ["review"]
+    assert plugin_a_payload["tool_events"][0]["tool_name"] == "skill_loader"
 
 
 class TestSkillEvolutionConfig:
@@ -1014,45 +1078,34 @@ class TestV2LifecycleRegistration:
 
     @pytest.mark.asyncio
     async def test_skill_loader_hook_attributes_next_turn_capture(self) -> None:
-        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
-        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            capture_skill_evolution_turn,
-            record_skill_evolution_tool_event,
-        )
-
         collector = MagicMock()
         collector.capture_from_hook = AsyncMock()
-        previous_collector = plugin_module._collector
-        previous_session_factory = plugin_module._session_factory
-        plugin_module._collector = collector
-        plugin_module._session_factory = object()
-        plugin_module._loaded_skill_names_by_turn.clear()
-        plugin_module._tool_events_by_turn.clear()
+        plugin = SkillEvolutionPlugin(
+            config=SkillEvolutionConfig(enabled=False),
+            skill_service=MagicMock(),
+            llm_client_lease=MagicMock(),
+            session_factory=object(),
+        )
+        plugin.collector = collector
 
-        try:
-            await record_skill_evolution_tool_event(
-                {
-                    "tool_name": "skill_loader",
-                    "conversation_id": "conv-1",
-                    "result_metadata": {"name": "dynamic-skill"},
-                    "result": "Loaded skill: dynamic-skill",
-                }
-            )
-            await capture_skill_evolution_turn(
-                {
-                    "tenant_id": "t1",
-                    "conversation_id": "conv-1",
-                    "user_message": "use the dynamic skill",
-                    "final_content": "done",
-                    "conversation_context": [],
-                    "success": True,
-                }
-            )
-        finally:
-            plugin_module._collector = previous_collector
-            plugin_module._session_factory = previous_session_factory
-            plugin_module._loaded_skill_names_by_turn.clear()
-            plugin_module._tool_events_by_turn.clear()
+        await plugin.record_tool_event(
+            {
+                "tool_name": "skill_loader",
+                "conversation_id": "conv-1",
+                "result_metadata": {"name": "dynamic-skill"},
+                "result": "Loaded skill: dynamic-skill",
+            }
+        )
+        await plugin.capture_turn(
+            {
+                "tenant_id": "t1",
+                "conversation_id": "conv-1",
+                "user_message": "use the dynamic skill",
+                "final_content": "done",
+                "conversation_context": [],
+                "success": True,
+            }
+        )
 
         captured_payload = collector.capture_from_hook.await_args.args[0]
         assert captured_payload["loaded_skill_names"] == ["dynamic-skill"]
@@ -1060,12 +1113,8 @@ class TestV2LifecycleRegistration:
 
     @pytest.mark.asyncio
     async def test_after_turn_capture_schedules_autonomous_evolution(self) -> None:
-        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
         from src.infrastructure.agent.plugins.skill_evolution.models import (
             SkillEvolutionSession,
-        )
-        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-            capture_skill_evolution_turn,
         )
 
         collector = MagicMock()
@@ -1089,28 +1138,25 @@ class TestV2LifecycleRegistration:
             ]
         )
         scheduler = MagicMock()
-        previous_collector = plugin_module._collector
-        previous_session_factory = plugin_module._session_factory
-        previous_scheduler = plugin_module._scheduler
-        plugin_module._collector = collector
-        plugin_module._session_factory = object()
-        plugin_module._scheduler = scheduler
+        plugin = SkillEvolutionPlugin(
+            config=SkillEvolutionConfig(enabled=False),
+            skill_service=MagicMock(),
+            llm_client_lease=MagicMock(),
+            session_factory=object(),
+        )
+        plugin.collector = collector
+        plugin._scheduler_instance = scheduler
 
-        try:
-            await capture_skill_evolution_turn(
-                {
-                    "tenant_id": "tenant-1",
-                    "conversation_id": "conv-1",
-                    "user_message": "use skill",
-                    "final_content": "done",
-                    "conversation_context": [],
-                    "success": True,
-                }
-            )
-        finally:
-            plugin_module._collector = previous_collector
-            plugin_module._session_factory = previous_session_factory
-            plugin_module._scheduler = previous_scheduler
+        await plugin.capture_turn(
+            {
+                "tenant_id": "tenant-1",
+                "conversation_id": "conv-1",
+                "user_message": "use skill",
+                "final_content": "done",
+                "conversation_context": [],
+                "success": True,
+            }
+        )
 
         scheduler.schedule_run.assert_called_once_with(
             tenant_id="tenant-1",
@@ -1273,7 +1319,6 @@ class TestSkillEvolutionEndToEnd:
         from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
             SqlSkillRepository,
         )
-        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
         from src.infrastructure.agent.plugins.skill_evolution.models import (
             SkillEvolutionJob,
             SkillEvolutionSession,
@@ -1405,7 +1450,7 @@ class TestSkillEvolutionEndToEnd:
                 session_factory=session_factory,
             )
 
-            await plugin_module.capture_skill_evolution_turn(
+            await plugin.capture_turn(
                 {
                     "tenant_id": tenant_id,
                     "project_id": project_id,

@@ -8138,7 +8138,7 @@
       },
       "contract_digest": "sha256:ff22eed2805f8cac5bac3f54afb79320c7dbd5611ac32c24ce31a1ec2e041617",
       "artifact": {
-        "digest": "sha256:c803eaaa05314e7b1003a7aac73e686a5fc0143c276c7ef5787d58e0866fc96e",
+        "digest": "sha256:257595028e5d9d45985471dcc1ecc5000ab208eb29c0d871e7de525b3b44c1af",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_runtime.py"
       }
     },
@@ -8197,7 +8197,7 @@
       },
       "contract_digest": "sha256:95503e10028c08a5e8e7996b787978fef5978d70183beed8145f12a9b9f3071d",
       "artifact": {
-        "digest": "sha256:5ffb8caa539373c847f028b278bbef87e087bd834152ef0018bbb0ad9d447362",
+        "digest": "sha256:4b14e599a9920cdfd33588afb0094e67b976a997ecae40fe31e5efda1eb24cbb",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_lifecycle_runtime.py"
       }
     },
@@ -8262,7 +8262,7 @@
       },
       "contract_digest": "sha256:31b0b61ff6c2abd808c54f9343b46cd4dabac3e69df0b547bd9ca12475ee5fc0",
       "artifact": {
-        "digest": "sha256:5ffb8caa539373c847f028b278bbef87e087bd834152ef0018bbb0ad9d447362",
+        "digest": "sha256:4b14e599a9920cdfd33588afb0094e67b976a997ecae40fe31e5efda1eb24cbb",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_lifecycle_runtime.py"
       }
     },

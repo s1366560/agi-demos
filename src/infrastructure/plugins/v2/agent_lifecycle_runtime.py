@@ -7,10 +7,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Protocol, cast, runtime_checkable
 
 from src.infrastructure.agent.memory.runtime import MemoryRuntimeProtocol
-from src.infrastructure.agent.plugins.skill_evolution.plugin import (
-    capture_skill_evolution_turn,
-    record_skill_evolution_tool_event,
-)
 from src.infrastructure.audit.audit_log_service import get_audit_service
 
 from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error, generated_contract_digest_v2
@@ -31,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class _SkillEvolutionSchedulerProtocolV2(Protocol):
+    async def record_tool_event(self, payload: Mapping[str, Any]) -> dict[str, Any]: ...
+
+    async def capture_turn(self, payload: Mapping[str, Any]) -> dict[str, Any]: ...
+
     def schedule_evolution(
         self,
         *,
@@ -182,20 +182,6 @@ async def _capture_memory_after_turn(
     )
 
 
-async def _record_skill_evolution_tool(
-    payload: Mapping[str, Any],
-) -> None:
-    _ = await record_skill_evolution_tool_event(payload)
-
-
-async def _capture_skill_evolution_after_turn(
-    payload: Mapping[str, Any],
-    next_: WaterfallNextV2,
-) -> dict[str, Any]:
-    updated = await capture_skill_evolution_turn(payload)
-    return await _continue_waterfall(next_, updated)
-
-
 def _apply_memory_lifecycle_v2(
     context: ContextV2,
     config: Mapping[str, Any],
@@ -219,8 +205,19 @@ def _apply_skill_evolution_lifecycle_v2(
             "invalid_skill_evolution_scheduler",
             "Skill Evolution lifecycle scheduler inject has an invalid implementation",
         )
-    _ = context.on(AGENT_SKILL_TOOL_OBSERVED_EVENT_V2, _record_skill_evolution_tool)
-    _ = context.on(AGENT_AFTER_TURN_COMPLETE_EVENT_V2, _capture_skill_evolution_after_turn)
+
+    async def record_tool_event(payload: Mapping[str, Any]) -> None:
+        _ = await scheduler.record_tool_event(payload)
+
+    async def capture_turn(
+        payload: Mapping[str, Any],
+        next_: WaterfallNextV2,
+    ) -> dict[str, Any]:
+        updated = await scheduler.capture_turn(payload)
+        return await _continue_waterfall(next_, updated)
+
+    _ = context.on(AGENT_SKILL_TOOL_OBSERVED_EVENT_V2, record_tool_event)
+    _ = context.on(AGENT_AFTER_TURN_COMPLETE_EVENT_V2, capture_turn)
 
 
 def agent_lifecycle_definitions_v2() -> tuple[PluginDefinitionV2, ...]:

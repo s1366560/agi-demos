@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:efd91304e9d75fccd6ef89e659f5d525260475e42fc87d4b448e9dfdd5',
-  'b6f50d","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:ea8bbc63a5b104dfa75a4027e3d8c6580da916d74c5e1234f5c6b92ef0',
+  '950696","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -160,8 +160,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '56:4874c76612f591967e039cf7e4db516b4fcc93c068d16e8d7e9f1a97adeffe6a","entrypoint":"s',
   'rc.infrastructure.plugins.v2.agent_loop:_apply_builtin_agent_loop_v2","module_ref":"',
   'builtin://memstack/agent/loop","plugin_id":"memstack-runtime-kernel","plugin_version',
-  '":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:5ffb8caa539373c847f028b27',
-  '8bbef87e087bd834152ef0018bbb0ad9d447362","artifact_source":"repo+python://src/infras',
+  '":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:4b14e599a9920cdfd33588afb',
+  '0094e67b976a997ecae40fe31e5efda1eb24cbb","artifact_source":"repo+python://src/infras',
   'tructure/plugins/v2/agent_lifecycle_runtime.py","contract":{"config_schema":{"$schem',
   'a":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"prop',
   'erties":{},"type":"object"},"events":{"emits":[],"handles":[{"event":"agent.before_p',
@@ -322,8 +322,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '56:628afbe88257ec446db86ad721698b1e0d8278232a74629be47522eea7bdb3a9","entrypoint":"s',
   'rc.infrastructure.plugins.v2.agent_capabilities:_apply_skill_contribution_v2","modul',
   'e_ref":"builtin://memstack/agent/skill-contribution","plugin_id":"memstack-runtime-k',
-  'ernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:5ff',
-  'b8caa539373c847f028b278bbef87e087bd834152ef0018bbb0ad9d447362","artifact_source":"re',
+  'ernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:4b1',
+  '4e599a9920cdfd33588afb0094e67b976a997ecae40fe31e5efda1eb24cbb","artifact_source":"re',
   'po+python://src/infrastructure/plugins/v2/agent_lifecycle_runtime.py","contract":{"c',
   'onfig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalP',
   'roperties":false,"properties":{},"type":"object"},"events":{"emits":[],"handles":[{"',
@@ -2823,7 +2823,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'a1","entrypoint":"src.infrastructure.plugins.v2.reflection_runtime:reflection_runtim',
   'e_definition_v2","module_ref":"builtin://memstack/runtime/reflection","plugin_id":"m',
   'emstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_di',
-  'gest":"sha256:c803eaaa05314e7b1003a7aac73e686a5fc0143c276c7ef5787d58e0866fc96e","art',
+  'gest":"sha256:257595028e5d9d45985471dcc1ecc5000ab208eb29c0d871e7de525b3b44c1af","art',
   'ifact_source":"repo+python://src/infrastructure/plugins/v2/skill_evolution_runtime.p',
   'y","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/sch',
   'ema","additionalProperties":false,"properties":{"enabled":{"type":"boolean"},"enviro',
@@ -3010,4 +3010,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:efd91304e9d75fccd6ef89e659f5d525260475e42fc87d4b448e9dfdd5b6f50d' as const;
+  'sha256:ea8bbc63a5b104dfa75a4027e3d8c6580da916d74c5e1234f5c6b92ef0950696' as const;

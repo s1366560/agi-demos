@@ -59,6 +59,10 @@ class SkillEvolutionPluginProtocolV2(Protocol):
 
     async def on_disable(self) -> None: ...
 
+    async def record_tool_event(self, payload: Mapping[str, Any]) -> dict[str, Any]: ...
+
+    async def capture_turn(self, payload: Mapping[str, Any]) -> dict[str, Any]: ...
+
     def schedule_evolution(
         self,
         *,
@@ -72,6 +76,10 @@ class SkillEvolutionPluginProtocolV2(Protocol):
 @runtime_checkable
 class SkillEvolutionSchedulerProtocolV2(Protocol):
     """Consumer-visible scheduler contract; callers never name the implementation."""
+
+    async def record_tool_event(self, payload: Mapping[str, Any]) -> dict[str, Any]: ...
+
+    async def capture_turn(self, payload: Mapping[str, Any]) -> dict[str, Any]: ...
 
     def schedule_evolution(
         self,
@@ -181,6 +189,26 @@ class SkillEvolutionSchedulerRuntimeV2:
                 self._plugin = None
                 self._config = None
                 self._session_factory = None
+
+    async def record_tool_event(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Record one observation through the active generation-owned plugin."""
+        plugin = self._plugin
+        if plugin is None:
+            raise RuntimeV2Error(
+                "skill_evolution_runtime_unavailable",
+                "Skill Evolution runtime has no active generation",
+            )
+        return await plugin.record_tool_event(payload)
+
+    async def capture_turn(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Capture one completed turn through the active generation-owned plugin."""
+        plugin = self._plugin
+        if plugin is None:
+            raise RuntimeV2Error(
+                "skill_evolution_runtime_unavailable",
+                "Skill Evolution runtime has no active generation",
+            )
+        return await plugin.capture_turn(payload)
 
     def schedule_evolution(
         self,

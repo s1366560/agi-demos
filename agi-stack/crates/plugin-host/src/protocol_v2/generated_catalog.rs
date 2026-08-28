@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:efd91304e9d75fccd6ef89e659f5d525260475e42fc87d4b448e9dfdd5b6f5",
-    "0d\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:ea8bbc63a5b104dfa75a4027e3d8c6580da916d74c5e1234f5c6b92ef09506",
+    "96\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -134,8 +134,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "76612f591967e039cf7e4db516b4fcc93c068d16e8d7e9f1a97adeffe6a\",\"entrypoint\":\"src.infrastru",
     "cture.plugins.v2.agent_loop:_apply_builtin_agent_loop_v2\",\"module_ref\":\"builtin://memsta",
     "ck/agent/loop\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":",
-    "[\"python\"]},{\"artifact_digest\":\"sha256:5ffb8caa539373c847f028b278bbef87e087bd834152ef001",
-    "8bbb0ad9d447362\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent_li",
+    "[\"python\"]},{\"artifact_digest\":\"sha256:4b14e599a9920cdfd33588afb0094e67b976a997ecae40fe3",
+    "1e5efda1eb24cbb\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent_li",
     "fecycle_runtime.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draf",
     "t/2020-12/schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"events\"",
     ":{\"emits\":[],\"handles\":[{\"event\":\"agent.before_prompt_build\",\"mode\":\"waterfall\",\"payload",
@@ -289,8 +289,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "8232a74629be47522eea7bdb3a9\",\"entrypoint\":\"src.infrastructure.plugins.v2.agent_capabilit",
     "ies:_apply_skill_contribution_v2\",\"module_ref\":\"builtin://memstack/agent/skill-contribut",
     "ion\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]",
-    "},{\"artifact_digest\":\"sha256:5ffb8caa539373c847f028b278bbef87e087bd834152ef0018bbb0ad9d4",
-    "47362\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent_lifecycle_ru",
+    "},{\"artifact_digest\":\"sha256:4b14e599a9920cdfd33588afb0094e67b976a997ecae40fe31e5efda1eb",
+    "24cbb\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent_lifecycle_ru",
     "ntime.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/",
     "schema\",\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"events\":{\"emits\":",
     "[],\"handles\":[{\"event\":\"agent.skill_tool_observed\",\"mode\":\"serial\",\"payload_schema\":{\"$s",
@@ -2675,8 +2675,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "gest\":\"sha256:c2417159a12f33545291297662ebb0b66883b515d434548e15fbc1839c59e7a1\",\"entrypo",
     "int\":\"src.infrastructure.plugins.v2.reflection_runtime:reflection_runtime_definition_v2\"",
     ",\"module_ref\":\"builtin://memstack/runtime/reflection\",\"plugin_id\":\"memstack-runtime-kern",
-    "el\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:c803eaaa05",
-    "314e7b1003a7aac73e686a5fc0143c276c7ef5787d58e0866fc96e\",\"artifact_source\":\"repo+python:/",
+    "el\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:257595028e",
+    "5d9d45985471dcc1ecc5000ab208eb29c0d871e7de525b3b44c1af\",\"artifact_source\":\"repo+python:/",
     "/src/infrastructure/plugins/v2/skill_evolution_runtime.py\",\"contract\":{\"config_schema\":{",
     "\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"p",
     "roperties\":{\"enabled\":{\"type\":\"boolean\"},\"environment_overrides\":{\"type\":\"boolean\"},\"str",
@@ -2849,4 +2849,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "time-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:efd91304e9d75fccd6ef89e659f5d525260475e42fc87d4b448e9dfdd5b6f50d";
+    "sha256:ea8bbc63a5b104dfa75a4027e3d8c6580da916d74c5e1234f5c6b92ef0950696";

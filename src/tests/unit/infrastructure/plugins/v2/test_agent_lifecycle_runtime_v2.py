@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pytest
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.agent.plugins.skill_evolution import plugin as skill_evolution_runtime
 from src.infrastructure.plugins.v2 import skill_evolution_runtime as skill_evolution_runtime_v2
 from src.infrastructure.plugins.v2.agent_lifecycle_runtime import (
     MEMORY_LIFECYCLE_MODULE_V2,
@@ -47,17 +46,12 @@ class _MemoryRuntime:
         return SimpleNamespace(emitted_events=[{"type": "memory_captured"}])
 
 
-class _Collector:
-    def __init__(self) -> None:
-        self.payload: dict[str, object] | None = None
-
-    async def capture_from_hook(self, payload, *, session_factory):
-        self.payload = dict(payload)
-        assert session_factory == "session-factory"
-        return []
-
-
 class _SchedulerPlugin:
+    def __init__(self) -> None:
+        self.loaded_skill_names_by_turn: dict[str, list[str]] = {}
+        self.tool_events_by_turn: dict[str, list[dict[str, object]]] = {}
+        self.capture_payload: dict[str, object] | None = None
+
     async def on_enable(self) -> None:
         return None
 
@@ -66,6 +60,31 @@ class _SchedulerPlugin:
 
     def schedule_evolution(self, **_kwargs: object) -> dict[str, object]:
         return {"scheduled": True}
+
+    async def record_tool_event(self, payload: dict[str, object]) -> dict[str, object]:
+        updated = dict(payload)
+        conversation_id = str(payload.get("conversation_id", ""))
+        self.tool_events_by_turn.setdefault(conversation_id, []).append(
+            {"tool_name": payload.get("tool_name")}
+        )
+        metadata = payload.get("result_metadata")
+        if isinstance(metadata, dict) and isinstance(metadata.get("name"), str):
+            self.loaded_skill_names_by_turn.setdefault(conversation_id, []).append(
+                str(metadata["name"])
+            )
+        return updated
+
+    async def capture_turn(self, payload: dict[str, object]) -> dict[str, object]:
+        updated = dict(payload)
+        conversation_id = str(payload.get("conversation_id", ""))
+        loaded = self.loaded_skill_names_by_turn.pop(conversation_id, [])
+        events = self.tool_events_by_turn.pop(conversation_id, [])
+        if loaded:
+            updated["loaded_skill_names"] = loaded
+        if events:
+            updated["tool_events"] = events
+        self.capture_payload = updated
+        return updated
 
 
 def _scope() -> ScopeV2:
@@ -208,16 +227,11 @@ async def test_disabling_memory_lifecycle_entry_removes_behavior_without_fallbac
 
 @pytest.mark.unit
 async def test_skill_evolution_attribution_flows_through_v2_events(monkeypatch) -> None:
-    collector = _Collector()
-    monkeypatch.setattr(skill_evolution_runtime, "_collector", collector)
-    monkeypatch.setattr(skill_evolution_runtime, "_session_factory", "session-factory")
-    monkeypatch.setattr(skill_evolution_runtime, "_scheduler", None)
-    skill_evolution_runtime._loaded_skill_names_by_turn.clear()
-    skill_evolution_runtime._tool_events_by_turn.clear()
+    plugin = _SchedulerPlugin()
     monkeypatch.setattr(
         skill_evolution_runtime_v2,
         "build_skill_evolution_runtime",
-        lambda **_kwargs: _SchedulerPlugin(),
+        lambda **_kwargs: plugin,
     )
 
     dispatcher = PinnedAgentRuntimeDispatcherV2()
@@ -260,6 +274,6 @@ async def test_skill_evolution_attribution_flows_through_v2_events(monkeypatch) 
     finally:
         await manager.close()
 
-    assert collector.payload is not None
-    assert collector.payload["loaded_skill_names"] == ["review"]
-    assert collector.payload["tool_events"][0]["tool_name"] == "skill_loader"
+    assert plugin.capture_payload is not None
+    assert plugin.capture_payload["loaded_skill_names"] == ["review"]
+    assert plugin.capture_payload["tool_events"][0]["tool_name"] == "skill_loader"

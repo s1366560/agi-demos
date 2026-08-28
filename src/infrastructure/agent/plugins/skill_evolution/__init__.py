@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from .plugin import (
         SkillEvolutionPlugin,
         build_skill_evolution_runtime,
-        configure_skill_evolution_capture,
     )
     from .repository import SkillEvolutionRepository
     from .scheduler import EvolutionScheduler
@@ -68,7 +67,6 @@ _EXPORTS = {
     "SkillSessionAggregator": (".aggregation", "SkillSessionAggregator"),
     "SkillSessionGroup": (".aggregation", "SkillSessionGroup"),
     "build_skill_evolution_runtime": (".plugin", "build_skill_evolution_runtime"),
-    "configure_skill_evolution_capture": (".plugin", "configure_skill_evolution_capture"),
 }
 
 __all__ = [
@@ -86,7 +84,6 @@ __all__ = [
     "SkillSessionAggregator",
     "SkillSessionGroup",
     "build_skill_evolution_runtime",
-    "configure_skill_evolution_capture",
 ]
 
 

@@ -56,6 +56,8 @@ def _plugin() -> SimpleNamespace:
     return SimpleNamespace(
         on_enable=AsyncMock(),
         on_disable=AsyncMock(),
+        record_tool_event=AsyncMock(side_effect=lambda payload: dict(payload)),
+        capture_turn=AsyncMock(side_effect=lambda payload: dict(payload)),
         schedule_evolution=MagicMock(
             return_value={"scheduled": True, "reason": "manual", "status": "queued"}
         ),
