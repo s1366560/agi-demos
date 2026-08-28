@@ -5,40 +5,43 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.infrastructure.adapters.primary.web.websocket.handlers import subscription_handler
 from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_handler import (
     SubscribeHandler,
 )
+from src.infrastructure.plugins.v2.session_event_log_types import (
+    SessionEventCursorV2,
+    SessionMessageRecoveryStateV2,
+)
 
 
-def _build_context() -> SimpleNamespace:
+def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     connection_manager = SimpleNamespace(
         subscribe=AsyncMock(),
         try_start_bridge_task=AsyncMock(return_value=True),
         bridge_tasks={},
     )
     conversation_repo = SimpleNamespace(find_by_id=AsyncMock())
-    event_repo = SimpleNamespace(
-        get_last_event_time=AsyncMock(return_value=(0, 0)),
-        get_events_by_message=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    conversation_id="conv-1",
-                    event_type="observe",
-                    event_time_us=100,
-                    event_counter=1,
-                )
-            ]
+    redis_client = SimpleNamespace(get=AsyncMock(return_value=None))
+    session_event_log = SimpleNamespace(
+        message_recovery_state=AsyncMock(
+            return_value=SessionMessageRecoveryStateV2(
+                has_events=True,
+                is_terminal=False,
+                cursor=SessionEventCursorV2(event_time_us=100, event_counter=1),
+            )
         ),
     )
-    redis_client = SimpleNamespace(get=AsyncMock(return_value=None))
     container = SimpleNamespace(
         conversation_repository=lambda: conversation_repo,
-        agent_execution_event_repository=lambda: event_repo,
-        redis=lambda: redis_client,
+        agent_execution_event_repository=MagicMock(
+            side_effect=AssertionError("static event repository must not be used")
+        ),
+        redis=MagicMock(side_effect=AssertionError("static Redis must not be used")),
         agent_service=lambda _llm: AsyncMock(),
     )
 
@@ -46,10 +49,13 @@ def _build_context() -> SimpleNamespace:
         user_id="user-1",
         tenant_id="tenant-1",
         session_id="session-1",
+        db=SimpleNamespace(),
         connection_manager=connection_manager,
         get_scoped_container=lambda: container,
         send_ack=AsyncMock(),
         send_error=AsyncMock(),
+        v2_redis=redis_client,
+        v2_session_event_log=session_event_log,
     )
 
     @asynccontextmanager
@@ -57,17 +63,33 @@ def _build_context() -> SimpleNamespace:
         yield context
 
     context.fresh_db_context = _fresh_db_context
+
+    @asynccontextmanager
+    async def _operation_context(**_kwargs: object):
+        yield None
+
+    monkeypatch.setattr(subscription_handler, "pin_agent_turn_operation_v2", _operation_context)
+    monkeypatch.setattr(
+        subscription_handler,
+        "current_agent_worker_redis_client_v2",
+        lambda: context.v2_redis,
+    )
+    monkeypatch.setattr(
+        subscription_handler,
+        "_session_event_log_service_v2",
+        lambda: context.v2_session_event_log,
+    )
     return context
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_subscribe_starts_recovery_bridge_when_running(monkeypatch) -> None:
-    context = _build_context()
+    context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1")
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
     context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
-    context.get_scoped_container().redis().get.return_value = b"msg-1"
+    context.v2_redis.get.return_value = b"msg-1"
 
     created_tasks = []
 
@@ -118,26 +140,18 @@ async def test_subscribe_starts_recovery_bridge_when_running(monkeypatch) -> Non
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_subscribe_keeps_client_recovery_cursor(monkeypatch) -> None:
-    context = _build_context()
+    context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1")
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
     context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
-    context.get_scoped_container().redis().get.return_value = b"msg-1"
-    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.return_value = [
-        SimpleNamespace(
-            conversation_id="conv-1",
-            event_type="text_delta",
-            event_time_us=320,
-            event_counter=7,
-        ),
-        # Higher watermark from another conversation/message should be ignored
-        SimpleNamespace(
-            conversation_id="conv-other",
-            event_type="text_delta",
-            event_time_us=999,
-            event_counter=1,
-        ),
-    ]
+    context.v2_redis.get.return_value = b"msg-1"
+    context.v2_session_event_log.message_recovery_state.return_value = (
+        SessionMessageRecoveryStateV2(
+            has_events=True,
+            is_terminal=False,
+            cursor=SessionEventCursorV2(event_time_us=320, event_counter=7),
+        )
+    )
 
     real_create_task = asyncio.create_task
     created_tasks: list[asyncio.Task[None]] = []
@@ -188,8 +202,9 @@ async def test_subscribe_keeps_client_recovery_cursor(monkeypatch) -> None:
     stream_kwargs = stream_mock.call_args.kwargs
     assert stream_kwargs["from_time_us"] == 100
     assert stream_kwargs["from_counter"] == 1
-    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.assert_awaited_once_with(
-        "conv-1", "msg-1"
+    context.v2_session_event_log.message_recovery_state.assert_awaited_once_with(
+        conversation_id="conv-1",
+        message_id="msg-1",
     )
 
 
@@ -198,19 +213,18 @@ async def test_subscribe_keeps_client_recovery_cursor(monkeypatch) -> None:
 async def test_subscribe_uses_message_scoped_recovery_cursor_when_client_cursor_missing(
     monkeypatch,
 ) -> None:
-    context = _build_context()
+    context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1")
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
     context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
-    context.get_scoped_container().redis().get.return_value = b"msg-1"
-    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.return_value = [
-        SimpleNamespace(
-            conversation_id="conv-1",
-            event_type="text_delta",
-            event_time_us=320,
-            event_counter=7,
+    context.v2_redis.get.return_value = b"msg-1"
+    context.v2_session_event_log.message_recovery_state.return_value = (
+        SessionMessageRecoveryStateV2(
+            has_events=True,
+            is_terminal=False,
+            cursor=SessionEventCursorV2(event_time_us=320, event_counter=7),
         )
-    ]
+    )
 
     real_create_task = asyncio.create_task
     created_tasks: list[asyncio.Task[None]] = []
@@ -259,22 +273,29 @@ async def test_subscribe_uses_message_scoped_recovery_cursor_when_client_cursor_
     stream_kwargs = stream_mock.call_args.kwargs
     assert stream_kwargs["from_time_us"] == 320
     assert stream_kwargs["from_counter"] == 7
-    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.assert_has_awaits(
-        [call("conv-1", "msg-1"), call("conv-1", "msg-1")]
+    context.v2_session_event_log.message_recovery_state.assert_awaited_once_with(
+        conversation_id="conv-1",
+        message_id="msg-1",
     )
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_subscribe_skips_recovery_when_running_key_is_stale() -> None:
-    context = _build_context()
+async def test_subscribe_skips_recovery_when_running_key_is_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1")
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
     context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
-    context.get_scoped_container().redis().get.return_value = b"msg-1"
-    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.return_value = [
-        SimpleNamespace(conversation_id="conv-1", event_type="complete")
-    ]
+    context.v2_redis.get.return_value = b"msg-1"
+    context.v2_session_event_log.message_recovery_state.return_value = (
+        SessionMessageRecoveryStateV2(
+            has_events=True,
+            is_terminal=True,
+            cursor=SessionEventCursorV2(event_time_us=100, event_counter=1),
+        )
+    )
 
     await handler.handle(context, {"conversation_id": "conv-1"})
 
@@ -282,20 +303,28 @@ async def test_subscribe_skips_recovery_when_running_key_is_stale() -> None:
     context.connection_manager.try_start_bridge_task.assert_not_awaited()
     context.send_ack.assert_awaited_once_with("subscribe", conversation_id="conv-1")
     context.send_error.assert_not_awaited()
-    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.assert_awaited_once_with(
-        "conv-1", "msg-1"
+    context.v2_session_event_log.message_recovery_state.assert_awaited_once_with(
+        conversation_id="conv-1",
+        message_id="msg-1",
     )
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_subscribe_skips_recovery_when_running_key_has_no_persisted_events() -> None:
-    context = _build_context()
+async def test_subscribe_skips_recovery_when_running_key_has_no_persisted_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1")
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
     context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
-    context.get_scoped_container().redis().get.return_value = b"attempt-1"
-    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.return_value = []
+    context.v2_redis.get.return_value = b"attempt-1"
+    context.v2_session_event_log.message_recovery_state.return_value = (
+        SessionMessageRecoveryStateV2(
+            has_events=False,
+            is_terminal=False,
+        )
+    )
 
     await handler.handle(context, {"conversation_id": "conv-1"})
 
@@ -303,19 +332,44 @@ async def test_subscribe_skips_recovery_when_running_key_has_no_persisted_events
     context.connection_manager.try_start_bridge_task.assert_not_awaited()
     context.send_ack.assert_awaited_once_with("subscribe", conversation_id="conv-1")
     context.send_error.assert_not_awaited()
-    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.assert_awaited_once_with(
-        "conv-1", "attempt-1"
+    context.v2_session_event_log.message_recovery_state.assert_awaited_once_with(
+        conversation_id="conv-1",
+        message_id="attempt-1",
     )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_subscribe_does_not_fallback_when_v2_session_log_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _build_context(monkeypatch)
+    handler = SubscribeHandler()
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
+    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    context.v2_redis.get.return_value = b"msg-1"
+    context.v2_session_event_log.message_recovery_state.side_effect = RuntimeError(
+        "v2 session log unavailable"
+    )
+
+    await handler.handle(context, {"conversation_id": "conv-1"})
+
+    context.connection_manager.subscribe.assert_awaited_once_with("session-1", "conv-1")
+    context.connection_manager.try_start_bridge_task.assert_not_awaited()
+    context.get_scoped_container().redis.assert_not_called()
+    context.get_scoped_container().agent_execution_event_repository.assert_not_called()
+    context.send_ack.assert_awaited_once_with("subscribe", conversation_id="conv-1")
+    context.send_error.assert_not_awaited()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_subscribe_ignores_boolean_cursor_values(monkeypatch) -> None:
-    context = _build_context()
+    context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1")
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
     context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
-    context.get_scoped_container().redis().get.return_value = b"msg-1"
+    context.v2_redis.get.return_value = b"msg-1"
 
     real_create_task = asyncio.create_task
     created_tasks: list[asyncio.Task[None]] = []
@@ -376,12 +430,14 @@ async def test_subscribe_ignores_boolean_cursor_values(monkeypatch) -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_subscribe_skips_recovery_when_bridge_already_active() -> None:
-    context = _build_context()
+async def test_subscribe_skips_recovery_when_bridge_already_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1")
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
     context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
-    context.get_scoped_container().redis().get.return_value = b"msg-1"
+    context.v2_redis.get.return_value = b"msg-1"
     context.connection_manager.try_start_bridge_task.return_value = False
 
     await handler.handle(context, {"conversation_id": "conv-1"})
@@ -395,11 +451,11 @@ async def test_subscribe_skips_recovery_when_bridge_already_active() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_subscribe_does_not_init_llm_when_bridge_not_started(monkeypatch) -> None:
-    context = _build_context()
+    context = _build_context(monkeypatch)
     handler = SubscribeHandler()
-    conversation = SimpleNamespace(user_id="user-1")
+    conversation = SimpleNamespace(user_id="user-1", project_id="project-1")
     context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
-    context.get_scoped_container().redis().get.return_value = b"msg-1"
+    context.v2_redis.get.return_value = b"msg-1"
     context.connection_manager.try_start_bridge_task.return_value = False
 
     create_llm_mock = AsyncMock()
