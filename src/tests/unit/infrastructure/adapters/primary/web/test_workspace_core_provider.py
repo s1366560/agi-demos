@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -42,6 +43,19 @@ from src.infrastructure.workspace_core.provider import (
     ProviderRuntimeEvent,
     ProviderWebhookRequest,
 )
+
+
+class _ImmediateGenerationReservation:
+    @asynccontextmanager
+    async def admit(self) -> AsyncIterator[object]:
+        yield object()
+
+    async def release(self) -> None:
+        return None
+
+
+async def _reserve_immediate_generation() -> _ImmediateGenerationReservation:
+    return _ImmediateGenerationReservation()
 
 
 def _settings() -> WorkspaceCoreSettings:
@@ -210,6 +224,7 @@ def _app() -> FastAPI:
         FakeRuntime(),
         FakeSink(),
         app.state.workspace_core_client,
+        generation_reserver=_reserve_immediate_generation,
     )
     return app
 

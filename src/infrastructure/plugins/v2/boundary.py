@@ -246,6 +246,61 @@ class ForkedAgentOperationV2:
         self._released = True
 
 
+@dataclass(kw_only=True)
+class ReservedGenerationV2:
+    """One-shot exact-generation reservation for a detached operation boundary."""
+
+    host: DistributionGenerationHostV2
+    lease: GenerationLeaseV2
+    generation: RuntimeGenerationV2
+    _claimed: bool = False
+    _released: bool = False
+
+    @property
+    def descriptor(self) -> PluginGenerationDescriptorV2:
+        return self.generation.descriptor
+
+    @asynccontextmanager
+    async def admit(self) -> AsyncIterator[RuntimeGenerationV2]:
+        """Activate the reserved generation once from a context-clean detached task."""
+        if self._claimed or self._released:
+            raise RuntimeV2Error(
+                "reserved_generation_consumed",
+                "reserved plugin generation has already been consumed",
+            )
+        if (
+            _generation_context.get() is not None
+            or _operation_context.get() is not None
+            or _generation_host_context.get() is not None
+        ):
+            raise RuntimeV2Error(
+                "detached_generation_context_not_clean",
+                "reserved plugin generation requires a detached task context",
+            )
+        self._claimed = True
+        try:
+            async with _pin_reserved_generation_v2(
+                self.host,
+                self.lease,
+            ) as generation:
+                yield generation
+        finally:
+            await self.lease.release()
+            self._released = True
+
+    async def release(self) -> None:
+        """Release an unclaimed reservation after detached task creation fails."""
+        if self._released:
+            return
+        if self._claimed:
+            raise RuntimeV2Error(
+                "reserved_generation_active",
+                "active reserved plugin generation must exit before release",
+            )
+        await self.lease.release()
+        self._released = True
+
+
 async def fork_current_agent_operation_v2() -> ForkedAgentOperationV2:
     """Reserve the exact active generation for one detached Agent operation."""
     operation = current_operation_context_v2()
@@ -287,6 +342,28 @@ async def fork_current_agent_operation_v2() -> ForkedAgentOperationV2:
     except BaseException:
         await lease.release()
         raise
+
+
+async def reserve_current_generation_v2() -> ReservedGenerationV2:
+    """Retain the exact boundary generation before launching a detached task."""
+    generation = current_generation_v2()
+    host = _generation_host_context.get()
+    if (
+        host is None
+        or not hasattr(host, "acquire_exact")
+        or not hasattr(host, "distribution_for_generation")
+    ):
+        raise RuntimeV2Error(
+            "exact_generation_host_unavailable",
+            "active generation host cannot reserve an exact detached boundary",
+        )
+    exact_host = cast(DistributionGenerationHostV2, host)
+    lease = await exact_host.acquire_exact(generation, generation.descriptor)
+    return ReservedGenerationV2(
+        host=exact_host,
+        lease=lease,
+        generation=generation,
+    )
 
 
 def detached_operation_task_context_v2() -> Context:

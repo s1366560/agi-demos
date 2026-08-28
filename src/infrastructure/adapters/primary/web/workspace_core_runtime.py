@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from src.configuration.workspace_core import WorkspaceCoreSettings
+from src.infrastructure.plugins.v2.boundary import reserve_current_generation_v2
 from src.infrastructure.plugins.v2.workspace_core_runtime import (
     WorkspaceCoreRuntimeServiceV2,
 )
@@ -48,6 +49,7 @@ def _build_workspace_core_runtime_service_v2(
         agent_runtime_provider,
         event_sink,
         client,
+        generation_reserver=reserve_current_generation_v2,
     )
     access_verifier = AvernetWorkspaceAccessVerifier(client)
     return WorkspaceCoreRuntimeServiceV2(

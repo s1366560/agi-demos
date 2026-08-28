@@ -55,6 +55,19 @@ async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
     yield None
 
 
+class _ImmediateGenerationReservation:
+    @asynccontextmanager
+    async def admit(self) -> AsyncIterator[object]:
+        yield object()
+
+    async def release(self) -> None:
+        return None
+
+
+async def _reserve_immediate_generation() -> _ImmediateGenerationReservation:
+    return _ImmediateGenerationReservation()
+
+
 @pytest.fixture(autouse=True)
 def _isolate_legacy_provider_tests_from_generation_host(
     monkeypatch: pytest.MonkeyPatch,
@@ -780,6 +793,7 @@ async def test_provider_e2e_preserves_terminal_four_way_authority_and_replay(
         runtime,
         sink,
         core,
+        generation_reserver=_reserve_immediate_generation,
         terminal_callback_retry_delay_seconds=0,
     )
 

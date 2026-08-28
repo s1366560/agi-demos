@@ -19,15 +19,18 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_METADATA_SERVICE_V2,
     OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
     PluginGenerationMiddlewareV2,
+    ReservedGenerationV2,
     attach_current_generation_v2,
     clear_process_generation_host_v2,
     current_generation_v2,
     current_operation_context_v2,
+    detached_operation_task_context_v2,
     fork_current_agent_operation_v2,
     install_process_generation_host_v2,
     pin_agent_turn_operation_v2,
     pin_generation_v2,
     pin_operation_context_v2,
+    reserve_current_generation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import (
     RUNTIME_BOUNDARY_SERVICE_V2,
@@ -557,6 +560,70 @@ async def test_forked_agent_operation_keeps_exact_generation_and_safe_services()
         assert disposed_error.value.code == "disposed_generation"
     finally:
         clear_process_generation_host_v2(host)
+        await host.close()
+
+
+@pytest.mark.unit
+async def test_reserved_generation_keeps_exact_generation_for_detached_boundary() -> None:
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=1,
+        version=1,
+        nonce="reserved-generation-1",
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    first_generation = None
+
+    async def detached_boundary(reservation: ReservedGenerationV2) -> int:
+        with pytest.raises(RuntimeV2Error) as inherited_error:
+            current_generation_v2()
+        assert inherited_error.value.code == "generation_not_pinned"
+        async with reservation.admit() as generation:
+            entered.set()
+            await release.wait()
+            assert current_generation_v2() is generation
+            return generation.descriptor.generation
+
+    try:
+        async with pin_generation_v2(host) as parent_generation:
+            first_generation = parent_generation
+            reservation = await reserve_current_generation_v2()
+            task = asyncio.create_task(
+                detached_boundary(reservation),
+                context=detached_operation_task_context_v2(),
+            )
+            await entered.wait()
+            await host.bootstrap(
+                profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+                manifest_paths=(
+                    _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
+                ),
+                generation=2,
+                version=2,
+                nonce="reserved-generation-2",
+            )
+
+        assert first_generation is not None
+        assert isinstance(
+            first_generation.resolve(
+                RUNTIME_BOUNDARY_SERVICE_V2,
+                ScopeV2(kind=ScopeKindV2.ROOT),
+            ),
+            RuntimeBoundaryServiceV2,
+        )
+        release.set()
+        assert await task == 1
+        with pytest.raises(RuntimeV2Error) as disposed_error:
+            first_generation.resolve(
+                RUNTIME_BOUNDARY_SERVICE_V2,
+                ScopeV2(kind=ScopeKindV2.ROOT),
+            )
+        assert disposed_error.value.code == "disposed_generation"
+    finally:
+        release.set()
         await host.close()
 
 

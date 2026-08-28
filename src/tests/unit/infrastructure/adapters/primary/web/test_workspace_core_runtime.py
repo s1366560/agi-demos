@@ -17,6 +17,7 @@ from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
 from src.infrastructure.adapters.primary.web.workspace_core_runtime_resolver import (
     workspace_core_runtime_service_v2_from_app,
 )
+from src.infrastructure.plugins.v2.boundary import reserve_current_generation_v2
 from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 from src.infrastructure.workspace_core.autonomy_judge import AgentWorkspaceAutonomyJudge
 from src.infrastructure.workspace_core.client import (
@@ -92,6 +93,7 @@ def test_avernet_injects_core_client_into_agent_runtime_provider() -> None:
         provider_type.return_value,
         event_sink_type.return_value,
         app.state.workspace_core_client,
+        generation_reserver=reserve_current_generation_v2,
     )
     assert app.state.workspace_core_event_sink is event_sink_type.return_value
     assert app.state.workspace_core_provider_adapter is provider_adapter_type.return_value
