@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:d2b9568fecaaf79d36fe371b109e38f843b7bcec9825ebd7800c90f8cf9ebd84",
+        "digest": "sha256:c5c5aa807a4249e7eadf493d8b4994cd39d616e3f7beab3c2c73965b35c95b16",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4014,6 +4014,79 @@
       "artifact": {
         "digest": "sha256:6b200a04e6a6372aa3cbce11591dbe35e25ffd8bd19bd3edb55edad6b8340ac1",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/agent-execution-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_execution_query_services:_apply_agent_execution_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.agent-execution-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:eaa993ad6c819908f82531e4df4feb726253eb8f0e49af1e9f6dd9fefeb85971",
+      "artifact": {
+        "digest": "sha256:afaaee2b13c61ec4e52bf1251611a5129eb553e5977994c2237c7627bf80fbbc",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_execution_query_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/agent-execution-query",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_execution_query_services:_apply_agent_execution_query_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.agent-execution-query",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "conversation_repository_provider",
+              "service": "service:persistence.conversation-repository-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "execution_repository_provider",
+              "service": "service:persistence.agent-execution-repository-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-providers", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:cfa290258f93ab0f012e8a6b74b1065d01d4be562bf7861645b2b540bd167ff4",
+      "artifact": {
+        "digest": "sha256:afaaee2b13c61ec4e52bf1251611a5129eb553e5977994c2237c7627bf80fbbc",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_execution_query_services.py"
       }
     },
     {

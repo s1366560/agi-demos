@@ -1,6 +1,7 @@
 """Tests for agent message endpoints."""
 
 from contextlib import asynccontextmanager
+from inspect import getsource, signature
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -10,6 +11,9 @@ from sqlalchemy import delete
 
 from src.domain.model.agent.conversation.conversation import Conversation as DomainConversation
 from src.domain.model.agent.skill.tool_execution_record import ToolExecutionRecord
+from src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2 import (
+    agent_execution_query_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.agent import messages as messages_router
 from src.infrastructure.adapters.primary.web.routers.agent.messages import (
     _get_recovery_info,
@@ -37,6 +41,23 @@ class TestAgentMessagesRouter:
     @pytest.fixture(autouse=True)
     def _clear_router_monkeypatches(self, monkeypatch: pytest.MonkeyPatch):
         self.monkeypatch = monkeypatch
+
+    def test_execution_queries_have_no_static_llm_or_agent_service_composition(self) -> None:
+        source = getsource(get_conversation_execution) + getsource(get_execution_stats)
+
+        assert "create_llm_client" not in source
+        assert "get_container_with_db" not in source
+        assert ".agent_service(" not in source
+
+    @pytest.mark.parametrize("handler", (get_conversation_execution, get_execution_stats))
+    def test_execution_queries_require_v2_application_authority(self, handler: object) -> None:
+        parameters = signature(handler).parameters
+
+        assert "request" not in parameters
+        assert (
+            parameters["execution_query"].default.dependency
+            is agent_execution_query_application_authority_dependency_v2
+        )
 
     @pytest.mark.asyncio
     async def test_get_message_replies_rejects_non_owner(
@@ -116,6 +137,7 @@ class TestAgentMessagesRouter:
             "tenant_id": "tenant-complete-scope",
             "db": test_db,
         }
+        query_common = {key: value for key, value in common.items() if key != "request"}
         route_calls = {
             "messages": lambda: get_conversation_messages(
                 **common,
@@ -126,7 +148,7 @@ class TestAgentMessagesRouter:
                 before_counter=None,
             ),
             "execution": lambda: get_conversation_execution(
-                **common,
+                **query_common,
                 limit=50,
                 status_filter=None,
                 tool_filter=None,
@@ -141,7 +163,7 @@ class TestAgentMessagesRouter:
                 include_recovery_info=False,
                 from_time_us=0,
             ),
-            "execution_stats": lambda: get_execution_stats(**common),
+            "execution_stats": lambda: get_execution_stats(**query_common),
         }
 
         with pytest.raises(HTTPException) as exc_info:
@@ -423,10 +445,6 @@ class TestAgentMessagesRouter:
             "src.infrastructure.adapters.primary.web.routers.agent.messages.get_container_with_db",
             MagicMock(side_effect=RuntimeError("internal stream secret")),
         )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.create_llm_client",
-            AsyncMock(return_value=object()),
-        )
 
         with pytest.raises(HTTPException) as exc_info:
             await get_conversation_messages(
@@ -450,29 +468,20 @@ class TestAgentMessagesRouter:
 
     @pytest.mark.asyncio
     async def test_conversation_execution_sanitizes_internal_errors(self, test_db, test_user):
-        container = SimpleNamespace(
-            agent_service=lambda _llm: SimpleNamespace(
+        execution_query = SimpleNamespace(
+            services=SimpleNamespace(
                 get_execution_history=AsyncMock(side_effect=RuntimeError("internal exec secret"))
             )
-        )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.get_container_with_db",
-            lambda _request, _db: container,
         )
         self.monkeypatch.setattr(
             messages_router,
             "_verify_conversation_access",
             AsyncMock(return_value=None),
         )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.create_llm_client",
-            AsyncMock(return_value=object()),
-        )
 
         with pytest.raises(HTTPException) as exc_info:
             await get_conversation_execution(
                 "conversation-secret",
-                request=MagicMock(),
                 project_id="project-1",
                 limit=50,
                 status_filter=None,
@@ -480,6 +489,7 @@ class TestAgentMessagesRouter:
                 current_user=test_user,
                 tenant_id="tenant-secret",
                 db=test_db,
+                execution_query=execution_query,
             )
 
         assert exc_info.value.status_code == 500
@@ -492,29 +502,20 @@ class TestAgentMessagesRouter:
         test_db,
         test_user,
     ):
-        container = SimpleNamespace(
-            agent_service=lambda _llm: SimpleNamespace(
+        execution_query = SimpleNamespace(
+            services=SimpleNamespace(
                 get_execution_history=AsyncMock(side_effect=ValueError("secret conversation id"))
             )
-        )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.get_container_with_db",
-            lambda _request, _db: container,
         )
         self.monkeypatch.setattr(
             messages_router,
             "_verify_conversation_access",
             AsyncMock(return_value=None),
         )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.create_llm_client",
-            AsyncMock(return_value=object()),
-        )
 
         with pytest.raises(HTTPException) as exc_info:
             await get_conversation_execution(
                 "conversation-secret",
-                request=MagicMock(),
                 project_id="project-1",
                 limit=50,
                 status_filter=None,
@@ -522,6 +523,7 @@ class TestAgentMessagesRouter:
                 current_user=test_user,
                 tenant_id="tenant-secret",
                 db=test_db,
+                execution_query=execution_query,
             )
 
         assert exc_info.value.status_code == 404
@@ -722,33 +724,25 @@ class TestAgentMessagesRouter:
 
     @pytest.mark.asyncio
     async def test_execution_stats_sanitizes_internal_errors(self, test_db, test_user):
-        container = SimpleNamespace(
-            agent_service=lambda _llm: SimpleNamespace(
+        execution_query = SimpleNamespace(
+            services=SimpleNamespace(
                 get_execution_history=AsyncMock(side_effect=RuntimeError("internal stats secret"))
             )
-        )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.get_container_with_db",
-            lambda _request, _db: container,
         )
         self.monkeypatch.setattr(
             messages_router,
             "_verify_conversation_access",
             AsyncMock(return_value=None),
         )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.create_llm_client",
-            AsyncMock(return_value=object()),
-        )
 
         with pytest.raises(HTTPException) as exc_info:
             await get_execution_stats(
                 "conversation-secret",
-                request=MagicMock(),
                 project_id="project-1",
                 current_user=test_user,
                 tenant_id="tenant-secret",
                 db=test_db,
+                execution_query=execution_query,
             )
 
         assert exc_info.value.status_code == 500
@@ -757,33 +751,25 @@ class TestAgentMessagesRouter:
 
     @pytest.mark.asyncio
     async def test_execution_stats_not_found_errors_are_sanitized(self, test_db, test_user):
-        container = SimpleNamespace(
-            agent_service=lambda _llm: SimpleNamespace(
+        execution_query = SimpleNamespace(
+            services=SimpleNamespace(
                 get_execution_history=AsyncMock(side_effect=ValueError("secret conversation id"))
             )
-        )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.get_container_with_db",
-            lambda _request, _db: container,
         )
         self.monkeypatch.setattr(
             messages_router,
             "_verify_conversation_access",
             AsyncMock(return_value=None),
         )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.messages.create_llm_client",
-            AsyncMock(return_value=object()),
-        )
 
         with pytest.raises(HTTPException) as exc_info:
             await get_execution_stats(
                 "conversation-secret",
-                request=MagicMock(),
                 project_id="project-1",
                 current_user=test_user,
                 tenant_id="tenant-secret",
                 db=test_db,
+                execution_query=execution_query,
             )
 
         assert exc_info.value.status_code == 404

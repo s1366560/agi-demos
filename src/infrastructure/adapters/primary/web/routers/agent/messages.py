@@ -15,11 +15,14 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.hitl_response_contract import hitl_authority_revision
-from src.configuration.factories import create_llm_client
 from src.domain.events.types import (
     DELTA_EVENT_TYPES,
     INTERNAL_EVENT_TYPES,
     AgentEventType,
+)
+from src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2 import (
+    AgentExecutionQueryApplicationAuthorityV2,
+    agent_execution_query_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -1676,7 +1679,6 @@ async def get_conversation_messages(
 @router.get("/conversations/{conversation_id}/execution")
 async def get_conversation_execution(
     conversation_id: str,
-    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=100, description="Maximum executions to return"),
     status_filter: str | None = Query(None, description="Filter by execution status"),
@@ -1684,10 +1686,12 @@ async def get_conversation_execution(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    execution_query: AgentExecutionQueryApplicationAuthorityV2 = Depends(
+        agent_execution_query_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get the agent execution history for a conversation."""
     try:
-        assert request is not None
         await _verify_conversation_access(
             conversation_id,
             current_user,
@@ -1695,11 +1699,7 @@ async def get_conversation_execution(
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        executions = await agent_service.get_execution_history(
+        executions = await execution_query.services.get_execution_history(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
@@ -2044,15 +2044,16 @@ def _compute_timeline_data(executions: list[dict[str, Any]]) -> list[dict[str, A
 @router.get("/conversations/{conversation_id}/execution/stats")
 async def get_execution_stats(
     conversation_id: str,
-    request: Request,
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    execution_query: AgentExecutionQueryApplicationAuthorityV2 = Depends(
+        agent_execution_query_application_authority_dependency_v2
+    ),
 ) -> ExecutionStatsResponse:
     """Get execution statistics for a conversation."""
     try:
-        assert request is not None
         await _verify_conversation_access(
             conversation_id,
             current_user,
@@ -2060,11 +2061,7 @@ async def get_execution_stats(
             tenant_id=tenant_id,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        executions = await agent_service.get_execution_history(
+        executions = await execution_query.services.get_execution_history(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
