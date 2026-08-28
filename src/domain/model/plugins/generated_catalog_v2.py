@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:9e344a2462b37e736f754aae7c498bfa397f02dd7f8a4fd9248009fc604be4'
-    '91","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:a95b16c651cf8c3985622cb3385d892c9cb0cb223fae8894b062763933a4af'
+    '81","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -2759,8 +2759,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'entrypoint":"src.infrastructure.plugins.v2.sandbox_operation_services:sandbox_operation_'
     'provider_definition_v2","module_ref":"builtin://memstack/sandbox/operation-service-provi'
     'der","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]'
-    '},{"artifact_digest":"sha256:824bb2f510f3189d5c28fc0d46d76c9a29c8a8ae3c1f80f84560563f0e9'
-    '79b48","artifact_source":"repo+python://src/infrastructure/plugins/v2/session_event_log.'
+    '},{"artifact_digest":"sha256:43173b45e7a6b6efa0abc6ce89b5c8b148cded2a8775f931d9d0f4e0160'
+    'f7dd8","artifact_source":"repo+python://src/infrastructure/plugins/v2/session_event_log.'
     'py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema'
     '","additionalProperties":false,"properties":{"strategy":{"const":"ordered-sql-event-log"'
     ',"type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[],"handle'
@@ -2867,7 +2867,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:9e344a2462b37e736f754aae7c498bfa397f02dd7f8a4fd9248009fc604be491"
+    "sha256:a95b16c651cf8c3985622cb3385d892c9cb0cb223fae8894b062763933a4af81"
 )
 # fmt: on
 

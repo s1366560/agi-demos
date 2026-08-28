@@ -583,6 +583,50 @@ async def test_read_events_uses_full_cursor_order_within_same_microsecond() -> N
 
 
 @pytest.mark.unit
+async def test_read_message_events_is_scoped_and_cursor_ordered() -> None:
+    rows = [
+        SimpleNamespace(
+            id="event-1",
+            conversation_id="conversation-a",
+            message_id="message-a",
+            event_type="text_delta",
+            event_data={"delta": "working"},
+            event_time_us=450,
+            event_counter=1,
+        ),
+        SimpleNamespace(
+            id="event-2",
+            conversation_id="conversation-a",
+            message_id="message-a",
+            event_type="complete",
+            event_data={},
+            event_time_us=451,
+            event_counter=0,
+        ),
+    ]
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = rows
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=result)
+    session_context = _session_context(session)
+
+    with patch.object(store_module, "async_session_factory", return_value=session_context):
+        records = await SqlSessionEventLogStoreV2().read_message_events(
+            conversation_id="conversation-a",
+            message_id="message-a",
+        )
+
+    sql = str(session.execute.await_args.args[0])
+    assert "agent_execution_events.conversation_id" in sql
+    assert "agent_execution_events.message_id" in sql
+    assert (
+        "ORDER BY agent_execution_events.event_time_us ASC, "
+        "agent_execution_events.event_counter ASC"
+    ) in sql
+    assert [record.event_id for record in records] == ["event-1", "event-2"]
+
+
+@pytest.mark.unit
 async def test_last_cursor_returns_origin_for_empty_stream() -> None:
     result = MagicMock()
     result.one_or_none.return_value = None

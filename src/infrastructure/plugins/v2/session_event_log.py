@@ -19,6 +19,7 @@ from .session_event_log_types import (
     SessionEventCursorV2,
     SessionEventLogStoreV2,
     SessionEventRecordV2,
+    SessionMessageRecoveryStateV2,
 )
 
 SESSION_EVENT_LOG_MODULE_V2 = "builtin://memstack/session/event-log"
@@ -40,6 +41,7 @@ _LEGACY_MODEL_EVENT_ROLES = {
     "assistant_message": "assistant",
 }
 _MODEL_ROLES = frozenset({"assistant", "system", "tool", "user"})
+_TERMINAL_SESSION_EVENT_TYPES = frozenset({"cancelled", "complete", "error"})
 
 
 type GenerationResolverV2 = Callable[[], PluginGenerationDescriptorV2]
@@ -236,6 +238,43 @@ class SessionEventLogServiceV2:
         _require_identifier(conversation_id, field_name="conversation_id")
         return await self.store.last_cursor(conversation_id=conversation_id)
 
+    async def message_recovery_state(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str,
+    ) -> SessionMessageRecoveryStateV2:
+        """Return the durable cursor and terminal state for one running message."""
+        _require_identifier(conversation_id, field_name="conversation_id")
+        _require_identifier(message_id, field_name="message_id")
+        records = sorted(
+            await self.store.read_message_events(
+                conversation_id=conversation_id,
+                message_id=message_id,
+            ),
+            key=lambda item: item.cursor,
+        )
+        if not records:
+            return SessionMessageRecoveryStateV2(
+                has_events=False,
+                is_terminal=False,
+            )
+        if any(
+            record.conversation_id != conversation_id or record.message_id != message_id
+            for record in records
+        ):
+            raise RuntimeV2Error(
+                "invalid_session_event_scope",
+                "session event store returned a record outside the requested message scope",
+            )
+        return SessionMessageRecoveryStateV2(
+            has_events=True,
+            is_terminal=any(
+                record.event_type in _TERMINAL_SESSION_EVENT_TYPES for record in records
+            ),
+            cursor=records[-1].cursor,
+        )
+
 
 def _apply_session_event_log_v2(
     context: ContextV2,
@@ -275,5 +314,6 @@ __all__ = [
     "SessionEventLogServiceV2",
     "SessionEventLogStoreV2",
     "SessionEventRecordV2",
+    "SessionMessageRecoveryStateV2",
     "builtin_session_event_log_definition_v2",
 ]

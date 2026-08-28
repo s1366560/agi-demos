@@ -49,6 +49,21 @@ class _MemorySessionEventLogStore:
             records = [record for record in records if record.cursor > after]
         return sorted(records, key=lambda record: record.cursor)[:limit]
 
+    async def read_message_events(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str,
+    ) -> list[SessionEventRecordV2]:
+        return sorted(
+            [
+                record
+                for record in self.records
+                if record.conversation_id == conversation_id and record.message_id == message_id
+            ],
+            key=lambda record: record.cursor,
+        )
+
     async def last_cursor(self, *, conversation_id: str) -> SessionEventCursorV2:
         cursors = [
             record.cursor for record in self.records if record.conversation_id == conversation_id
@@ -79,11 +94,13 @@ def _record(
     event_data: dict[str, Any],
     time_us: int,
     counter: int,
+    conversation_id: str = "conversation-a",
+    message_id: str = "message-a",
 ) -> SessionEventRecordV2:
     return SessionEventRecordV2(
         event_id=event_id,
-        conversation_id="conversation-a",
-        message_id="message-a",
+        conversation_id=conversation_id,
+        message_id=message_id,
         event_type=event_type,
         event_data=event_data,
         cursor=SessionEventCursorV2(event_time_us=time_us, event_counter=counter),
@@ -346,3 +363,54 @@ async def test_last_cursor_returns_precise_time_and_counter() -> None:
     cursor = await _service(store).last_cursor(conversation_id="conversation-a")
 
     assert cursor == SessionEventCursorV2(event_time_us=400, event_counter=7)
+
+
+@pytest.mark.unit
+async def test_message_recovery_state_is_message_scoped_and_detects_terminal_event() -> None:
+    store = _MemorySessionEventLogStore(
+        records=[
+            _record(
+                event_id="running-message-event",
+                event_type="text_delta",
+                event_data={"delta": "working"},
+                time_us=500,
+                counter=2,
+            ),
+            _record(
+                event_id="other-message-terminal",
+                event_type="complete",
+                event_data={},
+                time_us=999,
+                counter=0,
+                message_id="message-other",
+            ),
+            _record(
+                event_id="running-message-terminal",
+                event_type="error",
+                event_data={"code": "failed"},
+                time_us=501,
+                counter=0,
+            ),
+        ]
+    )
+
+    state = await _service(store).message_recovery_state(
+        conversation_id="conversation-a",
+        message_id="message-a",
+    )
+
+    assert state.has_events is True
+    assert state.is_terminal is True
+    assert state.cursor == SessionEventCursorV2(event_time_us=501, event_counter=0)
+
+
+@pytest.mark.unit
+async def test_message_recovery_state_is_empty_for_unknown_message() -> None:
+    state = await _service(_MemorySessionEventLogStore()).message_recovery_state(
+        conversation_id="conversation-a",
+        message_id="message-missing",
+    )
+
+    assert state.has_events is False
+    assert state.is_terminal is False
+    assert state.cursor == SessionEventCursorV2()

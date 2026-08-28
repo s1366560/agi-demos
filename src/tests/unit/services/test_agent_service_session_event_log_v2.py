@@ -69,6 +69,21 @@ class _MemorySessionEventLogStore:
             records = [record for record in records if record.cursor > after]
         return sorted(records, key=lambda record: record.cursor)[:limit]
 
+    async def read_message_events(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str,
+    ) -> list[SessionEventRecordV2]:
+        return sorted(
+            [
+                record
+                for record in self.records
+                if record.conversation_id == conversation_id and record.message_id == message_id
+            ],
+            key=lambda record: record.cursor,
+        )
+
     async def last_cursor(self, *, conversation_id: str) -> SessionEventCursorV2:
         self.actions.append("cursor")
         return max(
@@ -171,13 +186,14 @@ async def runtime(
     )
     monkeypatch.setattr(store_module, "SqlSessionEventLogStoreV2", lambda: store)
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
-    await host.bootstrap(
+    publication = await host.bootstrap(
         profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
         manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
         generation=7,
         version=7,
         nonce="agent-service-session-log-v2",
     )
+    assert publication.accepted, publication.receipt
     try:
         yield host, store
     finally:

@@ -190,6 +190,21 @@ class _MemorySessionEventLogStore:
             records = [record for record in records if record.cursor > after]
         return sorted(records, key=lambda record: record.cursor)[:limit]
 
+    async def read_message_events(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str,
+    ) -> list[SessionEventRecordV2]:
+        return sorted(
+            [
+                record
+                for record in self.records
+                if record.conversation_id == conversation_id and record.message_id == message_id
+            ],
+            key=lambda record: record.cursor,
+        )
+
     async def last_cursor(self, *, conversation_id: str) -> SessionEventCursorV2:
         return max(
             (record.cursor for record in self.records if record.conversation_id == conversation_id),

@@ -356,6 +356,40 @@ class SqlSessionEventLogStoreV2:
                 for row in result.scalars().all()
             ]
 
+    async def read_message_events(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str,
+    ) -> list[SessionEventRecordV2]:
+        statement = (
+            select(AgentExecutionEvent)
+            .where(
+                AgentExecutionEvent.conversation_id == conversation_id,
+                AgentExecutionEvent.message_id == message_id,
+            )
+            .order_by(
+                AgentExecutionEvent.event_time_us.asc(),
+                AgentExecutionEvent.event_counter.asc(),
+            )
+        )
+        async with async_session_factory() as session:
+            result = await session.execute(statement)
+            return [
+                SessionEventRecordV2(
+                    event_id=row.id,
+                    conversation_id=row.conversation_id,
+                    message_id=row.message_id or "",
+                    event_type=row.event_type,
+                    event_data=row.event_data or {},
+                    cursor=SessionEventCursorV2(
+                        event_time_us=row.event_time_us,
+                        event_counter=row.event_counter,
+                    ),
+                )
+                for row in result.scalars().all()
+            ]
+
     async def last_cursor(self, *, conversation_id: str) -> SessionEventCursorV2:
         async with async_session_factory() as session:
             result = await session.execute(

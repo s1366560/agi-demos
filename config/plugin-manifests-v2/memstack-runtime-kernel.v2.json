@@ -8055,7 +8055,7 @@
       },
       "contract_digest": "sha256:081387f06d341da12450daedda2583999da04ae134406a5f5c7804dcc64f0b9c",
       "artifact": {
-        "digest": "sha256:824bb2f510f3189d5c28fc0d46d76c9a29c8a8ae3c1f80f84560563f0e979b48",
+        "digest": "sha256:43173b45e7a6b6efa0abc6ce89b5c8b148cded2a8775f931d9d0f4e0160f7dd8",
         "source": "repo+python://src/infrastructure/plugins/v2/session_event_log.py"
       }
     },

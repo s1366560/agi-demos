@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 
@@ -39,6 +39,15 @@ class SessionEventRecordV2:
     cursor: SessionEventCursorV2
 
 
+@dataclass(frozen=True, kw_only=True)
+class SessionMessageRecoveryStateV2:
+    """Durable recovery state for one exact conversation message."""
+
+    has_events: bool
+    is_terminal: bool
+    cursor: SessionEventCursorV2 = field(default_factory=SessionEventCursorV2)
+
+
 class SessionEventLogStoreV2(Protocol):
     """Driven store port owned exclusively by the v2 session-log service."""
 
@@ -59,6 +68,13 @@ class SessionEventLogStoreV2(Protocol):
         limit: int,
     ) -> Sequence[SessionEventRecordV2]: ...
 
+    async def read_message_events(
+        self,
+        *,
+        conversation_id: str,
+        message_id: str,
+    ) -> Sequence[SessionEventRecordV2]: ...
+
     async def last_cursor(self, *, conversation_id: str) -> SessionEventCursorV2: ...
 
 
@@ -66,4 +82,5 @@ __all__ = [
     "SessionEventCursorV2",
     "SessionEventLogStoreV2",
     "SessionEventRecordV2",
+    "SessionMessageRecoveryStateV2",
 ]

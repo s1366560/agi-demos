@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:9e344a2462b37e736f754aae7c498bfa397f02dd7f8a4fd9248009fc60',
-  '4be491","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:a95b16c651cf8c3985622cb3385d892c9cb0cb223fae8894b062763933',
+  'a4af81","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -2907,8 +2907,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ypoint":"src.infrastructure.plugins.v2.sandbox_operation_services:sandbox_operation_',
   'provider_definition_v2","module_ref":"builtin://memstack/sandbox/operation-service-p',
   'rovider","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["',
-  'python"]},{"artifact_digest":"sha256:824bb2f510f3189d5c28fc0d46d76c9a29c8a8ae3c1f80f',
-  '84560563f0e979b48","artifact_source":"repo+python://src/infrastructure/plugins/v2/se',
+  'python"]},{"artifact_digest":"sha256:43173b45e7a6b6efa0abc6ce89b5c8b148cded2a8775f93',
+  '1d9d0f4e0160f7dd8","artifact_source":"repo+python://src/infrastructure/plugins/v2/se',
   'ssion_event_log.py","contract":{"config_schema":{"$schema":"https://json-schema.org/',
   'draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const"',
   ':"ordered-sql-event-log","type":"string"}},"required":["strategy"],"type":"object"},',
@@ -3025,4 +3025,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:9e344a2462b37e736f754aae7c498bfa397f02dd7f8a4fd9248009fc604be491' as const;
+  'sha256:a95b16c651cf8c3985622cb3385d892c9cb0cb223fae8894b062763933a4af81' as const;
