@@ -8,7 +8,7 @@ and nested orchestration. Uses an explicit deps dataclass (no back-references).
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -18,6 +18,7 @@ from src.domain.model.agent.agent_role import (
 )
 from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from .processor import ToolDefinition
 from .subagent_registry_authority import (
@@ -25,6 +26,7 @@ from .subagent_registry_authority import (
     require_subagent_run_registry_v2,
 )
 from .subagent_router import subagent_allows_tool
+from .subagent_tool_set_v2 import InheritedToolSetV2, SubAgentToolSetBindingV2
 
 if TYPE_CHECKING:
     pass
@@ -58,7 +60,6 @@ class SubAgentToolBuilderDeps:
     agent_role: AgentRole | None = None
 
     # -- Callbacks to ReActAgent / Runner (set after init) --
-    get_current_tools_fn: Callable[..., tuple[dict[str, Any], list[ToolDefinition]]] | None = None
     get_observability_stats_fn: Callable[[], dict[str, int]] | None = None
     execute_subagent_fn: Callable[..., Any] | None = None
     launch_session_fn: Callable[..., Coroutine[Any, Any, None]] | None = None
@@ -87,30 +88,43 @@ class SubAgentToolBuilder:
     def filter_tools(
         self,
         subagent: SubAgent,
+        *,
+        inherited_tool_set: InheritedToolSetV2,
     ) -> tuple[list[ToolDefinition], set[str]]:
-        """Filter tools for SubAgent permissions and return mutable collections."""
-        from .tool_converter import convert_tools
-
-        assert self.deps.get_current_tools_fn is not None
-        current_raw_tools, current_tool_definitions = self.deps.get_current_tools_fn()
+        """Apply child policy as a strict subset of one inherited parent ToolSet."""
+        parent_tool_set = inherited_tool_set.tool_set
+        parent_tools = parent_tool_set.tools
+        allowed_names = set(parent_tools)
         if self.deps.subagent_router:
             filtered_raw = self.deps.subagent_router.filter_tools(
                 subagent,
-                current_raw_tools,
+                dict(parent_tools),
             )
-            filtered_tools = list(convert_tools(filtered_raw))
-        else:
-            filtered_tools = list(current_tool_definitions)
+            if not isinstance(filtered_raw, Mapping):
+                raise RuntimeV2Error(
+                    "invalid_subagent_tool_filter",
+                    "SubAgent router must return a mapping subset of the parent ToolSet",
+                )
+            for name, tool in filtered_raw.items():
+                if (
+                    not isinstance(name, str)
+                    or name not in parent_tools
+                    or parent_tools[name] is not tool
+                ):
+                    raise RuntimeV2Error(
+                        "subagent_tool_set_expansion",
+                        "SubAgent router cannot add or replace parent ToolSet entries",
+                    )
+            allowed_names = set(filtered_raw)
 
         role_denied = self._get_role_denied_tools()
-        if role_denied:
-            filtered_tools = [t for t in filtered_tools if t.name not in role_denied]
-
-        known_tool_names = {tool.name for tool in filtered_tools}
+        allowed_names.difference_update(role_denied)
+        known_tool_names = set(parent_tools)
         filtered_tools = [
             tool
-            for tool in filtered_tools
-            if subagent_allows_tool(subagent, tool.name, known_tool_names)
+            for tool in parent_tool_set.definitions
+            if tool.name in allowed_names
+            and subagent_allows_tool(subagent, tool.name, known_tool_names)
         ]
 
         existing_tool_names = {tool.name for tool in filtered_tools}
@@ -155,6 +169,8 @@ class SubAgentToolBuilder:
         conversation_id: str,
         abort_signal: asyncio.Event | None,
         delegation_depth: int,
+        tool_set_binding: SubAgentToolSetBindingV2,
+        allowed_tool_names: frozenset[str],
         filtered_tools: list[ToolDefinition],
         existing_tool_names: set[str],
     ) -> None:
@@ -185,7 +201,7 @@ class SubAgentToolBuilder:
         nested_depth = delegation_depth + 1
 
         def _append_tool_def(td: ToolDefinition) -> None:
-            if td.name in existing_tool_names:
+            if td.name not in allowed_tool_names or td.name in existing_tool_names:
                 return
             filtered_tools.append(td)
             existing_tool_names.add(td.name)
@@ -199,6 +215,7 @@ class SubAgentToolBuilder:
             conversation_id=conversation_id,
             abort_signal=abort_signal,
             delegation_depth=delegation_depth,
+            tool_set_binding=tool_set_binding,
         )
 
         for td in self.make_nested_session_tool_defs(
@@ -237,6 +254,7 @@ class SubAgentToolBuilder:
         conversation_id: str,
         abort_signal: asyncio.Event | None,
         delegation_depth: int,
+        tool_set_binding: SubAgentToolSetBindingV2,
     ) -> tuple[
         Callable[..., Coroutine[Any, Any, str]],
         Callable[..., Coroutine[Any, Any, str]],
@@ -271,6 +289,7 @@ class SubAgentToolBuilder:
                 conversation_id=conversation_id,
                 abort_signal=abort_signal,
                 delegation_depth=delegation_depth + 1,
+                inherited_tool_set=tool_set_binding.require(),
             ):
                 if on_event:
                     event_type = evt.get("type")
@@ -324,6 +343,7 @@ class SubAgentToolBuilder:
                 spawn_mode=str(spawn_options.get("spawn_mode") or "run"),
                 thread_requested=bool(spawn_options.get("thread_requested")),
                 cleanup=str(spawn_options.get("cleanup") or "keep"),
+                inherited_tool_set=tool_set_binding.require(),
             )
             return run_id
 

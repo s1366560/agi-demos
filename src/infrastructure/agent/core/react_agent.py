@@ -492,11 +492,9 @@ class ReActAgent(
         )
 
         # Cross-wire callbacks (after both objects exist)
-        self._session_runner.deps.get_current_tools_fn = self._get_current_tools
         self._session_runner.deps.filter_tools_fn = self._subagent_filter_tools
         self._session_runner.deps.inject_nested_tools_fn = self._subagent_inject_nested_tools
 
-        self._tool_builder.deps.get_current_tools_fn = self._get_current_tools
         self._tool_builder.deps.get_observability_stats_fn = self._get_subagent_observability_stats
         self._tool_builder.deps.execute_subagent_fn = self._execute_subagent
         self._tool_builder.deps.launch_session_fn = self._launch_subagent_session

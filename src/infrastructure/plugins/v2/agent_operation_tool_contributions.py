@@ -217,6 +217,33 @@ async def contribute_operation_tool_definitions_v2(
     await operation.effect(setup, label=f"operation-tools:{source_id}")
 
 
+async def lease_operation_tool_definitions_v2(
+    *,
+    operation: OperationContextV2,
+    source_id: str,
+    definitions: Sequence[ToolDefinition],
+) -> ToolSetV2:
+    """Bind prepared definitions to an operation without publishing a catalog source."""
+    normalized_source_id = source_id.strip()
+    if not normalized_source_id:
+        raise RuntimeV2Error(
+            "invalid_tool_contribution",
+            "leased operation tools require a non-empty source ID",
+        )
+    lease = _OperationToolLeaseV2(source_id=normalized_source_id)
+    tool_set = _operation_tool_set_v2(definitions, lease=lease)
+
+    def setup() -> Callable[[], None]:
+        return lease.revoke
+
+    try:
+        await operation.effect(setup, label=f"leased-operation-tools:{normalized_source_id}")
+    except BaseException:
+        lease.revoke()
+        raise
+    return tool_set
+
+
 async def _cleanup_failed_skill_mcp_activation_v2(
     *,
     manager: SkillMCPManagerProtocolV2,
@@ -451,5 +478,6 @@ __all__ = [
     "SkillMCPManagerProtocolV2",
     "activate_skill_mcp_operation_tools_v2",
     "contribute_operation_tool_definitions_v2",
+    "lease_operation_tool_definitions_v2",
     "parse_skill_mcp_configs_v2",
 ]

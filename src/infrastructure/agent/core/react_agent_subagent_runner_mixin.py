@@ -17,6 +17,7 @@ from typing import Any, Protocol, cast
 from src.domain.model.agent.subagent import SubAgent
 
 from .subagent_runner import SubAgentSessionRunner
+from .subagent_tool_set_v2 import InheritedToolSetV2
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class SubAgentRunnerMixin:
         delegation_depth: int = 0,
         model_override: str | None = None,
         thinking_override: str | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute a SubAgent in an independent ReAct loop."""
         async for evt in self._session_runner.execute_subagent(
@@ -57,6 +59,7 @@ class SubAgentRunnerMixin:
             delegation_depth=delegation_depth,
             model_override=model_override,
             thinking_override=thinking_override,
+            inherited_tool_set=inherited_tool_set,
         ):
             yield evt
 
@@ -71,6 +74,7 @@ class SubAgentRunnerMixin:
         conversation_id: str | None = None,
         route_id: str | None = None,
         abort_signal: asyncio.Event | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute multiple SubAgents in parallel."""
         async for evt in self._session_runner.execute_parallel(
@@ -83,6 +87,7 @@ class SubAgentRunnerMixin:
             conversation_id=conversation_id,
             route_id=route_id,
             abort_signal=abort_signal,
+            inherited_tool_set=inherited_tool_set,
         ):
             yield evt
 
@@ -97,6 +102,7 @@ class SubAgentRunnerMixin:
         conversation_id: str | None = None,
         route_id: str | None = None,
         abort_signal: asyncio.Event | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute SubAgents as a sequential chain."""
         async for evt in self._session_runner.execute_chain(
@@ -109,6 +115,7 @@ class SubAgentRunnerMixin:
             conversation_id=conversation_id,
             route_id=route_id,
             abort_signal=abort_signal,
+            inherited_tool_set=inherited_tool_set,
         ):
             yield evt
 
@@ -120,6 +127,7 @@ class SubAgentRunnerMixin:
         conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Launch a SubAgent for background execution."""
         async for evt in self._session_runner.execute_background(
@@ -129,6 +137,7 @@ class SubAgentRunnerMixin:
             conversation_context=conversation_context,
             project_id=project_id,
             tenant_id=tenant_id,
+            inherited_tool_set=inherited_tool_set,
         ):
             yield evt
 
@@ -321,6 +330,7 @@ class SubAgentRunnerMixin:
         abort_signal: asyncio.Event | None,
         model_override: str | None,
         thinking_override: str | None,
+        inherited_tool_set: InheritedToolSetV2,
     ) -> tuple[str, int | None, int | None, bool, str | None]:
         """Consume subagent events and extract completion results."""
         result = await self._session_runner.runner_consume_and_extract(
@@ -334,6 +344,7 @@ class SubAgentRunnerMixin:
             abort_signal=abort_signal,
             model_override=model_override,
             thinking_override=thinking_override,
+            inherited_tool_set=inherited_tool_set,
         )
         return cast(tuple[str, int | None, int | None, bool, str | None], result)
 
@@ -354,6 +365,7 @@ class SubAgentRunnerMixin:
         thread_requested: bool = False,
         cleanup: str = "keep",
         run_metadata: dict[str, str] | None = None,
+        inherited_tool_set: InheritedToolSetV2 | None = None,
     ) -> None:
         """Launch a detached SubAgent session tied to a run_id."""
         await self._session_runner.launch_subagent_session(
@@ -372,6 +384,7 @@ class SubAgentRunnerMixin:
             thread_requested=thread_requested,
             cleanup=cleanup,
             run_metadata=run_metadata,
+            inherited_tool_set=inherited_tool_set,
         )
 
     @staticmethod

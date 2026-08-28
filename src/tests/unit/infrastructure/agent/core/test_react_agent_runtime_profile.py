@@ -10,8 +10,10 @@ from src.domain.model.agent.spawn_policy import SpawnPolicy
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.domain.model.agent.tool_policy import ToolPolicy, ToolPolicyPrecedence
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.agent.core.processor import ToolDefinition
 from src.infrastructure.agent.core.react_agent import ReActAgent
+from src.infrastructure.agent.core.subagent_tool_set_v2 import SubAgentToolSetBindingV2
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     build_builtin_all_access_agent,
@@ -21,7 +23,24 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     list_builtin_agents,
 )
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+from src.infrastructure.plugins.v2.runtime import FiberPhaseV2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
+
+_TEST_GENERATION_DESCRIPTOR = PluginGenerationDescriptorV2(
+    profile_id="react-agent-runtime-profile",
+    generation=1,
+    digest="1" * 64,
+)
+
+
+def _make_tool_set_binding() -> SubAgentToolSetBindingV2:
+    return SubAgentToolSetBindingV2(
+        operation=SimpleNamespace(
+            operation_id="react-agent-runtime-profile-turn",
+            descriptor=_TEST_GENERATION_DESCRIPTOR,
+            phase=FiberPhaseV2.ACTIVE,
+        )
+    )
 
 
 def _make_react_agent(**overrides) -> ReActAgent:
@@ -379,6 +398,7 @@ class TestReActAgentRuntimeProfile:
             abort_signal=None,
             selected_agent=selected_agent,
             available_subagents=agent.subagents,
+            tool_set_binding=_make_tool_set_binding(),
         )
 
         assert result == tools
@@ -412,6 +432,7 @@ class TestReActAgentRuntimeProfile:
             abort_signal=None,
             selected_agent=selected_agent,
             available_subagents=agent.subagents,
+            tool_set_binding=_make_tool_set_binding(),
         )
 
         assert "delegate_to_subagent" in {tool.name for tool in result}
@@ -438,6 +459,7 @@ class TestReActAgentRuntimeProfile:
             abort_signal=None,
             selected_agent=selected_agent,
             available_subagents=[_make_subagent("runtime-agent")],
+            tool_set_binding=_make_tool_set_binding(),
         )
 
         assert "delegate_to_subagent" in {tool.name for tool in result}

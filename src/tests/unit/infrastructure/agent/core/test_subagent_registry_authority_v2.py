@@ -7,10 +7,10 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from dataclasses import fields
+from dataclasses import fields, replace
 from inspect import signature
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
 import pytest
@@ -18,6 +18,7 @@ import pytest
 from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.core.react_agent import ReActAgent
 from src.infrastructure.agent.core.subagent_runner import SubAgentRunnerDeps
+from src.infrastructure.agent.core.subagent_tool_set_v2 import SubAgentToolSetBindingV2
 from src.infrastructure.agent.core.subagent_tools import SubAgentToolBuilderDeps
 from src.infrastructure.agent.processor.processor import ToolDefinition
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
@@ -32,8 +33,10 @@ from src.infrastructure.plugins.v2.boundary import (
     pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
 
 pytestmark = pytest.mark.unit
 
@@ -44,6 +47,30 @@ _TEST_REGISTRY_CONTEXT: ContextVar[SubAgentRunRegistry | None] = ContextVar(
     "test_subagent_registry_context",
     default=None,
 )
+_OPTIONAL_CAPABILITY_MODULES = frozenset(
+    {
+        "builtin://memstack/agent/tool/github",
+        "builtin://memstack/agent/skill/github",
+        "builtin://memstack/agent/tool/docker-compose",
+        "builtin://memstack/agent/skill/docker-compose",
+        "builtin://memstack/agent/tool/drone",
+        "builtin://memstack/agent/skill/drone",
+        "builtin://memstack/agent/skill/darwinian-evolver",
+    }
+)
+
+
+def _registry_authority_profile(document: ProfileDocumentV2) -> ProfileDocumentV2:
+    """Exclude unrelated optional entrypoints imported by other collected test modules."""
+    return replace(
+        document,
+        entries=tuple(
+            replace(entry, enabled=False)
+            if entry.module_ref in _OPTIONAL_CAPABILITY_MODULES
+            else entry
+            for entry in document.entries
+        ),
+    )
 
 
 def _agent(**kwargs: Any) -> ReActAgent:
@@ -200,6 +227,7 @@ async def test_detached_session_keeps_exact_generation_and_uses_a_new_db_session
         generation=188,
         version=188,
         nonce="detached-subagent-generation-188",
+        profile_projector=_registry_authority_profile,
     )
     assert first.accepted is True
     install_process_generation_host_v2(host)
@@ -268,6 +296,9 @@ async def test_detached_session_keeps_exact_generation_and_uses_a_new_db_session
                 },
             },
         ) as parent_operation:
+            inherited_tool_set = SubAgentToolSetBindingV2(operation=parent_operation).bind(
+                ToolSetV2(tools=MappingProxyType({}), definitions=())
+            )
             run = first_registry.create_run(
                 conversation_id="conversation-detached",
                 subagent_name=subagent.name,
@@ -284,6 +315,7 @@ async def test_detached_session_keeps_exact_generation_and_uses_a_new_db_session
                 conversation_context=[],
                 project_id="project-1",
                 tenant_id="tenant-1",
+                inherited_tool_set=inherited_tool_set,
             )
             task = agent._subagent_session_tasks[run.run_id]
             await asyncio.wait_for(entered.wait(), timeout=1)
@@ -296,6 +328,7 @@ async def test_detached_session_keeps_exact_generation_and_uses_a_new_db_session
                 generation=189,
                 version=189,
                 nonce="detached-subagent-generation-189",
+                profile_projector=_registry_authority_profile,
             )
             assert second.accepted is True
 
@@ -352,6 +385,7 @@ async def test_supervisor_shutdown_waits_for_exact_generation_and_db_cleanup(  #
         generation=288,
         version=288,
         nonce="detached-supervisor-generation-288",
+        profile_projector=_registry_authority_profile,
     )
     assert first.accepted is True
     install_process_generation_host_v2(host)
@@ -394,6 +428,9 @@ async def test_supervisor_shutdown_waits_for_exact_generation_and_db_cleanup(  #
             project_id="project-1",
             session_id="conversation-shutdown",
         ) as parent_operation:
+            inherited_tool_set = SubAgentToolSetBindingV2(operation=parent_operation).bind(
+                ToolSetV2(tools=MappingProxyType({}), definitions=())
+            )
             run = first_registry.create_run(
                 conversation_id="conversation-shutdown",
                 subagent_name=subagent.name,
@@ -410,6 +447,7 @@ async def test_supervisor_shutdown_waits_for_exact_generation_and_db_cleanup(  #
                 conversation_context=[],
                 project_id="project-1",
                 tenant_id="tenant-1",
+                inherited_tool_set=inherited_tool_set,
             )
             task = agent._subagent_session_tasks[run.run_id]
             await asyncio.wait_for(entered.wait(), timeout=1)
@@ -421,6 +459,7 @@ async def test_supervisor_shutdown_waits_for_exact_generation_and_db_cleanup(  #
                 generation=289,
                 version=289,
                 nonce="detached-supervisor-generation-289",
+                profile_projector=_registry_authority_profile,
             )
             assert second.accepted is True
 

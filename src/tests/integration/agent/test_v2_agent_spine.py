@@ -24,6 +24,7 @@ from src.infrastructure.agent.core.react_agent_stream_mixin import (
     _resolve_agent_capabilities_from_runtime_v2,
     _resolve_current_tools_from_runtime_v2,
 )
+from src.infrastructure.agent.core.subagent_tool_set_v2 import SubAgentToolSetBindingV2
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
 from src.infrastructure.agent.processor.factory import ProcessorFactory
 from src.infrastructure.agent.processor.processor import ProcessorConfig
@@ -456,6 +457,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
                 project_id="project-a",
             )
             operation_catalog = bind_operation_tool_set_catalog_v2(operation)
+            subagent_tool_set_binding = SubAgentToolSetBindingV2(operation=operation)
             subagent_definitions = agent._stream_inject_subagent_tools(
                 tools_to_use=[],
                 available_subagents=capabilities.subagents,
@@ -464,6 +466,7 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
                 tenant_id="tenant-a",
                 conversation_id="conversation-a",
                 abort_signal=None,
+                tool_set_binding=subagent_tool_set_binding,
             )
             await contribute_operation_tool_definitions_v2(
                 operation=operation,
@@ -475,6 +478,14 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
                 agent,
                 ToolSelectionContext(),
                 operation_catalog=operation_catalog,
+            )
+            subagent_tool_set_binding.bind(
+                tool_set,
+                rebindable_tool_names=(
+                    definition.name
+                    for definition in subagent_definitions
+                    if definition.name in tool_set.tools
+                ),
             )
             raw_tools, tool_definitions = tool_set.tools, list(tool_set.definitions)
 
@@ -615,6 +626,7 @@ async def test_profile_disabled_subagents_remove_delegation_and_session_tools_fr
             )
             assert capabilities.subagents == ()
             operation_catalog = bind_operation_tool_set_catalog_v2(operation)
+            subagent_tool_set_binding = SubAgentToolSetBindingV2(operation=operation)
             subagent_definitions = agent._stream_inject_subagent_tools(
                 tools_to_use=[],
                 available_subagents=capabilities.subagents,
@@ -623,6 +635,7 @@ async def test_profile_disabled_subagents_remove_delegation_and_session_tools_fr
                 tenant_id="tenant-a",
                 conversation_id="conversation-a",
                 abort_signal=None,
+                tool_set_binding=subagent_tool_set_binding,
             )
             assert subagent_definitions == []
 
@@ -631,6 +644,7 @@ async def test_profile_disabled_subagents_remove_delegation_and_session_tools_fr
                 ToolSelectionContext(),
                 operation_catalog=operation_catalog,
             )
+            subagent_tool_set_binding.bind(tool_set)
             tool_names = {definition.name for definition in tool_set.definitions}
             dynamic_subagent_names = {
                 name

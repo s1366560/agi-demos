@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from src.infrastructure.plugins.v2.tool_set import ToolSetV2
 
     from .processor import ToolDefinition
+    from .subagent_tool_set_v2 import InheritedToolSetV2, SubAgentToolSetBindingV2
 
 logger = logging.getLogger(__name__)
 
@@ -162,9 +163,14 @@ class CompositionMixin:
     def _subagent_filter_tools(
         self: _CompositionAgent,
         subagent: SubAgent,
+        *,
+        inherited_tool_set: InheritedToolSetV2,
     ) -> tuple[list[ToolDefinition], set[str]]:
         """Filter tools for SubAgent permissions and return mutable collections."""
-        filtered = self._tool_builder.filter_tools(subagent)
+        filtered = self._tool_builder.filter_tools(
+            subagent,
+            inherited_tool_set=inherited_tool_set,
+        )
         return cast("tuple[list[ToolDefinition], set[str]]", filtered)
 
     def _subagent_inject_nested_tools(
@@ -178,6 +184,8 @@ class CompositionMixin:
         conversation_id: str,
         abort_signal: asyncio.Event | None,
         delegation_depth: int,
+        tool_set_binding: SubAgentToolSetBindingV2,
+        allowed_tool_names: frozenset[str],
         filtered_tools: list[ToolDefinition],
         existing_tool_names: set[str],
     ) -> None:
@@ -191,6 +199,8 @@ class CompositionMixin:
             conversation_id=conversation_id,
             abort_signal=abort_signal,
             delegation_depth=delegation_depth,
+            tool_set_binding=tool_set_binding,
+            allowed_tool_names=allowed_tool_names,
             filtered_tools=filtered_tools,
             existing_tool_names=existing_tool_names,
         )

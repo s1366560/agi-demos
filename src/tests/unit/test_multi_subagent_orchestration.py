@@ -7,7 +7,7 @@ execution based on TaskDecomposer results.
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,9 +15,12 @@ import pytest
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent.core.processor import ToolDefinition
+from src.infrastructure.agent.core.subagent_tool_set_v2 import InheritedToolSetV2
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.subagent.task_decomposer import SubTask
-from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime import FiberPhaseV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.tool_set import ToolSetV2
 
 
 class _FakeForkedOperationV2:
@@ -46,6 +49,49 @@ class _FakeForkedOperationV2:
 
     async def release(self) -> None:
         self.released = True
+
+
+class _TestOperationV2:
+    operation_id = "unit-parent-turn"
+    descriptor = _FakeForkedOperationV2.descriptor
+    phase = FiberPhaseV2.ACTIVE
+
+    async def effect(self, setup, *, label: str) -> None:
+        assert label
+        result = setup()
+        if hasattr(result, "__await__"):
+            result = await result
+
+
+_SUBAGENT_REBINDABLE_TOOL_NAMES = (
+    "delegate_to_subagent",
+    "parallel_delegate_subagents",
+    "sessions_spawn",
+    "sessions_list",
+    "sessions_history",
+    "sessions_timeline",
+    "sessions_overview",
+    "sessions_wait",
+    "sessions_ack",
+    "sessions_send",
+    "subagents",
+)
+
+
+def _inherited_tool_set() -> InheritedToolSetV2:
+    names = ("test_tool", *_SUBAGENT_REBINDABLE_TOOL_NAMES)
+    tools = {name: SimpleNamespace(description=name) for name in names}
+    return InheritedToolSetV2(
+        tool_set=ToolSetV2(
+            tools=MappingProxyType(tools),
+            definitions=tuple(
+                ToolDefinition(name, name, {}, lambda **_kwargs: None) for name in names
+            ),
+        ),
+        generation_descriptor=_FakeForkedOperationV2.descriptor,
+        owner_operation_id=_TestOperationV2.operation_id,
+        rebindable_tool_names=frozenset(_SUBAGENT_REBINDABLE_TOOL_NAMES),
+    )
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -79,6 +125,10 @@ def _make_react_agent(**kwargs):
 
     agent._session_runner.deps.subagent_run_registry_resolver = resolver
     agent._session_runner.deps.operation_reserver = reserve_operation
+    inherited_tool_set = _inherited_tool_set()
+    operation = _TestOperationV2()
+    agent._session_runner.deps.inherited_tool_set_fn = lambda: inherited_tool_set
+    agent._session_runner.deps.operation_context_fn = lambda: operation
     agent._tool_builder.deps.subagent_run_registry_resolver = resolver
     return agent
 

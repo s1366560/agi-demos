@@ -85,6 +85,7 @@ from .react_agent_tool_policy import (
     filter_tools_by_name_policy,
     filter_workspace_root_tools,
 )
+from .subagent_tool_set_v2 import SubAgentToolSetBindingV2
 
 if TYPE_CHECKING:
     from .processor import ProcessorConfig, SessionProcessor
@@ -1326,6 +1327,7 @@ class StreamMixin:
         tenant_id: str,
         conversation_id: str,
         abort_signal: asyncio.Event | None,
+        tool_set_binding: SubAgentToolSetBindingV2,
         workspace_root_task: Any | None = None,
         leader_agent_id: str | None = None,
         actor_user_id: str | None = None,
@@ -1490,6 +1492,7 @@ class StreamMixin:
                 tenant_id=tenant_id,
                 conversation_id=conversation_id,
                 abort_signal=abort_signal,
+                inherited_tool_set=tool_set_binding.require(),
             ):
                 if on_event:
                     event_type = evt.get("type")
@@ -1580,6 +1583,7 @@ class StreamMixin:
                 thread_requested=bool(spawn_options.get("thread_requested")),
                 cleanup=str(spawn_options.get("cleanup") or "keep"),
                 run_metadata=task_binding,
+                inherited_tool_set=tool_set_binding.require(),
             )
             return run_id
 
@@ -1917,6 +1921,7 @@ class StreamMixin:
 
         # Phase 6c: Contribute turn-bound SubAgent closures before the one
         # selection pass so prompt, processor, traces, and telemetry share them.
+        subagent_tool_set_binding = SubAgentToolSetBindingV2(operation=operation)
         subagent_definitions = self._stream_inject_subagent_tools(
             tools_to_use=[],
             available_subagents=available_subagents,
@@ -1929,6 +1934,7 @@ class StreamMixin:
             leader_agent_id=selected_agent.id,
             actor_user_id=user_id,
             selected_agent=selected_agent,
+            tool_set_binding=subagent_tool_set_binding,
         )
         if subagent_definitions:
             await contribute_operation_tool_definitions_v2(
@@ -1960,6 +1966,14 @@ class StreamMixin:
             allow_tools=runtime_profile.allow_tools,
             deny_tools=runtime_profile.deny_tools,
             forced_operation_tool_names=mcp_tool_names,
+        )
+        subagent_tool_set_binding.bind(
+            turn_tool_set,
+            rebindable_tool_names=(
+                definition.name
+                for definition in subagent_definitions
+                if definition.name in turn_tool_set.tools
+            ),
         )
 
         # Phase 6e: Operational resource sync derives its sandbox identity

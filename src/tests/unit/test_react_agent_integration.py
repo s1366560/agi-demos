@@ -11,6 +11,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.domain.model.agent.subagent import SubAgent
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
+from src.infrastructure.agent.core.subagent_tool_set_v2 import (
+    InheritedToolSetV2,
+    SubAgentToolSetBindingV2,
+)
 from src.infrastructure.agent.mcp.skill_mcp_manager import SkillMCPManager
 from src.infrastructure.agent.model_route import ModelRouteRef
 from src.infrastructure.agent.orchestration.orchestrator import AgentOrchestrator
@@ -26,11 +31,43 @@ from src.infrastructure.plugins.v2.agent_skill_mcp_service import (
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     AGENT_OPERATION_ORCHESTRATOR_SERVICE_V2,
 )
+from src.infrastructure.plugins.v2.runtime import FiberPhaseV2
 from src.infrastructure.plugins.v2.tool_set import (
     OPERATION_TOOL_SET_CATALOG_SERVICE_V2,
     ToolSetCatalogV2,
     ToolSetV2,
 )
+
+_TEST_GENERATION_DESCRIPTOR = PluginGenerationDescriptorV2(
+    profile_id="react-agent-integration",
+    generation=1,
+    digest="1" * 64,
+)
+_SUBAGENT_REBINDABLE_TOOL_NAMES = (
+    "delegate_to_subagent",
+    "parallel_delegate_subagents",
+    "sessions_spawn",
+    "sessions_list",
+    "sessions_history",
+    "sessions_timeline",
+    "sessions_overview",
+    "sessions_wait",
+    "sessions_ack",
+    "sessions_send",
+    "subagents",
+)
+
+
+class _TestOperationV2:
+    operation_id = "react-agent-parent-turn"
+    descriptor = _TEST_GENERATION_DESCRIPTOR
+    phase = FiberPhaseV2.ACTIVE
+
+    async def effect(self, setup, *, label: str) -> None:
+        assert label
+        result = setup()
+        if hasattr(result, "__await__"):
+            await result
 
 
 def _turn_tool_set(*names: str) -> ToolSetV2:
@@ -39,6 +76,16 @@ def _turn_tool_set(*names: str) -> ToolSetV2:
     return ToolSetV2(
         tools=MappingProxyType(raw_tools),
         definitions=definitions,
+    )
+
+
+def _inherited_tool_set() -> InheritedToolSetV2:
+    names = ("test_tool", *_SUBAGENT_REBINDABLE_TOOL_NAMES)
+    return InheritedToolSetV2(
+        tool_set=_turn_tool_set(*names),
+        generation_descriptor=_TEST_GENERATION_DESCRIPTOR,
+        owner_operation_id=_TestOperationV2.operation_id,
+        rebindable_tool_names=frozenset(_SUBAGENT_REBINDABLE_TOOL_NAMES),
     )
 
 
@@ -70,6 +117,10 @@ def _make_react_agent(**kwargs):
         return registry
 
     agent._session_runner.deps.subagent_run_registry_resolver = resolver
+    inherited_tool_set = _inherited_tool_set()
+    operation = _TestOperationV2()
+    agent._session_runner.deps.inherited_tool_set_fn = lambda: inherited_tool_set
+    agent._session_runner.deps.operation_context_fn = lambda: operation
     agent._tool_builder.deps.subagent_run_registry_resolver = resolver
     return agent
 
@@ -132,6 +183,8 @@ def _make_operation_context(dispatcher):
 
     return SimpleNamespace(
         operation_id="test-turn",
+        descriptor=_TEST_GENERATION_DESCRIPTOR,
+        phase=FiberPhaseV2.ACTIVE,
         require=_require,
         effect=_effect,
     )
@@ -565,6 +618,8 @@ class TestReActAgentWorkspaceDelegation:
         )
         workspace_root_task = MagicMock(id="root-1", workspace_id="ws-1")
         captured: dict[str, object] = {}
+        tool_set_binding = SubAgentToolSetBindingV2(operation=_TestOperationV2())
+        tool_set_binding.bind(_inherited_tool_set().tool_set)
 
         def capture_build(**kwargs):
             captured.update(kwargs)
@@ -615,6 +670,7 @@ class TestReActAgentWorkspaceDelegation:
                 workspace_root_task=workspace_root_task,
                 leader_agent_id="leader-agent",
                 actor_user_id="u-1",
+                tool_set_binding=tool_set_binding,
             )
 
             delegate_callback = captured["delegate_callback"]
