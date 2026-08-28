@@ -12,11 +12,17 @@ from src.infrastructure.agent.core.subagent_tools import (
 )
 from src.infrastructure.agent.processor.processor import ToolDefinition
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+from src.infrastructure.agent.tools import delegate_subagent as delegate_subagent_module
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.delegate_subagent import make_nested_delegate_tool_defs
 from src.infrastructure.agent.tools.subagent_sessions import make_nested_session_tool_defs
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+
+@pytest.mark.unit
+def test_delegate_process_context_configure_seam_is_retired() -> None:
+    assert not hasattr(delegate_subagent_module, "configure_delegate_subagent")
 
 
 def _context(conversation_id: str) -> ToolContext:

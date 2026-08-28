@@ -120,37 +120,6 @@ def _delegate_runtime_from_dependencies(
     )
 
 
-def configure_delegate_subagent(
-    execute_callback: Callable[..., Coroutine[Any, Any, str]],
-    run_registry: SubAgentRunRegistry,
-    *,
-    conversation_id: str | None = None,
-    subagent_names: list[str] | None = None,
-    subagent_descriptions: dict[str, str] | None = None,
-    delegation_depth: int = 0,
-    max_active_runs: int | None = None,
-    max_concurrency: int = 5,
-) -> None:
-    """Bind a compatibility runtime in the current context.
-
-    Production composition uses :func:`make_delegate_tool_defs`, whose
-    definitions capture their own immutable runtime. This compatibility entry
-    point remains only for direct ``ToolInfo.execute`` callers while they are
-    migrated.
-    """
-    runtime = _delegate_runtime_from_dependencies(
-        execute_callback=execute_callback,
-        run_registry=run_registry,
-        conversation_id=conversation_id,
-        subagent_names=subagent_names,
-        subagent_descriptions=subagent_descriptions,
-        delegation_depth=delegation_depth,
-        max_active_runs=max_active_runs,
-        max_concurrency=max_concurrency,
-    )
-    _ = _delegate_runtime.set(runtime)
-
-
 @tool_define(
     name="delegate_to_subagent",
     description=(
