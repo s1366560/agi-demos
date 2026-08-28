@@ -217,8 +217,9 @@ class TestWorkerLaunchHeartbeat:
             lambda: publisher,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-            AsyncMock(return_value=redis),
+            "src.infrastructure.plugins.v2.agent_worker_runtime."
+            "current_agent_worker_redis_client_v2",
+            lambda: redis,
         )
 
         await wl._publish_worker_launch_heartbeat(
@@ -272,8 +273,9 @@ class TestWorkerLaunchHeartbeat:
             lambda: publisher,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
-            AsyncMock(return_value=redis),
+            "src.infrastructure.plugins.v2.agent_worker_runtime."
+            "current_agent_worker_redis_client_v2",
+            lambda: redis,
         )
 
         await wl._publish_worker_launch_heartbeat(

@@ -2599,10 +2599,12 @@ def _build_worker_brief(
 
 async def _is_on_cooldown(conversation_id: str) -> bool:
     """Return True if a launch was recently scheduled for this conversation."""
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
 
     try:
-        redis = await get_redis_client()
+        redis = current_agent_worker_redis_client_v2()
     except Exception:
         return False
     key = f"workspace:worker_launch:cooldown:{conversation_id}"
@@ -2619,10 +2621,12 @@ async def _refresh_launch_cooldown(conversation_id: str | None) -> None:
 
     if not conversation_id:
         return
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
 
     try:
-        redis = await get_redis_client()
+        redis = current_agent_worker_redis_client_v2()
         key = f"workspace:worker_launch:cooldown:{conversation_id}"
         await redis.expire(key, WORKER_LAUNCH_COOLDOWN_SECONDS)
     except Exception:
@@ -2644,10 +2648,12 @@ async def _refresh_worker_agent_running_marker(
 
     if not conversation_id or not attempt_id:
         return
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
 
     try:
-        redis = await get_redis_client()
+        redis = current_agent_worker_redis_client_v2()
         if await redis.exists(f"agent:finished:{conversation_id}"):
             return
         running_key = f"agent:running:{conversation_id}"
@@ -3099,17 +3105,19 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
     )
-    from src.infrastructure.agent.state.agent_worker_state import get_redis_client
     from src.infrastructure.agent.workspace.workspace_goal_runtime import (
         _build_attempt_service,
         _ensure_execution_attempt,
         apply_workspace_worker_report,
     )
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
     from src.infrastructure.workspace_core.legacy_runtime import (
         legacy_workspace_runtime_retired,
     )
 
-    redis_client = await get_redis_client()
+    redis_client = current_agent_worker_redis_client_v2()
 
     # --- Stage 1: attempt lifecycle + deterministic conversation binding ---
     resolved_attempt_id = attempt_id
@@ -4259,9 +4267,7 @@ async def schedule_worker_session(
         raise
 
     _background_tasks.add(bg)
-    bg.add_done_callback(
-        lambda completed: _finish_reserved_worker_session(completed, reservation)
-    )
+    bg.add_done_callback(lambda completed: _finish_reserved_worker_session(completed, reservation))
 
 
 __all__ = [
