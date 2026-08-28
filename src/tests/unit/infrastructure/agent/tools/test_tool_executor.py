@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.domain.events.agent_events import AgentArtifactCreatedEvent
 from src.infrastructure.agent.tools import executor as executor_module
 from src.infrastructure.agent.tools.executor import (
     ExecutionContext,
@@ -314,6 +315,66 @@ class TestToolExecutorInit:
             artifact_service=mock_artifact_service,
         )
         assert executor._artifact_service is mock_artifact_service
+
+
+# ============================================================================
+# Test Artifact Processing
+# ============================================================================
+
+
+@pytest.mark.unit
+class TestArtifactProcessing:
+    """Test explicit extraction followed by a single artifact upload."""
+
+    async def test_process_artifacts_uses_explicit_stateless_extractor(
+        self,
+        mock_doom_loop_detector,
+        mock_permission_manager,
+        mock_artifact_service,
+        execution_context,
+    ):
+        executor = ToolExecutor(
+            doom_loop_detector=mock_doom_loop_detector,
+            permission_manager=mock_permission_manager,
+            artifact_service=mock_artifact_service,
+        )
+        result = {
+            "artifact": {
+                "filename": "report.txt",
+                "mime_type": "text/plain",
+                "encoding": "utf-8",
+                "category": "document",
+            },
+            "content": [{"type": "text", "text": "Report content"}],
+        }
+
+        events = [
+            event
+            async for event in executor._process_artifacts(
+                tool_name="export_artifact",
+                result=result,
+                tool_execution_id="exec-001",
+                context=execution_context,
+            )
+        ]
+
+        assert len(events) == 1
+        assert isinstance(events[0], AgentArtifactCreatedEvent)
+        assert events[0].filename == "report.txt"
+        assert events[0].mime_type == "text/plain"
+        mock_artifact_service.upload_artifact.assert_awaited_once_with(
+            content=b"Report content",
+            filename="report.txt",
+            content_type="text/plain",
+            project_id="proj-001",
+            tenant_id="tenant-001",
+            metadata={
+                "tool_name": "export_artifact",
+                "tool_execution_id": "exec-001",
+                "conversation_id": "conv-001",
+                "category": "document",
+            },
+        )
 
 
 # ============================================================================

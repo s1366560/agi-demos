@@ -52,16 +52,13 @@ class TestRefactoredArchitectureIntegration:
         assert ClarificationStrategy is not None
         assert DecisionStrategy is not None
 
-    def test_artifact_extractor_singleton(self):
-        """Test ArtifactExtractor singleton pattern."""
-        from src.infrastructure.agent.artifact.extractor import (
-            ArtifactExtractor,
-            get_artifact_extractor,
-        )
+    def test_artifact_extractor_is_explicitly_constructed(self):
+        """Test ArtifactExtractor has no implicit process-global identity."""
+        from src.infrastructure.agent.artifact.extractor import ArtifactExtractor
 
-        extractor = get_artifact_extractor()
-        assert extractor is not None
-        assert isinstance(extractor, ArtifactExtractor)
+        extractor1 = ArtifactExtractor()
+        extractor2 = ArtifactExtractor()
+        assert extractor1 is not extractor2
 
 
 @pytest.mark.integration
