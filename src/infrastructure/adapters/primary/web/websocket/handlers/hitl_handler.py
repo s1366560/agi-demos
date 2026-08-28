@@ -5,7 +5,6 @@ Handles clarification_respond, decision_respond, env_var_respond, and permission
 message types. Uses Redis Streams to communicate with the running Ray Actor.
 """
 
-import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -23,6 +22,14 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler imp
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    current_agent_worker_redis_client_v2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -77,32 +84,49 @@ async def _publish_hitl_response_to_redis(
     try:
         from src.configuration.config import get_settings
         from src.infrastructure.agent.hitl.utils import serialize_hitl_stream_response
-        from src.infrastructure.agent.state.agent_worker_state import (
-            get_redis_client,
-        )
 
         settings = get_settings()
         if not getattr(settings, "hitl_realtime_enabled", True):
             logger.debug("[WS HITL] Realtime disabled, skipping Redis publish")
             return False
 
-        redis = await get_redis_client()
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"agent-hitl-response-publish:{request_id}",
+            tenant_id=tenant_id,
+            project_id=project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                    "user_id": user_id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-hitl-response-publish",
+                    "channel": "websocket",
+                    "request_id": request_id,
+                    "conversation_id": conversation_id,
+                    "message_id": message_id,
+                    "hitl_type": hitl_type,
+                },
+            },
+        ):
+            redis = current_agent_worker_redis_client_v2()
+            stream_key = f"hitl:response:{tenant_id}:{project_id}"
+            message_data: dict[str, Any] = {
+                "request_id": request_id,
+                "hitl_type": hitl_type,
+                "user_id": user_id,
+                "conversation_id": conversation_id,
+                "message_id": message_id,
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+                "agent_mode": agent_mode,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            message_data.update(serialize_hitl_stream_response(hitl_type, response_data))
 
-        stream_key = f"hitl:response:{tenant_id}:{project_id}"
-        message_data: dict[str, Any] = {
-            "request_id": request_id,
-            "hitl_type": hitl_type,
-            "user_id": user_id,
-            "conversation_id": conversation_id,
-            "message_id": message_id,
-            "tenant_id": tenant_id,
-            "project_id": project_id,
-            "agent_mode": agent_mode,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-        message_data.update(serialize_hitl_stream_response(hitl_type, response_data))
-
-        await redis.xadd(stream_key, {"data": json.dumps(message_data)}, maxlen=1000)
+            await redis.xadd(stream_key, {"data": json.dumps(message_data)}, maxlen=1000)
 
         logger.info(f"[WS HITL] Published response to Redis: {request_id}")
         return True
@@ -753,26 +777,45 @@ async def _start_hitl_stream_bridge(
         # Auto-subscribe session to conversation
         await manager.subscribe(context.session_id, conversation_id)
 
-        # Import here to avoid circular imports
-        from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler import (
-            stream_hitl_response_to_websocket,
+        # Import here to avoid the handlers package initialization cycle.
+        from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_handler import (
+            _start_recovery_bridge_task_v2,
         )
 
-        async def _run_hitl_recovery_stream() -> None:
-            from src.configuration.factories import create_llm_client
-
-            async with context.fresh_db_context() as stream_context:
-                llm = await create_llm_client(stream_context.tenant_id)
-                agent_service = stream_context.get_scoped_container().agent_service(llm)
-                await stream_hitl_response_to_websocket(
-                    agent_service=agent_service,
-                    session_id=stream_context.session_id,
-                    conversation_id=conversation_id,
-                    message_id=None,  # Read all new events
-                )
-
-        task = asyncio.create_task(_run_hitl_recovery_stream())
-        manager.add_bridge_task(context.session_id, conversation_id, task)
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"agent-hitl-recovery-admission:{request_id}",
+            tenant_id=hitl_request.tenant_id,
+            project_id=hitl_request.project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": hitl_request.tenant_id,
+                    "project_id": hitl_request.project_id,
+                    "user_id": context.user_id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-hitl-recovery-admission",
+                    "channel": "websocket",
+                    "request_id": request_id,
+                    "conversation_id": conversation_id,
+                    "message_id": hitl_request.message_id,
+                },
+            },
+        ):
+            started = await _start_recovery_bridge_task_v2(
+                context=context,
+                conversation_id=conversation_id,
+                message_id=None,
+                replay_from_db=True,
+                cursor_time_us=None,
+                cursor_counter=None,
+                operation_kind="agent-hitl-recovery-stream",
+            )
+        if not started:
+            logger.info(
+                "[WS HITL] Recovery bridge was not started for conversation %s",
+                conversation_id,
+            )
 
     except Exception as e:
         logger.error(f"[WS HITL] Failed to start stream bridge: {e}", exc_info=True)

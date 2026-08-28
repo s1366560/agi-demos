@@ -137,19 +137,21 @@ async def _run_recovery_stream_v2(
     fork: ForkedAgentOperationV2,
     context: MessageContext,
     conversation_id: str,
-    running_message_id: str,
+    message_id: str | None,
+    replay_from_db: bool,
     cursor_time_us: int | None,
     cursor_counter: int | None,
+    operation_kind: str,
 ) -> None:
     async with (
         context.fresh_db_context() as stream_context,
         fork.admit(
-            operation_id=f"agent-subscription-recovery-stream:{conversation_id}",
+            operation_id=f"{operation_kind}:{conversation_id}",
             metadata={
-                "kind": "agent-subscription-recovery-stream",
+                "kind": operation_kind,
                 "channel": "websocket",
                 "conversation_id": conversation_id,
-                "message_id": running_message_id,
+                "message_id": message_id,
             },
             services={OPERATION_DB_SESSION_SERVICE_V2: stream_context.db},
         ) as operation,
@@ -160,8 +162,8 @@ async def _run_recovery_stream_v2(
             agent_service=agent_service,
             session_id=stream_context.session_id,
             conversation_id=conversation_id,
-            message_id=running_message_id,
-            replay_from_db=False,
+            message_id=message_id,
+            replay_from_db=replay_from_db,
             from_time_us=cursor_time_us,
             from_counter=cursor_counter,
         )
@@ -171,9 +173,11 @@ async def _start_recovery_bridge_task_v2(
     *,
     context: MessageContext,
     conversation_id: str,
-    running_message_id: str,
+    message_id: str | None,
+    replay_from_db: bool,
     cursor_time_us: int | None,
     cursor_counter: int | None,
+    operation_kind: str,
 ) -> bool:
     fork = await fork_current_agent_operation_v2()
     task_started = False
@@ -187,9 +191,11 @@ async def _start_recovery_bridge_task_v2(
                 fork=fork,
                 context=context,
                 conversation_id=conversation_id,
-                running_message_id=running_message_id,
+                message_id=message_id,
+                replay_from_db=replay_from_db,
                 cursor_time_us=cursor_time_us,
                 cursor_counter=cursor_counter,
+                operation_kind=operation_kind,
             )
         finally:
             await fork.release()
@@ -216,7 +222,7 @@ async def _start_recovery_bridge_task_v2(
         started = await context.connection_manager.try_start_bridge_task(
             session_id=context.session_id,
             conversation_id=conversation_id,
-            bridge_message_id=running_message_id,
+            bridge_message_id=message_id,
             task_factory=create_recovery_task,
         )
     except BaseException:
@@ -292,9 +298,11 @@ async def _maybe_start_recovery_bridge(
             started = await _start_recovery_bridge_task_v2(
                 context=context,
                 conversation_id=conversation_id,
-                running_message_id=running_message_id,
+                message_id=running_message_id,
+                replay_from_db=False,
                 cursor_time_us=cursor_time_us,
                 cursor_counter=cursor_counter,
+                operation_kind="agent-subscription-recovery-stream",
             )
             if started:
                 logger.info(
