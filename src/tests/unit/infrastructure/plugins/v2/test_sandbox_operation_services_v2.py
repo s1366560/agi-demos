@@ -165,3 +165,7 @@ def test_operation_services_are_an_explicit_profile_entry() -> None:
     assert entry.inject == {
         "provider": "service:sandbox.operation-service-provider",
     }
+
+
+def test_process_global_sandbox_resource_provider_is_retired() -> None:
+    assert not (_ROOT / "src/infrastructure/agent/sandbox_resource_provider.py").exists()

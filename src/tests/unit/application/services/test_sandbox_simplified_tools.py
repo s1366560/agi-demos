@@ -122,37 +122,23 @@ class TestSandboxResourcePortProvidesTools:
 
 
 class TestAgentCanGetToolsDirectly:
-    """Test agent workflow can get tools from SandboxResourcePort."""
+    """Test agent workflow uses an explicitly supplied SandboxResourcePort."""
 
     @pytest.mark.asyncio
-    async def test_agent_workflow_tool_discovery(self):
-        """Agent should discover available tools through SandboxResourcePort."""
-        from src.infrastructure.agent.sandbox_resource_provider import (
-            get_sandbox_resource_port,
-            set_sandbox_resource_port,
-        )
-
-        # Set up port with tools
+    async def test_agent_workflow_tool_discovery_uses_explicit_port(self):
+        """Agent should discover tools without process-global registration."""
         port = MockSandboxResourceWithTools(
             available_tools=["bash", "read", "write", "import_file", "browse"]
         )
-        set_sandbox_resource_port(port)
-
-        # Agent workflow retrieves port
-        retrieved_port = get_sandbox_resource_port()
-        assert retrieved_port is not None
 
         # Get sandbox info with tools
-        info = await retrieved_port.get_sandbox_info("proj-123")
+        info = await port.get_sandbox_info("proj-123")
 
         # Verify tools are available
         assert "bash" in info.available_tools
         assert "write" in info.available_tools
         assert "import_file" in info.available_tools
         assert len(info.available_tools) == 5
-
-        # Clean up
-        set_sandbox_resource_port(None)
 
 
 class TestSimplifiedToolManagement:
