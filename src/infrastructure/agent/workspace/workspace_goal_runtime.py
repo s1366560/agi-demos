@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.workspace_agent_autonomy import (
@@ -59,7 +60,6 @@ from src.domain.model.workspace_plan.plan import PlanStatus
 from src.domain.model.workspace_plan.plan_node import PlanNodeKind, TaskExecution, TaskIntent
 from src.domain.ports.repositories import WorkspaceTaskRepository
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.workspace.dispatcher.retry_policy import DEFAULT_RETRY_POLICY
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     AUTONOMY_SCHEMA_VERSION_KEY,
@@ -90,6 +90,23 @@ logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
 _RETRY_CONVERSATION_SOURCE = "workspace_retry_launch"
 _RETRY_CONVERSATION_STAGE = "retry_leader"
+
+
+def _current_workspace_goal_redis_client_v2() -> redis.Redis:
+    """Resolve Redis from the generation pinned to this workspace operation."""
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
+
+    return current_agent_worker_redis_client_v2()
+
+
+async def _publish_workspace_goal_events_v2(
+    events: Sequence[PendingWorkspaceTaskEvent],
+) -> None:
+    """Publish workspace goal effects through the pinned generation Redis."""
+    publisher = WorkspaceTaskEventPublisher(_current_workspace_goal_redis_client_v2())
+    await publisher.publish_pending_events(events)
 
 
 class _RetryConversationProjection(Protocol):
@@ -269,7 +286,7 @@ async def maybe_materialize_workspace_goal_candidate(
         return None
 
     try:
-        redis_client = await get_redis_client()
+        redis_client = _current_workspace_goal_redis_client_v2()
     except Exception:
         logger.warning("Workspace goal runtime: redis unavailable", exc_info=True)
         redis_client = None
@@ -1118,7 +1135,7 @@ async def _launch_workspace_retry_attempt(
     )
 
     try:
-        redis_client = await get_redis_client()
+        redis_client = _current_workspace_goal_redis_client_v2()
         async with async_session_factory() as db:
             workspace_repo = legacy_workspace_runtime_retired("Workspace retry authority lookup")
             workspace = await workspace_repo.find_by_id(workspace_id)
@@ -1481,8 +1498,7 @@ async def apply_workspace_worker_report(  # noqa: C901, PLR0912, PLR0913, PLR091
 
             await db.commit()
             try:
-                publisher = WorkspaceTaskEventPublisher(await get_redis_client())
-                await publisher.publish_pending_events(command_service.consume_pending_events())
+                await _publish_workspace_goal_events_v2(command_service.consume_pending_events())
             except Exception:
                 logger.warning(
                     "Workspace worker report event publish failed after commit",
@@ -1708,8 +1724,7 @@ async def adjudicate_workspace_worker_report(  # noqa: C901, PLR0912, PLR0915
                 )
 
             await db.commit()
-            publisher = WorkspaceTaskEventPublisher(await get_redis_client())
-            await publisher.publish_pending_events(command_service.consume_pending_events())
+            await _publish_workspace_goal_events_v2(command_service.consume_pending_events())
             if retry_launch_request is not None:
                 _schedule_workspace_retry_attempt(**retry_launch_request)
             return updated
@@ -1868,8 +1883,7 @@ async def prepare_workspace_subagent_delegation(
                 )
 
             await db.commit()
-            publisher = WorkspaceTaskEventPublisher(await get_redis_client())
-            await publisher.publish_pending_events(command_service.consume_pending_events())
+            await _publish_workspace_goal_events_v2(command_service.consume_pending_events())
             return {
                 "workspace_task_id": updated.id,
                 "attempt_id": attempt.id,
