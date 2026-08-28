@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,16 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_worker_runtime import (
+    current_agent_worker_redis_client_v2,
+)
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from .schemas import ExecutionStatsResponse
 from .utils import get_container_with_db
@@ -1788,45 +1798,68 @@ async def get_conversation_execution_status(
         )
         container = get_container_with_db(request, db)
 
-        redis_client = container.redis_client
-        is_running = False
-        current_message_id = None
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"agent-execution-status:{conversation_id}",
+            tenant_id=tenant_id,
+            project_id=project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: db,
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": tenant_id,
+                    "user_id": current_user.id,
+                    "project_id": project_id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "agent-execution-status",
+                    "channel": "http",
+                    "method": request.method,
+                    "path": request.url.path,
+                    "conversation_id": conversation_id,
+                    "include_recovery_info": include_recovery_info,
+                },
+            },
+        ):
+            redis_client = current_agent_worker_redis_client_v2()
+            key = f"agent:running:{conversation_id}"
+            is_running = bool(await redis_client.exists(key))
+            current_message_id = None
+            if is_running:
+                message_id_bytes = await redis_client.get(key)
+                if message_id_bytes:
+                    current_message_id = (
+                        message_id_bytes.decode()
+                        if isinstance(message_id_bytes, bytes)
+                        else message_id_bytes
+                    )
 
-        if redis_client:
-            import redis.asyncio as redis
+            result = {
+                "conversation_id": conversation_id,
+                "is_running": is_running,
+                "current_message_id": current_message_id,
+            }
 
-            if isinstance(redis_client, redis.Redis):
-                key = f"agent:running:{conversation_id}"
-                exists = await redis_client.exists(key)
-                is_running = bool(exists)
+            if include_recovery_info:
+                recovery_info = await _get_recovery_info(
+                    container=container,
+                    redis_client=redis_client,
+                    conversation_id=conversation_id,
+                    message_id=current_message_id,
+                    from_time_us=from_time_us,
+                )
+                result["recovery"] = recovery_info
 
-                if is_running:
-                    message_id_bytes = await redis_client.get(key)
-                    if message_id_bytes:
-                        current_message_id = (
-                            message_id_bytes.decode()
-                            if isinstance(message_id_bytes, bytes)
-                            else message_id_bytes
-                        )
+            return result
 
-        result = {
-            "conversation_id": conversation_id,
-            "is_running": is_running,
-            "current_message_id": current_message_id,
-        }
-
-        if include_recovery_info:
-            recovery_info = await _get_recovery_info(
-                container=container,
-                redis_client=redis_client,
-                conversation_id=conversation_id,
-                message_id=current_message_id,
-                from_time_us=from_time_us,
-            )
-            result["recovery"] = recovery_info
-
-        return result
-
+    except RuntimeV2Error as exc:
+        logger.warning("Agent execution status V2 authority unavailable: code=%s", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Agent execution status authority is unavailable"),
+            },
+        ) from exc
     except HTTPException:
         raise
     except Exception as exc:
