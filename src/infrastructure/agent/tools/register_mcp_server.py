@@ -56,50 +56,13 @@ TOOL_DESCRIPTION = (
 
 # =============================================================================
 
-# ---------------------------------------------------------------------------
-# Module-level DI references
-# ---------------------------------------------------------------------------
-
-
-_register_mcp_session_factory: Any | None = None
-_register_mcp_tenant_id: str = ""
-_register_mcp_project_id: str = ""
-_register_mcp_sandbox_adapter: SandboxPort | None = None
-_register_mcp_sandbox_id: str | None = None
-
-
-def configure_register_mcp_server_tool(
-    *,
-    session_factory: Any | None = None,
-    tenant_id: str = "",
-    project_id: str = "",
-    sandbox_adapter: SandboxPort | None = None,
-    sandbox_id: str | None = None,
-) -> None:
-    """Configure legacy module-level fallback dependencies for the tool."""
-    global _register_mcp_session_factory
-    global _register_mcp_tenant_id
-    global _register_mcp_project_id
-    global _register_mcp_sandbox_adapter
-    global _register_mcp_sandbox_id
-    _register_mcp_session_factory = session_factory
-    _register_mcp_tenant_id = tenant_id
-    _register_mcp_project_id = project_id
-    _register_mcp_sandbox_adapter = sandbox_adapter
-    _register_mcp_sandbox_id = sandbox_id
-
-
 def _current_register_mcp_server_runtime() -> RegisterMCPServerRuntime:
     runtime = _register_mcp_server_runtime.get()
-    if runtime is not None:
-        return runtime
-    return RegisterMCPServerRuntime(
-        session_factory=_register_mcp_session_factory,
-        tenant_id=_register_mcp_tenant_id,
-        project_id=_register_mcp_project_id,
-        sandbox_adapter=_register_mcp_sandbox_adapter,
-        sandbox_id=_register_mcp_sandbox_id,
-    )
+    if runtime is None:
+        raise RuntimeError(
+            "register_mcp_server requires a generation-bound runtime",
+        )
+    return runtime
 
 
 # ---------------------------------------------------------------------------

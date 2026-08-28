@@ -98,10 +98,6 @@ class TestToolContextRegistration:
             _fake_make_register_mcp_server_tool,
         )
         monkeypatch.setattr(
-            "src.infrastructure.agent.tools.register_mcp_server.configure_register_mcp_server_tool",
-            _forbidden,
-        )
-        monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
             _forbidden,
         )
@@ -154,10 +150,6 @@ class TestToolContextRegistration:
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.register_mcp_server_runtime.make_register_mcp_server_tool",
             _fake_make_register_mcp_server_tool,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.agent.tools.register_mcp_server.configure_register_mcp_server_tool",
-            _forbidden,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
@@ -214,10 +206,6 @@ class TestToolContextRegistration:
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.register_mcp_server_runtime.make_register_mcp_server_tool",
             _fake_make_register_mcp_server_tool,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.agent.tools.register_mcp_server.configure_register_mcp_server_tool",
-            _forbidden,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",
@@ -281,10 +269,6 @@ class TestToolContextRegistration:
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.register_mcp_server_runtime.make_register_mcp_server_tool",
             _fake_make_register_mcp_server_tool,
-        )
-        monkeypatch.setattr(
-            "src.infrastructure.agent.tools.register_mcp_server.configure_register_mcp_server_tool",
-            _forbidden,
         )
         monkeypatch.setattr(
             "src.infrastructure.agent.tools.define.get_registered_tools",

@@ -10,9 +10,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.infrastructure.agent.tools import register_mcp_server as register_module
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.register_mcp_server import (
     register_mcp_server_tool,
+)
+from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+    RegisterMCPServerRuntime,
 )
 
 
@@ -35,6 +39,33 @@ _MOD = "src.infrastructure.agent.tools.register_mcp_server"
 @pytest.mark.unit
 class TestRegisterMCPServerTool:
     """Tests for register_mcp_server_tool @tool_define implementation."""
+
+    @pytest.fixture(autouse=True)
+    def _bind_template_runtime_for_unit_tests(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Adapt direct template tests without restoring a production fallback."""
+        defaults: dict[str, object | None] = {
+            "_register_mcp_session_factory": None,
+            "_register_mcp_tenant_id": "",
+            "_register_mcp_project_id": "",
+            "_register_mcp_sandbox_adapter": None,
+            "_register_mcp_sandbox_id": None,
+        }
+        for name, value in defaults.items():
+            monkeypatch.setattr(register_module, name, value, raising=False)
+
+        def current_runtime() -> RegisterMCPServerRuntime:
+            return RegisterMCPServerRuntime(
+                session_factory=register_module._register_mcp_session_factory,
+                tenant_id=register_module._register_mcp_tenant_id,
+                project_id=register_module._register_mcp_project_id,
+                sandbox_adapter=register_module._register_mcp_sandbox_adapter,
+                sandbox_id=register_module._register_mcp_sandbox_id,
+            )
+
+        monkeypatch.setattr(register_module, "_current_register_mcp_server_runtime", current_runtime)
 
     def test_name_and_description(self) -> None:
         assert register_mcp_server_tool.name == "register_mcp_server"
@@ -416,11 +447,21 @@ class TestRegisterMCPServerTool:
 
 
 @pytest.mark.unit
+def test_unbound_register_mcp_template_rejects_legacy_runtime_fallback() -> None:
+    with pytest.raises(RuntimeError, match="generation-bound runtime"):
+        register_module._current_register_mcp_server_runtime()
+
+
+@pytest.mark.unit
+def test_register_mcp_module_has_no_legacy_configure_seam() -> None:
+    assert not hasattr(register_module, "configure_register_mcp_server_tool")
+
+
+@pytest.mark.unit
 async def test_bound_tools_isolate_runtime_during_interleaved_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Each bound tool must retain its generation dependencies across awaits."""
-    from src.infrastructure.agent.tools import register_mcp_server as register_module
     from src.infrastructure.agent.tools.register_mcp_server_runtime import (
         make_register_mcp_server_tool,
     )
