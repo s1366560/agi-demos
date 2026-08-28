@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         AutomationRuntimeIdentity,
     )
     from src.domain.model.agent.hitl.hitl_types import HITLPendingException
+    from src.infrastructure.plugins.v2.boundary import GenerationHostV2
     from src.infrastructure.plugins.v2.session_event_log import SessionEventLogServiceV2
 
 import redis.asyncio as aioredis
@@ -53,7 +54,6 @@ from src.infrastructure.agent.actor.types import ProjectChatRequest, ProjectChat
 from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
 from src.infrastructure.agent.events.converter import normalize_event_dict
 from src.infrastructure.agent.hitl.state_store import HITLAgentState, HITLStateStore
-from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.subagent.announce_service import AnnounceService
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.session_event_log import MODEL_MESSAGE_COMMITTED_EVENT_V2
@@ -704,10 +704,25 @@ async def _load_hitl_state(
     return state
 
 
-async def load_hitl_state_for_resume(request_id: str) -> HITLAgentState | None:
-    """Load persisted HITL state before admitting its generation boundary."""
-    redis_client = await _get_redis_client()
-    return await _load_hitl_state(HITLStateStore(redis_client), request_id)
+async def load_hitl_state_for_resume(
+    request_id: str,
+    *,
+    generation_host: GenerationHostV2,
+) -> HITLAgentState | None:
+    """Load persisted HITL state under a short lease on the data-plane generation."""
+    from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
+    from src.infrastructure.plugins.v2.boundary import pin_operation_context_v2
+
+    async with pin_operation_context_v2(
+        generation_host,
+        operation_id=f"hitl-state-lookup:{request_id}",
+        scope=ScopeV2(kind=ScopeKindV2.ROOT),
+    ):
+        redis_client = current_agent_worker_redis_client_v2()
+        return await _load_hitl_state(HITLStateStore(redis_client), request_id)
 
 
 def _hitl_state_not_found_result(start_time: float) -> ProjectChatResult:
@@ -1785,7 +1800,11 @@ async def _stream_publish_event(
 
 
 async def _get_redis_client() -> aioredis.Redis:
-    return await get_redis_client()
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
+
+    return current_agent_worker_redis_client_v2()
 
 
 async def _get_announce_service() -> AnnounceService:

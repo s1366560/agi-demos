@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.hitl.utils import HITLRequestRecord
+    from src.infrastructure.plugins.v2.boundary import GenerationHostV2
 
 
 class LocalHITLResumeConsumer:
@@ -37,8 +38,14 @@ class LocalHITLResumeConsumer:
     RECLAIM_IDLE_MS = 30_000
     STALE_PROCESSING_IDLE_MS = 300_000
 
-    def __init__(self, redis_client: aioredis.Redis) -> None:
+    def __init__(
+        self,
+        redis_client: aioredis.Redis,
+        *,
+        generation_host: GenerationHostV2,
+    ) -> None:
         self._redis = redis_client
+        self._generation_host = generation_host
         self._projects: set[tuple[str, str]] = set()
         self._running = False
         self._listen_task: asyncio.Task[None] | None = None
@@ -474,7 +481,10 @@ class LocalHITLResumeConsumer:
                     return False
                 await session.commit()
 
-            state = await load_hitl_state_for_resume(request_id)
+            state = await load_hitl_state_for_resume(
+                request_id,
+                generation_host=self._generation_host,
+            )
             if state is None:
                 from src.infrastructure.agent.hitl.coordinator import complete_hitl_request
 
@@ -573,13 +583,10 @@ class LocalHITLResumeConsumer:
         """Return True when Redis or DB snapshots can resume a HITL request."""
         from src.infrastructure.agent.actor.state.snapshot_repo import load_hitl_snapshot
         from src.infrastructure.agent.hitl.state_store import HITLStateStore
-        from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 
-        redis_client = await get_redis_client()
-        if redis_client is not None:
-            state = await HITLStateStore(redis_client).load_state_by_request(request_id)
-            if state is not None:
-                return True
+        state = await HITLStateStore(self._redis).load_state_by_request(request_id)
+        if state is not None:
+            return True
 
         return await load_hitl_snapshot(request_id) is not None
 
@@ -666,10 +673,15 @@ async def get_or_create_local_consumer() -> LocalHITLResumeConsumer:
         from src.infrastructure.agent.state.agent_worker_state import (
             get_redis_client,
         )
+        from src.infrastructure.plugins.v2.boundary import current_process_generation_host_v2
 
         redis = await get_redis_client()
-        _local_consumer = LocalHITLResumeConsumer(redis)
-        await recover_hitl_on_startup()
+        generation_host = current_process_generation_host_v2()
+        _local_consumer = LocalHITLResumeConsumer(
+            redis,
+            generation_host=generation_host,
+        )
+        await recover_hitl_on_startup(generation_host=generation_host)
         await _local_consumer.start()
     return _local_consumer
 

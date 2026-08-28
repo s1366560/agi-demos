@@ -191,7 +191,10 @@ class TestProjectAgentActor:
         admission_context.__aenter__.side_effect = _enter_admission
         admission_context.__aexit__.side_effect = _exit_admission
         admit = MagicMock(return_value=admission_context)
-        actor._plugin_admission_v2 = SimpleNamespace(admit=admit)
+        actor._plugin_admission_v2 = SimpleNamespace(
+            admit=admit,
+            host=SimpleNamespace(manager=SimpleNamespace(current=None)),
+        )
         heartbeat = AsyncMock()
         heartbeat.__aenter__.return_value = None
         heartbeat.__aexit__.return_value = False

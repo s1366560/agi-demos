@@ -327,13 +327,8 @@ async def get_hitl_state_store() -> HITLStateStore:
     Returns:
         Configured HITLStateStore instance
     """
-    from src.infrastructure.agent.state.agent_worker_state import (
-        get_redis_client,
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
     )
 
-    redis_client = await get_redis_client()
-
-    if not redis_client:
-        raise RuntimeError("Redis client not available for HITL state store")
-
-    return HITLStateStore(redis_client)
+    return HITLStateStore(current_agent_worker_redis_client_v2())

@@ -661,7 +661,10 @@ class ProjectAgentActor:
                     load_hitl_state_for_resume,
                 )
 
-                state = await load_hitl_state_for_resume(request_id)
+                state = await load_hitl_state_for_resume(
+                    request_id,
+                    generation_host=self._plugin_admission_v2.host,
+                )
                 if state is None:
                     raise RuntimeV2Error(
                         "generation_descriptor_missing",

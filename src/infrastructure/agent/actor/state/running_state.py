@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import logging
 
-from src.infrastructure.agent.state.agent_worker_state import (
-    get_redis_client,
-)
+from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
 AGENT_FINISHED_TTL_SECONDS = 1800
+
+
+def _current_redis_client_v2() -> Redis:
+    from src.infrastructure.plugins.v2.agent_worker_runtime import (
+        current_agent_worker_redis_client_v2,
+    )
+
+    return current_agent_worker_redis_client_v2()
 
 
 def _decode_redis_value(value: object) -> str | None:
@@ -29,7 +35,7 @@ async def set_agent_running(
     ttl_seconds: int = 300,
 ) -> None:
     """Mark an agent execution as running in Redis."""
-    redis_client = await get_redis_client()
+    redis_client = _current_redis_client_v2()
     key = f"agent:running:{conversation_id}"
     await redis_client.setex(key, ttl_seconds, message_id)
     logger.info(
@@ -48,7 +54,7 @@ async def mark_agent_finished(
     """Record that an actor execution exited for a bounded recovery window."""
     if not conversation_id or not message_id:
         return
-    redis_client = await get_redis_client()
+    redis_client = _current_redis_client_v2()
     key = f"agent:finished:{conversation_id}"
     await redis_client.setex(key, ttl_seconds, message_id)
     logger.info(
@@ -61,7 +67,7 @@ async def mark_agent_finished(
 
 async def clear_agent_running(conversation_id: str, message_id: str | None = None) -> None:
     """Clear an agent running state in Redis."""
-    redis_client = await get_redis_client()
+    redis_client = _current_redis_client_v2()
     key = f"agent:running:{conversation_id}"
     stored_message_id = _decode_redis_value(await redis_client.get(key))
     await redis_client.delete(key)
@@ -77,7 +83,7 @@ async def clear_agent_running(conversation_id: str, message_id: str | None = Non
 
 async def refresh_agent_running_ttl(conversation_id: str, ttl_seconds: int = 300) -> None:
     """Refresh the running state TTL while execution continues."""
-    redis_client = await get_redis_client()
+    redis_client = _current_redis_client_v2()
     key = f"agent:running:{conversation_id}"
     await redis_client.expire(key, ttl_seconds)
     logger.debug("Refreshed agent running TTL: %s (TTL=%ss)", key, ttl_seconds)

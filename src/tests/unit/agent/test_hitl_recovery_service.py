@@ -51,7 +51,12 @@ def _persisted_state(request_id: str) -> HITLAgentState:
 
 @pytest.fixture(autouse=True)
 def _stub_persisted_generation_recovery(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _load_state(request_id: str) -> HITLAgentState:
+    async def _load_state(
+        request_id: str,
+        *,
+        generation_host: object,
+    ) -> HITLAgentState:
+        del generation_host
         return _persisted_state(request_id)
 
     @asynccontextmanager
@@ -139,7 +144,7 @@ async def test_recover_unprocessed_requests_replays_answered_env_var_request(
         snapshot_repo_mod, "load_hitl_snapshot_agent_mode", AsyncMock(return_value="plan")
     )
 
-    service = HITLRecoveryService()
+    service = HITLRecoveryService(generation_host=MagicMock())
     recovered = await service.recover_unprocessed_requests()
 
     assert recovered == 1
@@ -213,7 +218,7 @@ async def test_recovery_reverts_processing_request_when_replay_fails(
         snapshot_repo_mod, "load_hitl_snapshot_agent_mode", AsyncMock(return_value="default")
     )
 
-    service = HITLRecoveryService()
+    service = HITLRecoveryService(generation_host=MagicMock())
     recovered = await service.recover_unprocessed_requests()
 
     assert recovered == 0
@@ -280,7 +285,7 @@ async def test_recovery_replays_stale_processing_requests(monkeypatch: pytest.Mo
         snapshot_repo_mod, "load_hitl_snapshot_agent_mode", AsyncMock(return_value="default")
     )
 
-    service = HITLRecoveryService()
+    service = HITLRecoveryService(generation_host=MagicMock())
     recovered = await service.recover_unprocessed_requests()
 
     assert recovered == 1
@@ -363,7 +368,7 @@ async def test_recovery_skips_bad_payload_and_continues(monkeypatch: pytest.Monk
     )
     monkeypatch.setattr(hitl_utils, "restore_persisted_hitl_response", _restore)
 
-    service = HITLRecoveryService()
+    service = HITLRecoveryService(generation_host=MagicMock())
     recovered = await service.recover_unprocessed_requests()
 
     assert recovered == 1
@@ -468,7 +473,7 @@ async def test_recovery_initializes_and_continues_inside_snapshot_generation(
         lambda _request: {"answer": "yes"},
     )
 
-    service = HITLRecoveryService()
+    service = HITLRecoveryService(generation_host=MagicMock())
     recovered = await service._recover_answered_request(request)
 
     assert recovered is True

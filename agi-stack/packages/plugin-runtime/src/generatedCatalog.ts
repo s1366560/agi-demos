@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:6fcd955270d9b387e81cec0c2407e08414ce568e5f529d22b97507d5a1',
-  '072f46","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:9e344a2462b37e736f754aae7c498bfa397f02dd7f8a4fd9248009fc60',
+  '4be491","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -678,8 +678,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '69a4db0","entrypoint":"src.infrastructure.plugins.v2.agent_runtime_utility_tools:_ap',
   'ply_agent_web_tool_contribution_v2","module_ref":"builtin://memstack/agent/tool/web"',
   ',"plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]',
-  '},{"artifact_digest":"sha256:9f4da1b27992316393123b6712f29999fd52dd7f8d87cb301c43812',
-  'd5ff2e0c0","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent_work',
+  '},{"artifact_digest":"sha256:6d596898b49290617862f4b6172344b0bcafc472a7bb9ac685a7946',
+  'ee607523c","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent_work',
   'er_runtime.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft',
   '/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"gen',
   'eration-sandbox-runtime","type":"string"}},"required":["strategy"],"type":"object"},',
@@ -3025,4 +3025,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:6fcd955270d9b387e81cec0c2407e08414ce568e5f529d22b97507d5a1072f46' as const;
+  'sha256:9e344a2462b37e736f754aae7c498bfa397f02dd7f8a4fd9248009fc604be491' as const;

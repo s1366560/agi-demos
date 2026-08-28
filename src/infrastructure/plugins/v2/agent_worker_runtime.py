@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 import redis.asyncio as redis
 
@@ -119,6 +119,17 @@ def current_agent_worker_runtime_services_v2() -> AgentWorkerRuntimeServicesV2:
             "agent worker runtime resolver returned invalid services",
         )
     return services
+
+
+def current_agent_worker_redis_client_v2() -> redis.Redis:
+    """Resolve the Redis client from the exact pinned Agent operation."""
+    client = current_agent_worker_runtime_services_v2().redis_runtime.client
+    if client is None:
+        raise RuntimeV2Error(
+            "agent_worker_redis_unavailable",
+            "Agent Worker requires the generation Redis runtime",
+        )
+    return cast(redis.Redis, client)
 
 
 def current_agent_canvas_manager_v2() -> CanvasManager:
@@ -312,5 +323,6 @@ __all__ = [
     "bind_current_agent_orchestrator_v2",
     "current_agent_canvas_manager_v2",
     "current_agent_orchestrator_v2",
+    "current_agent_worker_redis_client_v2",
     "current_agent_worker_runtime_services_v2",
 ]

@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:6fcd955270d9b387e81cec0c2407e08414ce568e5f529d22b97507d5a1072f'
-    '46","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:9e344a2462b37e736f754aae7c498bfa397f02dd7f8a4fd9248009fc604be4'
+    '91","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -631,8 +631,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '0149bcf2ca7e8d8bf3290d7fb0bf86c569a4db0","entrypoint":"src.infrastructure.plugins.v2.age'
     'nt_runtime_utility_tools:_apply_agent_web_tool_contribution_v2","module_ref":"builtin://'
     'memstack/agent/tool/web","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0",'
-    '"targets":["python"]},{"artifact_digest":"sha256:9f4da1b27992316393123b6712f29999fd52dd7'
-    'f8d87cb301c43812d5ff2e0c0","artifact_source":"repo+python://src/infrastructure/plugins/v'
+    '"targets":["python"]},{"artifact_digest":"sha256:6d596898b49290617862f4b6172344b0bcafc47'
+    '2a7bb9ac685a7946ee607523c","artifact_source":"repo+python://src/infrastructure/plugins/v'
     '2/agent_worker_runtime.py","contract":{"config_schema":{"$schema":"https://json-schema.o'
     'rg/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":'
     '"generation-sandbox-runtime","type":"string"}},"required":["strategy"],"type":"object"},'
@@ -2867,7 +2867,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:6fcd955270d9b387e81cec0c2407e08414ce568e5f529d22b97507d5a1072f46"
+    "sha256:9e344a2462b37e736f754aae7c498bfa397f02dd7f8a4fd9248009fc604be491"
 )
 # fmt: on
 

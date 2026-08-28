@@ -6,6 +6,8 @@ and Postgres snapshots. This service performs minimal maintenance, such as
 expiring stale pending requests.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging
@@ -13,6 +15,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from src.domain.model.agent.hitl_request import HITLRequest, HITLRequestStatus
+from src.infrastructure.plugins.v2.boundary import GenerationHostV2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,8 @@ class HITLRecoveryService:
 
     STALE_PROCESSING_AGE_SECONDS = 300
 
-    def __init__(self) -> None:
+    def __init__(self, *, generation_host: GenerationHostV2) -> None:
+        self._generation_host = generation_host
         self._recovery_in_progress = False
         self._recovered_count = 0
         self._lease_owner = f"startup-recovery:{uuid.uuid4()}"
@@ -119,7 +124,10 @@ class HITLRecoveryService:
                 else:
                     await session.commit()
                     try:
-                        state = await load_hitl_state_for_resume(request_id)
+                        state = await load_hitl_state_for_resume(
+                            request_id,
+                            generation_host=self._generation_host,
+                        )
                         if state is None:
                             raise RuntimeV2Error(
                                 "generation_descriptor_missing",
@@ -342,20 +350,28 @@ class HITLRecoveryService:
 _recovery_service: HITLRecoveryService | None = None
 
 
-def get_hitl_recovery_service() -> HITLRecoveryService:
+def get_hitl_recovery_service(
+    *,
+    generation_host: GenerationHostV2,
+) -> HITLRecoveryService:
     """Get the global HITL recovery service instance."""
     global _recovery_service
     if _recovery_service is None:
-        _recovery_service = HITLRecoveryService()
+        _recovery_service = HITLRecoveryService(generation_host=generation_host)
+    elif _recovery_service._generation_host is not generation_host:
+        raise RuntimeV2Error(
+            "hitl_recovery_generation_host_conflict",
+            "HITL recovery is already bound to another generation host",
+        )
     return _recovery_service
 
 
-async def recover_hitl_on_startup() -> int:
+async def recover_hitl_on_startup(*, generation_host: GenerationHostV2) -> int:
     """
     Convenience function to be called during Worker startup.
 
     Returns:
         Number of requests recovered
     """
-    service = get_hitl_recovery_service()
+    service = get_hitl_recovery_service(generation_host=generation_host)
     return await service.recover_unprocessed_requests()
