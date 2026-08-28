@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -10,15 +12,19 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.websocket.handlers import subscription_handler
 from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_handler import (
     SubscribeHandler,
 )
 from src.infrastructure.plugins.v2 import (
+    agent_recovery_stream_services as recovery_stream_module,
     conversation_access_services as conversation_module,
     session_event_log_store as store_module,
 )
 from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
     clear_process_generation_host_v2,
+    current_generation_v2,
     install_process_generation_host_v2,
     pin_generation_v2,
 )
@@ -282,3 +288,123 @@ async def test_subscription_recovery_does_not_fallback_when_v2_redis_is_unavaila
         clear_process_generation_host_v2(host)
         await db.close()
         await host.close()
+
+
+async def test_detached_recovery_stream_keeps_exact_generation_after_reload(  # noqa: PLR0915
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_client = _TrackedRedisClient("first")
+    second_client = _TrackedRedisClient("second")
+    redis_clients = iter((first_client, second_client))
+    first_store = _TrackedSessionEventLogStore("first")
+    second_store = _TrackedSessionEventLogStore("second")
+    stores = iter((first_store, second_store))
+
+    async def redis_factory() -> _TrackedRedisClient:
+        return next(redis_clients)
+
+    monkeypatch.setattr(store_module, "SqlSessionEventLogStoreV2", lambda: next(stores))
+    host = PlatformPluginRuntimeHostV2(
+        builtin_runtime_definitions_v2(redis_runtime_factory=redis_factory)
+    )
+    first = await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=949,
+        version=949,
+    )
+    assert first.accepted is True
+    install_process_generation_host_v2(host)
+
+    async def reload_generation() -> None:
+        second = await host.bootstrap(
+            profile_path=_PROFILE_PATH,
+            manifest_paths=(_MANIFEST_PATH,),
+            generation=950,
+            version=950,
+        )
+        assert second.accepted is True
+
+    first_client.reload_generation = reload_generation
+    static_probe = _StaticRecoveryAuthorityProbe()
+    parent_db = AsyncSession()
+    detached_db = AsyncSession()
+    context = _message_context(static_probe, parent_db)
+    context.session_id = "session-1"
+    created_tasks: list[asyncio.Task[None]] = []
+
+    @asynccontextmanager
+    async def fresh_db_context():
+        yield SimpleNamespace(db=detached_db, session_id="session-1")
+
+    context.fresh_db_context = fresh_db_context
+
+    async def try_start_bridge_task(**kwargs: object) -> bool:
+        task_factory = kwargs["task_factory"]
+        assert callable(task_factory)
+        task = task_factory()
+        assert isinstance(task, asyncio.Task)
+        created_tasks.append(task)
+        return True
+
+    context.connection_manager.try_start_bridge_task.side_effect = try_start_bridge_task
+    stream_service = object()
+    resolved: list[tuple[int, str, object, object]] = []
+
+    async def resolve_recovery_stream(
+        self: recovery_stream_module.AgentRecoveryStreamResolverV2,
+        operation: Any,
+    ) -> object:
+        generation = current_generation_v2()
+        resolved.append(
+            (
+                generation.descriptor.generation,
+                self.redis.client.name,
+                operation.require(OPERATION_DB_SESSION_SERVICE_V2),
+                operation,
+            )
+        )
+        return stream_service
+
+    monkeypatch.setattr(
+        recovery_stream_module.AgentRecoveryStreamResolverV2,
+        "resolve",
+        resolve_recovery_stream,
+    )
+    stream = AsyncMock()
+    monkeypatch.setattr(subscription_handler, "stream_hitl_response_to_websocket", stream)
+
+    def conversation_repository(db: AsyncSession) -> Any:
+        return static_probe._conversation_repository
+
+    monkeypatch.setattr(
+        conversation_module,
+        "SqlConversationRepository",
+        conversation_repository,
+    )
+
+    try:
+        async with pin_generation_v2(host):
+            await SubscribeHandler().handle(context, {"conversation_id": "conversation-1"})
+
+        assert first_client.close_calls == 0
+        assert host.manager.current is not None
+        assert host.manager.current.generation == 950
+        await asyncio.gather(*created_tasks)
+
+        assert [(generation, redis_name, db) for generation, redis_name, db, _ in resolved] == [
+            (949, "first", detached_db)
+        ]
+        stream.assert_awaited_once()
+        assert stream.call_args.kwargs["agent_service"] is stream_service
+        assert first_client.close_calls == 1
+        assert second_client.close_calls == 0
+        assert static_probe.redis_accesses == 0
+        assert static_probe.event_repository_accesses == 0
+    finally:
+        clear_process_generation_host_v2(host)
+        await parent_db.close()
+        await detached_db.close()
+        await host.close()
+
+    assert second_client.close_calls == 1

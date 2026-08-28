@@ -18,6 +18,10 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler imp
     stream_hitl_response_to_websocket,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.plugins.v2.agent_recovery_stream_services import (
+    AGENT_RECOVERY_STREAM_SERVICE_V2,
+    AgentRecoveryStreamResolverProtocolV2,
+)
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     current_agent_worker_redis_client_v2,
 )
@@ -25,10 +29,13 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
+    ForkedAgentOperationV2,
     current_operation_context_v2,
+    detached_operation_task_context_v2,
+    fork_current_agent_operation_v2,
     pin_agent_turn_operation_v2,
 )
-from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.session_event_log import (
     SESSION_EVENT_LOG_SERVICE_V2,
     SessionEventLogServiceV2,
@@ -36,6 +43,8 @@ from src.infrastructure.plugins.v2.session_event_log import (
 )
 
 logger = logging.getLogger(__name__)
+
+_recovery_reservation_cleanup_tasks: set[asyncio.Task[None]] = set()
 
 
 def _is_valid_int_cursor(value: object) -> bool:
@@ -90,6 +99,135 @@ def _session_event_log_service_v2() -> SessionEventLogServiceV2:
             "v2 session event-log service has an invalid implementation",
         )
     return provider
+
+
+def _agent_recovery_stream_resolver_v2(
+    operation: OperationContextV2,
+) -> AgentRecoveryStreamResolverProtocolV2:
+    resolver = operation.require(AGENT_RECOVERY_STREAM_SERVICE_V2)
+    if not isinstance(resolver, AgentRecoveryStreamResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_agent_recovery_stream",
+            "v2 Agent recovery stream service has an invalid implementation",
+        )
+    return resolver
+
+
+def _finish_recovery_reservation_cleanup(task: asyncio.Task[None]) -> None:
+    _recovery_reservation_cleanup_tasks.discard(task)
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        logger.warning("[WS] Recovery reservation cleanup was cancelled")
+    except Exception:
+        logger.exception("[WS] Recovery reservation cleanup failed")
+
+
+def _schedule_recovery_reservation_cleanup(fork: ForkedAgentOperationV2) -> None:
+    cleanup = asyncio.create_task(
+        fork.release(),
+        context=detached_operation_task_context_v2(),
+    )
+    _recovery_reservation_cleanup_tasks.add(cleanup)
+    cleanup.add_done_callback(_finish_recovery_reservation_cleanup)
+
+
+async def _run_recovery_stream_v2(
+    *,
+    fork: ForkedAgentOperationV2,
+    context: MessageContext,
+    conversation_id: str,
+    running_message_id: str,
+    cursor_time_us: int | None,
+    cursor_counter: int | None,
+) -> None:
+    async with (
+        context.fresh_db_context() as stream_context,
+        fork.admit(
+            operation_id=f"agent-subscription-recovery-stream:{conversation_id}",
+            metadata={
+                "kind": "agent-subscription-recovery-stream",
+                "channel": "websocket",
+                "conversation_id": conversation_id,
+                "message_id": running_message_id,
+            },
+            services={OPERATION_DB_SESSION_SERVICE_V2: stream_context.db},
+        ) as operation,
+    ):
+        resolver = _agent_recovery_stream_resolver_v2(operation)
+        agent_service = await resolver.resolve(operation)
+        await stream_hitl_response_to_websocket(
+            agent_service=agent_service,
+            session_id=stream_context.session_id,
+            conversation_id=conversation_id,
+            message_id=running_message_id,
+            replay_from_db=False,
+            from_time_us=cursor_time_us,
+            from_counter=cursor_counter,
+        )
+
+
+async def _start_recovery_bridge_task_v2(
+    *,
+    context: MessageContext,
+    conversation_id: str,
+    running_message_id: str,
+    cursor_time_us: int | None,
+    cursor_counter: int | None,
+) -> bool:
+    fork = await fork_current_agent_operation_v2()
+    task_started = False
+    created_task: asyncio.Task[None] | None = None
+
+    async def run_reserved_recovery_stream() -> None:
+        nonlocal task_started
+        task_started = True
+        try:
+            await _run_recovery_stream_v2(
+                fork=fork,
+                context=context,
+                conversation_id=conversation_id,
+                running_message_id=running_message_id,
+                cursor_time_us=cursor_time_us,
+                cursor_counter=cursor_counter,
+            )
+        finally:
+            await fork.release()
+
+    def create_recovery_task() -> asyncio.Task[None]:
+        nonlocal created_task
+        task = asyncio.create_task(
+            run_reserved_recovery_stream(),
+            context=detached_operation_task_context_v2(),
+        )
+
+        def release_if_never_started(_task: asyncio.Task[None]) -> None:
+            if not task_started:
+                _schedule_recovery_reservation_cleanup(fork)
+
+        task.add_done_callback(
+            release_if_never_started,
+            context=detached_operation_task_context_v2(),
+        )
+        created_task = task
+        return task
+
+    try:
+        started = await context.connection_manager.try_start_bridge_task(
+            session_id=context.session_id,
+            conversation_id=conversation_id,
+            bridge_message_id=running_message_id,
+            task_factory=create_recovery_task,
+        )
+    except BaseException:
+        if created_task is None:
+            await fork.release()
+        else:
+            created_task.cancel()
+        raise
+    if not started:
+        await fork.release()
+    return started
 
 
 async def _maybe_start_recovery_bridge(
@@ -151,28 +289,12 @@ async def _maybe_start_recovery_bridge(
                 requested_time_us=from_time_us,
                 requested_counter=from_counter,
             )
-
-            async def _run_recovery_stream() -> None:
-                from src.configuration.factories import create_llm_client
-
-                async with context.fresh_db_context() as stream_context:
-                    llm = await create_llm_client(stream_context.tenant_id)
-                    agent_service = stream_context.get_scoped_container().agent_service(llm)
-                    await stream_hitl_response_to_websocket(
-                        agent_service=agent_service,
-                        session_id=stream_context.session_id,
-                        conversation_id=conversation_id,
-                        message_id=running_message_id,
-                        replay_from_db=False,
-                        from_time_us=cursor_time_us,
-                        from_counter=cursor_counter,
-                    )
-
-            started = await context.connection_manager.try_start_bridge_task(
-                session_id=context.session_id,
+            started = await _start_recovery_bridge_task_v2(
+                context=context,
                 conversation_id=conversation_id,
-                bridge_message_id=running_message_id,
-                task_factory=lambda: asyncio.create_task(_run_recovery_stream()),
+                running_message_id=running_message_id,
+                cursor_time_us=cursor_time_us,
+                cursor_counter=cursor_counter,
             )
             if started:
                 logger.info(

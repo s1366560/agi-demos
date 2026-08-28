@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -17,6 +18,23 @@ from src.infrastructure.plugins.v2.session_event_log_types import (
     SessionEventCursorV2,
     SessionMessageRecoveryStateV2,
 )
+
+
+class _FakeRecoveryFork:
+    def __init__(self, service: object) -> None:
+        self.resolver = SimpleNamespace(resolve=AsyncMock(return_value=service))
+        self.admit_calls: list[dict[str, object]] = []
+        self.release = AsyncMock()
+        self.operation = SimpleNamespace(require=self._require)
+
+    def _require(self, service: str) -> object:
+        assert service == "service:agent.recovery-stream"
+        return self.resolver
+
+    @asynccontextmanager
+    async def admit(self, **kwargs: object):
+        self.admit_calls.append(dict(kwargs))
+        yield self.operation
 
 
 def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
@@ -44,7 +62,9 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             side_effect=AssertionError("static event repository must not be used")
         ),
         redis=MagicMock(side_effect=AssertionError("static Redis must not be used")),
-        agent_service=lambda _llm: AsyncMock(),
+        agent_service=MagicMock(
+            side_effect=AssertionError("static AgentService factory must not be used")
+        ),
     )
 
     context = SimpleNamespace(
@@ -60,6 +80,9 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         v2_session_event_log=session_event_log,
         v2_conversation_access=conversation_access,
     )
+    context.v2_agent_service = AsyncMock()
+    context.v2_recovery_fork = _FakeRecoveryFork(context.v2_agent_service)
+    context.v2_recovery_stream = AsyncMock()
 
     @asynccontextmanager
     async def _fresh_db_context():
@@ -74,6 +97,12 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(subscription_handler, "pin_agent_turn_operation_v2", _operation_context)
     monkeypatch.setattr(
         subscription_handler,
+        "fork_current_agent_operation_v2",
+        AsyncMock(return_value=context.v2_recovery_fork),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        subscription_handler,
         "current_agent_worker_redis_client_v2",
         lambda: context.v2_redis,
     )
@@ -81,6 +110,11 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         subscription_handler,
         "_session_event_log_service_v2",
         lambda: context.v2_session_event_log,
+    )
+    monkeypatch.setattr(
+        subscription_handler,
+        "stream_hitl_response_to_websocket",
+        context.v2_recovery_stream,
     )
 
     @asynccontextmanager
@@ -114,11 +148,11 @@ async def test_subscribe_starts_recovery_bridge_when_running(monkeypatch) -> Non
     context.v2_conversation_access.find_by_id.return_value = conversation
     context.v2_redis.get.return_value = b"msg-1"
 
-    created_tasks = []
+    real_create_task = asyncio.create_task
+    created_tasks: list[asyncio.Task[None]] = []
 
-    def _fake_create_task(coro):
-        coro.close()
-        task = SimpleNamespace(done=lambda: False)
+    def _fake_create_task(coro, *, context=None):
+        task = real_create_task(coro, context=context)
         created_tasks.append(task)
         return task
 
@@ -152,6 +186,7 @@ async def test_subscribe_starts_recovery_bridge_when_running(monkeypatch) -> Non
     await handler.handle(
         context, {"conversation_id": "conv-1", "from_time_us": 100, "from_counter": 2}
     )
+    await asyncio.gather(*created_tasks)
 
     context.connection_manager.subscribe.assert_awaited_once_with("session-1", "conv-1")
     context.connection_manager.try_start_bridge_task.assert_awaited_once()
@@ -205,8 +240,8 @@ async def test_subscribe_keeps_client_recovery_cursor(monkeypatch) -> None:
     real_create_task = asyncio.create_task
     created_tasks: list[asyncio.Task[None]] = []
 
-    def _fake_create_task(coro):
-        task = real_create_task(coro)
+    def _fake_create_task(coro, *, context=None):
+        task = real_create_task(coro, context=context)
         created_tasks.append(task)
         return task
 
@@ -282,8 +317,8 @@ async def test_subscribe_uses_message_scoped_recovery_cursor_when_client_cursor_
     real_create_task = asyncio.create_task
     created_tasks: list[asyncio.Task[None]] = []
 
-    def _fake_create_task(coro):
-        task = real_create_task(coro)
+    def _fake_create_task(coro, *, context=None):
+        task = real_create_task(coro, context=context)
         created_tasks.append(task)
         return task
 
@@ -478,8 +513,8 @@ async def test_subscribe_ignores_boolean_cursor_values(monkeypatch) -> None:
     real_create_task = asyncio.create_task
     created_tasks: list[asyncio.Task[None]] = []
 
-    def _fake_create_task(coro):
-        task = real_create_task(coro)
+    def _fake_create_task(coro, *, context=None):
+        task = real_create_task(coro, context=context)
         created_tasks.append(task)
         return task
 
@@ -583,3 +618,62 @@ async def test_subscribe_does_not_init_llm_when_bridge_not_started(monkeypatch) 
     create_llm_mock.assert_not_awaited()
     context.send_ack.assert_awaited_once_with("subscribe", conversation_id="conv-1")
     context.send_error.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_subscribe_releases_generation_fork_when_bridge_is_not_started(monkeypatch) -> None:
+    context = _build_context(monkeypatch)
+    context.v2_conversation_access.find_by_id.return_value = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_redis.get.return_value = b"msg-1"
+    context.connection_manager.try_start_bridge_task.return_value = False
+
+    await SubscribeHandler().handle(context, {"conversation_id": "conv-1"})
+
+    context.v2_recovery_fork.release.assert_awaited_once_with()
+    context.v2_recovery_fork.resolver.resolve.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_subscribe_releases_generation_fork_when_task_is_cancelled_before_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _build_context(monkeypatch)
+    context.v2_conversation_access.find_by_id.return_value = SimpleNamespace(
+        user_id="user-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    context.v2_redis.get.return_value = b"msg-1"
+    created_tasks: list[asyncio.Task[None]] = []
+
+    async def try_start_bridge_task(**kwargs: object) -> bool:
+        task_factory = kwargs["task_factory"]
+        assert callable(task_factory)
+        task = task_factory()
+        assert isinstance(task, asyncio.Task)
+        created_tasks.append(task)
+        task.cancel()
+        return True
+
+    context.connection_manager.try_start_bridge_task.side_effect = try_start_bridge_task
+
+    await SubscribeHandler().handle(context, {"conversation_id": "conv-1"})
+    await asyncio.gather(*created_tasks, return_exceptions=True)
+    await asyncio.sleep(0)
+
+    context.v2_recovery_fork.release.assert_awaited_once_with()
+    assert context.v2_recovery_fork.admit_calls == []
+
+
+@pytest.mark.unit
+def test_subscription_recovery_has_no_static_llm_or_agent_service_factory() -> None:
+    source = Path(subscription_handler.__file__).read_text(encoding="utf-8")
+
+    assert "create_llm_client" not in source
+    assert "get_scoped_container().agent_service" not in source

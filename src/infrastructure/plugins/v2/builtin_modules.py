@@ -42,6 +42,7 @@ from .agent_orchestration_tools import (
     builtin_agent_orchestration_tool_contribution_definition_v2,
 )
 from .agent_persisted_definition import builtin_agent_persisted_definition_contribution_v2
+from .agent_recovery_stream_services import agent_recovery_stream_service_definitions_v2
 from .agent_routing import builtin_agent_routing_definition_v2
 from .agent_runtime_dispatcher import (
     AGENT_RUNTIME_DISPATCHER_SERVICE_V2,
@@ -356,6 +357,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         skill_evolution_scheduler_definition_v2(),
         *background_task_service_definitions_v2(),
         *conversation_access_service_definitions_v2(),
+        *agent_recovery_stream_service_definitions_v2(),
         *task_log_service_definitions_v2(),
         *workflow_service_definitions_v2(workflow_runtime_factory),
         retrieval_runtime_definition_v2(retrieval_runtime_factory),
