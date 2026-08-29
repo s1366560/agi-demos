@@ -24,6 +24,7 @@ from .agent_definition import (
     builtin_agent_definition_contribution_v2,
     builtin_agent_definition_v2,
 )
+from .agent_definition_management_services import agent_definition_management_definitions_v2
 from .agent_event_query_services import agent_event_query_service_definitions_v2
 from .agent_execution_query_services import agent_execution_query_service_definitions_v2
 from .agent_execution_resume_services import agent_execution_resume_definition_v2
@@ -372,6 +373,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         skill_evolution_scheduler_definition_v2(),
         *background_task_service_definitions_v2(),
         *conversation_access_service_definitions_v2(),
+        *agent_definition_management_definitions_v2(),
         agent_binding_definition_v2(),
         *conversation_context_status_definitions_v2(),
         *conversation_revision_definitions_v2(),

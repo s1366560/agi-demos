@@ -27,6 +27,10 @@ from src.domain.model.agent.session_policy import SessionPolicy
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 from src.domain.model.auth.user import User
+from src.infrastructure.adapters.primary.web.agent_definition_management_http_application_authority_v2 import (
+    AgentDefinitionManagementHttpApplicationAuthorityV2,
+    agent_definition_management_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
@@ -44,6 +48,9 @@ from src.infrastructure.agent.tools._agent_definition_policy import (
     normalize_updated_agent_a2a,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_definition_management_services import (
+    AgentDefinitionManagementServiceProtocolV2,
+)
 
 from .access import require_tenant_access
 from .utils import get_container_with_db
@@ -236,6 +243,39 @@ async def _validate_execution_backend(
     return dict(backend)
 
 
+async def _validate_execution_backend_v2(
+    service: AgentDefinitionManagementServiceProtocolV2,
+    *,
+    tenant_id: str,
+    execution_backend: object,
+) -> dict[str, Any]:
+    backend = normalize_execution_backend(execution_backend)
+    if backend["type"] != "acp_external":
+        return dict(backend)
+
+    agent_key = backend.get("acp_agent_key")
+    if not agent_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid ACP external agent selection"),
+        )
+    enabled = await service.external_agent_enabled(
+        tenant_id=tenant_id,
+        agent_key=agent_key,
+    )
+    if enabled is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid ACP external agent selection"),
+        )
+    if not enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("ACP external agent is disabled"),
+        )
+    return dict(backend)
+
+
 async def _accessible_definition_project_ids(
     db: AsyncSession,
     *,
@@ -274,19 +314,25 @@ async def create_definition(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_definition_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    definition_authority: AgentDefinitionManagementHttpApplicationAuthorityV2 = Depends(
+        agent_definition_management_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
+        db = definition_authority.db
+        service = definition_authority.service
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
         if body.project_id is not None:
-            await _ensure_project_definition_access(
-                db,
-                current_user=current_user,
+            has_access = await service.has_project_access(
+                user_id=str(current_user.id),
                 tenant_id=tenant_id,
                 project_id=body.project_id,
             )
-        container = get_container_with_db(request, db)
-        orchestrator = container.agent_orchestrator()
+            if not has_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=_("Access denied"),
+                )
 
         ws_config = (
             WorkspaceConfig.from_dict(body.workspace_config) if body.workspace_config else None
@@ -301,8 +347,8 @@ async def create_definition(
         )
         spawn_policy = Agent._spawn_policy_from_dict(body.spawn_policy)
         tool_policy = Agent._tool_policy_from_dict(body.tool_policy)
-        execution_backend = await _validate_execution_backend(
-            db,
+        execution_backend = await _validate_execution_backend_v2(
+            service,
             tenant_id=tenant_id,
             execution_backend=body.execution_backend,
         )
@@ -348,8 +394,8 @@ async def create_definition(
             tool_policy=tool_policy,
         )
 
-        created = await orchestrator.create_agent(agent)
-        return cast(dict[str, Any], created.to_dict())
+        created = await service.create_agent(agent)
+        return created.to_dict()
 
     except ValueError as e:
         status_code = 409 if "already exists" in str(e) else 400

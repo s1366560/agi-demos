@@ -3253,6 +3253,35 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-repository-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/agent-definition-repository-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-agent-definition-management
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/agent-definition-management
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        repositories: service:persistence.agent-definition-repository-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-agent-bindings
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
