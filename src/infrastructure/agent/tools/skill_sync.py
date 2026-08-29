@@ -16,11 +16,16 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo, tool_define
 from src.infrastructure.agent.tools.result import ToolResult
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.skill_repository_services import (
+        SkillRepositoryApplicationResolverProtocolV2,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +53,7 @@ class SkillSyncRuntime:
     sandbox_id: str | None
     session_factory: Callable[..., Any] | None
     skill_loader_tool: Any | None
+    skill_repository_resolver: SkillRepositoryApplicationResolverProtocolV2 | None
     generation_bound: bool
 
 
@@ -129,25 +135,30 @@ async def _skill_sync_execute_sync(
 ) -> ToolResult:
     """Execute the core skill sync operation (DB + sandbox)."""
     from src.application.services.skill_reverse_sync import SkillReverseSync
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-        SqlSkillRepository,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
-        SqlSkillVersionRepository,
-    )
     from src.infrastructure.agent.state.agent_worker_state import resolve_project_base_path
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+    from src.infrastructure.plugins.v2.skill_repository_operation_authority_v2 import (
+        skill_repository_child_operation_authority_v2,
+    )
 
     assert runtime.session_factory is not None
     assert runtime.sandbox_adapter is not None
     assert runtime.sandbox_id is not None
     assert runtime.tenant_id is not None
+    assert runtime.skill_repository_resolver is not None
 
-    async with runtime.session_factory() as db_session:
-        skill_repo = SqlSkillRepository(db_session)
-        version_repo = SqlSkillVersionRepository(db_session)
+    async with (
+        runtime.session_factory() as db_session,
+        skill_repository_child_operation_authority_v2(
+            parent_operation=current_operation_context_v2(),
+            resolver=runtime.skill_repository_resolver,
+            db=db_session,
+            consumer="agent-skill-sync",
+        ) as authority,
+    ):
         reverse_sync = SkillReverseSync(
-            skill_repository=skill_repo,
-            skill_version_repository=version_repo,
+            skill_repository=authority.repository,
+            skill_version_repository=authority.version_repository,
             host_project_path=resolve_project_base_path(runtime.project_id or ""),
         )
 
@@ -237,6 +248,15 @@ def _skill_sync_prerequisite_error(runtime: SkillSyncRuntime) -> ToolResult | No
         return ToolResult(
             output="Database session factory not available.",
             is_error=True,
+        )
+    if runtime.skill_repository_resolver is None:
+        return ToolResult(
+            output="Skill repository service is missing from the active generation.",
+            is_error=True,
+            metadata={
+                "error": "skill_repository_service_missing",
+                "service": "service:application.skill-repository",
+            },
         )
     return None
 
@@ -331,6 +351,40 @@ class _BoundSkillSyncExecutor:
             _skill_sync_runtime.reset(token)
 
 
+def bind_skill_sync_repository_authority_v2(
+    tool: object,
+    *,
+    resolver: object,
+) -> ToolInfo:
+    """Bind the Profile-selected Skill repository resolver to one prepared tool."""
+    from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+    from src.infrastructure.plugins.v2.skill_repository_services import (
+        SkillRepositoryApplicationResolverProtocolV2,
+    )
+
+    if not isinstance(resolver, SkillRepositoryApplicationResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_skill_repository_application_resolver",
+            "Skill sync received an invalid Skill repository resolver",
+        )
+    if not isinstance(tool, ToolInfo) or tool.name != TOOL_NAME:
+        raise RuntimeV2Error(
+            "invalid_prepared_skill_sync_tool",
+            "Skill sync repository binding requires the prepared skill_sync ToolInfo",
+        )
+    executor = tool.execute
+    if not isinstance(executor, _BoundSkillSyncExecutor):
+        raise RuntimeV2Error(
+            "invalid_prepared_skill_sync_tool",
+            "Prepared skill_sync ToolInfo has an invalid executor",
+        )
+    runtime = replace(executor.runtime, skill_repository_resolver=resolver)
+    return replace(
+        tool,
+        execute=replace(executor, runtime=runtime),
+    )
+
+
 def make_skill_sync_tool(
     *,
     tenant_id: str,
@@ -348,6 +402,7 @@ def make_skill_sync_tool(
         sandbox_id=sandbox_id,
         session_factory=session_factory,
         skill_loader_tool=skill_loader_tool,
+        skill_repository_resolver=None,
         generation_bound=True,
     )
     return replace(

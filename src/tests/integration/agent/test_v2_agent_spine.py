@@ -523,7 +523,12 @@ async def test_v2_generation_drives_tool_turn_capabilities_and_replay(  # noqa: 
                 and raw_tools[_CRON_TOOL.name] is _CRON_TOOL
             )
             assert all(raw_tools[name] is tool for name, tool in _WEB_TOOLS.items())
-            assert all(raw_tools[name] is tool for name, tool in _SKILL_MANAGEMENT_TOOLS.items())
+            assert raw_tools["skill_sync"] is not _SKILL_MANAGEMENT_TOOLS["skill_sync"]
+            assert all(
+                raw_tools[name] is tool
+                for name, tool in _SKILL_MANAGEMENT_TOOLS.items()
+                if name != "skill_sync"
+            )
             assert all(raw_tools[name] is tool for name, tool in _ENV_VAR_TOOLS.items())
             assert raw_tools[_MCP_REGISTRATION_TOOL.name] is _MCP_REGISTRATION_TOOL
             assert "agent_spawn" in raw_tools

@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import Any, cast
 
 from src.infrastructure.agent.core.tool_converter import convert_tools
+from src.infrastructure.agent.tools.skill_sync import bind_skill_sync_repository_authority_v2
 
 from .runtime import (
     ContextV2,
@@ -14,6 +15,7 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
+from .skill_repository_services import SkillRepositoryApplicationResolverProtocolV2
 from .tool_set import (
     PreparedToolProviderV2,
     ToolContributionDisposerV2,
@@ -74,6 +76,32 @@ def _prepared_runtime_utility_tool_group_v2(
     )
 
 
+def _prepared_skill_management_tool_group_v2(
+    *,
+    agent: object,
+    selection_context: object | None,
+    prepared_tool_provider: PreparedToolProviderV2,
+    skill_repository_resolver: SkillRepositoryApplicationResolverProtocolV2,
+) -> ToolSetV2:
+    """Bind Skill persistence to the prepared sync tool from one exact generation."""
+    prepared = _prepared_runtime_utility_tool_group_v2(
+        agent=agent,
+        selection_context=selection_context,
+        prepared_tool_provider=prepared_tool_provider,
+        label="Skill-management tool",
+        required_tool_names=AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2,
+    )
+    tools = dict(prepared.tools)
+    tools["skill_sync"] = bind_skill_sync_repository_authority_v2(
+        tools["skill_sync"],
+        resolver=skill_repository_resolver,
+    )
+    return ToolSetV2(
+        tools=MappingProxyType(tools),
+        definitions=tuple(convert_tools(tools)),
+    )
+
+
 def _register_runtime_utility_tool_group_v2(
     context: ContextV2,
     config: Mapping[str, Any],
@@ -121,13 +149,34 @@ def _apply_agent_skill_management_tool_contribution_v2(
     context: ContextV2,
     config: Mapping[str, Any],
 ) -> ToolContributionDisposerV2:
-    return _register_runtime_utility_tool_group_v2(
-        context,
-        config,
-        expected_source_id=AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2,
-        label="Skill-management tool",
-        required_tool_names=AGENT_SKILL_MANAGEMENT_TOOL_NAMES_V2,
-    )
+    source_id = config.get("source_id")
+    if source_id != AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2:
+        raise ValueError(
+            "Skill-management tool contribution requires source_id "
+            + AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2
+        )
+    catalog = context.require("catalog")
+    if not isinstance(catalog, ToolSetCatalogProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "Skill-management tool contribution received an invalid tool catalog",
+        )
+    skills = context.require("skills")
+    if not isinstance(skills, SkillRepositoryApplicationResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_service_implementation",
+            "Skill-management tool contribution received an invalid Skill repository resolver",
+        )
+
+    def contribution(**kwargs: object) -> ToolSetV2:
+        return _prepared_skill_management_tool_group_v2(
+            agent=kwargs["agent"],
+            selection_context=kwargs.get("selection_context"),
+            prepared_tool_provider=cast("PreparedToolProviderV2", kwargs["prepared_tool_provider"]),
+            skill_repository_resolver=skills,
+        )
+
+    return catalog.register_tools(AGENT_SKILL_MANAGEMENT_TOOLS_SOURCE_V2, contribution)
 
 
 def _apply_agent_env_var_tool_contribution_v2(

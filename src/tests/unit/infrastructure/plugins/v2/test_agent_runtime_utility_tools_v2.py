@@ -15,6 +15,7 @@ from src.infrastructure.agent.core.react_agent_stream_mixin import (
 from src.infrastructure.agent.core.tool_converter import convert_tools
 from src.infrastructure.agent.plugins.selection_pipeline import ToolSelectionContext
 from src.infrastructure.agent.prompts.tool_summaries import TOOL_ORDER, TOOL_SUMMARIES
+from src.infrastructure.agent.tools.skill_sync import make_skill_sync_tool
 from src.infrastructure.plugins.v2.agent_runtime_utility_tools import (
     AGENT_ENV_VAR_TOOL_NAMES_V2,
     AGENT_ENV_VAR_TOOLS_MODULE_V2,
@@ -37,6 +38,12 @@ from src.infrastructure.plugins.v2.builtin_modules import (
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.skill_repository_services import (
+    SKILL_REPOSITORY_APPLICATION_MODULE_V2,
+    SKILL_REPOSITORY_APPLICATION_SERVICE_V2,
+    SKILL_REPOSITORY_PROVIDER_MODULE_V2,
+    SKILL_VERSION_REPOSITORY_PROVIDER_MODULE_V2,
+)
 from src.infrastructure.plugins.v2.tool_set import (
     TOOL_SET_MODULE_V2,
     ToolSetCatalogV2,
@@ -128,6 +135,13 @@ class _NamedTool:
 class _ToolAgent:
     def __init__(self, case: _ToolGroupCase, *, include_group: bool = True) -> None:
         group_tools = {name: _NamedTool(name) for name in case.tool_names} if include_group else {}
+        if include_group and case.module_ref == AGENT_SKILL_MANAGEMENT_TOOLS_MODULE_V2:
+            group_tools["skill_sync"] = make_skill_sync_tool(
+                tenant_id="tenant-a",
+                project_id="project-a",
+                session_factory=lambda: None,
+                skill_loader_tool=group_tools["skill_loader"],
+            )
         self.raw_tools = {"read": _NamedTool("read"), **group_tools}
         self._tool_selection_pipeline = None
         self._last_tool_selection_trace: tuple[object, ...] = ()
@@ -149,6 +163,14 @@ def _snapshot(*, case: _ToolGroupCase, generation: int, group_enabled: bool):
         TOOL_SET_MODULE_V2,
         case.module_ref,
     }
+    if case.module_ref == AGENT_SKILL_MANAGEMENT_TOOLS_MODULE_V2:
+        selected_modules.update(
+            {
+                SKILL_REPOSITORY_PROVIDER_MODULE_V2,
+                SKILL_VERSION_REPOSITORY_PROVIDER_MODULE_V2,
+                SKILL_REPOSITORY_APPLICATION_MODULE_V2,
+            }
+        )
     entries = tuple(
         replace(
             entry,
@@ -188,7 +210,10 @@ def test_runtime_utility_tools_are_separate_explicit_profile_contributions(
     assert len(entries) == 1
     assert entries[0].enabled is True
     assert entries[0].config == {"source_id": case.source_id}
-    assert entries[0].inject == {"catalog": "service:tool-set-catalog"}
+    expected_inject = {"catalog": "service:tool-set-catalog"}
+    if case.module_ref == AGENT_SKILL_MANAGEMENT_TOOLS_MODULE_V2:
+        expected_inject["skills"] = SKILL_REPOSITORY_APPLICATION_SERVICE_V2
+    assert entries[0].inject == expected_inject
 
 
 @pytest.mark.unit
@@ -240,7 +265,11 @@ async def test_enabling_runtime_utility_contribution_restores_exact_prepared_too
 
     assert set(tools) == set(case.tool_names)
     assert {definition.name for definition in definitions} == set(tools)
-    assert all(tools[name] is agent.raw_tools[name] for name in case.tool_names)
+    for name in case.tool_names:
+        if case.module_ref == AGENT_SKILL_MANAGEMENT_TOOLS_MODULE_V2 and name == "skill_sync":
+            assert tools[name] is not agent.raw_tools[name]
+        else:
+            assert tools[name] is agent.raw_tools[name]
 
 
 @pytest.mark.unit

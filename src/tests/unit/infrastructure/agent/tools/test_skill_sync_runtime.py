@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from inspect import getsource
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -10,7 +14,10 @@ import pytest
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.agent.tools.skill_loader import make_skill_loader_tool
-from src.infrastructure.agent.tools.skill_sync import make_skill_sync_tool
+from src.infrastructure.agent.tools.skill_sync import (
+    bind_skill_sync_repository_authority_v2,
+    make_skill_sync_tool,
+)
 
 
 def _context(label: str) -> ToolContext:
@@ -29,6 +36,21 @@ def _skill_loader(label: str) -> object:
         tenant_id=f"tenant-{label}",
         project_id=f"project-{label}",
         available_skill_names=(f"skill-{label}",),
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class _SkillRepositoryResolver:
+    label: str
+
+    def resolve(self, _operation: object) -> object:
+        raise AssertionError("repository resolution belongs to the child authority")
+
+
+def _bind_repository_authority(tool: object, label: str) -> object:
+    return bind_skill_sync_repository_authority_v2(
+        tool,
+        resolver=_SkillRepositoryResolver(label=label),
     )
 
 
@@ -58,21 +80,27 @@ async def test_bound_skill_sync_runtimes_are_isolated_during_interleaved_awaits(
         return ToolResult(output=f"{runtime.tenant_id}/{runtime.project_id}")
 
     monkeypatch.setattr(skill_sync_module, "_skill_sync_execute_sync", _execute)
-    first_tool = make_skill_sync_tool(
-        tenant_id="tenant-a",
-        project_id="project-a",
-        sandbox_adapter=object(),
-        sandbox_id="sandbox-a",
-        session_factory=lambda: None,
-        skill_loader_tool=_skill_loader("a"),
+    first_tool = _bind_repository_authority(
+        make_skill_sync_tool(
+            tenant_id="tenant-a",
+            project_id="project-a",
+            sandbox_adapter=object(),
+            sandbox_id="sandbox-a",
+            session_factory=lambda: None,
+            skill_loader_tool=_skill_loader("a"),
+        ),
+        "generation-a",
     )
-    second_tool = make_skill_sync_tool(
-        tenant_id="tenant-b",
-        project_id="project-b",
-        sandbox_adapter=object(),
-        sandbox_id="sandbox-b",
-        session_factory=lambda: None,
-        skill_loader_tool=_skill_loader("b"),
+    second_tool = _bind_repository_authority(
+        make_skill_sync_tool(
+            tenant_id="tenant-b",
+            project_id="project-b",
+            sandbox_adapter=object(),
+            sandbox_id="sandbox-b",
+            session_factory=lambda: None,
+            skill_loader_tool=_skill_loader("b"),
+        ),
+        "generation-b",
     )
 
     first_task = asyncio.create_task(first_tool.execute(_context("a"), skill_name="shared-skill"))
@@ -105,6 +133,8 @@ async def test_bound_skill_sync_passes_exact_runtime_dependencies(
             captured["committed"] = True
 
     session = _Session()
+    parent_operation = object()
+    resolver = _SkillRepositoryResolver(label="generation-exact")
 
     class _SkillReverseSync:
         def __init__(self, **kwargs: object) -> None:
@@ -123,14 +153,23 @@ async def test_bound_skill_sync_passes_exact_runtime_dependencies(
         "src.application.services.skill_reverse_sync.SkillReverseSync",
         _SkillReverseSync,
     )
+
+    @asynccontextmanager
+    async def _repository_authority(**kwargs: object):
+        captured["authority"] = kwargs
+        yield SimpleNamespace(
+            repository=("skill-repo", session),
+            version_repository=("version-repo", session),
+        )
+
     monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
-        lambda session: ("skill-repo", session),
+        "src.infrastructure.plugins.v2.boundary.current_operation_context_v2",
+        lambda: parent_operation,
     )
     monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        lambda session: ("version-repo", session),
+        "src.infrastructure.plugins.v2.skill_repository_operation_authority_v2."
+        "skill_repository_child_operation_authority_v2",
+        _repository_authority,
     )
     monkeypatch.setattr(
         "src.infrastructure.agent.state.agent_worker_state.resolve_project_base_path",
@@ -141,13 +180,16 @@ async def test_bound_skill_sync_passes_exact_runtime_dependencies(
         "_skill_sync_invalidate_caches",
         lambda **kwargs: captured.setdefault("cache", kwargs) or {},
     )
-    tool = make_skill_sync_tool(
-        tenant_id="tenant-exact",
-        project_id="project-exact",
-        sandbox_adapter=sandbox_adapter,
-        sandbox_id="sandbox-exact",
-        session_factory=lambda: session,
-        skill_loader_tool=skill_loader_tool,
+    tool = bind_skill_sync_repository_authority_v2(
+        make_skill_sync_tool(
+            tenant_id="tenant-exact",
+            project_id="project-exact",
+            sandbox_adapter=sandbox_adapter,
+            sandbox_id="sandbox-exact",
+            session_factory=lambda: session,
+            skill_loader_tool=skill_loader_tool,
+        ),
+        resolver=resolver,
     )
 
     result = await tool.execute(
@@ -163,6 +205,12 @@ async def test_bound_skill_sync_passes_exact_runtime_dependencies(
         "skill_repository": ("skill-repo", session),
         "skill_version_repository": ("version-repo", session),
         "host_project_path": "/project/project-exact",
+    }
+    assert captured["authority"] == {
+        "parent_operation": parent_operation,
+        "resolver": resolver,
+        "db": session,
+        "consumer": "agent-skill-sync",
     }
     assert captured["operation"] == {
         "skill_name": "exact-skill",
@@ -266,6 +314,43 @@ async def test_bound_skill_sync_fails_closed_without_skill_loader_contribution(
         "error": "skill_availability_service_missing",
         "service": "skill_loader",
     }
+
+
+@pytest.mark.unit
+async def test_prepared_skill_sync_fails_closed_without_v2_repository_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.infrastructure.agent.tools import skill_sync as skill_sync_module
+
+    async def _execute_forbidden(*_args: object, **_kwargs: object) -> ToolResult:
+        raise AssertionError("missing repository authority must fail before persistence")
+
+    monkeypatch.setattr(skill_sync_module, "_skill_sync_execute_sync", _execute_forbidden)
+    tool = make_skill_sync_tool(
+        tenant_id="tenant-a",
+        project_id="project-a",
+        sandbox_adapter=object(),
+        sandbox_id="sandbox-a",
+        session_factory=lambda: None,
+        skill_loader_tool=_skill_loader("a"),
+    )
+
+    result = await tool.execute(_context("missing-repositories"), skill_name="new-skill")
+
+    assert result.is_error is True
+    assert result.metadata == {
+        "error": "skill_repository_service_missing",
+        "service": "service:application.skill-repository",
+    }
+
+
+@pytest.mark.unit
+def test_skill_sync_execute_has_no_static_skill_repository_construction() -> None:
+    from src.infrastructure.agent.tools import skill_sync as skill_sync_module
+
+    source = getsource(skill_sync_module._skill_sync_execute_sync)
+    assert "SqlSkillRepository" not in source
+    assert "SqlSkillVersionRepository" not in source
 
 
 @pytest.mark.unit

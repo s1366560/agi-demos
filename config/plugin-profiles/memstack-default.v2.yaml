@@ -3396,6 +3396,7 @@ profile:
         source_id: builtin-agent-skill-management-tools
       inject:
         catalog: service:tool-set-catalog
+        skills: service:application.skill-repository
       isolate: {}
       scope:
         kind: root
