@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PlatformPluginDistributionResponseV2(BaseModel):
@@ -20,6 +20,34 @@ class PlatformPluginApplyStateResponseV2(BaseModel):
     data_plane_id: str
     nonce: str
     receipt: dict[str, Any]
+
+
+class PlatformPluginDataPlaneCredentialIssueRequestV2(BaseModel):
+    data_plane_id: str
+    expires_at: datetime | None = None
+
+
+class PlatformPluginDataPlaneCredentialRotateRequestV2(BaseModel):
+    expires_at: datetime | None = None
+
+
+class PlatformPluginDataPlaneCredentialResponseV2(BaseModel):
+    schema_version: Literal[2] = 2
+    credential_id: str
+    data_plane_id: str
+    key_prefix: str
+    created_by_user_id: str
+    created_at: datetime
+    expires_at: datetime | None
+    revoked_at: datetime | None
+    revoked_by_user_id: str | None
+    rotated_from_id: str | None
+
+
+class PlatformPluginDataPlaneCredentialIssuedResponseV2(
+    PlatformPluginDataPlaneCredentialResponseV2
+):
+    secret: str = Field(repr=False)
 
 
 class PlatformPluginDataPlaneReadinessResponseV2(BaseModel):

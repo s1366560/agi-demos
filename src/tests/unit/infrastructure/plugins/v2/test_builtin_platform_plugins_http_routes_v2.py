@@ -6,6 +6,8 @@ import pytest
 
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateResponseV2,
+    PlatformPluginDataPlaneCredentialIssuedResponseV2,
+    PlatformPluginDataPlaneCredentialResponseV2,
     PlatformPluginDesiredBundleSetResponseV2,
     PlatformPluginDistributionResponseV2,
     PlatformPluginPublicationReadinessResponseV2,
@@ -45,6 +47,30 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             ("GET",),
             "list_desired_bundle_set_history_v2",
             list[PlatformPluginDesiredBundleSetResponseV2],
+        ),
+        (
+            f"{v2}/data-plane-credentials",
+            ("POST",),
+            "issue_data_plane_credential_v2",
+            PlatformPluginDataPlaneCredentialIssuedResponseV2,
+        ),
+        (
+            f"{v2}/data-plane-credentials",
+            ("GET",),
+            "list_data_plane_credentials_v2",
+            list[PlatformPluginDataPlaneCredentialResponseV2],
+        ),
+        (
+            f"{v2}/data-plane-credentials/{{credential_id}}/rotate",
+            ("POST",),
+            "rotate_data_plane_credential_v2",
+            PlatformPluginDataPlaneCredentialIssuedResponseV2,
+        ),
+        (
+            f"{v2}/data-plane-credentials/{{credential_id}}",
+            ("DELETE",),
+            "revoke_data_plane_credential_v2",
+            PlatformPluginDataPlaneCredentialResponseV2,
         ),
         (
             f"{v2}/distribution",
@@ -96,14 +122,29 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
         ),
     )
     assert (
-        tuple(definition.tags for definition in definitions[:9])
-        == (("Platform Plugins", "Platform Plugins V2"),) * 9
+        tuple(definition.tags for definition in definitions[:13])
+        == (("Platform Plugins", "Platform Plugins V2"),) * 13
     )
-    assert tuple(definition.tags for definition in definitions[9:]) == (
+    assert tuple(definition.tags for definition in definitions[13:]) == (
         ("Platform Plugins",),
         ("Platform Plugins",),
     )
     assert all(definition.include_in_schema is False for definition in definitions[-2:])
+    assert tuple(definition.status_code for definition in definitions[:13]) == (
+        None,
+        None,
+        None,
+        201,
+        None,
+        201,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
     assert {definition.owner_entry_id for definition in definitions} == {
         subject.PLATFORM_PLUGINS_HTTP_ROUTES_ENTRY_V2
     }
@@ -127,9 +168,7 @@ def test_platform_plugins_row_preserves_route_order_and_openapi() -> None:
         (
             definition.path,
             definition.name,
-            ()
-            if definition.methods == ("WEBSOCKET",)
-            else tuple(sorted(definition.methods)),
+            () if definition.methods == ("WEBSOCKET",) else tuple(sorted(definition.methods)),
         )
         for definition in claimed.table.definitions
     )

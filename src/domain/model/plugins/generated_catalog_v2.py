@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:563ce48b99438ba8d1dcefa247688d27130df1c2c355ccbfba26d20f29532b'
-    '41","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:f8d9384aafa9dd66d34a33ab26359749956110200c1582b469c99e11e01800'
+    'a8","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -2108,8 +2108,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     't":"src.infrastructure.plugins.v2.builtin_observability_http_routes:builtin_observabilit'
     'y_http_routes_definition_v2","module_ref":"builtin://memstack/http/observability-routes"'
     ',"plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"'
-    'artifact_digest":"sha256:e8e5ba366e2ae0be3c3bec94aa1418c69e2f002f6888214e99e83c75ad20bf7'
-    '5","artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_platform_plugi'
+    'artifact_digest":"sha256:7e94baef9ca405e8c28fb331d297f9108a3c3978954a68b30fd0c7ccb0ef1e3'
+    'e","artifact_source":"repo+python://src/infrastructure/plugins/v2/builtin_platform_plugi'
     'ns_http_routes.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft'
     '/2020-12/schema","additionalProperties":false,"properties":{},"type":"object"},"events":'
     '{"emits":[],"handles":[]},"services":{"provides":[],"requires":[{"alias":"route_table","'
@@ -3457,7 +3457,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:563ce48b99438ba8d1dcefa247688d27130df1c2c355ccbfba26d20f29532b41"
+    "sha256:f8d9384aafa9dd66d34a33ab26359749956110200c1582b469c99e11e01800a8"
 )
 # fmt: on
 

@@ -7,6 +7,8 @@ from typing import Any
 
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateResponseV2,
+    PlatformPluginDataPlaneCredentialIssuedResponseV2,
+    PlatformPluginDataPlaneCredentialResponseV2,
     PlatformPluginDesiredBundleSetResponseV2,
     PlatformPluginDistributionResponseV2,
     PlatformPluginPublicationReadinessResponseV2,
@@ -22,10 +24,14 @@ from src.infrastructure.adapters.primary.web.routers.platform_plugins_v2 import 
     get_latest_publication_readiness_v2,
     get_publication_readiness_v2,
     get_route_authority_readiness_v2,
+    issue_data_plane_credential_v2,
+    list_data_plane_credentials_v2,
     list_desired_bundle_set_history_v2,
     put_current_desired_bundle_set_v2,
     record_data_plane_state_v2,
     republish_last_ready_v2,
+    revoke_data_plane_credential_v2,
+    rotate_data_plane_credential_v2,
 )
 
 from .http_routes import RouteDefinitionV2, RouteTableBuilderV2
@@ -52,6 +58,7 @@ def _platform_plugins_route_v2(
     name: str,
     response_model: object,
     tags: tuple[str, ...],
+    status_code: int | None = None,
     include_in_schema: bool = True,
 ) -> RouteDefinitionV2:
     return RouteDefinitionV2(
@@ -61,6 +68,7 @@ def _platform_plugins_route_v2(
         endpoint=endpoint,
         name=name,
         tags=tags,
+        status_code=status_code,
         response_model=response_model,
         include_in_schema=include_in_schema,
         replaces_builtin_row_id=PLATFORM_PLUGINS_HTTP_ROUTES_ROW_V2,
@@ -104,6 +112,38 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             list_desired_bundle_set_history_v2,
             "list_desired_bundle_set_history_v2",
             list[PlatformPluginDesiredBundleSetResponseV2],
+            _PROTOCOL_V2_TAGS_V2,
+        ),
+        (
+            f"{v2}/data-plane-credentials",
+            ("POST",),
+            issue_data_plane_credential_v2,
+            "issue_data_plane_credential_v2",
+            PlatformPluginDataPlaneCredentialIssuedResponseV2,
+            _PROTOCOL_V2_TAGS_V2,
+        ),
+        (
+            f"{v2}/data-plane-credentials",
+            ("GET",),
+            list_data_plane_credentials_v2,
+            "list_data_plane_credentials_v2",
+            list[PlatformPluginDataPlaneCredentialResponseV2],
+            _PROTOCOL_V2_TAGS_V2,
+        ),
+        (
+            f"{v2}/data-plane-credentials/{{credential_id}}/rotate",
+            ("POST",),
+            rotate_data_plane_credential_v2,
+            "rotate_data_plane_credential_v2",
+            PlatformPluginDataPlaneCredentialIssuedResponseV2,
+            _PROTOCOL_V2_TAGS_V2,
+        ),
+        (
+            f"{v2}/data-plane-credentials/{{credential_id}}",
+            ("DELETE",),
+            revoke_data_plane_credential_v2,
+            "revoke_data_plane_credential_v2",
+            PlatformPluginDataPlaneCredentialResponseV2,
             _PROTOCOL_V2_TAGS_V2,
         ),
         (
@@ -163,6 +203,11 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             name=name,
             response_model=response_model,
             tags=tags,
+            status_code=(
+                201
+                if endpoint in {issue_data_plane_credential_v2, rotate_data_plane_credential_v2}
+                else None
+            ),
         )
         for path, methods, endpoint, name, response_model, tags in mapping
     )

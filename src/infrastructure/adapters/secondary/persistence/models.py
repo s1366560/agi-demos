@@ -3339,6 +3339,71 @@ class PlatformPluginV1MigrationRunModel(IdGeneratorMixin, Base):
     )
 
 
+class PlatformPluginV2DataPlaneCredentialModel(IdGeneratorMixin, Base):
+    """Dedicated hashed workload credential bound to one protocol-v2 data plane."""
+
+    __tablename__ = "platform_plugin_v2_data_plane_credentials"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(18), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rotated_from_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("platform_plugin_v2_data_plane_credentials.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "length(data_plane_id) > 0",
+            name="ck_platform_plugin_v2_data_plane_credential_plane",
+        ),
+        CheckConstraint(
+            "length(key_hash) = 64",
+            name="ck_platform_plugin_v2_data_plane_credential_hash",
+        ),
+        CheckConstraint(
+            "length(key_prefix) = 18 AND substr(key_prefix, 1, 6) = 'ms_dp_'",
+            name="ck_platform_plugin_v2_data_plane_credential_prefix",
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR expires_at > created_at",
+            name="ck_platform_plugin_v2_data_plane_credential_expiry",
+        ),
+        CheckConstraint(
+            " ".join(
+                (
+                    "(revoked_at IS NULL AND revoked_by_user_id IS NULL) OR",
+                    "(revoked_at IS NOT NULL AND revoked_by_user_id IS NOT NULL)",
+                )
+            ),
+            name="ck_platform_plugin_v2_data_plane_credential_revocation",
+        ),
+        UniqueConstraint(
+            "key_hash",
+            name="uq_platform_plugin_v2_data_plane_credential_hash",
+        ),
+        Index(
+            "ix_platform_plugin_v2_data_plane_credential_plane_active",
+            "data_plane_id",
+            "revoked_at",
+            "expires_at",
+        ),
+        Index(
+            "ix_platform_plugin_v2_data_plane_credential_rotated_from",
+            "rotated_from_id",
+        ),
+    )
+
+
 class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
     """Append-only requested protocol-v2 snapshot distribution."""
 

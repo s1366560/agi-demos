@@ -7460,7 +7460,7 @@
       },
       "contract_digest": "sha256:5ed847de05c6b444c5475129fe15fc2e9b99b1f492629e9ed96b3592c6c048d4",
       "artifact": {
-        "digest": "sha256:e8e5ba366e2ae0be3c3bec94aa1418c69e2f002f6888214e99e83c75ad20bf75",
+        "digest": "sha256:7e94baef9ca405e8c28fb331d297f9108a3c3978954a68b30fd0c7ccb0ef1e3e",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_platform_plugins_http_routes.py"
       }
     },

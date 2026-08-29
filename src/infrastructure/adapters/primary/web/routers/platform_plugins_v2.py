@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.platform_plugins import (
     PlatformPluginApplyStateResponseV2,
+    PlatformPluginDataPlaneCredentialIssuedResponseV2,
+    PlatformPluginDataPlaneCredentialIssueRequestV2,
+    PlatformPluginDataPlaneCredentialResponseV2,
+    PlatformPluginDataPlaneCredentialRotateRequestV2,
     PlatformPluginDataPlaneReadinessResponseV2,
     PlatformPluginDesiredBundleSetResponseV2,
     PlatformPluginDistributionResponseV2,
@@ -27,7 +31,15 @@ from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     plugin_publication_policy_v2_from_app,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    PlatformPluginV2DataPlaneCredentialModel,
+    User,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_data_plane_credential_repository_v2 import (
+    IssuedPlatformPluginDataPlaneCredentialV2,
+    PlatformPluginDataPlaneCredentialRepositoryV2,
+    PlatformPluginDataPlaneCredentialV2Error,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
     PlatformPluginDesiredBundleSetRecordV2,
     PlatformPluginDesiredBundleSetRepositoryV2,
@@ -44,7 +56,7 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
 )
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.boundary import current_generation_v2
-from src.infrastructure.plugins.v2.http_routes import RouteTableBuilderV2
+from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTableBuilderV2
 from src.infrastructure.plugins.v2.protocol import (
     PluginProtocolV2Error,
     desired_bundle_set_v2_to_payload,
@@ -160,6 +172,105 @@ async def list_desired_bundle_set_history_v2(
     return [_desired_bundle_set_response_v2(record) for record in records]
 
 
+@router.post(
+    "/data-plane-credentials",
+    response_model=PlatformPluginDataPlaneCredentialIssuedResponseV2,
+    status_code=status.HTTP_201_CREATED,
+)
+async def issue_data_plane_credential_v2(
+    payload: PlatformPluginDataPlaneCredentialIssueRequestV2,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginDataPlaneCredentialIssuedResponseV2:
+    """Issue one dedicated workload credential and reveal its secret once."""
+    _require_platform_admin(current_user)
+    try:
+        issued = await PlatformPluginDataPlaneCredentialRepositoryV2(db).issue(
+            data_plane_id=payload.data_plane_id,
+            actor_id=current_user.id,
+            expires_at=payload.expires_at,
+        )
+    except ValueError as exc:
+        await db.rollback()
+        _raise_data_plane_credential_invalid(exc)
+    await db.commit()
+    return _issued_data_plane_credential_response_v2(issued)
+
+
+@router.get(
+    "/data-plane-credentials",
+    response_model=list[PlatformPluginDataPlaneCredentialResponseV2],
+)
+async def list_data_plane_credentials_v2(
+    data_plane_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=1000),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[PlatformPluginDataPlaneCredentialResponseV2]:
+    """List credential metadata without ever returning stored secret material."""
+    _require_platform_admin(current_user)
+    try:
+        credentials = await PlatformPluginDataPlaneCredentialRepositoryV2(db).list_credentials(
+            data_plane_id=data_plane_id,
+            limit=limit,
+        )
+    except ValueError as exc:
+        _raise_data_plane_credential_invalid(exc)
+    return [_data_plane_credential_response_v2(credential) for credential in credentials]
+
+
+@router.post(
+    "/data-plane-credentials/{credential_id}/rotate",
+    response_model=PlatformPluginDataPlaneCredentialIssuedResponseV2,
+    status_code=status.HTTP_201_CREATED,
+)
+async def rotate_data_plane_credential_v2(
+    credential_id: str,
+    payload: PlatformPluginDataPlaneCredentialRotateRequestV2,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginDataPlaneCredentialIssuedResponseV2:
+    """Revoke one workload credential and reveal its bound successor once."""
+    _require_platform_admin(current_user)
+    try:
+        issued = await PlatformPluginDataPlaneCredentialRepositoryV2(db).rotate(
+            credential_id,
+            actor_id=current_user.id,
+            expires_at=payload.expires_at,
+        )
+    except PlatformPluginDataPlaneCredentialV2Error as exc:
+        await db.rollback()
+        _raise_data_plane_credential_error(exc)
+    except ValueError as exc:
+        await db.rollback()
+        _raise_data_plane_credential_invalid(exc)
+    await db.commit()
+    return _issued_data_plane_credential_response_v2(issued)
+
+
+@router.delete(
+    "/data-plane-credentials/{credential_id}",
+    response_model=PlatformPluginDataPlaneCredentialResponseV2,
+)
+async def revoke_data_plane_credential_v2(
+    credential_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PlatformPluginDataPlaneCredentialResponseV2:
+    """Idempotently revoke one workload credential while retaining its audit row."""
+    _require_platform_admin(current_user)
+    try:
+        credential = await PlatformPluginDataPlaneCredentialRepositoryV2(db).revoke(
+            credential_id,
+            actor_id=current_user.id,
+        )
+    except PlatformPluginDataPlaneCredentialV2Error as exc:
+        await db.rollback()
+        _raise_data_plane_credential_error(exc)
+    await db.commit()
+    return _data_plane_credential_response_v2(credential)
+
+
 @router.get("/distribution", response_model=PlatformPluginDistributionResponseV2)
 async def get_distribution_v2(
     _current_user: User = Depends(get_current_user),
@@ -249,7 +360,7 @@ async def get_route_authority_readiness_v2(
     desired_rows = await PlatformPluginGovernanceRepository(db).list_http_routes()
     evidence = verify_bundle_route_authority_v2(
         snapshot=generation.snapshot,
-        route_definitions=builder.definitions,
+        route_definitions=cast("tuple[RouteDefinitionV2, ...]", builder.definitions),
         authorities=authority_catalog.authorities,
         desired_rows=desired_rows,
     )
@@ -361,6 +472,32 @@ def _desired_bundle_set_response_v2(
         desired_bundle_set=desired_bundle_set_v2_to_payload(record.desired_set),
         actor_id=record.actor_id,
         created_at=record.created_at,
+    )
+
+
+def _data_plane_credential_response_v2(
+    credential: PlatformPluginV2DataPlaneCredentialModel,
+) -> PlatformPluginDataPlaneCredentialResponseV2:
+    return PlatformPluginDataPlaneCredentialResponseV2(
+        credential_id=credential.id,
+        data_plane_id=credential.data_plane_id,
+        key_prefix=credential.key_prefix,
+        created_by_user_id=credential.created_by_user_id,
+        created_at=credential.created_at,
+        expires_at=credential.expires_at,
+        revoked_at=credential.revoked_at,
+        revoked_by_user_id=credential.revoked_by_user_id,
+        rotated_from_id=credential.rotated_from_id,
+    )
+
+
+def _issued_data_plane_credential_response_v2(
+    issued: IssuedPlatformPluginDataPlaneCredentialV2,
+) -> PlatformPluginDataPlaneCredentialIssuedResponseV2:
+    metadata = _data_plane_credential_response_v2(issued.credential)
+    return PlatformPluginDataPlaneCredentialIssuedResponseV2(
+        **metadata.model_dump(),
+        secret=issued.secret,
     )
 
 
@@ -507,6 +644,38 @@ def _raise_ledger_error(error: PlatformPluginLedgerV2Error) -> NoReturn:
             "code": code,
             "reason": error.code,
             "message": _("Plugin protocol receipt conflicts with control-plane state"),
+        },
+    ) from error
+
+
+def _raise_data_plane_credential_error(
+    error: PlatformPluginDataPlaneCredentialV2Error,
+) -> NoReturn:
+    if error.code == "credential_not_found":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "plugin_data_plane_credential_not_found",
+                "reason": error.code,
+                "message": _("Plugin data-plane credential was not found"),
+            },
+        ) from error
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "plugin_data_plane_credential_conflict",
+            "reason": error.code,
+            "message": _("Plugin data-plane credential conflicts with current state"),
+        },
+    ) from error
+
+
+def _raise_data_plane_credential_invalid(error: ValueError) -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={
+            "code": "plugin_data_plane_credential_invalid",
+            "message": _("Plugin data-plane credential request is invalid"),
         },
     ) from error
 
