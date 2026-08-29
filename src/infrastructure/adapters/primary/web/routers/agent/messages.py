@@ -24,6 +24,10 @@ from src.infrastructure.adapters.primary.web.agent_execution_query_application_a
     AgentExecutionQueryApplicationAuthorityV2,
     agent_execution_query_application_authority_dependency_v2,
 )
+from src.infrastructure.adapters.primary.web.agent_message_history_http_application_authority_v2 import (
+    AgentMessageHistoryHttpApplicationAuthorityV2,
+    agent_message_history_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -56,7 +60,6 @@ from src.infrastructure.plugins.v2.session_event_log import (
 )
 
 from .schemas import ExecutionStatsResponse
-from .utils import get_container_with_db
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1543,8 +1546,6 @@ async def _check_has_more(
 @router.get("/conversations/{conversation_id}/messages")
 async def get_conversation_messages(
     conversation_id: str,
-    request: Request,
-    project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=500, description="Maximum events to return"),
     from_time_us: int | None = Query(
         None, description="Starting event_time_us (inclusive) for forward pagination"
@@ -1558,9 +1559,9 @@ async def get_conversation_messages(
     before_counter: int | None = Query(
         None, description="For backward pagination, event_counter for the cursor"
     ),
-    current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    history: AgentMessageHistoryHttpApplicationAuthorityV2 = Depends(
+        agent_message_history_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Get conversation timeline from unified event stream with bidirectional pagination.
@@ -1568,18 +1569,7 @@ async def get_conversation_messages(
     Returns timeline of all events in the conversation, ordered by sequence number.
     """
     try:
-        assert request is not None
-        await _verify_conversation_access(
-            conversation_id,
-            current_user,
-            db,
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-        container = get_container_with_db(request, db)
-
-        event_repo = container.agent_execution_event_repository()
-        tool_exec_repo = container.tool_execution_record_repository()
+        event_repo = history.service
 
         cursors = await _resolve_pagination_cursors(
             event_repo,
@@ -1602,13 +1592,15 @@ async def get_conversation_messages(
         )
 
         tool_exec_map = _build_tool_exec_map(
-            await tool_exec_repo.list_by_conversation(conversation_id)
+            await history.service.list_tool_executions(
+                conversation_id=conversation_id,
+                message_id=None,
+            )
         )
         hitl_answered_map = _build_hitl_answered_map(events)
 
-        hitl_repo = container.hitl_request_repository()
         hitl_status_map = _build_hitl_status_map(
-            await hitl_repo.get_by_conversation(conversation_id)
+            await history.service.list_hitl_requests(conversation_id)
         )
         visible_assistant_message_ids = {
             event.message_id
@@ -1620,7 +1612,7 @@ async def get_conversation_messages(
             for event in events
             if event.event_type == "artifact_created" and event.message_id
         }
-        message_events_by_id = await event_repo.get_events_by_message_ids(
+        message_events_by_id = await history.service.get_events_by_message_ids(
             conversation_id, visible_assistant_message_ids | visible_artifact_message_ids
         )
         completion_map = _build_completion_map(
@@ -1729,36 +1721,19 @@ async def get_conversation_execution(
 @router.get("/conversations/{conversation_id}/tool-executions")
 async def get_conversation_tool_executions(
     conversation_id: str,
-    request: Request,
-    project_id: str = Query(..., description="Project ID for authorization"),
     message_id: str | None = Query(None, description="Filter by message ID"),
     limit: int = Query(100, ge=1, le=500, description="Maximum executions to return"),
-    current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    history: AgentMessageHistoryHttpApplicationAuthorityV2 = Depends(
+        agent_message_history_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get the tool execution history for a conversation."""
     try:
-        assert request is not None
-        await _verify_conversation_access(
-            conversation_id,
-            current_user,
-            db,
-            tenant_id=tenant_id,
-            project_id=project_id,
+        records = await history.service.list_tool_executions(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            limit=limit,
         )
-        container = get_container_with_db(request, db)
-
-        tool_execution_repo = container.tool_execution_record_repository()
-
-        if message_id:
-            records = [
-                record
-                for record in await tool_execution_repo.list_by_message(message_id, limit=limit)
-                if record.conversation_id == conversation_id
-            ]
-        else:
-            records = await tool_execution_repo.list_by_conversation(conversation_id, limit=limit)
 
         return {
             "conversation_id": conversation_id,

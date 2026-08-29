@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:264b9b1f08ff01572110d0f6321892bc61b1965063a081ecaf761c819a2b8f5e",
+        "digest": "sha256:22711ca234c03e7b6f4bfbd631d7f40e597e4a0c681c7ea5d3322a5089f2e319",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4284,6 +4284,84 @@
       "artifact": {
         "digest": "sha256:478690f1485f0870568c92a4f9eadba0708e491825b52e8ef16892137de52daf",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_event_query_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/agent-message-history-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_message_history_services:_apply_agent_message_history_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.agent-message-history-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:3db2f743b2334f9e59bf516b1d524c7eaf98076334dbededbdec980b7ac693c5",
+      "artifact": {
+        "digest": "sha256:61a78ec33a2651c1d218459eb1c868486762176d036d704034788b454662ef9c",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_message_history_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/agent-message-history",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_message_history_services:_apply_agent_message_history_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.agent-message-history",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repositories",
+              "service": "service:persistence.agent-message-history-repository-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "conversation_access",
+              "service": "service:application.conversation-access",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "project_access",
+              "service": "service:application.project-access",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-providers", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:14f203720e3ef30991407ffa5b198a421030532ea1564963d6e3b30f21a56ba3",
+      "artifact": {
+        "digest": "sha256:61a78ec33a2651c1d218459eb1c868486762176d036d704034788b454662ef9c",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_message_history_services.py"
       }
     },
     {

@@ -36,6 +36,7 @@ from .agent_lifecycle_notifier import (
 from .agent_lifecycle_runtime import agent_lifecycle_definitions_v2
 from .agent_loop import builtin_agent_loop_definition_v2
 from .agent_memory_tools import builtin_agent_memory_tool_contribution_definition_v2
+from .agent_message_history_services import agent_message_history_service_definitions_v2
 from .agent_model_awareness_tools import (
     builtin_agent_model_awareness_tool_contribution_definition_v2,
 )
@@ -385,6 +386,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         conversation_generation_definition_v2(),
         *conversation_collection_service_definitions_v2(),
         *agent_event_query_service_definitions_v2(),
+        *agent_message_history_service_definitions_v2(),
         agent_execution_resume_definition_v2(),
         agent_workflow_status_definition_v2(),
         agent_subagent_control_definition_v2(),
