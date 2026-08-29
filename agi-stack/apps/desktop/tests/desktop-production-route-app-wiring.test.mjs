@@ -15,6 +15,18 @@ const authenticatedShellSource = readFileSync(
   new URL('../src/plugins/DesktopRendererAuthenticatedShellV2.tsx', import.meta.url),
   'utf8',
 );
+const authenticationRouterSource = readFileSync(
+  new URL('../src/plugins/DesktopRendererAuthenticationRouterV2.tsx', import.meta.url),
+  'utf8',
+);
+const rendererProductionRouterSource = readFileSync(
+  new URL('../src/plugins/DesktopRendererProductionRouterV2.tsx', import.meta.url),
+  'utf8',
+);
+const workbenchSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const routerSource = readFileSync(
   new URL('../src/features/navigation/DesktopProductionRouter.tsx', import.meta.url),
   'utf8',
@@ -548,7 +560,7 @@ test('App injects async Cloud or Local permission authority and real capability 
   );
   assert.match(
     appSource,
-    /createCloudDesktopRoutePermissionClient\(\s*config,\s*desktopVaultBoundCloudRequestBroker\(\),\s*\)/u,
+    /createCloudDesktopRoutePermissionClient\(\s*config,\s*desktopVaultBoundCloudRequestBroker\(\),?\s*\)/u,
   );
   assert.match(
     appSource,
@@ -601,16 +613,30 @@ test('App scope switching uses the abort-aware transaction and no reset helper',
   );
 });
 
-test('production routing wraps the existing workbench tree without keying or remounting it', () => {
+test('production routing passes a typed model to the module-owned workbench without remount keys', () => {
   const routerStart = appSource.lastIndexOf('<DesktopRendererProductionRouterV2');
-  const routerEnd = appSource.indexOf('</DesktopRendererProductionRouterV2>', routerStart);
+  const routerEnd = appSource.indexOf('/>', routerStart);
   const routedWorkbench =
     routerStart >= 0 && routerEnd > routerStart ? appSource.slice(routerStart, routerEnd) : '';
 
-  assert.match(routedWorkbench, /<SessionWorkspace/u);
-  assert.match(routedWorkbench, /<section className="workbench-layout">/u);
+  assert.match(routedWorkbench, /viewModel=\{desktopWorkbenchSurfaceViewModelV2\}/u);
   assert.doesNotMatch(routedWorkbench, /\bkey=/u);
   assert.doesNotMatch(routedWorkbench, /<iframe|<webview|window\.open|shell\.openExternal/iu);
+  assert.doesNotMatch(rendererProductionRouterSource, /childrenAuthority|ReactNode/u);
+  for (const component of [
+    'ChatPanel',
+    'WorkspaceOverview',
+    'WorkspaceCollaborationCanvas',
+    'MyWorkQueue',
+    'ActivityInbox',
+    'NewThreadComposer',
+    'SessionWorkspace',
+  ]) {
+    assert.match(workbenchSurfaceSource, new RegExp(`<${component}\\b`, 'u'));
+    assert.doesNotMatch(appSource, new RegExp(`<${component}\\b`, 'u'));
+  }
+  assert.match(rendererAppCompositionSource, /DesktopWorkbenchSurfaceV2/u);
+  assert.match(workbenchSurfaceSource, /<section className="workbench-layout">/u);
   assert.match(appSource, /const socket = useAgentSocket\(/u);
 });
 
@@ -688,9 +714,10 @@ test('anonymous unknown routes are handled natively before the login gate', () =
   assert.ok(anonymousGate > forcedPasswordGate);
   assert.match(
     anonymousSource,
-    /<DesktopRendererProductionRouterV2[\s\S]*<LoginScreen[\s\S]*<\/DesktopRendererProductionRouterV2>/u,
+    /<DesktopRendererAuthenticationRouterV2[\s\S]*<LoginScreen[\s\S]*<\/DesktopRendererAuthenticationRouterV2>/u,
   );
   assert.doesNotMatch(anonymousSource, /DesktopRendererAuthenticatedShellV2/u);
+  assert.doesNotMatch(authenticationRouterSource, /projectDesktopWorkbenchCompositionV2/u);
   assert.match(
     anonymousSource,
     /location=\{desktopProductionRouteLocation\}[\s\S]*mode=\{productionRouteRuntimeMode\}[\s\S]*navigation=\{desktopProductionRouteNavigation\}/u,

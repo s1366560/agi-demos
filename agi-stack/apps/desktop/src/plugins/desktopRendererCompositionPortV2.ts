@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react';
 
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
+import type { DesktopWorkbenchSurfaceViewModelV2 } from './DesktopWorkbenchSurfaceV2';
 import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
 import type { UiSlotDefinition } from './uiSlotRegistry';
 
@@ -17,7 +18,7 @@ export type DesktopRendererAuthenticatedShellSurfaceV2 =
   ComponentType<DesktopRendererAuthenticatedShellSurfacePropsV2>;
 
 export interface DesktopRendererWorkbenchSurfacePropsV2 {
-  readonly children: ReactNode;
+  readonly viewModel: DesktopWorkbenchSurfaceViewModelV2;
 }
 
 export type DesktopRendererWorkbenchSurfaceV2 =

@@ -114,8 +114,7 @@ export const DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2 =
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.authenticated-shell-surface.v1';
-export const DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2 =
-  'desktop.ui-slots.workbench-surface.v1';
+export const DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2 = 'desktop.ui-slots.workbench-surface.v2';
 
 const TENANT_CREATION_ROUTE_IDS_V2 = Object.freeze([TENANT_CREATION_ROUTE_ID]);
 const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(

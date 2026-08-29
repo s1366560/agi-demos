@@ -321,7 +321,7 @@ describe('RendererPluginRuntimeV2', () => {
   it('lets the desktop target catalog nack an unknown artifact and retain last-good', async () => {
     const knownArtifactRefs = new Set([
       'desktop.ui-slots.authenticated-shell-surface.v1',
-      'desktop.ui-slots.workbench-surface.v1',
+      'desktop.ui-slots.workbench-surface.v2',
       'desktop.routes.tenant-creation.v1',
       'desktop.routes.auxiliary.v1',
       'desktop.routes.project-knowledge.v1',

@@ -12,18 +12,18 @@ const rendererArtifactCatalogSource = readFileSync(
   new URL('../src/plugins/desktopRendererArtifactCatalogV2.ts', import.meta.url),
   'utf8',
 );
-const auxiliaryViewUrl = new URL(
-  '../src/features/navigation/AuxiliaryView.tsx',
-  import.meta.url,
+const workbenchSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
+  'utf8',
 );
+const auxiliaryViewUrl = new URL('../src/features/navigation/AuxiliaryView.tsx', import.meta.url);
 const auxiliaryViewStylesUrl = new URL(
   '../src/features/navigation/AuxiliaryView.css',
   import.meta.url,
 );
 
 test('only shell-owned views remain first-class workbench sections', () => {
-  const workbenchSection =
-    typesSource.match(/export type WorkbenchSection =[\s\S]*?;/)?.[0] ?? '';
+  const workbenchSection = typesSource.match(/export type WorkbenchSection =[\s\S]*?;/)?.[0] ?? '';
 
   assert.match(workbenchSection, /'home'/);
   assert.match(workbenchSection, /'board'/);
@@ -37,10 +37,8 @@ test('Search and Automations enter only through V2 route and navigation contribu
     appSource.match(/onNavigate=\{\(section\) => \{[\s\S]*?\n\s*\}\}/)?.[0] ?? '';
   const primaryItems =
     sidebarSource.match(/const primaryItems = \[[\s\S]*?\] as const;/u)?.[0] ?? '';
-  const renderWorkbench =
-    appSource.match(
-      /const renderWorkbench = [\s\S]*?\n  \};[\s\S]*?\n  if \(!identityAuthenticated\)/,
-    )?.[0] ?? '';
+  const selectWorkbenchView =
+    appSource.match(/const selectDesktopWorkbenchViewV2 = [\s\S]*?\n  \};/u)?.[0] ?? '';
 
   assert.match(appSource, /from '\.\/features\/navigation\/AuxiliaryView'/);
   assert.match(navigationHandler, /section === 'home'[\s\S]*switchSection\('home'\)/);
@@ -48,8 +46,8 @@ test('Search and Automations enter only through V2 route and navigation contribu
   assert.doesNotMatch(navigationHandler, /openWorkspaceOverview|openCommandPalette/);
   assert.doesNotMatch(primaryItems, /id: '(?:automations|search)'/u);
 
-  assert.match(renderWorkbench, /activeSection === 'home'/);
-  assert.doesNotMatch(renderWorkbench, /activeSection === '(?:automations|search)'/u);
+  assert.match(selectWorkbenchView, /activeSection === 'home'/);
+  assert.doesNotMatch(selectWorkbenchView, /activeSection === '(?:automations|search)'/u);
   assert.doesNotMatch(appSource, /LazyAutomationsPage|renderAutomationsPage/u);
   assert.doesNotMatch(appSource, /features\/automations\/AutomationsPage/u);
   assert.doesNotMatch(appSource, /DesktopSearch|renderSearchPage/u);
@@ -80,7 +78,8 @@ test('auxiliary navigation uses the shared prototype overview surface', () => {
 });
 
 test('Work and Code mode controls live in the new-thread composer', () => {
-  assert.match(appSource, /<NewThreadComposer/);
-  assert.match(appSource, /onModeChange=\{setPreferredTaskMode\}/);
+  assert.match(workbenchSurfaceSource, /<NewThreadComposer/u);
+  assert.doesNotMatch(appSource, /<NewThreadComposer/u);
+  assert.match(appSource, /onModeChange:\s*setPreferredTaskMode/u);
   assert.doesNotMatch(appSource, /setPreferredTaskMode\(mode\)[\s\S]*switchSection\('board'\)/);
 });

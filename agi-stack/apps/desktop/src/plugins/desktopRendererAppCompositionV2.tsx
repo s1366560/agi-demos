@@ -18,6 +18,7 @@ import {
 } from '../features/navigation/appRouteRegistry';
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
+import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2,
@@ -38,7 +39,6 @@ import {
   type DesktopRendererAuthenticatedShellSurfacePropsV2,
   type DesktopRendererAuthenticatedShellSurfaceV2,
   type DesktopRendererCompositionPortV2,
-  type DesktopRendererWorkbenchSurfacePropsV2,
   type DesktopRendererWorkbenchSurfaceV2,
 } from './desktopRendererCompositionPortV2';
 import type { UiSlotDefinition } from './uiSlotRegistry';
@@ -93,10 +93,6 @@ export function createDesktopRendererAppCompositionPortV2(
 const DesktopAuthenticatedShellSurfaceV2: ComponentType<
   DesktopRendererAuthenticatedShellSurfacePropsV2
 > = ({ children }) => <Fragment>{children}</Fragment>;
-
-const DesktopWorkbenchSurfaceV2: ComponentType<DesktopRendererWorkbenchSurfacePropsV2> = ({
-  children,
-}) => <Fragment>{children}</Fragment>;
 
 function validAuthenticatedShellDefinitionV2(definition: UiSlotDefinition): boolean {
   return (

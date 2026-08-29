@@ -77,22 +77,25 @@ import {
 } from './features/automations/automationClient';
 import { initialDesktopRuntimeConfig } from './features/auth/loginRuntimeModel';
 import { resolveNativeOAuthResumePath } from './features/auth/nativeOAuthSessionModel';
-import {
-  ChatPanel,
-  type AgentTaskSignal,
-  type ChatWorkflowTarget,
-} from './features/chat/ChatPanel';
-import { PlatformPluginConversationSlots } from './features/chat/PlatformPluginConversationSlots';
+import type { ChatWorkflowTarget } from './features/chat/ChatWorkflowStrip';
 import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuthorityStateV2';
 import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRendererAppCompositionV2';
+import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
 import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
 import {
   DesktopRendererGenerationProviderV2,
   useDesktopRendererGenerationHostV2,
 } from './plugins/DesktopRendererGenerationHostV2';
 import { DesktopRendererProductionRouterV2 } from './plugins/DesktopRendererProductionRouterV2';
+import type {
+  DesktopWorkbenchSurfaceViewModelV2,
+  DesktopWorkbenchViewV2,
+} from './plugins/DesktopWorkbenchSurfaceV2';
 import { resolveSubAgentControlAuthority } from './features/chat/subagentControlAuthorityModel';
-import { reconcileAgentTaskSignals } from './features/chat/agentTaskSignalModel';
+import {
+  reconcileAgentTaskSignals,
+  type AgentTaskSignal,
+} from './features/chat/agentTaskSignalModel';
 import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
 import { createHttpDesktopArtifactClient } from './features/chat/desktopArtifactClient';
 import {
@@ -145,7 +148,6 @@ import {
   tabKey,
   type WorkbenchTab,
 } from './features/chrome/workbenchTabBarModel';
-import { SessionWorkspace } from './features/session/SessionWorkspace';
 import { buildRunCompletionSummary } from './features/session/runCompletionSummaryModel';
 import { deriveSessionUsage } from './features/session/sessionUsageModel';
 import {
@@ -218,8 +220,6 @@ import {
   failEarlierTimelinePage,
   resolveEarlierTimelinePage,
 } from './features/session/sessionTimelinePaginationModel';
-import { MyWorkQueue } from './features/my-work/MyWorkQueue';
-import { ActivityInbox } from './features/activity/ActivityInbox';
 import { useActivityInbox } from './features/activity/useActivityInbox';
 import { useCompletionNotifications } from './features/activity/useCompletionNotifications';
 import {
@@ -307,7 +307,6 @@ import {
   projectRuntimeModelOptions,
 } from './features/settings/workspaceRuntimeProviderModel';
 import { NewTaskFlow, type NewTaskResumeDraft } from './features/task/NewTaskFlow';
-import { NewThreadComposer } from './features/task/NewThreadComposer';
 import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
@@ -319,8 +318,6 @@ import {
   type NewTaskAgentTurnOutcome,
 } from './features/task/newTaskPlanModel';
 import { resolveNewTaskWorkspaceAuthority } from './features/task/newTaskSessionModel';
-import { WorkspaceCollaborationCanvas } from './features/workspace/WorkspaceCollaborationCanvas';
-import { WorkspaceOverview } from './features/workspace/WorkspaceOverview';
 import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialog';
 import { WorkspaceSettingsDialog } from './features/workspace/WorkspaceSettingsDialog';
 import {
@@ -6046,153 +6043,142 @@ export function App() {
       )
     : authorizedCommandItems;
 
-  const renderChatPanel = () => (
-    <>
-      <ChatPanel
-      api={chatComposerApi}
-      conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
-      selectedConversationId={selectedConversation?.id ?? null}
-      messages={dataset.messages}
-      timelineState={selectedConversation ? sessionTimeline : null}
-      agentTaskSignals={agentTaskSignals}
-      workflowCounts={chatWorkflowCounts}
-      sessionTitle={selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined)}
-      scopeLabel={
-        selectedConversation
-          ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
-          : 'Workspace conversation'
-      }
-      turnCollapseRuntime={{
+  const createChatWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+    kind: 'chat',
+    chatPanel: {
+      api: chatComposerApi,
+      conversations: dataset.conversationsByWorkspace[config.workspaceId] ?? [],
+      selectedConversationId: selectedConversation?.id ?? null,
+      messages: dataset.messages,
+      timelineState: selectedConversation ? sessionTimeline : null,
+      agentTaskSignals,
+      workflowCounts: chatWorkflowCounts,
+      sessionTitle: selectedConversation?.title ?? workspaceLabel(selectedWorkspace ?? undefined),
+      scopeLabel: selectedConversation
+        ? `Agent session / ${workspaceLabel(selectedWorkspace ?? undefined)}`
+        : 'Workspace conversation',
+      turnCollapseRuntime: {
         mode: config.mode,
         apiBaseUrl: config.apiBaseUrl,
         tenantId: config.tenantId,
         projectId: config.projectId,
-      }}
-      voiceTranscriptionConfig={config}
-      composerVariant={selectedConversation ? 'session' : 'workspace'}
-      composerResetKey={selectedConversation?.id ?? config.workspaceId}
-      activityPresence={sessionActivityState}
-      activityStructuredEvidence={sessionActivityStructuredEvidence}
-      sending={sending}
-      disabledReason={sessionChatDisabledReason}
-      agentControlEvents={socket.events}
-      activeWorkflowTarget={chatWorkflowTargetForReviewTab(reviewTab)}
-      modelLabel={chatRuntimeModelSelection.displayLabel}
-      modelOptions={runtimeModelOptions}
-      selectedModelValue={chatRuntimeModelSelection.selectedValue}
-      modelSwitching={chatRuntimeModelSwitching}
-      modelError={chatRuntimeModelError}
-      runtimeTargetLabel={runtimeTargetLabels[runtimeTarget]}
-      runtimeTargetOptions={runtimeTargetComposerOptions}
-      composeAheadFallbackAllowed={false}
-      canonicalRunStatus={currentArtifactRun?.status ?? null}
-      runInputDelivery={effectiveRunInputDeliveryValue}
-      runInputDeliveryOptions={runInputDeliveryOptions}
-      runInputs={runInputs}
-      runInputsLoading={runInputsLoading}
-      runInputsError={runInputsError}
-      promotingRunInputId={promotingRunInputId}
-      runInputAuthorityRunId={currentArtifactRun?.id ?? null}
-      references={runInputReferences}
-      onRunInputDeliveryChange={setRunInputDelivery}
-      onPromoteRunInput={promoteQueuedRunInput}
-      onRemoveReference={handleChatRemoveReference}
-      onSend={sendChatMessage}
-      onRegenerateConversationSummary={regenerateConversationSummary}
-      onStopResponse={socket.stopAgentResponse}
-      onSteerResponse={(request) =>
+      },
+      voiceTranscriptionConfig: config,
+      composerVariant: selectedConversation ? 'session' : 'workspace',
+      composerResetKey: selectedConversation?.id ?? config.workspaceId,
+      activityPresence: sessionActivityState,
+      activityStructuredEvidence: sessionActivityStructuredEvidence,
+      sending,
+      disabledReason: sessionChatDisabledReason,
+      agentControlEvents: socket.events,
+      activeWorkflowTarget: chatWorkflowTargetForReviewTab(reviewTab),
+      modelLabel: chatRuntimeModelSelection.displayLabel,
+      modelOptions: runtimeModelOptions,
+      selectedModelValue: chatRuntimeModelSelection.selectedValue,
+      modelSwitching: chatRuntimeModelSwitching,
+      modelError: chatRuntimeModelError,
+      runtimeTargetLabel: runtimeTargetLabels[runtimeTarget],
+      runtimeTargetOptions: runtimeTargetComposerOptions,
+      composeAheadFallbackAllowed: false,
+      canonicalRunStatus: currentArtifactRun?.status ?? null,
+      runInputDelivery: effectiveRunInputDeliveryValue,
+      runInputDeliveryOptions,
+      runInputs,
+      runInputsLoading,
+      runInputsError,
+      promotingRunInputId,
+      runInputAuthorityRunId: currentArtifactRun?.id ?? null,
+      references: runInputReferences,
+      onRunInputDeliveryChange: setRunInputDelivery,
+      onPromoteRunInput: promoteQueuedRunInput,
+      onRemoveReference: handleChatRemoveReference,
+      onSend: sendChatMessage,
+      onRegenerateConversationSummary: regenerateConversationSummary,
+      onStopResponse: socket.stopAgentResponse,
+      onSteerResponse: (request) =>
         socket.sendSteerMessage({
           conversationId: request.conversationId,
           projectId: config.projectId,
           message: request.text,
           messageId: request.messageId,
-        })
-      }
-      subAgentControlAuthority={subAgentControlAuthority}
-      onSubAgentControl={socket.sendSubAgentControl}
-      onRefresh={handleChatRefresh}
-      onLoadEarlier={loadEarlierTimeline}
-      onRespondToHitl={respondToHitlWithSteering}
-      respondableHitlRequestIds={respondableHitlRequestIds}
-      permissionPreset={selectedConversation ? permissionPreset : undefined}
-      permissionPresetFullAccessAcknowledged={fullAccessWarningAcknowledged}
-      onPermissionPresetChange={selectedConversation ? handlePermissionPresetChange : undefined}
-      onAcknowledgeFullAccessWarning={
-        selectedConversation ? handleAcknowledgeFullAccessWarning : undefined
-      }
-      authorityNotice={sessionAuthorityNotice}
-      onAuthorityAction={
-        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
-      }
-      onWorkflowSelect={selectChatWorkflowTarget}
-      onModelChange={selectChatRuntimeModel}
-      onModelReset={
-        scopedConversation && chatRuntimeModelSelection.canReset ? resetChatRuntimeModel : undefined
-      }
-      onRuntimeTargetChange={handleChatRuntimeTargetChange}
-      onOpenMCPAppResult={openMCPAppResult}
-      onOpenCommands={openCommandPalette}
-      runCompletionSummary={selectedConversation ? runCompletionSummary : null}
-      onOpenSessionCanvasTab={openSessionCanvasTab}
-      />
-      <PlatformPluginConversationSlots active />
-    </>
-  );
+        }),
+      subAgentControlAuthority,
+      onSubAgentControl: socket.sendSubAgentControl,
+      onRefresh: handleChatRefresh,
+      onLoadEarlier: loadEarlierTimeline,
+      onRespondToHitl: respondToHitlWithSteering,
+      respondableHitlRequestIds,
+      permissionPreset: selectedConversation ? permissionPreset : undefined,
+      permissionPresetFullAccessAcknowledged: fullAccessWarningAcknowledged,
+      onPermissionPresetChange: selectedConversation ? handlePermissionPresetChange : undefined,
+      onAcknowledgeFullAccessWarning: selectedConversation
+        ? handleAcknowledgeFullAccessWarning
+        : undefined,
+      authorityNotice: sessionAuthorityNotice,
+      onAuthorityAction:
+        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined,
+      onWorkflowSelect: selectChatWorkflowTarget,
+      onModelChange: selectChatRuntimeModel,
+      onModelReset:
+        scopedConversation && chatRuntimeModelSelection.canReset
+          ? resetChatRuntimeModel
+          : undefined,
+      onRuntimeTargetChange: handleChatRuntimeTargetChange,
+      onOpenMCPAppResult: openMCPAppResult,
+      onOpenCommands: openCommandPalette,
+      runCompletionSummary: selectedConversation ? runCompletionSummary : null,
+      onOpenSessionCanvasTab: openSessionCanvasTab,
+    },
+  });
 
-  const renderWorkspaceOverview = () => {
-    return (
-      <>
-        <WorkspaceOverview
-          workspace={selectedWorkspace}
-          project={selectedProject}
-          tenantName={
-            auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
-            config.tenantId ||
-            t('settings.noTenantSelected')
-          }
-          workspaceAuthority={newTaskWorkspaceAuthority}
-          conversations={dataset.conversationsByWorkspace[config.workspaceId] ?? []}
-          members={dataset.workspaceMembers}
-          agents={dataset.workspaceAgents}
-          plan={activeDataset.plan}
-          sandboxStatus={dataset.sandbox?.status ?? null}
-          liveActivity={workspaceLiveActivity}
-          autonomyAttentions={workspaceAutonomyAttentions}
-          canRetryAutonomyAttention={canRetryWorkspaceAutonomyAttention}
-          canResolveAutonomyAttention={canRetryWorkspaceAutonomyAttention}
-          retryingAutonomyAttentionId={retryingWorkspaceAutonomyAttentionId}
-          resolvingAutonomyAttentionId={resolvingWorkspaceAutonomyAttentionId}
-          newTaskDisabledReason={newTaskDisabledReason}
-          onNewTask={() => openNewTask(config.workspaceId)}
-          onRetryWorkspaces={() => void refreshRuntime()}
-          onRetryAutonomyAttention={(attentionId) =>
-            void retryWorkspaceAutonomyAttention(attentionId)
-          }
-          onResolveAutonomyAttention={(attentionId) =>
-            void resolveWorkspaceAutonomyAttention(attentionId)
-          }
-          onOpenConversation={(conversationId) => {
-            const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
-              (item) => item.id === conversationId,
-            );
+  const createWorkspaceWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+    kind: 'workspace',
+    overview: {
+      workspace: selectedWorkspace,
+      project: selectedProject,
+      tenantName:
+        auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
+        config.tenantId ||
+        t('settings.noTenantSelected'),
+      workspaceAuthority: newTaskWorkspaceAuthority,
+      conversations: dataset.conversationsByWorkspace[config.workspaceId] ?? [],
+      members: dataset.workspaceMembers,
+      agents: dataset.workspaceAgents,
+      plan: activeDataset.plan,
+      sandboxStatus: dataset.sandbox?.status ?? null,
+      liveActivity: workspaceLiveActivity,
+      autonomyAttentions: workspaceAutonomyAttentions,
+      canRetryAutonomyAttention: canRetryWorkspaceAutonomyAttention,
+      canResolveAutonomyAttention: canRetryWorkspaceAutonomyAttention,
+      retryingAutonomyAttentionId: retryingWorkspaceAutonomyAttentionId,
+      resolvingAutonomyAttentionId: resolvingWorkspaceAutonomyAttentionId,
+      newTaskDisabledReason,
+      onNewTask: () => openNewTask(config.workspaceId),
+      onRetryWorkspaces: () => void refreshRuntime(),
+      onRetryAutonomyAttention: (attentionId) => void retryWorkspaceAutonomyAttention(attentionId),
+      onResolveAutonomyAttention: (attentionId) =>
+        void resolveWorkspaceAutonomyAttention(attentionId),
+      onOpenConversation: (conversationId) => {
+        const conversation = (dataset.conversationsByWorkspace[config.workspaceId] ?? []).find(
+          (item) => item.id === conversationId,
+        );
             if (!conversation) {
               setError(t('myWork.sessionUnavailable'));
-              return;
-            }
-            selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
-          }}
-          onOpenSettings={openWorkspaceSettings}
-        />
-        {selectedWorkspace && config.workspaceId.trim() ? (
-          <WorkspaceCollaborationCanvas
-            workspaceId={config.workspaceId}
-            client={workspaceCollaborationClient}
-            authorityInvalidation={workspaceCollaborationAuthorityInvalidation}
-          />
-        ) : null}
-      </>
-    );
-  };
+          return;
+        }
+        selectConversation(config.projectId, config.workspaceId, conversation, 'chat');
+      },
+      onOpenSettings: openWorkspaceSettings,
+    },
+    collaboration:
+      selectedWorkspace && config.workspaceId.trim()
+        ? {
+            workspaceId: config.workspaceId,
+            client: workspaceCollaborationClient,
+            authorityInvalidation: workspaceCollaborationAuthorityInvalidation,
+          }
+        : null,
+  });
 
   const openMyWorkSession = async (item: ProjectWorkItem) => {
     const workspaceId = item.workspace_id ?? '';
@@ -6289,39 +6275,41 @@ export function App() {
     selectConversation(projectId, workspaceId, conversation, 'chat');
   };
 
-  const renderBoardPanel = () => (
-    <MyWorkQueue
-      items={dataset.myWork}
-      error={dataset.myWorkError}
-      loading={connection === 'loading' || myWorkRefreshing}
-      mode={preferredTaskMode}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
-      workspaceLabels={myWorkWorkspaceLabels}
-      onRefresh={() => void refreshMyWork()}
-      onOpenSession={(item) => void openMyWorkSession(item)}
-    />
-  );
+  const createBoardWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+    kind: 'board',
+    queue: {
+      items: dataset.myWork,
+      error: dataset.myWorkError,
+      loading: connection === 'loading' || myWorkRefreshing,
+      mode: preferredTaskMode,
+      projectName: selectedProject?.name ?? selectedProject?.id ?? t('overview.none'),
+      workspaceLabels: myWorkWorkspaceLabels,
+      onRefresh: () => void refreshMyWork(),
+      onOpenSession: (item) => void openMyWorkSession(item),
+    },
+  });
 
-  const renderActivityInbox = () => (
-    <ActivityInbox
-      groups={activityInbox.groups}
-      isEntryRead={activityInbox.isEntryRead}
-      unreadCount={activityInbox.unreadCount}
-      error={dataset.myWorkError}
-      loading={connection === 'loading' || myWorkRefreshing}
-      projectName={selectedProject?.name ?? selectedProject?.id ?? t('overview.none')}
-      workspaceLabels={myWorkWorkspaceLabels}
-      onRefresh={() => void refreshMyWork()}
-      onOpen={(entry) => {
+  const createActivityWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
+    kind: 'activity',
+    inbox: {
+      groups: activityInbox.groups,
+      isEntryRead: activityInbox.isEntryRead,
+      unreadCount: activityInbox.unreadCount,
+      error: dataset.myWorkError,
+      loading: connection === 'loading' || myWorkRefreshing,
+      projectName: selectedProject?.name ?? selectedProject?.id ?? t('overview.none'),
+      workspaceLabels: myWorkWorkspaceLabels,
+      onRefresh: () => void refreshMyWork(),
+      onOpen: (entry) => {
         activityInbox.markRead(entry.id);
         void openMyWorkSession(entry.item);
-      }}
-      onMarkRead={activityInbox.markRead}
-      onMarkAllRead={activityInbox.markAllRead}
-    />
-  );
+      },
+      onMarkRead: activityInbox.markRead,
+      onMarkAllRead: activityInbox.markAllRead,
+    },
+  });
 
-  const renderNewThreadComposer = () => {
+  const createHomeWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => {
     const newThreadComposerScopeKey = [
       config.mode,
       config.apiBaseUrl,
@@ -6343,23 +6331,23 @@ export function App() {
     );
     const unboundTransportUnavailable =
       !newThreadWorkspaceId && config.mode === 'cloud' && connection !== 'ready';
-    return (
-      <NewThreadComposer
-        key={newThreadComposerScopeKey}
-        api={newThreadComposerApi}
-        workspaceId={newThreadWorkspaceId}
-        workspace={workspace}
-        workspaces={newThreadWorkspaces}
-        conversations={
-          dataset.conversationsByWorkspace[newThreadWorkspaceId || UNBOUND_CONVERSATIONS_KEY] ?? []
-        }
-        mode={preferredTaskMode}
-        policy={workspaceAgentPolicy.policy}
-        modelOptions={modelOptions}
-        canManagePolicy={canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode}
-        loadingPolicy={workspaceAgentPolicy.loading}
-        compatibilityMode={Boolean(newThreadWorkspaceId) && workspaceAgentPolicy.compatibilityMode}
-        disabledReason={
+    return {
+      kind: 'home',
+      composerScopeKey: newThreadComposerScopeKey,
+      composer: {
+        api: newThreadComposerApi,
+        workspaceId: newThreadWorkspaceId,
+        workspace,
+        workspaces: newThreadWorkspaces,
+        conversations:
+          dataset.conversationsByWorkspace[newThreadWorkspaceId || UNBOUND_CONVERSATIONS_KEY] ?? [],
+        mode: preferredTaskMode,
+        policy: workspaceAgentPolicy.policy,
+        modelOptions,
+        canManagePolicy: canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode,
+        loadingPolicy: workspaceAgentPolicy.loading,
+        compatibilityMode: Boolean(newThreadWorkspaceId) && workspaceAgentPolicy.compatibilityMode,
+        disabledReason:
           newTaskDisabledReason ??
           (unboundTransportUnavailable
             ? t('task.liveConnectionRequired')
@@ -6367,22 +6355,20 @@ export function App() {
               ? t('task.policyUnavailable')
               : modelUnavailable
                 ? t('task.noModelsAvailable')
-                : null)
-        }
-        creating={newThreadCreating}
-        error={newThreadError}
-        onModeChange={setPreferredTaskMode}
-        onWorkspaceChange={changeNewThreadWorkspace}
-        onCreate={(input) => void createComposerThread(input)}
-        onOpenThread={(conversation) =>
-          selectConversation(config.projectId, newThreadWorkspaceId, conversation, 'chat')
-        }
-        onManageModels={() => {
+                : null),
+        creating: newThreadCreating,
+        error: newThreadError,
+        onModeChange: setPreferredTaskMode,
+        onWorkspaceChange: changeNewThreadWorkspace,
+        onCreate: (input) => void createComposerThread(input),
+        onOpenThread: (conversation) =>
+          selectConversation(config.projectId, newThreadWorkspaceId, conversation, 'chat'),
+        onManageModels: () => {
           setSettingsInitialSection('models');
           setSettingsWindowOpen(true);
-        }}
-      />
-    );
+        },
+      },
+    };
   };
 
   const renderAuxiliaryView = () => (
@@ -6496,14 +6482,14 @@ export function App() {
     />
   );
 
-  const renderWorkbench = () => {
-    if (!showRuntimeConfig) return renderWorkspaceOverview();
-    if (activeSection === 'workspace') return renderWorkspaceOverview();
-    if (activeSection === 'chat') return renderChatPanel();
-    if (activeSection === 'board') return renderBoardPanel();
-    if (activeSection === 'activity') return renderActivityInbox();
-    if (activeSection === 'home') return renderNewThreadComposer();
-    return renderWorkspaceOverview();
+  const selectDesktopWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => {
+    if (!showRuntimeConfig) return createWorkspaceWorkbenchViewV2();
+    if (activeSection === 'workspace') return createWorkspaceWorkbenchViewV2();
+    if (activeSection === 'chat') return createChatWorkbenchViewV2();
+    if (activeSection === 'board') return createBoardWorkbenchViewV2();
+    if (activeSection === 'activity') return createActivityWorkbenchViewV2();
+    if (activeSection === 'home') return createHomeWorkbenchViewV2();
+    return createWorkspaceWorkbenchViewV2();
   };
 
   if (auth.status === 'password_change_required' || auth.status === 'changing_password') {
@@ -6540,9 +6526,8 @@ export function App() {
           radius="medium"
           scaling="95%"
         >
-          <DesktopRendererProductionRouterV2
+          <DesktopRendererAuthenticationRouterV2
             authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
-            childrenAuthority="authentication-kernel"
             forceLegacyChildren={invitationSignInRequested}
             location={desktopProductionRouteLocation}
             mode={productionRouteRuntimeMode}
@@ -6572,11 +6557,57 @@ export function App() {
               onOpenWorkspaceSso={openCurrentWorkspaceSso}
               onCancelWorkspaceSso={cancelWorkspaceSso}
             />
-          </DesktopRendererProductionRouterV2>
+          </DesktopRendererAuthenticationRouterV2>
         </Theme>
       </DesktopRendererGenerationProviderV2>
     );
   }
+
+  const desktopWorkbenchSurfaceViewModelV2: DesktopWorkbenchSurfaceViewModelV2 = {
+    error: error
+      ? {
+          message: error,
+          onRetry:
+            connection === 'error' && showRuntimeConfig
+              ? () => {
+                  workbenchRef.current?.focus();
+                  void refreshRuntime();
+                }
+              : null,
+        }
+      : null,
+    paneStageClassName,
+    session:
+      activeSection === 'chat' && sessionDetailViewModel
+        ? {
+            viewModel: sessionDetailViewModel,
+            onOpenCanvas: handleOpenCanvas,
+            runActionPending: sessionRunActionPending,
+            liveConnected: socket.connected,
+            liveError: socket.error,
+            onRunAction: (action, feedback) => void handleSessionRunAction(action, feedback),
+            onOpenTask: sessionDetailViewModel.linkedTaskId
+              ? () => {
+                  setSelectedTaskId(sessionDetailViewModel.linkedTaskId!);
+                  switchSection('board');
+                }
+              : undefined,
+            onRenameConversation: scopedConversation
+              ? (title) =>
+                  renameConversation(
+                    config.projectId,
+                    config.workspaceId,
+                    scopedConversation,
+                    title,
+                  )
+              : undefined,
+            onDeleteConversation: scopedConversation
+              ? () => deleteConversation(config.projectId, config.workspaceId, scopedConversation)
+              : undefined,
+          }
+        : null,
+    view: selectDesktopWorkbenchViewV2(),
+  };
 
   const activeTenantName =
     auth.tenants.find((tenant) => tenant.id === config.tenantId)?.name ||
@@ -6708,70 +6739,8 @@ export function App() {
                 resolveCapability={resolveProductionRouteCapability}
                 resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
                 switchScope={switchProductionRouteScope}
-              >
-                {error ? (
-                  <div className="workbench-error" role="alert" aria-live="polite">
-                    <span>{error}</span>
-                    {connection === 'error' && showRuntimeConfig ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          workbenchRef.current?.focus();
-                          void refreshRuntime();
-                        }}
-                      >
-                        {t('runtime.retryWorkspace')}
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {activeSection === 'chat' && sessionDetailViewModel ? (
-                  <SessionWorkspace
-                    viewModel={sessionDetailViewModel}
-                    thread={<section className={paneStageClassName}>{renderWorkbench()}</section>}
-                    onOpenCanvas={handleOpenCanvas}
-                    runActionPending={sessionRunActionPending}
-                    liveConnected={socket.connected}
-                    liveError={socket.error}
-                    onRunAction={(action, feedback) =>
-                      void handleSessionRunAction(action, feedback)
-                    }
-                    onOpenTask={
-                      sessionDetailViewModel.linkedTaskId
-                        ? () => {
-                            setSelectedTaskId(sessionDetailViewModel.linkedTaskId!);
-                            switchSection('board');
-                          }
-                        : undefined
-                    }
-                    onRenameConversation={
-                      scopedConversation
-                        ? (title) =>
-                            renameConversation(
-                              config.projectId,
-                              config.workspaceId,
-                              scopedConversation,
-                              title,
-                            )
-                        : undefined
-                    }
-                    onDeleteConversation={
-                      scopedConversation
-                        ? () =>
-                            deleteConversation(
-                              config.projectId,
-                              config.workspaceId,
-                              scopedConversation,
-                            )
-                        : undefined
-                    }
-                  />
-                ) : (
-                  <section className="workbench-layout">
-                    <section className={paneStageClassName}>{renderWorkbench()}</section>
-                  </section>
-                )}
-              </DesktopRendererProductionRouterV2>
+                viewModel={desktopWorkbenchSurfaceViewModelV2}
+              />
             </div>
           </main>
 

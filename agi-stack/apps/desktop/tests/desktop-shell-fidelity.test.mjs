@@ -3,6 +3,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const workbenchSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const desktopAuthSource = [
   '../src/hooks/useDesktopAuth.ts',
   '../src/hooks/useCloudSessionAuth.ts',
@@ -113,7 +117,7 @@ test('desktop shell mounts only the prototype sidebar and page-owned headers', (
 });
 
 test('streaming conversation replies expose a dedicated stop-session control', () => {
-  assert.match(appSource, /onStopResponse=\{socket\.stopAgentResponse\}/);
+  assert.match(appSource, /onStopResponse:\s*socket\.stopAgentResponse/u);
   assert.match(chatPanelSource, /responseStreaming[\s\S]*session\.stopResponse/);
   assert.match(chatPanelSource, /<StopIcon\s*\/>/);
   assert.match(
@@ -142,10 +146,8 @@ test('workspace tree gives the Radix viewport the full available navigation heig
 });
 
 test('authenticated identities without a project remain inside the desktop shell', () => {
-  const renderWorkbench =
-    appSource.match(
-      /const renderWorkbench = [\s\S]*?\n  \};[\s\S]*?\n  if \(!identityAuthenticated\)/,
-    )?.[0] ?? '';
+  const selectWorkbenchView =
+    appSource.match(/const selectDesktopWorkbenchViewV2 = [\s\S]*?\n  \};/u)?.[0] ?? '';
 
   assert.match(appSource, /const identityAuthenticated = isIdentityAuthenticated\(auth\)/);
   assert.match(appSource, /const showRuntimeConfig = isWorkspaceReady\(auth, config\)/);
@@ -155,8 +157,11 @@ test('authenticated identities without a project remain inside the desktop shell
     /setSettingsInitialSection\('workspace'\);[\s\S]*setSettingsWindowOpen\(true\);/,
   );
   assert.match(appSource, /if \(!identityAuthenticated\) \{[\s\S]*<LoginScreen/);
-  assert.match(renderWorkbench, /if \(!showRuntimeConfig\) return renderWorkspaceOverview\(\)/);
-  assert.doesNotMatch(renderWorkbench, /<SignedOutPanel/);
+  assert.match(
+    selectWorkbenchView,
+    /if \(!showRuntimeConfig\) return createWorkspaceWorkbenchViewV2\(\)/,
+  );
+  assert.doesNotMatch(selectWorkbenchView, /SignedOutPanel/);
 });
 
 test('authenticated identities without a project get a source-aligned selection state', () => {
@@ -205,7 +210,7 @@ test('the hierarchy QA exposes an authoritative empty-workspace project state', 
   assert.match(noProjectQaSource, /onNewTask=\{\(\) => setNewTaskOpen\(true\)\}/);
   assert.match(
     appSource,
-    /<WorkspaceOverview[\s\S]*workspaceAuthority=\{newTaskWorkspaceAuthority\}[\s\S]*onRetryWorkspaces=\{\(\) => void refreshRuntime\(\)\}/,
+    /kind:\s*'workspace',[\s\S]*workspaceAuthority:\s*newTaskWorkspaceAuthority[\s\S]*onRetryWorkspaces:\s*\(\) => void refreshRuntime\(\)/,
   );
 });
 
@@ -336,7 +341,8 @@ test('an authoritative context switch closes settings even when workspace hydrat
 
   assert.match(applySettingsContext, /await refreshRuntime\(nextConfig, \[selectedProject\]\)/);
   assert.doesNotMatch(applySettingsContext, /contextSwitchLoadFailed/);
-  assert.match(appSource, /connection === 'error'[\s\S]*runtime\.retryWorkspace/);
+  assert.match(appSource, /connection === 'error'[\s\S]*onRetry:/u);
+  assert.match(workbenchSurfaceSource, /t\('runtime\.retryWorkspace'\)/u);
   assert.match(appSource, /workbenchRef\.current\?\.focus\(\);[\s\S]*void refreshRuntime\(\)/);
 });
 
@@ -507,7 +513,7 @@ test('notifications never open a standalone workspace review route', () => {
   assert.doesNotMatch(appSource, /switchSection\('review'\)/);
   assert.doesNotMatch(appSource, /WorkspaceReviewPanelVariant/);
   assert.doesNotMatch(appSource, /variant = 'workspace'/);
-  assert.match(appSource, /className="workbench-layout"/);
+  assert.match(workbenchSurfaceSource, /className="workbench-layout"/);
   assert.doesNotMatch(appSource, /review-panel-collapsed/);
   assert.doesNotMatch(globalStyles, /review-panel-collapsed/);
 });
@@ -525,7 +531,10 @@ test('sidebar bell opens the real Activity inbox workbench section', () => {
     /id === 'activity' && activityUnreadCount > 0 \? \(\s*<small>\{activityUnreadCount\}<\/small>\s*\) : null/,
   );
   assert.match(appSource, /if \(section === 'activity'\) switchSection\('activity'\)/);
-  assert.match(appSource, /if \(activeSection === 'activity'\) return renderActivityInbox\(\)/);
+  assert.match(
+    appSource,
+    /if \(activeSection === 'activity'\) return createActivityWorkbenchViewV2\(\)/,
+  );
   assert.doesNotMatch(
     appSource,
     /section === 'notifications'\) openSettingsEntry\('sidebar_notifications'\)/,
@@ -701,7 +710,7 @@ test('conversation more-actions menu dismisses outside and restores focus on Esc
 test('conversation task navigation opens the exact linked task', () => {
   assert.match(
     appSource,
-    /onOpenTask=\{[\s\S]*?setSelectedTaskId\(sessionDetailViewModel\.linkedTaskId!\);[\s\S]*?switchSection\('board'\)/,
+    /onOpenTask:\s*sessionDetailViewModel\.linkedTaskId[\s\S]*?setSelectedTaskId\(sessionDetailViewModel\.linkedTaskId!\);[\s\S]*?switchSection\('board'\)/,
   );
 });
 
