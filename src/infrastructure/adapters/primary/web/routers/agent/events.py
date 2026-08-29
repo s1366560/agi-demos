@@ -20,6 +20,10 @@ from src.infrastructure.adapters.primary.web.agent_event_query_http_application_
     AgentEventQueryHttpApplicationAuthorityV2,
     agent_event_query_http_application_authority_dependency_v2,
 )
+from src.infrastructure.adapters.primary.web.agent_execution_resume_http_application_authority_v2 import (
+    AgentExecutionResumeHttpApplicationAuthorityV2,
+    agent_execution_resume_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
@@ -38,19 +42,6 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 _TENANT_ADMIN_ROLES = frozenset({"admin", "owner"})
-
-
-async def _get_resume_service(db: AsyncSession) -> Any:
-    """Build ExecutionResumeService with per-request DB session."""
-    from src.application.services.agent.execution_resume_service import (
-        ExecutionResumeService,
-    )
-    from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_repository import (
-        SqlExecutionCheckpointRepository,
-    )
-
-    checkpoint_repo = SqlExecutionCheckpointRepository(db)
-    return ExecutionResumeService(checkpoint_repo=checkpoint_repo)
 
 
 async def _get_accessible_conversation(
@@ -253,7 +244,9 @@ async def resume_execution(
         None, description="Optional message to use instead of pending message"
     ),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    resume_authority: AgentExecutionResumeHttpApplicationAuthorityV2 = Depends(
+        agent_execution_resume_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """
     Resume agent execution from the last checkpoint.
@@ -270,9 +263,13 @@ async def resume_execution(
         - resume_request: Request payload that can be used to continue execution
     """
     try:
-        await _get_accessible_conversation(conversation_id, current_user, db, request)
-
-        resume_service = await _get_resume_service(db)
+        await _get_accessible_conversation(
+            conversation_id,
+            current_user,
+            resume_authority.db,
+            request,
+        )
+        resume_service = resume_authority.service
 
         # Check if resumable
         if not await resume_service.can_resume(conversation_id):
@@ -294,6 +291,7 @@ async def resume_execution(
 
         # Mark as resumed
         await resume_service.mark_resumed(conversation_id, context.checkpoint.id)
+        await resume_authority.db.commit()
 
         return {
             "status": "resuming",

@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:fdd8ba04dbc543c7fd59c4242b7a70a0f32652bc721d48e175564827250ea324",
+        "digest": "sha256:8913dee7520aed5eae90aa585cda393cc561ef80229f31afc5b5296e17e42205",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4284,6 +4284,43 @@
       "artifact": {
         "digest": "sha256:478690f1485f0870568c92a4f9eadba0708e491825b52e8ef16892137de52daf",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_event_query_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/agent-execution-resume",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_execution_resume_services:_apply_agent_execution_resume_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.agent-execution-resume",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repositories",
+              "service": "service:persistence.conversation-crud-repository-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:f128ea4c9a39ba6dbc390481c6d8592fbf54350a789b47fddb06fa0c95dca6c9",
+      "artifact": {
+        "digest": "sha256:392a4d6e3c4532d74d04c37092230dc781e75313a98e4c118af0f72dce00c863",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_execution_resume_services.py"
       }
     },
     {

@@ -8,7 +8,7 @@ from inspect import getsource
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +52,12 @@ _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.
 async def test_resolver_builds_turn_service_from_exact_operation_dependencies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    redis_client = SimpleNamespace(name="generation-redis")
+    redis_client = SimpleNamespace(
+        name="generation-redis",
+        scan_iter=MagicMock(),
+        delete=AsyncMock(),
+        xadd=AsyncMock(),
+    )
     llm_client = object()
     created_repositories: dict[str, object] = {}
 

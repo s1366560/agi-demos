@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from src.application.services.agent.execution_resume_service import ResumeContext
+from src.domain.model.agent.execution.execution_checkpoint import ExecutionCheckpoint
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityUnavailableError,
@@ -116,6 +118,37 @@ class TestAgentEventsRouter:
             ),
         )
         return SimpleNamespace(service=service), service
+
+    def _resume_authority(
+        self,
+        *,
+        db: object | None = None,
+        can_resume_error: Exception | None = None,
+    ) -> tuple[SimpleNamespace, SimpleNamespace]:
+        checkpoint = ExecutionCheckpoint(
+            id="checkpoint-resume",
+            conversation_id="conversation-resume",
+            message_id="message-resume",
+            checkpoint_type="step_complete",
+            execution_state={},
+            step_number=7,
+        )
+        context = ResumeContext(
+            conversation_id="conversation-resume",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            checkpoint=checkpoint,
+            pending_message="continue",
+        )
+        service = SimpleNamespace(
+            can_resume=AsyncMock(return_value=True, side_effect=can_resume_error),
+            get_resume_context=AsyncMock(return_value=context),
+            prepare_resume_request=AsyncMock(return_value={"resume": True}),
+            mark_resumed=AsyncMock(),
+        )
+        selected_db = db if db is not None else SimpleNamespace(commit=AsyncMock())
+        return SimpleNamespace(db=selected_db, service=service), service
 
     @pytest.mark.asyncio
     async def test_get_workflow_status_rejects_user_outside_conversation_tenant(
@@ -407,27 +440,22 @@ class TestAgentEventsRouter:
         test_tenant_db,
         test_user,
         another_user,
-        monkeypatch,
     ) -> None:
         conversation_id = await self._seed_conversation(
             test_db, test_project_db, test_tenant_db, test_user
         )
-        get_resume_service = MagicMock()
-        monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.events._get_resume_service",
-            get_resume_service,
-        )
+        resume_authority, resume_service = self._resume_authority(db=test_db)
 
         with pytest.raises(HTTPException) as exc_info:
             await resume_execution(
                 conversation_id,
                 request=MagicMock(),
                 current_user=another_user,
-                db=test_db,
+                resume_authority=resume_authority,
             )
 
         assert exc_info.value.status_code == 403
-        get_resume_service.assert_not_called()
+        resume_service.can_resume.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_conversation_events_sanitizes_internal_errors(
@@ -500,16 +528,12 @@ class TestAgentEventsRouter:
         async def accessible_conversation(*_args, **_kwargs):
             return SimpleNamespace(tenant_id="tenant-1", project_id="project-1")
 
-        async def failing_resume_service(_db):
-            raise RuntimeError("internal checkpoint secret")
-
         self.monkeypatch.setattr(
             "src.infrastructure.adapters.primary.web.routers.agent.events._get_accessible_conversation",
             accessible_conversation,
         )
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.events._get_resume_service",
-            failing_resume_service,
+        resume_authority, _resume_service = self._resume_authority(
+            can_resume_error=RuntimeError("internal checkpoint secret")
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -517,12 +541,50 @@ class TestAgentEventsRouter:
                 "conversation-secret",
                 request=MagicMock(),
                 current_user=test_user,
-                db=test_db,
+                resume_authority=resume_authority,
             )
 
         assert exc_info.value.status_code == 500
         assert exc_info.value.detail == "Failed to resume execution"
         assert "internal" not in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_resume_execution_uses_v2_authority_and_commits_resume_marker(
+        self,
+        test_user,
+    ) -> None:
+        async def accessible_conversation(*_args, **_kwargs):
+            return SimpleNamespace(tenant_id="tenant-1", project_id="project-1")
+
+        self.monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.agent.events._get_accessible_conversation",
+            accessible_conversation,
+        )
+        resume_authority, resume_service = self._resume_authority()
+
+        response = await resume_execution(
+            "conversation-resume",
+            request=MagicMock(),
+            override_message="resume now",
+            current_user=test_user,
+            resume_authority=resume_authority,
+        )
+
+        resume_service.can_resume.assert_awaited_once_with("conversation-resume")
+        resume_service.get_resume_context.assert_awaited_once_with("conversation-resume")
+        resume_service.prepare_resume_request.assert_awaited_once_with(
+            "conversation-resume",
+            override_message="resume now",
+        )
+        resume_service.mark_resumed.assert_awaited_once_with(
+            "conversation-resume",
+            "checkpoint-resume",
+        )
+        resume_authority.db.commit.assert_awaited_once_with()
+        assert response["checkpoint_id"] == "checkpoint-resume"
+        assert response["checkpoint_type"] == "step_complete"
+        assert response["step_number"] == 7
+        assert response["resume_request"] == {"resume": True}
 
     @pytest.mark.asyncio
     async def test_get_workflow_status_sanitizes_internal_errors(
