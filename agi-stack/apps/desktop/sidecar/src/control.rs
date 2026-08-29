@@ -310,6 +310,13 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 Err(error) => Err(error),
             }
         }
+        "platform_plugin_renderer_distribution_current_v2" if request.args.is_none() => {
+            serde_json::to_value(state.runtime.renderer_distribution_current_v2().await)
+                .map_err(|error| error.to_string())
+        }
+        "platform_plugin_renderer_distribution_current_v2" => {
+            Err("desktop command arguments are invalid".to_string())
+        }
         "plugin_data_plane_credential_import_v2" => {
             let broker = state.plugin_data_plane_credentials_v2.clone();
             let saved =

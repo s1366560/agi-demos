@@ -51,6 +51,20 @@ test(
       assert.equal(status.api_base_url, identity.apiBaseUrl);
       assert.equal(status.api_token, identity.apiToken);
 
+      const rendererDistribution = await supervisor.invoke(
+        'platform_plugin_renderer_distribution_current_v2',
+      );
+      assert.deepEqual(Object.keys(rendererDistribution).sort(), ['snapshot', 'source']);
+      assert.equal(rendererDistribution.source, 'local');
+      assert.equal(rendererDistribution.snapshot.schema_version, 2);
+      assert.equal(Object.hasOwn(rendererDistribution, 'credential'), false);
+      assert.equal(Object.hasOwn(rendererDistribution, 'fingerprint'), false);
+      assert.equal(Object.hasOwn(rendererDistribution, 'receipt'), false);
+      await assert.rejects(
+        supervisor.invoke('platform_plugin_renderer_distribution_current_v2', {}),
+        /desktop command arguments are invalid/u,
+      );
+
       await supervisor.invoke('trusted_session_save', { input: record });
       assert.deepEqual(await supervisor.invoke('trusted_session_load'), {
         version: record.version,

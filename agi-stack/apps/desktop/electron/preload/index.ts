@@ -41,6 +41,7 @@ const UPDATE_STATE_CHANGED_CHANNEL = 'agistack:update-state-changed';
 const allowedCommands = new Set([
   'frontend_ready',
   'platform_plugin_authority_select_v2',
+  'platform_plugin_renderer_distribution_current_v2',
   'trusted_session_clear',
   'local_trusted_session_save',
   'local_trusted_session_load',

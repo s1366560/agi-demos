@@ -102,6 +102,7 @@ const UPDATE_STATE_CHANGED_CHANNEL = 'agistack:update-state-changed';
 const DEVICE_USER_CODE = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/u;
 const SIDECAR_COMMANDS = new Set([
   'platform_plugin_authority_select_v2',
+  'platform_plugin_renderer_distribution_current_v2',
   'trusted_session_clear',
   'local_trusted_session_save',
   'local_trusted_session_load',
@@ -729,6 +730,10 @@ async function executeDesktopCommand(
         cancelled: cloudRequestExecutions.cancel(ownerId, args?.requestId),
       });
     }
+    case 'platform_plugin_renderer_distribution_current_v2':
+      void authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      return sidecarSupervisor.invoke(command);
     case 'request_microphone_access':
       return process.platform === 'darwin'
         ? systemPreferences.askForMediaAccess('microphone')

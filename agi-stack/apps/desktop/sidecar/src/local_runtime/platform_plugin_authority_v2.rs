@@ -174,6 +174,18 @@ impl ActivePlatformPluginGenerationV2 {
 
 struct PublishedPlatformPluginGenerationV2 {
     projection: Arc<ActivePlatformPluginGenerationV2>,
+    renderer_distribution: PlatformPluginRendererDistributionV2,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "source", rename_all = "snake_case")]
+pub(crate) enum PlatformPluginRendererDistributionV2 {
+    Local {
+        snapshot: ProfileSnapshotV2,
+    },
+    Cloud {
+        distribution: ControlPlaneDistributionV2,
+    },
 }
 
 #[derive(Debug)]
@@ -296,6 +308,9 @@ impl PlatformPluginAuthorityV2 {
         self.replace_snapshot(
             &distribution.snapshot,
             Some(distribution.envelope.version),
+            PlatformPluginRendererDistributionV2::Cloud {
+                distribution: distribution.clone(),
+            },
             generation,
         )
     }
@@ -305,13 +320,21 @@ impl PlatformPluginAuthorityV2 {
         snapshot: &ProfileSnapshotV2,
         generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     ) -> GenerationRetirementV2 {
-        self.replace_snapshot(snapshot, None, generation)
+        self.replace_snapshot(
+            snapshot,
+            None,
+            PlatformPluginRendererDistributionV2::Local {
+                snapshot: snapshot.clone(),
+            },
+            generation,
+        )
     }
 
     fn replace_snapshot(
         &self,
         snapshot: &ProfileSnapshotV2,
         publication_version: Option<u64>,
+        renderer_distribution: PlatformPluginRendererDistributionV2,
         generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     ) -> GenerationRetirementV2 {
         let mut active_generation = write_lock(&self.active_generation);
@@ -321,8 +344,35 @@ impl PlatformPluginAuthorityV2 {
                 snapshot,
                 publication_version,
             )),
+            renderer_distribution,
         }));
         retirement
+    }
+
+    pub(super) async fn renderer_distribution_current(
+        &self,
+    ) -> Option<PlatformPluginRendererDistributionV2> {
+        let (lease, renderer_distribution, matches_projection) = {
+            let active_generation = read_lock(&self.active_generation);
+            let published = active_generation.as_ref()?.clone();
+            let lease = self.manager.acquire().ok()?;
+            let matches_projection =
+                runtime_generation_matches_projection(&lease, published.projection.descriptor())
+                    .is_some();
+            (
+                lease,
+                published.renderer_distribution.clone(),
+                matches_projection,
+            )
+        };
+        if let Err(error) = lease.release().await {
+            tracing::error!(
+                error_code = error.code(),
+                "desktop-sidecar renderer distribution generation lease release failed"
+            );
+            return None;
+        }
+        matches_projection.then_some(renderer_distribution)
     }
 
     pub(super) fn retire_current(&self) -> GenerationRetirementV2 {
@@ -568,6 +618,20 @@ mod tests {
             .expect("generation must stage");
         authority.publish(&distribution, generation).await;
 
+        assert_eq!(
+            serde_json::to_value(
+                authority
+                    .renderer_distribution_current()
+                    .await
+                    .expect("cloud renderer distribution must be published")
+            )
+            .expect("cloud renderer distribution must serialize"),
+            json!({
+                "source": "cloud",
+                "distribution": distribution,
+            })
+        );
+
         let lease = authority
             .acquire_generation()
             .expect("runtime generation must be available");
@@ -590,6 +654,7 @@ mod tests {
         );
 
         authority.deactivate().await;
+        assert_eq!(authority.renderer_distribution_current().await, None);
         assert_eq!(
             lease.http_routes().contribution_id,
             DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2
@@ -633,6 +698,8 @@ mod tests {
             .acquire_generation()
             .expect_err("projection/runtime mismatch must fail closed");
 
+        assert_eq!(authority.renderer_distribution_current().await, None);
+
         assert_eq!(
             error.reason(),
             PlatformPluginAvailabilityV2Error::GenerationMismatch
@@ -641,6 +708,46 @@ mod tests {
             error.descriptor().map(|descriptor| descriptor.generation),
             Some(distribution.snapshot.generation + 1)
         );
+        reconciler.close().await;
+    }
+
+    #[tokio::test]
+    async fn local_baseline_exports_only_its_validated_snapshot() {
+        let distribution = bootstrap_distribution();
+        let authority = PlatformPluginAuthorityV2::default();
+        let reconciler = PluginSnapshotReconcilerV2::new_with_manager(
+            LoaderV2::for_target(
+                DataPlaneTargetV2::DesktopSidecar,
+                [
+                    desktop_sidecar_http_routes_definition_v2(),
+                    desktop_sidecar_host_definition_v2(),
+                ],
+            ),
+            authority.manager(),
+        );
+        let generation = reconciler
+            .stage_snapshot(distribution.snapshot.clone())
+            .await
+            .expect("generation must stage");
+        authority
+            .publish_local_baseline(&distribution.snapshot, generation)
+            .await;
+
+        assert_eq!(
+            serde_json::to_value(
+                authority
+                    .renderer_distribution_current()
+                    .await
+                    .expect("local renderer snapshot must be published")
+            )
+            .expect("local renderer snapshot must serialize"),
+            json!({
+                "source": "local",
+                "snapshot": distribution.snapshot,
+            })
+        );
+
+        authority.deactivate().await;
         reconciler.close().await;
     }
 }

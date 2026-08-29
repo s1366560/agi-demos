@@ -425,6 +425,15 @@ impl LocalRuntimeService {
         .await
     }
 
+    pub(crate) async fn renderer_distribution_current_v2(
+        &self,
+    ) -> Option<platform_plugin_authority_v2::PlatformPluginRendererDistributionV2> {
+        self.state
+            .platform_plugin_authority_v2
+            .renderer_distribution_current()
+            .await
+    }
+
     pub fn configure(&self, config: LocalRuntimeConfig) -> Result<LocalRuntimeStatus, String> {
         self.state.configure(config, &self.api_base_url)?;
         Ok(self.status())
