@@ -22,6 +22,9 @@ if TYPE_CHECKING:
     from src.infrastructure.plugins.v2.plugin_config_repository_lease_v2 import (
         PluginConfigRepositoryLeaseV2,
     )
+    from src.infrastructure.plugins.v2.skill_evolution_repository_lease_v2 import (
+        SkillEvolutionRepositoryLeaseV2,
+    )
 
 PLUGIN_NAME = "skill-evolution"
 
@@ -65,12 +68,14 @@ class SkillEvolutionPlugin:
         skill_service: SkillService,
         llm_client_lease: LlmClientLease,
         plugin_config_repository_lease: PluginConfigRepositoryLeaseV2,
+        skill_evolution_repository_lease: SkillEvolutionRepositoryLeaseV2,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ) -> None:
         self.config = config
         self.skill_service = skill_service
         self.llm_client_lease = llm_client_lease
         self.plugin_config_repository_lease = plugin_config_repository_lease
+        self.skill_evolution_repository_lease = skill_evolution_repository_lease
         self.session_factory = session_factory
         self._loaded_skill_names_by_turn: dict[str, list[str]] = {}
         self._tool_events_by_turn: dict[str, list[dict[str, Any]]] = {}
@@ -161,6 +166,7 @@ class SkillEvolutionPlugin:
         try:
             captured_sessions = await self.collector.capture_from_hook(
                 result_payload,
+                repository_lease=self.skill_evolution_repository_lease,
                 session_factory=self.session_factory,
             )
             self._schedule_captured_sessions(captured_sessions)
@@ -247,6 +253,7 @@ def build_skill_evolution_runtime(
     session_factory: Any = None,  # noqa: ANN401
     *,
     plugin_config_repository_lease: Any,  # noqa: ANN401
+    skill_evolution_repository_lease: Any,  # noqa: ANN401
 ) -> SkillEvolutionPlugin:
     """Initialize the full skill evolution runtime with dependencies.
 
@@ -260,6 +267,7 @@ def build_skill_evolution_runtime(
         llm_client_lease: Generation-pinned tenant LLM client lease factory.
         session_factory: SQLAlchemy async session factory for persistence.
         plugin_config_repository_lease: Generation-pinned PluginConfig repository lease.
+        skill_evolution_repository_lease: Generation-pinned SkillEvolution repository lease.
 
     Returns:
         The constructed SkillEvolutionPlugin instance.
@@ -276,6 +284,7 @@ def build_skill_evolution_runtime(
         skill_service=skill_service,
         llm_client_lease=llm_client_lease,
         plugin_config_repository_lease=plugin_config_repository_lease,
+        skill_evolution_repository_lease=skill_evolution_repository_lease,
         session_factory=session_factory,
     )
 

@@ -5,7 +5,12 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.skill_evolution_repository_lease_v2 import (
+        SkillEvolutionRepositoryLeaseV2,
+    )
 
 from src.infrastructure.agent.plugins.skill_evolution.config import SkillEvolutionConfig
 from src.infrastructure.agent.plugins.skill_evolution.models import (
@@ -127,6 +132,7 @@ class SessionCollector:
         self,
         payload: Mapping[str, Any],
         *,
+        repository_lease: SkillEvolutionRepositoryLeaseV2,
         session_factory: Any = None,  # noqa: ANN401
     ) -> list[SkillEvolutionSession]:
         """Extract skill session data from hook payload and persist.
@@ -173,10 +179,15 @@ class SessionCollector:
 
         if session_factory is not None:
             try:
-                async with session_factory() as db:
-                    repo = _get_repo(db)
+                async with (
+                    session_factory() as db,
+                    repository_lease(
+                        db=db,
+                        tenant_id=sessions[0].tenant_id,
+                    ) as authority,
+                ):
                     for session in sessions:
-                        await repo.save_session(session)
+                        await authority.repository.save_session(session)
                     await db.commit()
             except Exception:
                 logger.exception("Failed to persist skill evolution sessions")
@@ -222,11 +233,3 @@ def _tool_events(value: object) -> list[dict[str, Any]]:
         if isinstance(item, dict):
             events.append(item)
     return events
-
-
-def _get_repo(db: Any) -> Any:  # noqa: ANN401
-    from src.infrastructure.agent.plugins.skill_evolution.repository import (
-        SkillEvolutionRepository,
-    )
-
-    return SkillEvolutionRepository(db)

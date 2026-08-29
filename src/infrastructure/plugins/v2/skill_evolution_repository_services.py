@@ -44,6 +44,11 @@ class SkillEvolutionRepositoryProtocolV2(Protocol):
 
     async def get_job(self, job_id: str) -> SkillEvolutionJob | None: ...
 
+    async def save_session(
+        self,
+        session: SkillEvolutionSession,
+    ) -> SkillEvolutionSession: ...
+
     async def update_job_status(
         self,
         job_id: str,

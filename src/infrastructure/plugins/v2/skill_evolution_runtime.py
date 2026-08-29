@@ -31,12 +31,17 @@ from .runtime import (
     RuntimeV2Error,
     generated_contract_digest_v2,
 )
+from .skill_evolution_repository_lease_v2 import lease_skill_evolution_repository_v2
+from .skill_evolution_repository_services import (
+    SkillEvolutionRepositoryApplicationResolverProtocolV2,
+)
 
 SKILL_EVOLUTION_RUNTIME_MODULE_V2 = "builtin://memstack/runtime/skill-evolution-scheduler"
 SKILL_EVOLUTION_RUNTIME_SERVICE_V2 = "service:runtime.skill-evolution-scheduler"
 SKILL_EVOLUTION_SESSIONS_INJECT_V2 = "sessions"
 SKILL_EVOLUTION_LLM_CLIENTS_INJECT_V2 = "llm_clients"
 SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2 = "plugin_configs"
+SKILL_EVOLUTION_REPOSITORIES_INJECT_V2 = "repositories"
 
 _ENABLED_ENV_V2 = "SKILL_EVOLUTION_ENABLED"
 
@@ -152,6 +157,7 @@ class SkillEvolutionSchedulerRuntimeV2:
                     llm_client_lease=lease_tenant_llm_client_v2,
                     session_factory=sessions.factory,
                     plugin_config_repository_lease=lease_plugin_config_repository_v2,
+                    skill_evolution_repository_lease=(lease_skill_evolution_repository_v2),
                 )
                 if not isinstance(plugin, SkillEvolutionPluginProtocolV2):
                     raise RuntimeV2Error(
@@ -280,6 +286,15 @@ def skill_evolution_scheduler_definition_v2(
                 "invalid_skill_evolution_plugin_configs",
                 "Skill Evolution plugin config inject has an invalid implementation",
             )
+        repositories = context.require(SKILL_EVOLUTION_REPOSITORIES_INJECT_V2)
+        if not isinstance(
+            repositories,
+            SkillEvolutionRepositoryApplicationResolverProtocolV2,
+        ):
+            raise RuntimeV2Error(
+                "invalid_skill_evolution_repositories",
+                "Skill Evolution repositories inject has an invalid implementation",
+            )
         token = await runtime.acquire_generation(
             sessions=sessions,
             llm_clients=llm_clients,
@@ -326,6 +341,7 @@ def current_skill_evolution_scheduler_v2() -> SkillEvolutionSchedulerProtocolV2:
 __all__ = [
     "SKILL_EVOLUTION_LLM_CLIENTS_INJECT_V2",
     "SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2",
+    "SKILL_EVOLUTION_REPOSITORIES_INJECT_V2",
     "SKILL_EVOLUTION_RUNTIME_MODULE_V2",
     "SKILL_EVOLUTION_RUNTIME_SERVICE_V2",
     "SKILL_EVOLUTION_SESSIONS_INJECT_V2",

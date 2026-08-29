@@ -6,6 +6,7 @@ import asyncio
 import json
 import tempfile
 from contextlib import asynccontextmanager
+from inspect import getsource
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -35,6 +36,28 @@ class _EmptyPluginConfigRepository:
 @asynccontextmanager
 async def _empty_plugin_config_repository_lease(**_kwargs: object):
     yield SimpleNamespace(repository=_EmptyPluginConfigRepository())
+
+
+@asynccontextmanager
+async def _empty_skill_evolution_repository_lease(**_kwargs: object):
+    yield SimpleNamespace(repository=MagicMock())
+
+
+def _skill_evolution_repository_lease(repository: object):
+    @asynccontextmanager
+    async def lease(**_kwargs: object):
+        yield SimpleNamespace(repository=repository)
+
+    return lease
+
+
+@asynccontextmanager
+async def _direct_skill_evolution_repository_lease(*, db: object, **_kwargs: object):
+    from src.infrastructure.agent.plugins.skill_evolution.repository import (
+        SkillEvolutionRepository,
+    )
+
+    yield SimpleNamespace(repository=SkillEvolutionRepository(db))
 
 
 @pytest.mark.unit
@@ -67,6 +90,7 @@ async def test_turn_capture_state_is_owned_by_each_plugin_instance() -> None:
         skill_service=MagicMock(),
         llm_client_lease=MagicMock(),
         plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+        skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
         session_factory="session-factory-a",
     )
     plugin_b = SkillEvolutionPlugin(
@@ -74,6 +98,7 @@ async def test_turn_capture_state_is_owned_by_each_plugin_instance() -> None:
         skill_service=MagicMock(),
         llm_client_lease=MagicMock(),
         plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+        skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
         session_factory="session-factory-b",
     )
     plugin_a.collector.capture_from_hook = AsyncMock(return_value=[])
@@ -209,6 +234,15 @@ class TestSkillSessionGroup:
 
 
 class TestSessionCollector:
+    def test_capture_requires_generation_owned_repository_lease(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
+            SessionCollector,
+        )
+
+        source = getsource(SessionCollector.capture_from_hook)
+        assert "repository_lease" in source
+        assert "_get_repo(" not in source
+
     def test_build_session_with_skill(self) -> None:
         from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
             SessionCollector,
@@ -286,10 +320,7 @@ class TestSessionCollector:
         assert trajectory["user_query"] == "read the file"
 
     @pytest.mark.asyncio
-    async def test_capture_from_hook_records_loaded_skill_names(self, monkeypatch) -> None:
-        from src.infrastructure.agent.plugins.skill_evolution import (
-            session_collector as collector_module,
-        )
+    async def test_capture_from_hook_records_loaded_skill_names(self) -> None:
         from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
             SessionCollector,
         )
@@ -306,7 +337,6 @@ class TestSessionCollector:
 
         repo = MagicMock()
         repo.save_session = AsyncMock()
-        monkeypatch.setattr(collector_module, "_get_repo", lambda _db: repo)
 
         await SessionCollector(SkillEvolutionConfig()).capture_from_hook(
             {
@@ -326,6 +356,7 @@ class TestSessionCollector:
                 "conversation_context": [{"role": "assistant", "content": "done"}],
                 "success": True,
             },
+            repository_lease=_skill_evolution_repository_lease(repo),
             session_factory=lambda: FakeSessionContext(),
         )
 
@@ -338,11 +369,8 @@ class TestSessionCollector:
 
     @pytest.mark.asyncio
     async def test_matched_skill_takes_precedence_over_loaded_skill_names(
-        self, monkeypatch
+        self,
     ) -> None:
-        from src.infrastructure.agent.plugins.skill_evolution import (
-            session_collector as collector_module,
-        )
         from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
             SessionCollector,
         )
@@ -359,7 +387,6 @@ class TestSessionCollector:
 
         repo = MagicMock()
         repo.save_session = AsyncMock()
-        monkeypatch.setattr(collector_module, "_get_repo", lambda _db: repo)
 
         await SessionCollector(SkillEvolutionConfig()).capture_from_hook(
             {
@@ -372,6 +399,7 @@ class TestSessionCollector:
                 "conversation_context": [],
                 "success": True,
             },
+            repository_lease=_skill_evolution_repository_lease(repo),
             session_factory=lambda: FakeSessionContext(),
         )
 
@@ -1091,6 +1119,7 @@ class TestV2LifecycleRegistration:
             skill_service=MagicMock(),
             llm_client_lease=MagicMock(),
             plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
             session_factory=None,
         )
         assert plugin.config.enabled is False
@@ -1104,6 +1133,7 @@ class TestV2LifecycleRegistration:
             skill_service=MagicMock(),
             llm_client_lease=MagicMock(),
             plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
             session_factory=object(),
         )
         plugin.collector = collector
@@ -1163,6 +1193,7 @@ class TestV2LifecycleRegistration:
             skill_service=MagicMock(),
             llm_client_lease=MagicMock(),
             plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
             session_factory=object(),
         )
         plugin.collector = collector
@@ -1470,6 +1501,7 @@ class TestSkillEvolutionEndToEnd:
                 skill_service=FakeSkillService(session_factory),
                 llm_client_lease=fake_llm_client_lease,
                 plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+                skill_evolution_repository_lease=(_direct_skill_evolution_repository_lease),
                 session_factory=session_factory,
             )
 
