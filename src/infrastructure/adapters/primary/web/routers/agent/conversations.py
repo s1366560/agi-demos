@@ -8,9 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import and_, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.domain.model.agent import ConversationStatus
@@ -49,17 +47,16 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2 import (
+    ProjectAccessHttpApplicationAuthorityV2,
+    project_access_create_http_application_authority_dependency_v2,
+    project_access_query_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.workspace_authority import (
     get_workspace_authority,
     workspace_core_unavailable_error,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import (
-    Project,
-    User,
-    UserProject,
-)
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.conversation_collection_services import (
     InvalidConversationAgentSelectionV2,
@@ -74,6 +71,7 @@ from src.infrastructure.plugins.v2.conversation_revision_services import (
     ConversationRevisionMessageNotFoundV2,
     ConversationRevisionToolExecutionNotFoundV2,
 )
+from src.infrastructure.plugins.v2.project_access_services import ProjectAccessDeniedV2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from .schemas import (
@@ -147,34 +145,24 @@ def _conversation_list_filters(
 
 
 async def _ensure_project_access(
-    db: AsyncSession,
+    project_access: ProjectAccessHttpApplicationAuthorityV2,
     *,
     current_user: User,
     project_id: str,
-    tenant_id: str | None = None,
+    tenant_id: str,
 ) -> str:
-    conditions = [
-        UserProject.user_id == current_user.id,
-        UserProject.project_id == project_id,
-    ]
-    if tenant_id is not None:
-        conditions.append(Project.tenant_id == tenant_id)
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(Project.tenant_id)
-            .select_from(UserProject)
-            .join(Project, UserProject.project_id == Project.id)
-            .where(and_(*conditions))
+    try:
+        grant = await project_access.service.require_access(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=str(current_user.id),
         )
-    )
-    project_tenant_id = result.scalar_one_or_none()
-    if project_tenant_id is None:
+    except ProjectAccessDeniedV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied"),
-        )
-    return str(project_tenant_id)
+        ) from exc
+    return grant.tenant_id
 
 
 async def _workspace_name_by_id(
@@ -198,7 +186,6 @@ async def _workspace_name_by_id(
 
 
 async def _ensure_workspace_access(
-    db: AsyncSession,
     *,
     request: Request,
     current_user: User,
@@ -261,7 +248,6 @@ async def _ensure_workspace_task_linkage(
 
 
 async def _ensure_workspace_linkage_access(
-    db: AsyncSession,
     *,
     request: Request,
     conversation: "Conversation",
@@ -280,7 +266,6 @@ async def _ensure_workspace_linkage_access(
 
     if workspace_id:
         await _ensure_workspace_access(
-            db,
             request=request,
             current_user=current_user,
             tenant_id=tenant_id,
@@ -433,7 +418,9 @@ async def create_conversation(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_create_http_application_authority_dependency_v2
+    ),
     conversation_collection: ConversationCollectionHttpApplicationAuthorityV2 = Depends(
         conversation_create_http_application_authority_dependency_v2
     ),
@@ -442,13 +429,13 @@ async def create_conversation(
     try:
         assert request is not None
         tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=data.project_id,
+            tenant_id=tenant_id,
         )
         if data.workspace_id:
             await _ensure_workspace_access(
-                db,
                 request=request,
                 current_user=current_user,
                 tenant_id=tenant_id,
@@ -463,7 +450,7 @@ async def create_conversation(
             agent_config=data.agent_config,
             workspace_id=data.workspace_id,
         )
-        await db.commit()
+        await conversation_collection.db.commit()
         try:
             await conversation_collection.service.after_create_committed(conversation)
         except Exception:
@@ -481,7 +468,7 @@ async def create_conversation(
     except HTTPException:
         raise
     except (ValueError, AttributeError) as e:
-        await db.rollback()
+        await conversation_collection.db.rollback()
         logger.error(
             f"Validation error creating conversation: {e}",
             exc_info=True,
@@ -489,7 +476,7 @@ async def create_conversation(
         )
         raise HTTPException(status_code=400, detail=_("Invalid request")) from e
     except SQLAlchemyError as e:
-        await db.rollback()
+        await conversation_collection.db.rollback()
         logger.error(
             f"Database error creating conversation: {e}",
             exc_info=True,
@@ -500,7 +487,7 @@ async def create_conversation(
             detail=_("A database error occurred while creating the conversation"),
         ) from e
     except Exception as e:
-        await db.rollback()
+        await conversation_collection.db.rollback()
         logger.error(
             f"Unexpected error creating conversation: {e}",
             exc_info=True,
@@ -535,7 +522,9 @@ async def list_conversations(
     ),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_collection: ConversationCollectionHttpApplicationAuthorityV2 = Depends(
         conversation_list_http_application_authority_dependency_v2
     ),
@@ -544,12 +533,13 @@ async def list_conversations(
     try:
         assert request is not None
         tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
 
-        engine = db.get_bind()
+        engine = conversation_collection.db.get_bind()
         pool = engine.pool  # type: ignore[union-attr]
         pool_size = getattr(pool, "size", lambda: 0)()
         checked_out = getattr(pool, "checkedout", lambda: 0)()
@@ -582,7 +572,6 @@ async def list_conversations(
             )
         elif requested_workspace_id:
             await _ensure_workspace_access(
-                db,
                 request=request,
                 current_user=current_user,
                 tenant_id=tenant_id,
@@ -683,7 +672,9 @@ async def get_conversation(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
         conversation_http_application_authority_dependency_v2
     ),
@@ -692,9 +683,10 @@ async def get_conversation(
     try:
         assert request is not None
         await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
         conversation = await conversation_http.service.get_conversation(
             conversation_id=conversation_id,
@@ -721,7 +713,9 @@ async def get_context_status(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_context_status: ConversationContextStatusHttpApplicationAuthorityV2 = Depends(
         conversation_context_status_http_application_authority_dependency_v2
     ),
@@ -735,7 +729,7 @@ async def get_context_status(
     try:
         assert request is not None
         authorized_tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
             tenant_id=tenant_id,
@@ -766,7 +760,9 @@ async def delete_conversation(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
         conversation_http_application_authority_dependency_v2
     ),
@@ -775,9 +771,10 @@ async def delete_conversation(
     try:
         assert request is not None
         await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
         deleted = await conversation_http.service.delete_conversation(
             conversation_id=conversation_id,
@@ -806,7 +803,9 @@ async def update_conversation_title(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
         conversation_http_application_authority_dependency_v2
     ),
@@ -815,9 +814,10 @@ async def update_conversation_title(
     try:
         assert request is not None
         await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
         updated_conversation = await conversation_http.service.update_conversation_title(
             conversation_id=conversation_id,
@@ -850,7 +850,9 @@ async def update_conversation_config(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_config: ConversationConfigHttpApplicationAuthorityV2 = Depends(
         conversation_config_http_application_authority_dependency_v2
     ),
@@ -859,7 +861,7 @@ async def update_conversation_config(
     try:
         assert request is not None
         authorized_tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
             tenant_id=tenant_id,
@@ -911,7 +913,9 @@ async def update_conversation_mode(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
         conversation_http_application_authority_dependency_v2
     ),
@@ -928,9 +932,10 @@ async def update_conversation_mode(
     try:
         assert request is not None
         tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
         conversation = await conversation_http.service.get_conversation(
             conversation_id=conversation_id,
@@ -942,7 +947,6 @@ async def update_conversation_mode(
 
         fields = data.model_fields_set
         await _ensure_workspace_linkage_access(
-            db,
             request=request,
             conversation=conversation,
             data=data,
@@ -1019,7 +1023,9 @@ async def generate_conversation_title(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_generation: ConversationGenerationHttpApplicationAuthorityV2 = Depends(
         conversation_generation_http_application_authority_dependency_v2
     ),
@@ -1033,7 +1039,7 @@ async def generate_conversation_title(
     try:
         assert request is not None
         authorized_tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
             tenant_id=tenant_id,
@@ -1076,7 +1082,9 @@ async def generate_summary(
     project_id: str = Query(..., description="Project ID for authorization"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    project_access: ProjectAccessHttpApplicationAuthorityV2 = Depends(
+        project_access_query_http_application_authority_dependency_v2
+    ),
     conversation_generation: ConversationGenerationHttpApplicationAuthorityV2 = Depends(
         conversation_generation_http_application_authority_dependency_v2
     ),
@@ -1085,7 +1093,7 @@ async def generate_summary(
     try:
         assert request is not None
         authorized_tenant_id = await _ensure_project_access(
-            db,
+            project_access,
             current_user=current_user,
             project_id=project_id,
             tenant_id=tenant_id,

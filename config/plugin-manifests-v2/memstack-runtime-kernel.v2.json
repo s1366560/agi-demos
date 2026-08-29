@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:e3be1d3c98d9b858ac1b3c0be755ff327027ba9885ceecb0fbfd2a7fc9786a11",
+        "digest": "sha256:3cef39b3587ce2c2410fee7091243ebadf8d32afa3585733eb9311a4e2f1b7a0",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -3288,6 +3288,74 @@
       "artifact": {
         "digest": "sha256:d8c7300d11588122c04b639d2bc6c94ef7fc8a1ae7382d411b247ad523890acc",
         "source": "repo+python://src/infrastructure/plugins/v2/project_tenant_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/project-access-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.project_access_services:_apply_project_access_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.project-access-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:bef779bc4328217fc8912e5f7451adb7e4c7be109396c5917ca3b7f710b01820",
+      "artifact": {
+        "digest": "sha256:35e14823281446c25a010b820192f6d3ad0bc2cac4fd983214c12d03233ce7d4",
+        "source": "repo+python://src/infrastructure/plugins/v2/project_access_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/project-access",
+      "entrypoint": "src.infrastructure.plugins.v2.project_access_services:_apply_project_access_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.project-access",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.project-access-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:c3c9155eaaa9e04a2be13b5617e6fc3feb87e7fb7efdfa6adeafeb5c4cdddab2",
+      "artifact": {
+        "digest": "sha256:35e14823281446c25a010b820192f6d3ad0bc2cac4fd983214c12d03233ce7d4",
+        "source": "repo+python://src/infrastructure/plugins/v2/project_access_services.py"
       }
     },
     {

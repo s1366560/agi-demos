@@ -18,6 +18,10 @@ from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityProfile,
 )
+from src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2 import (
+    project_access_create_http_application_authority_dependency_v2,
+    project_access_query_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.agent import (
     conversations as conversations_router,
 )
@@ -54,6 +58,10 @@ from src.infrastructure.plugins.v2.conversation_revision_services import (
     EditedConversationMessageV2,
     ForkedConversationV2,
     ToolUndoRequestV2,
+)
+from src.infrastructure.plugins.v2.project_access_services import (
+    ProjectAccessDeniedV2,
+    ProjectAccessGrantV2,
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.workspace_core.authority import AvernetWorkspaceAuthority
@@ -220,12 +228,43 @@ def _sql_collection_service(
 def _db_with_project_access(
     *, allowed: bool = True, tenant_id: str = "tenant-1"
 ) -> SimpleNamespace:
+    async def require_access(*, project_id: str, user_id: str, **_kwargs: object) -> object:
+        if not allowed:
+            raise ProjectAccessDeniedV2(project_id)
+        return ProjectAccessGrantV2(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
     return SimpleNamespace(
+        service=SimpleNamespace(require_access=AsyncMock(side_effect=require_access)),
         execute=AsyncMock(
             return_value=SimpleNamespace(scalar_one_or_none=lambda: tenant_id if allowed else None)
         ),
         commit=AsyncMock(),
         rollback=AsyncMock(),
+    )
+
+
+def _project_access_authority_for_db(
+    db: object,
+    *,
+    tenant_id: str,
+    allowed: bool = True,
+) -> SimpleNamespace:
+    async def require_access(*, project_id: str, user_id: str, **_kwargs: object) -> object:
+        if not allowed:
+            raise ProjectAccessDeniedV2(project_id)
+        return ProjectAccessGrantV2(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
+    return SimpleNamespace(
+        service=SimpleNamespace(require_access=AsyncMock(side_effect=require_access)),
+        db=db,
     )
 
 
@@ -302,7 +341,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             offset=0,
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_collection=conversation_collection,
         ),
         "get": lambda: conversations_router.get_conversation(
@@ -311,7 +350,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=conversation_http,
         ),
         "context_status": lambda: conversations_router.get_context_status(
@@ -320,7 +359,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_context_status=conversation_context_status,
         ),
         "delete": lambda: conversations_router.delete_conversation(
@@ -329,7 +368,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=conversation_http,
         ),
         "title": lambda: conversations_router.update_conversation_title(
@@ -339,7 +378,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=conversation_http,
         ),
         "config": lambda: conversations_router.update_conversation_config(
@@ -349,7 +388,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_config=conversation_config,
         ),
         "mode": lambda: conversations_router.update_conversation_mode(
@@ -359,7 +398,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=conversation_http,
         ),
         "generate_title": lambda: conversations_router.generate_conversation_title(
@@ -368,7 +407,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_generation=conversation_generation,
         ),
         "summary": lambda: conversations_router.generate_summary(
@@ -377,7 +416,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_generation=conversation_generation,
         ),
     }
@@ -429,7 +468,7 @@ async def test_generate_title_uses_v2_generation_authority(
         project_id=conversation.project_id,
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
         conversation_generation=_conversation_generation_authority(generation_service, db),
     )
 
@@ -479,7 +518,7 @@ async def test_generate_summary_uses_v2_generation_authority(
         project_id=conversation.project_id,
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
         conversation_generation=_conversation_generation_authority(generation_service, db),
     )
 
@@ -534,7 +573,7 @@ async def test_conversation_generation_commits_before_cache_invalidation(
         "project_id": conversation.project_id,
         "current_user": SimpleNamespace(id=conversation.user_id),
         "tenant_id": conversation.tenant_id,
-        "db": db,
+        "project_access": db,
         "conversation_generation": _conversation_generation_authority(service, db),
     }
 
@@ -588,7 +627,7 @@ async def test_conversation_generation_commit_failure_never_invalidates_cache(
         "project_id": conversation.project_id,
         "current_user": SimpleNamespace(id=conversation.user_id),
         "tenant_id": conversation.tenant_id,
-        "db": db,
+        "project_access": db,
         "conversation_generation": _conversation_generation_authority(service, db),
     }
 
@@ -631,7 +670,7 @@ async def test_conversation_generation_maps_missing_sources_to_public_errors(
         "project_id": "project-1",
         "current_user": SimpleNamespace(id="user-1"),
         "tenant_id": "tenant-1",
-        "db": db,
+        "project_access": db,
         "conversation_generation": authority,
     }
 
@@ -706,7 +745,7 @@ async def test_list_conversations_expands_workspace_group_and_names(
         group_by_workspace=True,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
         conversation_collection=collection,
     )
 
@@ -763,7 +802,7 @@ async def test_create_conversation_persists_authorized_workspace_link(
         request=request,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db,
+        project_access=db,
         conversation_collection=_conversation_collection_authority(collection_service, db),
     )
 
@@ -843,7 +882,7 @@ async def test_list_conversations_caps_workspace_group_expansion(
         group_by_workspace=True,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
         conversation_collection=collection,
     )
 
@@ -995,7 +1034,7 @@ async def test_list_conversations_filters_unbound_before_pagination(
         group_by_workspace=False,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
         conversation_collection=collection,
     )
 
@@ -1021,7 +1060,7 @@ async def test_list_conversations_filters_unbound_before_pagination(
         group_by_workspace=False,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
         conversation_collection=collection,
     )
 
@@ -1108,7 +1147,7 @@ async def test_unbound_filter_ignores_non_string_metadata_and_uses_legacy_fallba
         group_by_workspace=False,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
         conversation_collection=collection,
     )
 
@@ -1156,7 +1195,14 @@ async def test_list_conversations_rejects_combined_workspace_and_unbound_filters
             group_by_workspace=False,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db_session,
+            project_access=_project_access_authority_for_db(
+                db_session,
+                tenant_id="tenant-1",
+            ),
+            conversation_collection=_conversation_collection_authority(
+                SimpleNamespace(),
+                db_session,
+            ),
         )
 
     assert exc_info.value.status_code == 422
@@ -1365,7 +1411,7 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
         group_by_workspace=True,
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db_session,
+        project_access=db_session,
         conversation_collection=collection,
     )
 
@@ -1427,7 +1473,10 @@ async def test_list_workspace_conversations_requires_workspace_membership(
             group_by_workspace=False,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-workspace-list",
-            db=db_session,
+            project_access=_project_access_authority_for_db(
+                db_session,
+                tenant_id="tenant-workspace-list",
+            ),
             conversation_collection=collection,
         )
 
@@ -1492,7 +1541,10 @@ async def test_list_workspace_conversations_uses_avernet_membership_authority(
         group_by_workspace=False,
         current_user=test_user,
         tenant_id=test_project_db.tenant_id,
-        db=db_session,
+        project_access=_project_access_authority_for_db(
+            db_session,
+            tenant_id=test_project_db.tenant_id,
+        ),
         conversation_collection=collection,
     )
 
@@ -1770,6 +1822,75 @@ def test_conversation_revision_handlers_have_no_direct_sql_authority() -> None:
 
 
 @pytest.mark.unit
+def test_project_scoped_conversation_handlers_require_v2_project_access_authority() -> None:
+    create_parameter = inspect.signature(conversations_router.create_conversation).parameters[
+        "project_access"
+    ]
+    assert (
+        create_parameter.default.dependency
+        is project_access_create_http_application_authority_dependency_v2
+    )
+
+    for handler in (
+        conversations_router.list_conversations,
+        conversations_router.get_conversation,
+        conversations_router.get_context_status,
+        conversations_router.delete_conversation,
+        conversations_router.update_conversation_title,
+        conversations_router.update_conversation_config,
+        conversations_router.update_conversation_mode,
+        conversations_router.generate_conversation_title,
+        conversations_router.generate_summary,
+    ):
+        parameters = inspect.signature(handler).parameters
+        assert (
+            parameters["project_access"].default.dependency
+            is project_access_query_http_application_authority_dependency_v2
+        )
+        assert "db" not in parameters
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_project_access_helper_fails_closed_and_returns_exact_tenant() -> None:
+    service = SimpleNamespace(
+        require_access=AsyncMock(
+            return_value=ProjectAccessGrantV2(
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+            )
+        )
+    )
+    authority = SimpleNamespace(service=service)
+
+    tenant_id = await conversations_router._ensure_project_access(
+        authority,
+        current_user=SimpleNamespace(id="user-1"),
+        project_id="project-1",
+        tenant_id="tenant-1",
+    )
+
+    assert tenant_id == "tenant-1"
+    service.require_access.assert_awaited_once_with(
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+    )
+    service.require_access.side_effect = ProjectAccessDeniedV2("project-1")
+    with pytest.raises(HTTPException) as error:
+        await conversations_router._ensure_project_access(
+            authority,
+            current_user=SimpleNamespace(id="user-1"),
+            project_id="project-1",
+            tenant_id="tenant-other",
+        )
+
+    assert error.value.status_code == 403
+    assert error.value.detail == "Access denied"
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_conversation_revision_runtime_failure_is_structured_unavailable() -> None:
     db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
@@ -1819,7 +1940,7 @@ async def test_create_conversation_validation_errors_are_sanitized() -> None:
             request=_request_with_container(container),
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_collection=_conversation_collection_authority(collection_service, db),
         )
 
@@ -1845,7 +1966,7 @@ async def test_create_conversation_requires_project_access(
             request=_request_with_container(container),
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
         )
 
     assert exc_info.value.status_code == 403
@@ -1878,7 +1999,7 @@ async def test_create_conversation_rejects_inaccessible_selected_agent(
             request=_request_with_container(SimpleNamespace()),
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_collection=_conversation_collection_authority(collection_service, db),
         )
 
@@ -1931,7 +2052,7 @@ async def test_create_conversation_uses_authorized_project_tenant(
         request=_request_with_container(SimpleNamespace()),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-fallback",
-        db=db,
+        project_access=db,
         conversation_collection=_conversation_collection_authority(collection_service, db),
     )
 
@@ -1961,7 +2082,7 @@ async def test_list_conversations_requires_project_access() -> None:
             group_by_workspace=False,
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
         )
 
     assert exc_info.value.status_code == 403
@@ -2026,8 +2147,11 @@ async def test_list_conversations_uses_authorized_project_tenant(
         workspace_id=None,
         group_by_workspace=False,
         current_user=SimpleNamespace(id="user-1"),
-        tenant_id="tenant-fallback",
-        db=db_session,
+        tenant_id="tenant-project",
+        project_access=_project_access_authority_for_db(
+            db_session,
+            tenant_id="tenant-project",
+        ),
         conversation_collection=collection,
     )
 
@@ -2094,7 +2218,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=conversation_http,
         ),
         "context_status": lambda: conversations_router.get_context_status(
@@ -2103,7 +2227,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_context_status=conversation_context_status,
         ),
         "delete": lambda: conversations_router.delete_conversation(
@@ -2112,7 +2236,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=conversation_http,
         ),
         "title": lambda: conversations_router.update_conversation_title(
@@ -2122,7 +2246,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=conversation_http,
         ),
         "config": lambda: conversations_router.update_conversation_config(
@@ -2132,7 +2256,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_config=conversation_config,
         ),
         "mode": lambda: conversations_router.update_conversation_mode(
@@ -2142,7 +2266,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=conversation_http,
         ),
         "generate_title": lambda: conversations_router.generate_conversation_title(
@@ -2151,7 +2275,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_generation=conversation_generation,
         ),
         "summary": lambda: conversations_router.generate_summary(
@@ -2160,7 +2284,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_generation=conversation_generation,
         ),
     }
@@ -2206,7 +2330,7 @@ async def test_context_status_uses_v2_authority_without_llm_or_container(
         project_id="project-1",
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
-        db=db,
+        project_access=db,
         conversation_context_status=authority,
     )
 
@@ -2244,7 +2368,7 @@ async def test_context_status_hides_missing_or_cross_scope_conversation() -> Non
             project_id="project-1",
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_context_status=authority,
         )
 
@@ -2301,7 +2425,7 @@ async def test_conversation_get_delete_and_title_use_v2_access_without_llm_or_co
         project_id=conversation.project_id,
         current_user=current_user,
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
         conversation_http=authority,
     )
     await conversations_router.delete_conversation(
@@ -2310,7 +2434,7 @@ async def test_conversation_get_delete_and_title_use_v2_access_without_llm_or_co
         project_id=conversation.project_id,
         current_user=current_user,
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
         conversation_http=authority,
     )
     title_response = await conversations_router.update_conversation_title(
@@ -2320,7 +2444,7 @@ async def test_conversation_get_delete_and_title_use_v2_access_without_llm_or_co
         project_id=conversation.project_id,
         current_user=current_user,
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
         conversation_http=authority,
     )
 
@@ -2369,7 +2493,7 @@ async def test_conversation_mutations_rollback_when_v2_scope_is_not_found(
         "project_id": "project-1",
         "current_user": SimpleNamespace(id="user-1"),
         "tenant_id": "tenant-1",
-        "db": db,
+        "project_access": db,
         "conversation_http": authority,
     }
 
@@ -2460,7 +2584,7 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
         project_id=conversation.project_id,
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
         conversation_config=authority,
     )
 
@@ -2474,7 +2598,7 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
         project_id=conversation.project_id,
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
-        db=db,
+        project_access=db,
         conversation_config=authority,
     )
 
@@ -2514,7 +2638,7 @@ async def test_update_conversation_config_rejects_inaccessible_selected_agent() 
             project_id="project-1",
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_config=_conversation_config_authority(service, db),
         )
 
@@ -2612,7 +2736,10 @@ async def test_update_conversation_mode_requires_workspace_membership(
             project_id=test_project_db.id,
             current_user=test_user,
             tenant_id=test_project_db.tenant_id,
-            db=db_session,
+            project_access=_project_access_authority_for_db(
+                db_session,
+                tenant_id=test_project_db.tenant_id,
+            ),
             conversation_http=authority,
         )
 
@@ -2703,7 +2830,10 @@ async def test_update_conversation_mode_accepts_accessible_workspace_task_linkag
         project_id=test_project_db.id,
         current_user=test_user,
         tenant_id=test_project_db.tenant_id,
-        db=db_session,
+        project_access=_project_access_authority_for_db(
+            db_session,
+            tenant_id=test_project_db.tenant_id,
+        ),
         conversation_http=authority,
     )
 
@@ -2756,7 +2886,7 @@ async def test_update_conversation_mode_value_errors_are_sanitized(
             project_id="project-1",
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
-            db=db,
+            project_access=db,
             conversation_http=authority,
         )
 

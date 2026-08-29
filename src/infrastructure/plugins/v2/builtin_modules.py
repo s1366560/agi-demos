@@ -103,6 +103,7 @@ from .llm_health_runtime import llm_health_runtime_definition_v2
 from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
 from .notification_services import notification_service_definitions_v2
+from .project_access_services import project_access_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
 from .redis_runtime import RedisRuntimeFactoryV2, redis_runtime_definition_v2
 from .reflection_runtime import ReflectionRuntimeManagerV2, reflection_runtime_definition_v2
@@ -453,6 +454,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         builtin_invitations_http_routes_definition_v2(),
         builtin_invitations_public_http_routes_definition_v2(),
         builtin_agent_pool_http_routes.builtin_agent_pool_http_routes_definition_v2(),
+        *project_access_definitions_v2(),
         *project_tenant_service_definitions_v2(),
         *cron_service_definitions_v2(),
         *reflection_service_definitions_v2(),

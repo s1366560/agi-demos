@@ -1121,6 +1121,35 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-project-access-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/project-access-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-project-access
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/project-access
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        provider: service:persistence.project-access-provider
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-cron-scheduler-gateway
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
