@@ -46,6 +46,16 @@ from src.infrastructure.plugins.v2.conversation_context_status_services import (
 from src.infrastructure.plugins.v2.conversation_generation_services import (
     ConversationGenerationSourceMissingV2,
 )
+from src.infrastructure.plugins.v2.conversation_revision_services import (
+    ConversationRevisionAccessDeniedV2,
+    ConversationRevisionConversationNotFoundV2,
+    ConversationRevisionMessageNotFoundV2,
+    ConversationRevisionToolExecutionNotFoundV2,
+    EditedConversationMessageV2,
+    ForkedConversationV2,
+    ToolUndoRequestV2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.workspace_core.authority import AvernetWorkspaceAuthority
 from src.infrastructure.workspace_core.client import WorkspaceCoreClient
 
@@ -85,11 +95,6 @@ class FailingConversationGenerationService:
     generate_title = AsyncMock(side_effect=RuntimeError("internal title generation secret"))
     generate_summary = AsyncMock(side_effect=RuntimeError("internal summary generation secret"))
     after_update_committed = AsyncMock()
-
-
-class FailingDb:
-    get = AsyncMock(side_effect=RuntimeError("internal direct db secret"))
-    rollback = AsyncMock()
 
 
 class ListUseCase:
@@ -177,6 +182,10 @@ def _conversation_collection_authority(service: object, db: object) -> SimpleNam
 
 
 def _conversation_config_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
+def _conversation_revision_authority(service: object, db: object) -> SimpleNamespace:
     return SimpleNamespace(service=service, db=db)
 
 
@@ -1523,14 +1532,21 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
     expected_detail: str,
 ) -> None:
     current_user = SimpleNamespace(id="user-1")
-    db = FailingDb()
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        fork_conversation=AsyncMock(side_effect=RuntimeError("internal revision secret")),
+        edit_message=AsyncMock(side_effect=RuntimeError("internal revision secret")),
+        request_tool_undo=AsyncMock(side_effect=RuntimeError("internal revision secret")),
+        after_mutation_committed=AsyncMock(),
+    )
+    revision = _conversation_revision_authority(service, db)
     route_calls: dict[str, Any] = {
         "fork": lambda: conversations_router.fork_conversation(
             conversation_id="conversation-1",
             message_id="message-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            conversation_revision=revision,
         ),
         "edit_message": lambda: conversations_router.edit_message(
             conversation_id="conversation-1",
@@ -1538,14 +1554,14 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
             data={"content": "updated"},
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            conversation_revision=revision,
         ),
         "tool_undo": lambda: conversations_router.request_tool_undo(
             conversation_id="conversation-1",
             execution_id="execution-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db,
+            conversation_revision=revision,
         ),
     }
 
@@ -1555,133 +1571,231 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-@pytest.mark.parametrize("route_name", ["fork", "edit_message", "tool_undo"])
-async def test_db_backed_conversation_routes_reject_non_owner(
+@pytest.mark.parametrize(
+    ("route_name", "failure", "expected_status", "expected_detail"),
+    [
+        (
+            "fork",
+            ConversationRevisionAccessDeniedV2("conversation-1"),
+            403,
+            "Access denied",
+        ),
+        (
+            "fork",
+            ConversationRevisionMessageNotFoundV2("message-1"),
+            404,
+            "Message not found",
+        ),
+        (
+            "edit_message",
+            ConversationRevisionConversationNotFoundV2("conversation-1"),
+            404,
+            "Conversation not found",
+        ),
+        (
+            "edit_message",
+            ConversationRevisionMessageNotFoundV2("message-1"),
+            404,
+            "Message not found",
+        ),
+        (
+            "tool_undo",
+            ConversationRevisionToolExecutionNotFoundV2("execution-1"),
+            404,
+            "Tool execution not found",
+        ),
+    ],
+)
+async def test_conversation_revision_routes_map_scoped_failures(
     route_name: str,
-    db_session: AsyncSession,
+    failure: Exception,
+    expected_status: int,
+    expected_detail: str,
 ) -> None:
-    db_session.add(
-        DBConversation(
-            id="conversation-owned-elsewhere",
-            project_id="project-1",
-            tenant_id="tenant-1",
-            user_id="other-user",
-            title="Private conversation",
-            status=ConversationStatus.ACTIVE.value,
-            agent_config={},
-            meta={},
-            message_count=0,
-            created_at=datetime.now(UTC),
-            current_mode="build",
-            participant_agents=[],
-        )
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        fork_conversation=AsyncMock(side_effect=failure),
+        edit_message=AsyncMock(side_effect=failure),
+        request_tool_undo=AsyncMock(side_effect=failure),
+        after_mutation_committed=AsyncMock(),
     )
-    await db_session.flush()
-
     current_user = SimpleNamespace(id="user-1")
+    revision = _conversation_revision_authority(service, db)
     route_calls: dict[str, Any] = {
         "fork": lambda: conversations_router.fork_conversation(
-            conversation_id="conversation-owned-elsewhere",
+            conversation_id="conversation-1",
             message_id="message-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db_session,
+            conversation_revision=revision,
         ),
         "edit_message": lambda: conversations_router.edit_message(
-            conversation_id="conversation-owned-elsewhere",
+            conversation_id="conversation-1",
             message_id="message-1",
             data={"content": "updated"},
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db_session,
+            conversation_revision=revision,
         ),
         "tool_undo": lambda: conversations_router.request_tool_undo(
-            conversation_id="conversation-owned-elsewhere",
+            conversation_id="conversation-1",
             execution_id="execution-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db_session,
+            conversation_revision=revision,
         ),
     }
 
     with pytest.raises(HTTPException) as exc_info:
         await route_calls[route_name]()
 
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Access denied"
+    assert exc_info.value.status_code == expected_status
+    assert exc_info.value.detail == expected_detail
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route_name", ["fork", "edit_message", "tool_undo"])
-async def test_db_backed_conversation_routes_require_project_access_for_owner(
+async def test_conversation_revision_routes_commit_then_invalidate_cache(
     route_name: str,
-    db_session: AsyncSession,
 ) -> None:
-    db_session.add(
-        Project(
-            id="project-private",
-            tenant_id="tenant-1",
-            name="Private project",
-            description="Project without current user membership",
-            owner_id="other-user",
-            memory_rules={},
-            graph_config={},
-        )
+    edited_at = datetime.now(UTC)
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        fork_conversation=AsyncMock(
+            return_value=ForkedConversationV2(
+                conversation_id="conversation-fork",
+                title="Fork",
+                parent_conversation_id="conversation-1",
+                project_id="project-1",
+            )
+        ),
+        edit_message=AsyncMock(
+            return_value=EditedConversationMessageV2(
+                message_id="message-1",
+                content="updated",
+                original_content="before",
+                version=2,
+                edited_at=edited_at,
+                project_id="project-1",
+            )
+        ),
+        request_tool_undo=AsyncMock(
+            return_value=ToolUndoRequestV2(
+                message_id="undo-message",
+                tool_name="write_file",
+                project_id="project-1",
+            )
+        ),
+        after_mutation_committed=AsyncMock(),
     )
-    db_session.add(
-        DBConversation(
-            id="conversation-owned-without-project",
-            project_id="project-private",
-            tenant_id="tenant-1",
-            user_id="user-1",
-            title="Former project conversation",
-            status=ConversationStatus.ACTIVE.value,
-            agent_config={},
-            meta={},
-            message_count=0,
-            created_at=datetime.now(UTC),
-            current_mode="build",
-            participant_agents=[],
-        )
-    )
-    await db_session.flush()
-
     current_user = SimpleNamespace(id="user-1")
+    revision = _conversation_revision_authority(service, db)
     route_calls: dict[str, Any] = {
         "fork": lambda: conversations_router.fork_conversation(
-            conversation_id="conversation-owned-without-project",
+            conversation_id="conversation-1",
             message_id="message-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db_session,
+            conversation_revision=revision,
         ),
         "edit_message": lambda: conversations_router.edit_message(
-            conversation_id="conversation-owned-without-project",
+            conversation_id="conversation-1",
             message_id="message-1",
             data={"content": "updated"},
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db_session,
+            conversation_revision=revision,
         ),
         "tool_undo": lambda: conversations_router.request_tool_undo(
-            conversation_id="conversation-owned-without-project",
+            conversation_id="conversation-1",
             execution_id="execution-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=db_session,
+            conversation_revision=revision,
         ),
     }
 
-    with pytest.raises(HTTPException) as exc_info:
-        await route_calls[route_name]()
+    response = await route_calls[route_name]()
 
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Access denied"
+    assert isinstance(response, dict)
+    db.commit.assert_awaited_once()
+    service.after_mutation_committed.assert_awaited_once_with("project-1")
+    db.rollback.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_edit_message_rejects_non_string_content_before_service_call() -> None:
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        edit_message=AsyncMock(),
+        after_mutation_committed=AsyncMock(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.edit_message(
+            conversation_id="conversation-1",
+            message_id="message-1",
+            data={"content": {"unexpected": True}},
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            conversation_revision=_conversation_revision_authority(service, db),
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Invalid message content"
+    service.edit_message.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+
+def test_conversation_revision_handlers_have_no_direct_sql_authority() -> None:
+    for handler in (
+        conversations_router.fork_conversation,
+        conversations_router.edit_message,
+        conversations_router.request_tool_undo,
+    ):
+        source = inspect.getsource(handler)
+        assert "_load_owned_conversation_row" not in source
+        assert "db.get(" not in source
+        assert "select(" not in source
+        assert "MessageModel" not in source
+        assert "ToolExecutionRecord" not in source
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_conversation_revision_runtime_failure_is_structured_unavailable() -> None:
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        fork_conversation=AsyncMock(
+            side_effect=RuntimeV2Error("missing_service", "internal provider detail")
+        ),
+        after_mutation_committed=AsyncMock(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.fork_conversation(
+            conversation_id="conversation-1",
+            message_id="message-1",
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            conversation_revision=_conversation_revision_authority(service, db),
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "code": "missing_service",
+        "message": "Conversation revision authority is unavailable",
+    }
+    assert "internal provider detail" not in str(exc_info.value.detail)
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit

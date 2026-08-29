@@ -319,6 +319,7 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         "src.infrastructure.adapters.primary.web.conversation_context_status_http_application_authority_v2.conversation_context_status_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.conversation_generation_http_application_authority_v2.conversation_generation_http_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2.conversation_http_application_authority_dependency_v2": 4,
+        "src.infrastructure.adapters.primary.web.conversation_revision_http_application_authority_v2.conversation_revision_http_application_authority_dependency_v2": 3,
         "src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2.agent_execution_query_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 92,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user_tenant": 31,
@@ -326,7 +327,7 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         "src.infrastructure.adapters.primary.web.routers.agent.binding_router._get_selected_binding_tenant_id": 6,
         "src.infrastructure.adapters.primary.web.routers.agent.definitions_router._get_selected_definition_tenant_id": 6,
         "src.infrastructure.adapters.primary.web.workflow_pattern_application_authority_v2.workflow_pattern_application_authority_dependency_v2": 5,
-        "src.infrastructure.adapters.secondary.persistence.database.get_db": 88,
+        "src.infrastructure.adapters.secondary.persistence.database.get_db": 85,
     }
     assert claimed.v2_owned_row_ids == ("agent",)
 

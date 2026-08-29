@@ -4,7 +4,6 @@ CRUD operations for Agent conversations.
 """
 
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +41,10 @@ from src.infrastructure.adapters.primary.web.conversation_http_application_autho
     ConversationHttpApplicationAuthorityV2,
     conversation_http_application_authority_dependency_v2,
 )
+from src.infrastructure.adapters.primary.web.conversation_revision_http_application_authority_v2 import (
+    ConversationRevisionHttpApplicationAuthorityV2,
+    conversation_revision_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -53,10 +56,7 @@ from src.infrastructure.adapters.primary.web.workspace_authority import (
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
-    Conversation as ConversationModel,
-    Message as MessageModel,
     Project,
-    ToolExecutionRecord,
     User,
     UserProject,
 )
@@ -68,6 +68,13 @@ from src.infrastructure.plugins.v2.conversation_config_services import Conversat
 from src.infrastructure.plugins.v2.conversation_generation_services import (
     ConversationGenerationSourceMissingV2,
 )
+from src.infrastructure.plugins.v2.conversation_revision_services import (
+    ConversationRevisionAccessDeniedV2,
+    ConversationRevisionConversationNotFoundV2,
+    ConversationRevisionMessageNotFoundV2,
+    ConversationRevisionToolExecutionNotFoundV2,
+)
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 from .schemas import (
     ConversationResponse,
@@ -168,27 +175,6 @@ async def _ensure_project_access(
             detail=_("Access denied"),
         )
     return str(project_tenant_id)
-
-
-async def _load_owned_conversation_row(
-    db: AsyncSession,
-    *,
-    conversation_id: str,
-    current_user: User,
-    tenant_id: str,
-) -> ConversationModel:
-    conversation = await db.get(ConversationModel, conversation_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail=_("Conversation not found"))
-    if conversation.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail=_("Access denied"))
-    await _ensure_project_access(
-        db,
-        current_user=current_user,
-        project_id=conversation.project_id,
-        tenant_id=conversation.tenant_id,
-    )
-    return conversation
 
 
 async def _workspace_name_by_id(
@@ -1139,66 +1125,42 @@ async def fork_conversation(
     message_id: str = Query(..., description="Message ID to fork from"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    conversation_revision: ConversationRevisionHttpApplicationAuthorityV2 = Depends(
+        conversation_revision_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Fork a conversation from a specific message point."""
     try:
-        original = await _load_owned_conversation_row(
-            db,
+        fork = await conversation_revision.service.fork_conversation(
             conversation_id=conversation_id,
-            current_user=current_user,
+            branch_message_id=message_id,
             tenant_id=tenant_id,
+            user_id=str(current_user.id),
         )
+        await conversation_revision.db.commit()
+        await conversation_revision.service.after_mutation_committed(fork.project_id)
+        return fork.to_dict()
 
-        new_id = str(uuid.uuid4())
-        new_conv = ConversationModel(
-            id=new_id,
-            project_id=original.project_id,
-            tenant_id=original.tenant_id,
-            user_id=current_user.id,
-            title=f"{original.title} (fork)",
-            status="active",
-            parent_conversation_id=conversation_id,
-            branch_point_message_id=message_id,
-        )
-        db.add(new_conv)
-
-        query = (
-            select(MessageModel)
-            .where(MessageModel.conversation_id == conversation_id)
-            .order_by(MessageModel.created_at)
-        )
-        result = await db.execute(refresh_select_statement(query))
-        messages = result.scalars().all()
-
-        copied = 0
-        for msg in messages:
-            new_msg = MessageModel(
-                id=str(uuid.uuid4()),
-                conversation_id=new_id,
-                role=msg.role,
-                content=msg.content,
-                message_type=msg.message_type,
-                created_at=msg.created_at,
-            )
-            db.add(new_msg)
-            copied += 1
-            if msg.id == message_id:
-                break
-
-        new_conv.message_count = copied
-        await db.commit()
-
-        return {
-            "id": new_conv.id,
-            "title": new_conv.title,
-            "parent_id": conversation_id,
-        }
-
-    except HTTPException:
-        raise
+    except ConversationRevisionConversationNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from exc
+    except ConversationRevisionAccessDeniedV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=403, detail=_("Access denied")) from exc
+    except ConversationRevisionMessageNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Message not found")) from exc
+    except RuntimeV2Error as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Conversation revision authority is unavailable"),
+            },
+        ) from exc
     except Exception as exc:
-        await db.rollback()
+        await conversation_revision.db.rollback()
         logger.exception("Error forking conversation")
         raise HTTPException(
             status_code=500,
@@ -1213,38 +1175,49 @@ async def edit_message(
     data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    conversation_revision: ConversationRevisionHttpApplicationAuthorityV2 = Depends(
+        conversation_revision_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Edit a message and increment version."""
     try:
-        await _load_owned_conversation_row(
-            db,
+        content = data.get("content")
+        if content is not None and not isinstance(content, str):
+            raise HTTPException(status_code=422, detail=_("Invalid message content"))
+        edited = await conversation_revision.service.edit_message(
             conversation_id=conversation_id,
-            current_user=current_user,
+            message_id=message_id,
+            content=content,
             tenant_id=tenant_id,
+            user_id=str(current_user.id),
         )
-        msg = await db.get(MessageModel, message_id)
-        if not msg or msg.conversation_id != conversation_id:
-            raise HTTPException(status_code=404, detail=_("Message not found"))
+        await conversation_revision.db.commit()
+        await conversation_revision.service.after_mutation_committed(edited.project_id)
+        return edited.to_dict()
 
-        if msg.original_content is None:
-            msg.original_content = msg.content
-        msg.content = data.get("content", msg.content)
-        msg.version = (msg.version or 1) + 1
-        msg.edited_at = datetime.now(UTC)
-
-        await db.commit()
-        return {
-            "id": msg.id,
-            "content": msg.content,
-            "version": msg.version,
-            "edited_at": str(msg.edited_at),
-        }
-
+    except ConversationRevisionConversationNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from exc
+    except ConversationRevisionAccessDeniedV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=403, detail=_("Access denied")) from exc
+    except ConversationRevisionMessageNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Message not found")) from exc
+    except RuntimeV2Error as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Conversation revision authority is unavailable"),
+            },
+        ) from exc
     except HTTPException:
+        await conversation_revision.db.rollback()
         raise
     except Exception as exc:
-        await db.rollback()
+        await conversation_revision.db.rollback()
         logger.exception("Error editing message")
         raise HTTPException(
             status_code=500,
@@ -1258,7 +1231,9 @@ async def request_tool_undo(
     execution_id: str,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
+    conversation_revision: ConversationRevisionHttpApplicationAuthorityV2 = Depends(
+        conversation_revision_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Request undo of a tool execution.
 
@@ -1266,42 +1241,36 @@ async def request_tool_undo(
     the specified tool execution.
     """
     try:
-        await _load_owned_conversation_row(
-            db,
+        undo = await conversation_revision.service.request_tool_undo(
             conversation_id=conversation_id,
-            current_user=current_user,
+            execution_id=execution_id,
             tenant_id=tenant_id,
+            user_id=str(current_user.id),
         )
-        exec_record = await db.get(ToolExecutionRecord, execution_id)
-        if not exec_record:
-            raise HTTPException(status_code=404, detail=_("Tool execution not found"))
+        await conversation_revision.db.commit()
+        await conversation_revision.service.after_mutation_committed(undo.project_id)
+        return undo.to_dict()
 
-        if exec_record.conversation_id != conversation_id:
-            raise HTTPException(status_code=404, detail=_("Tool execution not found"))
-
-        undo_msg = MessageModel(
-            id=str(uuid.uuid4()),
-            conversation_id=conversation_id,
-            role="user",
-            content=(
-                f"Please undo the previous tool execution: {exec_record.tool_name}. "
-                "Revert any changes made."
-            ),
-            created_at=datetime.now(UTC),
-        )
-        db.add(undo_msg)
-        await db.commit()
-
-        return {
-            "status": "undo_requested",
-            "message_id": undo_msg.id,
-            "tool_name": exec_record.tool_name,
-        }
-
-    except HTTPException:
-        raise
+    except ConversationRevisionConversationNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Conversation not found")) from exc
+    except ConversationRevisionAccessDeniedV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=403, detail=_("Access denied")) from exc
+    except ConversationRevisionToolExecutionNotFoundV2 as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(status_code=404, detail=_("Tool execution not found")) from exc
+    except RuntimeV2Error as exc:
+        await conversation_revision.db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("Conversation revision authority is unavailable"),
+            },
+        ) from exc
     except Exception as exc:
-        await db.rollback()
+        await conversation_revision.db.rollback()
         logger.exception("Error requesting tool undo")
         raise HTTPException(
             status_code=500,

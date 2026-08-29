@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:138e5f68354f343ef943ee99f89a010760f65fbe16a12a9ec416ebb43137d1cb",
+        "digest": "sha256:e3be1d3c98d9b858ac1b3c0be755ff327027ba9885ceecb0fbfd2a7fc9786a11",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4008,6 +4008,37 @@
       "artifact": {
         "digest": "sha256:fd723b431db3ad157aeed4e5ebb0561bf23ab0a0519ae67da3a4f6686b276460",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/conversation-revision-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_revision_services:_apply_conversation_revision_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.conversation-revision-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:08753d4092173ce8025d61832870f336d350380e89c1542267c1e87358ce3197",
+      "artifact": {
+        "digest": "sha256:f7289c1eb8fde72c9f4f57defe1b257325e62aa7083ed186d49f4dedc6fd29d9",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_revision_services.py"
       }
     },
     {
@@ -8115,6 +8146,48 @@
       "artifact": {
         "digest": "sha256:00e0ab3a20908fb93f4af309ff4d288e6b3edaf1ea096b65b15cabf0e09bbc28",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_context_status_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/conversation-revision",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_revision_services:_apply_conversation_revision_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.conversation-revision",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "provider",
+              "service": "service:persistence.conversation-revision-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:ee104bfcef5d06073fa59d2fce7eafbdefa47cbfc96747dacc73f0c78589e556",
+      "artifact": {
+        "digest": "sha256:f7289c1eb8fde72c9f4f57defe1b257325e62aa7083ed186d49f4dedc6fd29d9",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_revision_services.py"
       }
     },
     {
