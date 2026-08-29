@@ -2437,14 +2437,12 @@ async def apply_skill_evolution_job(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillEvolutionJobResponse:
     """Apply a pending evolution job and create a new SkillVersion."""
     from pathlib import Path
 
     from src.application.services.skill_service import SkillService
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-        SqlSkillRepository,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
     )
@@ -2461,7 +2459,7 @@ async def apply_skill_evolution_job(
     _validate_pending_evolution_job(job, tenant_id=tenant_id)
     assert job is not None
 
-    skill_repo = SqlSkillRepository(db)
+    skill_repo = skill_repository
     await _ensure_evolution_job_write_access(
         db,
         job=job,
@@ -2608,11 +2606,9 @@ async def get_skill_evolution(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillEvolutionDetailResponse:
     """Return trigger metadata, evolution jobs, and version route for a skill."""
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-        SqlSkillRepository,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
     )
@@ -2622,7 +2618,7 @@ async def get_skill_evolution(
 
     tenant_id = _normalize_tenant_id(tenant)
     config = await _load_skill_evolution_config(db, tenant_id)
-    skill_repo = SqlSkillRepository(db)
+    skill_repo = skill_repository
     skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
     await _ensure_existing_project_skill_access(
         db,
@@ -2669,14 +2665,11 @@ async def run_skill_evolution(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillEvolutionRunResponse:
     """Manually trigger one evolution cycle scoped to a single skill."""
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-        SqlSkillRepository,
-    )
-
     tenant_id = _normalize_tenant_id(tenant)
-    skill_repo = SqlSkillRepository(db)
+    skill_repo = skill_repository
     skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
     if skill.is_system_skill or skill.scope == SkillScope.SYSTEM:
         raise HTTPException(
@@ -2714,16 +2707,14 @@ async def list_skill_versions(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillVersionListResponse:
     """List all versions of a skill, ordered by version_number DESC."""
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-        SqlSkillRepository,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
     )
 
-    skill_repo = SqlSkillRepository(db)
+    skill_repo = skill_repository
     tenant_id = _normalize_tenant_id(tenant)
     skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
     await _ensure_existing_project_skill_access(
@@ -2765,16 +2756,14 @@ async def get_skill_version(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillVersionDetailResponse:
     """Get a specific version of a skill including content and resource files."""
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-        SqlSkillRepository,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
     )
 
-    skill_repo = SqlSkillRepository(db)
+    skill_repo = skill_repository
     tenant_id = _normalize_tenant_id(tenant)
     skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
     await _ensure_existing_project_skill_access(
@@ -2814,19 +2803,17 @@ async def rollback_skill(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillResponse:
     """Rollback a skill to a specific version. Creates a new version entry."""
     from pathlib import Path
 
     from src.application.services.skill_reverse_sync import SkillReverseSync
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-        SqlSkillRepository,
-    )
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
     )
 
-    skill_repo = SqlSkillRepository(db)
+    skill_repo = skill_repository
     version_repo = SqlSkillVersionRepository(db)
 
     # Verify skill exists and belongs to tenant

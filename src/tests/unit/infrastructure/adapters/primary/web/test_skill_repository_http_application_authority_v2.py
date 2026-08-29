@@ -61,12 +61,15 @@ async def test_authority_uses_pinned_tenant_generation_and_operation_session() -
     user = cast(User, SimpleNamespace(id="user-a"))
     authority = None
     try:
-        async with pin_generation_v2(host), skill_repository_http_application_authority_v2(
-            request=_request(),
-            tenant_id="tenant-a",
-            current_user=user,
-            db=db,
-        ) as authority:
+        async with (
+            pin_generation_v2(host),
+            skill_repository_http_application_authority_v2(
+                request=_request(),
+                tenant_id="tenant-a",
+                current_user=user,
+                db=db,
+            ) as authority,
+        ):
             assert authority.operation.phase is FiberPhaseV2.ACTIVE
             assert authority.operation.descriptor.generation == 1011
             assert authority.operation.context.scope.kind is ScopeKindV2.TENANT
@@ -131,6 +134,12 @@ def test_skill_handlers_resolve_repository_only_from_v2_authority() -> None:
         skills.import_skill_package,
         skills.import_skill_zip_package,
         skills.export_skill_package,
+        skills.apply_skill_evolution_job,
+        skills.get_skill_evolution,
+        skills.run_skill_evolution,
+        skills.list_skill_versions,
+        skills.get_skill_version,
+        skills.rollback_skill,
     )
 
     for endpoint in endpoints:
