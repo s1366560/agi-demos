@@ -46,6 +46,8 @@ class _TrackedRedisClient:
     def __init__(self, name: str) -> None:
         self.name = name
         self.calls: list[str] = []
+        self.cache_patterns: list[str] = []
+        self.cache_deletes: list[tuple[str | bytes, ...]] = []
         self.close_calls = 0
         self.reload_generation = None
 
@@ -58,6 +60,16 @@ class _TrackedRedisClient:
         if key == "agent:running:conversation-1":
             return b"message-1"
         return None
+
+    async def scan_iter(self, *, match: str, count: int) -> Any:
+        assert count == 100
+        self.cache_patterns.append(match)
+        if False:
+            yield "unreachable"
+
+    async def delete(self, *keys: str | bytes) -> int:
+        self.cache_deletes.append(keys)
+        return len(keys)
 
     async def aclose(self) -> None:
         self.close_calls += 1

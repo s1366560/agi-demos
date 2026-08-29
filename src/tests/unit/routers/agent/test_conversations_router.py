@@ -49,6 +49,14 @@ class FailingAgentService:
     get_conversation = AsyncMock(side_effect=RuntimeError("internal conversation service secret"))
 
 
+class FailingConversationAccessService:
+    get_conversation = AsyncMock(side_effect=RuntimeError("internal conversation access secret"))
+    delete_conversation = AsyncMock(side_effect=RuntimeError("internal conversation access secret"))
+    update_conversation_title = AsyncMock(
+        side_effect=RuntimeError("internal conversation access secret")
+    )
+
+
 class FailingDb:
     get = AsyncMock(side_effect=RuntimeError("internal direct db secret"))
     rollback = AsyncMock()
@@ -130,6 +138,10 @@ def _request_with_container(
     return request
 
 
+def _conversation_http_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
 def _db_with_project_access(
     *, allowed: bool = True, tenant_id: str = "tenant-1"
 ) -> SimpleNamespace:
@@ -179,6 +191,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     request = _request_with_container(container)
     current_user = SimpleNamespace(id="user-1")
     db = _db_with_project_access()
+    conversation_http = _conversation_http_authority(FailingConversationAccessService(), db)
 
     route_calls: dict[str, Any] = {
         "list": lambda: conversations_router.list_conversations(
@@ -198,6 +211,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_http=conversation_http,
         ),
         "context_status": lambda: conversations_router.get_context_status(
             conversation_id="conversation-1",
@@ -214,6 +228,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_http=conversation_http,
         ),
         "title": lambda: conversations_router.update_conversation_title(
             conversation_id="conversation-1",
@@ -223,6 +238,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_http=conversation_http,
         ),
         "config": lambda: conversations_router.update_conversation_config(
             conversation_id="conversation-1",
@@ -266,6 +282,8 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
+    if route_name in {"delete", "title"}:
+        db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -1702,6 +1720,12 @@ async def test_project_scoped_conversation_routes_require_project_access(
     request = _request_with_container(container)
     db = _db_with_project_access(allowed=False)
     current_user = SimpleNamespace(id="user-1")
+    conversation_service = SimpleNamespace(
+        get_conversation=AsyncMock(),
+        delete_conversation=AsyncMock(),
+        update_conversation_title=AsyncMock(),
+    )
+    conversation_http = _conversation_http_authority(conversation_service, db)
     route_calls: dict[str, Any] = {
         "get": lambda: conversations_router.get_conversation(
             conversation_id="conversation-1",
@@ -1710,6 +1734,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_http=conversation_http,
         ),
         "context_status": lambda: conversations_router.get_context_status(
             conversation_id="conversation-1",
@@ -1726,6 +1751,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_http=conversation_http,
         ),
         "title": lambda: conversations_router.update_conversation_title(
             conversation_id="conversation-1",
@@ -1735,6 +1761,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_http=conversation_http,
         ),
         "config": lambda: conversations_router.update_conversation_config(
             conversation_id="conversation-1",
@@ -1778,6 +1805,158 @@ async def test_project_scoped_conversation_routes_require_project_access(
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Access denied"
     request.app.state.container.with_db.assert_not_called()
+    conversation_service.get_conversation.assert_not_awaited()
+    conversation_service.delete_conversation.assert_not_awaited()
+    conversation_service.update_conversation_title.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_conversation_get_delete_and_title_use_v2_access_without_llm_or_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-v2-crud",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Before",
+    )
+
+    async def update_title(**kwargs: Any) -> Conversation:
+        conversation.update_title(kwargs["title"])
+        return conversation
+
+    mutation_order: list[str] = []
+
+    async def commit() -> None:
+        mutation_order.append("commit")
+
+    async def invalidate(project_id: str) -> None:
+        assert project_id == conversation.project_id
+        mutation_order.append("invalidate")
+
+    service = SimpleNamespace(
+        get_conversation=AsyncMock(return_value=conversation),
+        delete_conversation=AsyncMock(return_value=True),
+        update_conversation_title=AsyncMock(side_effect=update_title),
+        cache=SimpleNamespace(invalidate=AsyncMock(side_effect=invalidate)),
+    )
+    db = _db_with_project_access()
+    db.commit.side_effect = commit
+    authority = _conversation_http_authority(service, db)
+    request = _request_with_container(SimpleNamespace())
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    current_user = SimpleNamespace(id="user-1")
+
+    get_response = await conversations_router.get_conversation(
+        conversation_id=conversation.id,
+        request=request,
+        project_id=conversation.project_id,
+        current_user=current_user,
+        tenant_id=conversation.tenant_id,
+        db=db,
+        conversation_http=authority,
+    )
+    await conversations_router.delete_conversation(
+        conversation_id=conversation.id,
+        request=request,
+        project_id=conversation.project_id,
+        current_user=current_user,
+        tenant_id=conversation.tenant_id,
+        db=db,
+        conversation_http=authority,
+    )
+    title_response = await conversations_router.update_conversation_title(
+        conversation_id=conversation.id,
+        data=UpdateConversationTitleRequest(title="After"),
+        request=request,
+        project_id=conversation.project_id,
+        current_user=current_user,
+        tenant_id=conversation.tenant_id,
+        db=db,
+        conversation_http=authority,
+    )
+
+    assert get_response.id == conversation.id
+    assert title_response.title == "After"
+    expected_scope = {
+        "conversation_id": conversation.id,
+        "project_id": conversation.project_id,
+        "user_id": conversation.user_id,
+    }
+    service.get_conversation.assert_awaited_once_with(**expected_scope)
+    service.delete_conversation.assert_awaited_once_with(**expected_scope)
+    service.update_conversation_title.assert_awaited_once_with(
+        **expected_scope,
+        title="After",
+    )
+    assert db.commit.await_count == 2
+    assert service.cache.invalidate.await_count == 2
+    assert mutation_order == ["commit", "invalidate", "commit", "invalidate"]
+    db.rollback.assert_not_awaited()
+    conversations_router.create_llm_client.assert_not_awaited()
+    request.app.state.container.with_db.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_name", ["delete", "title"])
+async def test_conversation_mutations_rollback_when_v2_scope_is_not_found(
+    route_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = SimpleNamespace(
+        delete_conversation=AsyncMock(return_value=False),
+        update_conversation_title=AsyncMock(return_value=None),
+    )
+    db = _db_with_project_access()
+    authority = _conversation_http_authority(service, db)
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    kwargs = {
+        "conversation_id": "conversation-missing",
+        "request": MagicMock(),
+        "project_id": "project-1",
+        "current_user": SimpleNamespace(id="user-1"),
+        "tenant_id": "tenant-1",
+        "db": db,
+        "conversation_http": authority,
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        if route_name == "delete":
+            await conversations_router.delete_conversation(**kwargs)
+        else:
+            await conversations_router.update_conversation_title(
+                data=UpdateConversationTitleRequest(title="After"),
+                **kwargs,
+            )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Conversation not found"
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+def test_conversation_crud_handlers_have_no_static_container_or_llm_fallback() -> None:
+    for handler in (
+        conversations_router.get_conversation,
+        conversations_router.delete_conversation,
+        conversations_router.update_conversation_title,
+    ):
+        source = inspect.getsource(handler)
+        assert "create_llm_client" not in source
+        assert "get_container_with_db" not in source
+        assert ".agent_service(" not in source
 
 
 @pytest.mark.unit

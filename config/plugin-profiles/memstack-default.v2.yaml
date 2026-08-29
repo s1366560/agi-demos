@@ -1413,6 +1413,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-conversation-crud-repository-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/conversation-crud-repository-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-conversation-access
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -1421,7 +1435,8 @@ profile:
       config:
         strategy: operation-scoped-provider
       inject:
-        repository_provider: service:persistence.conversation-repository-provider
+        crud_repositories: service:persistence.conversation-crud-repository-provider
+        redis: service:runtime.redis-client
       isolate: {}
       scope:
         kind: root

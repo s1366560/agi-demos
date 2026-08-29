@@ -6,10 +6,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
-from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -22,6 +22,9 @@ from src.infrastructure.plugins.v2.conversation_access_services import (
     ConversationAccessServiceV2,
 )
 from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 
 
 @dataclass(frozen=True, kw_only=True)

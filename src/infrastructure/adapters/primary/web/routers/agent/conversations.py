@@ -30,6 +30,10 @@ from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityScope,
     WorkspaceAuthorityUnavailableError,
 )
+from src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2 import (
+    ConversationHttpApplicationAuthorityV2,
+    conversation_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -991,20 +995,19 @@ async def get_conversation(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
+        conversation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Get a conversation by ID."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
+        await _ensure_project_access(
             db,
             current_user=current_user,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        use_case = container.get_conversation_use_case(llm)
-
-        conversation = await use_case.execute(
+        conversation = await conversation_http.service.get_conversation(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
@@ -1102,38 +1105,33 @@ async def delete_conversation(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
+        conversation_http_application_authority_dependency_v2
+    ),
 ) -> None:
     """Delete a conversation and all its messages."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
+        await _ensure_project_access(
             db,
             current_user=current_user,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        deleted = await conversation_http.service.delete_conversation(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
         )
-
-        if not conversation:
+        if not deleted:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        await agent_service.delete_conversation(
-            conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
-        )
-        await db.commit()
+        await conversation_http.db.commit()
+        await conversation_http.service.cache.invalidate(project_id)
 
     except HTTPException:
+        await conversation_http.db.rollback()
         raise
     except Exception as exc:
+        await conversation_http.db.rollback()
         logger.exception("Error deleting conversation")
         raise HTTPException(status_code=500, detail=_("Failed to delete conversation")) from exc
 
@@ -1147,41 +1145,35 @@ async def update_conversation_title(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
+        conversation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Update conversation title."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
+        await _ensure_project_access(
             db,
             current_user=current_user,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
-            conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
-        )
-
-        if not conversation:
-            raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        updated_conversation = await agent_service.update_conversation_title(
+        updated_conversation = await conversation_http.service.update_conversation_title(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
             title=data.title,
         )
-
-        assert updated_conversation is not None
+        if updated_conversation is None:
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
+        await conversation_http.db.commit()
+        await conversation_http.service.cache.invalidate(project_id)
         return ConversationResponse.from_domain(updated_conversation)
 
     except HTTPException:
+        await conversation_http.db.rollback()
         raise
     except Exception as exc:
+        await conversation_http.db.rollback()
         logger.exception("Error updating conversation title")
         raise HTTPException(
             status_code=500, detail=_("Failed to update conversation title")

@@ -3975,7 +3975,38 @@
       },
       "contract_digest": "sha256:99e069586c9a83004ea6e6085900e48f7ceda5cc91b9a91385de50f68cd9c5c2",
       "artifact": {
-        "digest": "sha256:6b200a04e6a6372aa3cbce11591dbe35e25ffd8bd19bd3edb55edad6b8340ac1",
+        "digest": "sha256:12b9235f7539c6a0a54d9753d455e10b8a26577e4e8471c7f2d295860becd7d1",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/conversation-crud-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_access_services:_apply_conversation_crud_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.conversation-crud-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8165840bcbb61d160141d9dd1d790166a505122b937aa00c4d548f927d493a5b",
+      "artifact": {
+        "digest": "sha256:12b9235f7539c6a0a54d9753d455e10b8a26577e4e8471c7f2d295860becd7d1",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
       }
     },
@@ -3993,8 +4024,13 @@
           ],
           "requires": [
             {
-              "alias": "repository_provider",
-              "service": "service:persistence.conversation-repository-provider",
+              "alias": "crud_repositories",
+              "service": "service:persistence.conversation-crud-repository-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
               "version": "1.0.0"
             }
           ]
@@ -4010,9 +4046,9 @@
           }
         }
       },
-      "contract_digest": "sha256:363ceac59f2cae3f8a553e6678e7db662fc3d1fd14a9ea0757f94319049dfb8c",
+      "contract_digest": "sha256:47214c114884e8cd271844eebe775c1bb53080161593f74bb2a8de14f8a4d936",
       "artifact": {
-        "digest": "sha256:6b200a04e6a6372aa3cbce11591dbe35e25ffd8bd19bd3edb55edad6b8340ac1",
+        "digest": "sha256:12b9235f7539c6a0a54d9753d455e10b8a26577e4e8471c7f2d295860becd7d1",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
       }
     },
