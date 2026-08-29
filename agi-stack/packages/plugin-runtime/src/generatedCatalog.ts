@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:1d20143a7792eea612c7fe815023fba9969e97b906ba3b06f52d8d9cb0',
-  'c94ee4","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:75be81d3202a7ee75d473f4011b0a103d5d809e5d3424c5cf7ea5c885c',
+  'e86997","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -952,7 +952,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'rc.infrastructure.plugins.v2.cluster_services:_apply_cluster_application_v2","module',
   '_ref":"builtin://memstack/application/cluster-services","plugin_id":"memstack-runtim',
   'e-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:',
-  '12b9235f7539c6a0a54d9753d455e10b8a26577e4e8471c7f2d295860becd7d1","artifact_source":',
+  'fd723b431db3ad157aeed4e5ebb0561bf23ab0a0519ae67da3a4f6686b276460","artifact_source":',
   '"repo+python://src/infrastructure/plugins/v2/conversation_access_services.py","contr',
   'act":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","add',
   'itionalProperties":false,"properties":{"strategy":{"const":"operation-scoped-provide',
@@ -2529,8 +2529,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'structure.plugins.v2.conversation_collection_repository:_apply_conversation_collecti',
   'on_repository_provider_v2","module_ref":"builtin://memstack/persistence/conversation',
   '-collection-repository-provider","plugin_id":"memstack-runtime-kernel","plugin_versi',
-  'on":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:12b9235f7539c6a0a54d975',
-  '3d455e10b8a26577e4e8471c7f2d295860becd7d1","artifact_source":"repo+python://src/infr',
+  'on":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:fd723b431db3ad157aeed4e',
+  '5ebb0561bf23ab0a0519ae67da3a4f6686b276460","artifact_source":"repo+python://src/infr',
   'astructure/plugins/v2/conversation_access_services.py","contract":{"config_schema":{',
   '"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":fals',
   'e,"properties":{"strategy":{"const":"request-async-session","type":"string"}},"requi',
@@ -2541,8 +2541,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '.conversation_access_services:_apply_conversation_crud_repository_provider_v2","modu',
   'le_ref":"builtin://memstack/persistence/conversation-crud-repository-provider","plug',
   'in_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"ar',
-  'tifact_digest":"sha256:12b9235f7539c6a0a54d9753d455e10b8a26577e4e8471c7f2d295860becd',
-  '7d1","artifact_source":"repo+python://src/infrastructure/plugins/v2/conversation_acc',
+  'tifact_digest":"sha256:fd723b431db3ad157aeed4e5ebb0561bf23ab0a0519ae67da3a4f6686b276',
+  '460","artifact_source":"repo+python://src/infrastructure/plugins/v2/conversation_acc',
   'ess_services.py","contract":{"config_schema":{"$schema":"https://json-schema.org/dra',
   'ft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"r',
   'equest-async-session","type":"string"}},"required":["strategy"],"type":"object"},"ev',
@@ -3190,4 +3190,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:1d20143a7792eea612c7fe815023fba9969e97b906ba3b06f52d8d9cb0c94ee4' as const;
+  'sha256:75be81d3202a7ee75d473f4011b0a103d5d809e5d3424c5cf7ea5c885ce86997' as const;

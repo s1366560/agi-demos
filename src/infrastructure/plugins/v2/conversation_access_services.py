@@ -259,6 +259,29 @@ class ConversationAccessServiceV2:
         conversation.update_title(title)
         return await self.repository.save(conversation)
 
+    async def save_scoped_conversation(
+        self,
+        *,
+        conversation: Conversation,
+        project_id: str,
+        tenant_id: str,
+        user_id: str,
+    ) -> Conversation | None:
+        """Persist a caller-mutated conversation only when its exact scope is unchanged."""
+        if not project_id.strip():
+            raise ValueError("project_id must be non-empty")
+        if not tenant_id.strip():
+            raise ValueError("tenant_id must be non-empty")
+        if not user_id.strip():
+            raise ValueError("user_id must be non-empty")
+        if (
+            conversation.project_id != project_id
+            or conversation.tenant_id != tenant_id
+            or conversation.user_id != user_id
+        ):
+            return None
+        return await self.repository.save(conversation)
+
 
 @runtime_checkable
 class ConversationAccessResolverProtocolV2(Protocol):

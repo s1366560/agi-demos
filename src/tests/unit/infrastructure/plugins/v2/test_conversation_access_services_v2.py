@@ -292,6 +292,50 @@ async def test_conversation_access_updates_title_without_owning_the_transaction(
     save.assert_awaited_once_with(conversation)
 
 
+async def test_conversation_access_saves_only_an_exact_scoped_conversation() -> None:
+    conversation = Conversation(
+        id="conversation-a",
+        project_id="project-a",
+        tenant_id="tenant-a",
+        user_id="user-a",
+        title="Mode mutation",
+    )
+    save = AsyncMock(return_value=conversation)
+    repository = cast(
+        ConversationRepository,
+        SimpleNamespace(save=save),
+    )
+    service = ConversationAccessServiceV2(
+        repositories=_repositories(repository),
+        cache=_cache(),
+    )
+
+    assert (
+        await service.save_scoped_conversation(
+            conversation=conversation,
+            project_id="project-a",
+            tenant_id="tenant-a",
+            user_id="user-a",
+        )
+        is conversation
+    )
+    save.assert_awaited_once_with(conversation)
+
+    for mismatched_scope in (
+        {"project_id": "project-b", "tenant_id": "tenant-a", "user_id": "user-a"},
+        {"project_id": "project-a", "tenant_id": "tenant-b", "user_id": "user-a"},
+        {"project_id": "project-a", "tenant_id": "tenant-a", "user_id": "user-b"},
+    ):
+        assert (
+            await service.save_scoped_conversation(
+                conversation=conversation,
+                **mismatched_scope,
+            )
+            is None
+        )
+    save.assert_awaited_once_with(conversation)
+
+
 async def test_conversation_cache_invalidator_scans_only_the_project_namespaces() -> None:
     class TrackedRedis:
         def __init__(self) -> None:

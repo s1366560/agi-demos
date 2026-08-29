@@ -297,6 +297,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_http=conversation_http,
         ),
         "generate_title": lambda: conversations_router.generate_conversation_title(
             conversation_id="conversation-1",
@@ -1882,6 +1883,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_http=conversation_http,
         ),
         "generate_title": lambda: conversations_router.generate_conversation_title(
             conversation_id="conversation-1",
@@ -2054,6 +2056,7 @@ def test_conversation_crud_handlers_have_no_static_container_or_llm_fallback() -
         conversations_router.get_conversation,
         conversations_router.delete_conversation,
         conversations_router.update_conversation_title,
+        conversations_router.update_conversation_mode,
     ):
         source = inspect.getsource(handler)
         assert "create_llm_client" not in source
@@ -2212,35 +2215,35 @@ async def test_update_conversation_mode_requires_workspace_membership(
         status=ConversationStatus.ACTIVE,
         created_at=datetime.now(UTC),
     )
-    conversation_repo = SimpleNamespace(save=AsyncMock())
-    agent_service = SimpleNamespace(
+    conversation_service = SimpleNamespace(
         get_conversation=AsyncMock(return_value=conversation),
-        _conversation_repo=conversation_repo,
+        save_scoped_conversation=AsyncMock(),
+        cache=SimpleNamespace(invalidate=AsyncMock()),
     )
-    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
-    monkeypatch.setattr(
-        conversations_router,
-        "get_container_with_db",
-        lambda _request, _db: container,
-    )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
+    authority = _conversation_http_authority(conversation_service, db_session)
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.update_conversation_mode(
             conversation_id=conversation.id,
             data=UpdateConversationModeRequest(workspace_id="workspace-mode-private"),
             request=_request_with_container(
-                container,
+                SimpleNamespace(),
                 authority=FakeWorkspaceAuthority(denied=True),
             ),
             project_id=test_project_db.id,
             current_user=test_user,
             tenant_id=test_project_db.tenant_id,
             db=db_session,
+            conversation_http=authority,
         )
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Workspace access required"
-    conversation_repo.save.assert_not_awaited()
+    conversation_service.save_scoped_conversation.assert_not_awaited()
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
 
 
 @pytest.mark.unit
@@ -2301,17 +2304,14 @@ async def test_update_conversation_mode_accepts_accessible_workspace_task_linkag
         status=ConversationStatus.ACTIVE,
         created_at=datetime.now(UTC),
     )
-    conversation_repo = SimpleNamespace(save=AsyncMock())
-    agent_service = SimpleNamespace(
+    conversation_service = SimpleNamespace(
         get_conversation=AsyncMock(return_value=conversation),
-        _conversation_repo=conversation_repo,
+        save_scoped_conversation=AsyncMock(return_value=conversation),
+        cache=SimpleNamespace(invalidate=AsyncMock()),
     )
-    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
-    monkeypatch.setattr(
-        conversations_router,
-        "get_container_with_db",
-        lambda _request, _db: container,
-    )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
+    authority = _conversation_http_authority(conversation_service, db_session)
 
     response = await conversations_router.update_conversation_mode(
         conversation_id=conversation.id,
@@ -2320,18 +2320,32 @@ async def test_update_conversation_mode_accepts_accessible_workspace_task_linkag
             linked_workspace_task_id="workspace-mode-linkage-task",
         ),
         request=_request_with_container(
-            container,
+            SimpleNamespace(),
             authority=FakeWorkspaceAuthority(linked_tasks=True),
         ),
         project_id=test_project_db.id,
         current_user=test_user,
         tenant_id=test_project_db.tenant_id,
         db=db_session,
+        conversation_http=authority,
     )
 
     assert response.workspace_id == "workspace-mode-linkage"
     assert response.linked_workspace_task_id == "workspace-mode-linkage-task"
-    conversation_repo.save.assert_awaited_once_with(conversation)
+    conversation_service.get_conversation.assert_awaited_once_with(
+        conversation_id=conversation.id,
+        project_id=test_project_db.id,
+        user_id=test_user.id,
+    )
+    conversation_service.save_scoped_conversation.assert_awaited_once_with(
+        conversation=conversation,
+        project_id=test_project_db.id,
+        tenant_id=test_project_db.tenant_id,
+        user_id=test_user.id,
+    )
+    conversation_service.cache.invalidate.assert_awaited_once_with(test_project_db.id)
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
 
 
 @pytest.mark.unit
@@ -2347,19 +2361,15 @@ async def test_update_conversation_mode_value_errors_are_sanitized(
         updated_at=None,
         assert_autonomous_invariants=MagicMock(),
     )
-    agent_service = SimpleNamespace(
+    conversation_service = SimpleNamespace(
         get_conversation=AsyncMock(return_value=conversation),
-        _conversation_repo=SimpleNamespace(
-            save=AsyncMock(side_effect=ValueError("secret persistence validation"))
-        ),
+        save_scoped_conversation=AsyncMock(side_effect=ValueError("secret persistence validation")),
+        cache=SimpleNamespace(invalidate=AsyncMock()),
     )
-    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
     db = _db_with_project_access()
-    monkeypatch.setattr(
-        conversations_router,
-        "get_container_with_db",
-        lambda _request, _db: container,
-    )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
+    authority = _conversation_http_authority(conversation_service, db)
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.update_conversation_mode(
@@ -2370,9 +2380,12 @@ async def test_update_conversation_mode_value_errors_are_sanitized(
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
             db=db,
+            conversation_http=authority,
         )
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "Invalid conversation mode update"
     assert "secret" not in exc_info.value.detail
     db.rollback.assert_awaited_once()
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()

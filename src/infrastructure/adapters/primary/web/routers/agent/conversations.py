@@ -1024,6 +1024,9 @@ async def update_conversation_mode(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_http: ConversationHttpApplicationAuthorityV2 = Depends(
+        conversation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Update a conversation's mode override.
 
@@ -1041,11 +1044,7 @@ async def update_conversation_mode(
             current_user=current_user,
             project_id=project_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        conversation = await conversation_http.service.get_conversation(
             conversation_id=conversation_id,
             project_id=project_id,
             user_id=current_user.id,
@@ -1093,20 +1092,28 @@ async def update_conversation_mode(
         )
 
         conversation.updated_at = datetime.now(UTC)
-        await agent_service._conversation_repo.save(conversation)
-        await db.commit()
+        updated_conversation = await conversation_http.service.save_scoped_conversation(
+            conversation=conversation,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=current_user.id,
+        )
+        if updated_conversation is None:
+            raise HTTPException(status_code=404, detail=_("Conversation not found"))
+        await conversation_http.db.commit()
+        await conversation_http.service.cache.invalidate(project_id)
 
-        return ConversationResponse.from_domain(conversation)
+        return ConversationResponse.from_domain(updated_conversation)
 
     except HTTPException:
-        await db.rollback()
+        await conversation_http.db.rollback()
         raise
     except ValueError as e:
-        await db.rollback()
+        await conversation_http.db.rollback()
         logger.warning(f"Invalid conversation mode update for {conversation_id}: {e}")
         raise HTTPException(status_code=422, detail=_("Invalid conversation mode update")) from e
     except Exception as exc:
-        await db.rollback()
+        await conversation_http.db.rollback()
         logger.exception("Error updating conversation mode")
         raise HTTPException(
             status_code=500, detail=_("Failed to update conversation mode")
