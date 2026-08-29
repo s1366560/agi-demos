@@ -85,6 +85,7 @@ from .conversation_config_services import conversation_config_definition_v2
 from .conversation_context_status_services import conversation_context_status_definitions_v2
 from .conversation_enrichment_judge import conversation_enrichment_judge_definition_v2
 from .conversation_generation_services import conversation_generation_definition_v2
+from .conversation_participant_services import conversation_participant_definition_v2
 from .conversation_revision_services import conversation_revision_definitions_v2
 from .cron_services import cron_service_definitions_v2
 from .docker_monitor_runtime import docker_event_monitor_definition_v2
@@ -371,6 +372,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *conversation_revision_definitions_v2(),
         conversation_collection_repository_definition_v2(),
         conversation_config_definition_v2(),
+        conversation_participant_definition_v2(),
         conversation_enrichment_judge_definition_v2(),
         conversation_generation_definition_v2(),
         *conversation_collection_service_definitions_v2(),

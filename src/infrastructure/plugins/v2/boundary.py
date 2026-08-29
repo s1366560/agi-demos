@@ -1,9 +1,10 @@
+# pyright: reportImportCycles=false
 """Generation pinning for HTTP, Agent-turn, and background-operation boundaries."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import Context, ContextVar, Token, copy_context
 from copy import deepcopy
 from dataclasses import dataclass
@@ -100,6 +101,23 @@ def current_operation_context_v2() -> OperationContextV2:
             "plugin operation context is not pinned to the current operation",
         )
     return operation
+
+
+@contextmanager
+def bind_operation_context_v2(
+    operation: OperationContextV2,
+) -> Iterator[OperationContextV2]:
+    """Bind an already-active operation without acquiring another generation lease."""
+    if operation.phase is not FiberPhaseV2.ACTIVE:
+        raise RuntimeV2Error(
+            "inactive_operation",
+            "only an active plugin operation can be bound to the current task",
+        )
+    token: Token[OperationContextV2 | None] = _operation_context.set(operation)
+    try:
+        yield operation
+    finally:
+        _operation_context.reset(token)
 
 
 def install_process_generation_host_v2(host: DistributionGenerationHostV2) -> None:

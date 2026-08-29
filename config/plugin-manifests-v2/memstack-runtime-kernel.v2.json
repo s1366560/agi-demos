@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:3cef39b3587ce2c2410fee7091243ebadf8d32afa3585733eb9311a4e2f1b7a0",
+        "digest": "sha256:f8095a2e06bc51c0b912d8612246fbd44d8f654374bbb3a69a2dbbc5b25bb9cd",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -8172,6 +8172,53 @@
       "artifact": {
         "digest": "sha256:21d55e605f0c12c9ff2c6efa962513be398cafdea976f1d9b0ec9f27f6a3aa07",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/conversation-participants",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_participant_services:_apply_conversation_participant_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.conversation-participants",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "conversation_access",
+              "service": "service:application.conversation-access",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "project_tenant",
+              "service": "service:application.project-tenant-services",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "agent_definitions",
+              "service": "service:agent-definition-resolver",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b8cf7342168c6567da6bf0ba4aa94b70429f764b66b10d664ecbec40e2a2adae",
+      "artifact": {
+        "digest": "sha256:4fb98d920edc5f03f12ddea7611519b83528153aec140b97ff2c7c58f737a812",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_participant_services.py"
       }
     },
     {
