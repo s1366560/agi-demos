@@ -35,6 +35,7 @@
     "electron/main/nativeFileDialogPolicy.ts",
     "electron/main/oauthDeepLinkPolicy.ts",
     "electron/main/oauthCallbackAuthority.ts",
+    "electron/main/platformPluginDataPlaneCredentialPolicy.ts",
     "electron/preload/nativeFilePreloadPolicy.ts",
     "electron/main/rendererProtocol.ts",
     "electron/main/sidecarSupervisor.ts",

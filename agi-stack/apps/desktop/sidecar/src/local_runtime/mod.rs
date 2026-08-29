@@ -413,13 +413,14 @@ impl LocalRuntimeService {
     pub(crate) async fn start_platform_plugin_control_plane_v2(
         &self,
         trusted_sessions: crate::trusted_session::TrustedSessionBroker,
+        plugin_data_plane_credentials_v2: crate::plugin_data_plane_credential_v2::PluginDataPlaneCredentialBrokerV2,
     ) -> Result<platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2, String> {
         self.state
             .platform_plugin_authority_v2
             .install_trusted_sessions(trusted_sessions.clone());
         platform_plugin_sync_v2::PlatformPluginControlPlaneReconcilerV2::start(
             Arc::clone(&self.state),
-            trusted_sessions,
+            plugin_data_plane_credentials_v2,
         )
         .await
     }

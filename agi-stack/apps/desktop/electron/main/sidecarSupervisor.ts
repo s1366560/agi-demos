@@ -2,6 +2,12 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
+import {
+  PLUGIN_DATA_PLANE_ACK_PARTICIPATION_ENV_V2,
+  PLUGIN_DATA_PLANE_API_BASE_URL_ENV_V2,
+  PLUGIN_DATA_PLANE_CREDENTIAL_ENV_V2,
+} from './platformPluginDataPlaneCredentialPolicy';
+
 const SIDECAR_PROTOCOL_VERSION = 1;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
@@ -56,6 +62,20 @@ export function sidecarRendererEnvironment(
   return Object.freeze({
     AGISTACK_DESKTOP_RENDERER_ORIGIN: developmentUrl?.origin ?? '',
   });
+}
+
+export function sidecarChildEnvironment(
+  inherited: NodeJS.ProcessEnv,
+  configured?: Readonly<Record<string, string>>,
+): NodeJS.ProcessEnv {
+  const environment = {
+    ...inherited,
+    ...configured,
+  };
+  delete environment[PLUGIN_DATA_PLANE_CREDENTIAL_ENV_V2];
+  delete environment[PLUGIN_DATA_PLANE_API_BASE_URL_ENV_V2];
+  delete environment[PLUGIN_DATA_PLANE_ACK_PARTICIPATION_ENV_V2];
+  return environment;
 }
 
 export type SidecarRuntimeIdentity = {
@@ -179,10 +199,7 @@ export class SidecarSupervisor {
     const secret = secretBytes.toString('base64url');
     const nonce = randomBytes(32).toString('base64url');
     const child = spawn(this.#options.binaryPath, [], {
-      env: {
-        ...process.env,
-        ...this.#options.environment,
-      },
+      env: sidecarChildEnvironment(process.env, this.#options.environment),
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });

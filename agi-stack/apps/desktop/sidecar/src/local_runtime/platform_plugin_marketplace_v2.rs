@@ -62,7 +62,7 @@ async fn list_packages(
     url.set_query(uri.query());
     let response = marketplace_client()?
         .get(url)
-        .bearer_auth(authority.credential)
+        .bearer_auth(authority.credential.as_str())
         .send()
         .await
         .map_err(|_| {
@@ -88,7 +88,7 @@ async fn uninstall_package(
     let url = uninstall_url(&authority.base_url, &plugin_id)?;
     let response = marketplace_client()?
         .post(url)
-        .bearer_auth(authority.credential)
+        .bearer_auth(authority.credential.as_str())
         .json(&request)
         .send()
         .await

@@ -28,6 +28,9 @@ use crate::{
     },
     native_host,
     oauth_pending_attempt::{OAuthPendingAttemptBroker, OAuthPendingAttemptRecord},
+    plugin_data_plane_credential_v2::{
+        PluginDataPlaneCredentialBrokerV2, PluginDataPlaneCredentialRecordV2,
+    },
     trusted_session::{
         deserialize_local_record, serialize_local_record, TrustedSessionBroker,
         TrustedSessionRecord,
@@ -97,6 +100,7 @@ struct ControlResponse {
 struct ControlState {
     runtime: LocalRuntimeService,
     oauth_pending_attempts: OAuthPendingAttemptBroker,
+    plugin_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     trusted_sessions: TrustedSessionBroker,
     workspace_core: WorkspaceCoreSupervisor,
     plugin_control_plane_v2: PlatformPluginControlPlaneReconcilerV2,
@@ -128,9 +132,14 @@ pub(crate) async fn run() -> Result<(), String> {
     )
     .await?;
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
+    let plugin_data_plane_credentials_v2 =
+        PluginDataPlaneCredentialBrokerV2::native(credential_vault.clone());
     let trusted_sessions = TrustedSessionBroker::native(credential_vault);
     let plugin_control_plane_v2 = match runtime
-        .start_platform_plugin_control_plane_v2(trusted_sessions.clone())
+        .start_platform_plugin_control_plane_v2(
+            trusted_sessions.clone(),
+            plugin_data_plane_credentials_v2.clone(),
+        )
         .await
     {
         Ok(reconciler) => reconciler,
@@ -167,6 +176,7 @@ pub(crate) async fn run() -> Result<(), String> {
     let state = ControlState {
         runtime,
         oauth_pending_attempts,
+        plugin_data_plane_credentials_v2,
         trusted_sessions,
         workspace_core,
         plugin_control_plane_v2,
@@ -300,13 +310,14 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 Err(error) => Err(error),
             }
         }
-        "trusted_session_save" => {
-            let broker = state.trusted_sessions.clone();
-            let saved = parse_arg::<TrustedSessionRecord>(request.args.as_ref(), "input").and_then(
-                |record| {
-                    task::block_in_place(|| broker.save(record)).map_err(|error| error.to_string())
-                },
-            );
+        "plugin_data_plane_credential_import_v2" => {
+            let broker = state.plugin_data_plane_credentials_v2.clone();
+            let saved =
+                parse_arg::<PluginDataPlaneCredentialRecordV2>(request.args.as_ref(), "input")
+                    .and_then(|record| {
+                        task::block_in_place(|| broker.save(&record))
+                            .map_err(|error| error.to_string())
+                    });
             match saved {
                 Ok(()) => state
                     .plugin_control_plane_v2
@@ -316,14 +327,8 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 Err(error) => Err(error),
             }
         }
-        "trusted_session_load" => {
-            let broker = state.trusted_sessions.clone();
-            task::block_in_place(|| broker.load())
-                .map_err(|error| error.to_string())
-                .and_then(|record| serde_json::to_value(record).map_err(|error| error.to_string()))
-        }
-        "trusted_session_clear" => {
-            let broker = state.trusted_sessions.clone();
+        "plugin_data_plane_credential_clear_v2" => {
+            let broker = state.plugin_data_plane_credentials_v2.clone();
             match task::block_in_place(|| broker.clear()).map_err(|error| error.to_string()) {
                 Ok(()) => state
                     .plugin_control_plane_v2
@@ -332,6 +337,26 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                     .map(|()| Value::Null),
                 Err(error) => Err(error),
             }
+        }
+        "trusted_session_save" => {
+            let broker = state.trusted_sessions.clone();
+            parse_arg::<TrustedSessionRecord>(request.args.as_ref(), "input")
+                .and_then(|record| {
+                    task::block_in_place(|| broker.save(record)).map_err(|error| error.to_string())
+                })
+                .map(|()| Value::Null)
+        }
+        "trusted_session_load" => {
+            let broker = state.trusted_sessions.clone();
+            task::block_in_place(|| broker.load())
+                .map_err(|error| error.to_string())
+                .and_then(|record| serde_json::to_value(record).map_err(|error| error.to_string()))
+        }
+        "trusted_session_clear" => {
+            let broker = state.trusted_sessions.clone();
+            task::block_in_place(|| broker.clear())
+                .map_err(|error| error.to_string())
+                .map(|()| Value::Null)
         }
         "oauth_pending_attempt_save" => {
             let broker = state.oauth_pending_attempts.clone();

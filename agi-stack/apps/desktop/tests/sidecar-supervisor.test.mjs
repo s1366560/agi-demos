@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 
-const { SidecarSupervisor, sidecarRendererEnvironment } =
+const { SidecarSupervisor, sidecarChildEnvironment, sidecarRendererEnvironment } =
   await import('file:///tmp/agistack-desktop-test-dist/electron/main/sidecarSupervisor.js');
 
 test('sidecar renderer environment binds the exact validated development origin', () => {
@@ -15,6 +15,28 @@ test('sidecar renderer environment binds the exact validated development origin'
   assert.deepEqual(sidecarRendererEnvironment(null), {
     AGISTACK_DESKTOP_RENDERER_ORIGIN: '',
   });
+});
+
+test('sidecar child environment excludes plugin data-plane bootstrap secrets', () => {
+  const credential = `ms_dp_${'d'.repeat(64)}`;
+  const environment = sidecarChildEnvironment(
+    {
+      PATH: '/usr/bin',
+      AGISTACK_PLUGIN_DATA_PLANE_CREDENTIAL_V2: credential,
+      AGISTACK_PLUGIN_DATA_PLANE_API_BASE_URL_V2: 'https://plugins.example.test',
+      AGISTACK_PLUGIN_DATA_PLANE_ACK_PARTICIPATION_V2: 'true',
+    },
+    {
+      AGISTACK_DESKTOP_RENDERER_ORIGIN: 'http://localhost:5175',
+      AGISTACK_PLUGIN_DATA_PLANE_CREDENTIAL_V2: credential,
+    },
+  );
+
+  assert.deepEqual(environment, {
+    PATH: '/usr/bin',
+    AGISTACK_DESKTOP_RENDERER_ORIGIN: 'http://localhost:5175',
+  });
+  assert.equal(JSON.stringify(environment).includes(credential), false);
 });
 
 const fakeSidecarSource = String.raw`#!/usr/bin/env node

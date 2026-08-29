@@ -70,6 +70,9 @@ import {
   type NativeFileDialogAuthority,
   type NativeFileDialogFilter,
 } from './nativeFileDialogPolicy';
+import {
+  takePlatformPluginDataPlaneCredentialEnvironmentV2,
+} from './platformPluginDataPlaneCredentialPolicy';
 import { configureQaProfile, resolveSidecarLegacyDataDirectories } from './qaProfilePolicy';
 import { SidecarSupervisor, sidecarRendererEnvironment } from './sidecarSupervisor';
 import { startAutomaticUpdates } from './updater';
@@ -1134,8 +1137,15 @@ function handleFatalStartup(error: unknown): void {
 async function bootstrapApplication(): Promise<void> {
   installRendererProtocol();
   installMediaPermissionPolicy();
+  const pluginDataPlaneCredentialV2 =
+    takePlatformPluginDataPlaneCredentialEnvironmentV2(process.env);
   sidecarSupervisor = createSidecarSupervisor();
   await sidecarSupervisor.start();
+  if (pluginDataPlaneCredentialV2) {
+    await sidecarSupervisor.invoke('plugin_data_plane_credential_import_v2', {
+      input: pluginDataPlaneCredentialV2,
+    });
+  }
   cloudSocketBroker = new DesktopCloudSocketBroker({
     authorize: (input) =>
       authorizeVaultBoundCloudSocket(input, {

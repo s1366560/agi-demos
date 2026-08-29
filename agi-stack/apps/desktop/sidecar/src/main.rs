@@ -6,6 +6,7 @@ mod data_migration;
 mod local_runtime;
 mod native_host;
 mod oauth_pending_attempt;
+mod plugin_data_plane_credential_v2;
 mod plugin_snapshots_v2;
 mod private_file_permissions;
 mod trusted_session;

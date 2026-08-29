@@ -17,8 +17,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, oneshot, watch};
 use url::Url;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
+    plugin_data_plane_credential_v2::{
+        validate_base_url_v2, PluginDataPlaneCredentialBrokerV2, PluginDataPlaneCredentialRecordV2,
+        DESKTOP_PLUGIN_DATA_PLANE_ID_V2,
+    },
     plugin_snapshots_v2,
     trusted_session::{
         TrustedSessionBroker, TrustedSessionCredentialKind, TrustedSessionRecord,
@@ -28,7 +33,7 @@ use crate::{
 
 use super::LocalRuntimeState;
 
-const DATA_PLANE_ID: &str = "desktop-sidecar-v2";
+const DATA_PLANE_ID: &str = DESKTOP_PLUGIN_DATA_PLANE_ID_V2;
 const SUCCESS_INTERVAL: Duration = Duration::from_secs(30);
 const INITIAL_ERROR_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_ERROR_INTERVAL: Duration = Duration::from_secs(60);
@@ -87,6 +92,14 @@ pub(super) struct CloudAuthorityV2 {
     pub(super) base_url: Url,
     pub(super) credential: String,
     fingerprint: String,
+    configuration_fingerprint: String,
+    ack_participation: bool,
+}
+
+impl Drop for CloudAuthorityV2 {
+    fn drop(&mut self) {
+        self.credential.zeroize();
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,11 +120,11 @@ pub(crate) struct PlatformPluginControlPlaneReconcilerV2 {
 impl PlatformPluginControlPlaneReconcilerV2 {
     pub(super) async fn start(
         state: Arc<LocalRuntimeState>,
-        trusted_sessions: TrustedSessionBroker,
+        plugin_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     ) -> Result<Self, String> {
         Self::start_with_intervals(
             state,
-            trusted_sessions,
+            plugin_data_plane_credentials_v2,
             SUCCESS_INTERVAL,
             INITIAL_ERROR_INTERVAL,
         )
@@ -120,7 +133,7 @@ impl PlatformPluginControlPlaneReconcilerV2 {
 
     async fn start_with_intervals(
         state: Arc<LocalRuntimeState>,
-        trusted_sessions: TrustedSessionBroker,
+        plugin_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
         success_interval: Duration,
         initial_error_interval: Duration,
     ) -> Result<Self, String> {
@@ -132,7 +145,7 @@ impl PlatformPluginControlPlaneReconcilerV2 {
         let (selection_tx, selection_rx) = mpsc::channel(SELECTION_COMMAND_CAPACITY);
         let task = tokio::spawn(reconcile_loop(
             state,
-            trusted_sessions,
+            plugin_data_plane_credentials_v2,
             ReconcileLoopControlV2 {
                 shutdown_rx,
                 selection: Arc::clone(&selection),
@@ -209,7 +222,7 @@ impl PlatformPluginControlPlaneReconcilerV2 {
 
 async fn reconcile_loop(
     state: Arc<LocalRuntimeState>,
-    trusted_sessions: TrustedSessionBroker,
+    plugin_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     mut control: ReconcileLoopControlV2,
     mut reconciler: PluginSnapshotReconcilerV2,
     mut active_authority: Option<DesktopAuthoritySourceV2>,
@@ -245,7 +258,7 @@ async fn reconcile_loop(
 
         let transition = reconcile_selected_authority(
             &state,
-            &trusted_sessions,
+            &plugin_data_plane_credentials_v2,
             &control.selection,
             expected_selection,
             &mut reconciler,
@@ -269,7 +282,7 @@ async fn reconcile_loop(
             Ok(SelectionReconcileOutcomeV2::Applied) => {
                 poll_selected_authority(
                     &state,
-                    &trusted_sessions,
+                    &plugin_data_plane_credentials_v2,
                     &control.selection,
                     expected_selection,
                     &mut reconciler,
@@ -370,7 +383,7 @@ async fn activate_authority_source(
 
 async fn reconcile_selected_authority(
     state: &LocalRuntimeState,
-    trusted_sessions: &TrustedSessionBroker,
+    plugin_data_plane_credentials_v2: &PluginDataPlaneCredentialBrokerV2,
     selection: &Mutex<PlatformPluginAuthoritySelectionV2>,
     expected_selection: PlatformPluginAuthoritySelectionV2,
     reconciler: &mut PluginSnapshotReconcilerV2,
@@ -381,20 +394,24 @@ async fn reconcile_selected_authority(
     }
     let desired_authority = match expected_selection.mode {
         PlatformPluginAuthorityModeV2::Local => Some(DesktopAuthoritySourceV2::Local),
-        PlatformPluginAuthorityModeV2::Cloud => match load_cloud_authority(trusted_sessions) {
-            Ok(Some(authority)) => Some(DesktopAuthoritySourceV2::Cloud(authority.fingerprint)),
-            Ok(None) => None,
-            Err(error) => {
-                let outcome =
-                    deactivate_for_selection(state, selection, expected_selection).await?;
-                if outcome == SelectionReconcileOutcomeV2::Applied {
-                    *active_authority = None;
-                    reconciler.reset_publication_ordering();
-                    return Err(error);
+        PlatformPluginAuthorityModeV2::Cloud => {
+            match load_plugin_data_plane_authority_v2(plugin_data_plane_credentials_v2) {
+                Ok(Some(authority)) => Some(DesktopAuthoritySourceV2::Cloud(
+                    authority.fingerprint.clone(),
+                )),
+                Ok(None) => None,
+                Err(error) => {
+                    let outcome =
+                        deactivate_for_selection(state, selection, expected_selection).await?;
+                    if outcome == SelectionReconcileOutcomeV2::Applied {
+                        *active_authority = None;
+                        reconciler.reset_publication_ordering();
+                        return Err(error);
+                    }
+                    return Ok(outcome);
                 }
-                return Ok(outcome);
             }
-        },
+        }
     };
     if *active_authority == desired_authority {
         return Ok(SelectionReconcileOutcomeV2::Applied);
@@ -532,7 +549,7 @@ async fn deactivate_for_selection(
 
 async fn poll_selected_authority(
     state: &LocalRuntimeState,
-    trusted_sessions: &TrustedSessionBroker,
+    plugin_data_plane_credentials_v2: &PluginDataPlaneCredentialBrokerV2,
     selection: &Mutex<PlatformPluginAuthoritySelectionV2>,
     expected_selection: PlatformPluginAuthoritySelectionV2,
     reconciler: &mut PluginSnapshotReconcilerV2,
@@ -542,12 +559,13 @@ async fn poll_selected_authority(
     {
         return Ok(());
     }
-    let Some(authority) = load_cloud_authority(trusted_sessions)? else {
+    let Some(authority) = load_plugin_data_plane_authority_v2(plugin_data_plane_credentials_v2)?
+    else {
         return Ok(());
     };
     reconcile_once(
         state,
-        trusted_sessions,
+        plugin_data_plane_credentials_v2,
         &authority,
         selection,
         expected_selection,
@@ -581,7 +599,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn begin_selected_cloud_publication(
     state: &LocalRuntimeState,
-    trusted_sessions: &TrustedSessionBroker,
+    plugin_data_plane_credentials_v2: &PluginDataPlaneCredentialBrokerV2,
     authority: &CloudAuthorityV2,
     selection: &Mutex<PlatformPluginAuthoritySelectionV2>,
     expected_selection: PlatformPluginAuthoritySelectionV2,
@@ -591,7 +609,10 @@ fn begin_selected_cloud_publication(
 ) -> Result<Option<GenerationRetirementV2>, String> {
     let current = lock_selection(selection)?;
     if *current != expected_selection
-        || !cloud_authority_is_current(trusted_sessions, &authority.fingerprint)?
+        || !plugin_data_plane_authority_is_current_v2(
+            plugin_data_plane_credentials_v2,
+            &authority.configuration_fingerprint,
+        )?
     {
         return Ok(None);
     }
@@ -631,19 +652,76 @@ pub(super) fn load_cloud_authority(
     Ok(Some(CloudAuthorityV2 {
         base_url,
         credential: record.credential,
+        configuration_fingerprint: fingerprint.clone(),
         fingerprint,
+        ack_participation: false,
+    }))
+}
+
+fn load_plugin_data_plane_authority_v2(
+    plugin_data_plane_credentials_v2: &PluginDataPlaneCredentialBrokerV2,
+) -> Result<Option<CloudAuthorityV2>, String> {
+    let Some(mut record) = plugin_data_plane_credentials_v2
+        .load()
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(None);
+    };
+    let base_url = validate_base_url_v2(&record.api_base_url)
+        .map_err(|()| "plugin data-plane API base URL is invalid".to_string())?;
+    let fingerprint =
+        data_plane_authority_fingerprint_v2(&base_url, record.data_plane_id.as_str())?;
+    let configuration_fingerprint = data_plane_configuration_fingerprint_v2(&fingerprint, &record)?;
+    let credential = std::mem::take(&mut record.credential);
+    Ok(Some(CloudAuthorityV2 {
+        base_url,
+        credential,
+        fingerprint,
+        configuration_fingerprint,
+        ack_participation: record.ack_participation,
     }))
 }
 
 fn authority_fingerprint(base_url: &Url, credential: &str) -> Result<String, String> {
     let normalized_base_url = normalized_cloud_base_url(base_url);
+    let identity = Zeroizing::new(
+        serde_json::to_vec(&(
+            "memstack-platform-plugin-authority-v2",
+            normalized_base_url,
+            credential,
+        ))
+        .map_err(|_| "plugin v2 authority identity could not be encoded".to_string())?,
+    );
+    Ok(format!("sha256:{:x}", Sha256::digest(identity.as_slice())))
+}
+
+fn data_plane_authority_fingerprint_v2(
+    base_url: &Url,
+    data_plane_id: &str,
+) -> Result<String, String> {
     let identity = serde_json::to_vec(&(
-        "memstack-platform-plugin-authority-v2",
-        normalized_base_url,
-        credential,
+        "memstack-platform-plugin-data-plane-authority-v2",
+        normalized_cloud_base_url(base_url),
+        data_plane_id,
     ))
-    .map_err(|_| "plugin v2 authority identity could not be encoded".to_string())?;
+    .map_err(|_| "plugin v2 data-plane authority identity could not be encoded".to_string())?;
     Ok(format!("sha256:{:x}", Sha256::digest(identity)))
+}
+
+fn data_plane_configuration_fingerprint_v2(
+    authority_fingerprint: &str,
+    record: &PluginDataPlaneCredentialRecordV2,
+) -> Result<String, String> {
+    let identity = Zeroizing::new(
+        serde_json::to_vec(&(
+            "memstack-platform-plugin-data-plane-configuration-v2",
+            authority_fingerprint,
+            record.credential.as_str(),
+            record.ack_participation,
+        ))
+        .map_err(|_| "plugin v2 data-plane configuration could not be encoded".to_string())?,
+    );
+    Ok(format!("sha256:{:x}", Sha256::digest(identity.as_slice())))
 }
 
 fn normalized_cloud_base_url(base_url: &Url) -> String {
@@ -672,7 +750,7 @@ fn restore_last_good(
 
 async fn reconcile_once(
     state: &LocalRuntimeState,
-    trusted_sessions: &TrustedSessionBroker,
+    plugin_data_plane_credentials_v2: &PluginDataPlaneCredentialBrokerV2,
     authority: &CloudAuthorityV2,
     selection: &Mutex<PlatformPluginAuthoritySelectionV2>,
     expected_selection: PlatformPluginAuthoritySelectionV2,
@@ -688,8 +766,8 @@ async fn reconcile_once(
         return Ok(());
     };
     if !selected_cloud_authority_is_current(
-        trusted_sessions,
-        &authority.fingerprint,
+        plugin_data_plane_credentials_v2,
+        &authority.configuration_fingerprint,
         selection,
         expected_selection,
     )? {
@@ -704,8 +782,8 @@ async fn reconcile_once(
     let receipt = match reconciler.prepare(&distribution).await {
         SnapshotPreparationV2::Receipt(receipt) => {
             if !selected_cloud_authority_is_current(
-                trusted_sessions,
-                &authority.fingerprint,
+                plugin_data_plane_credentials_v2,
+                &authority.configuration_fingerprint,
                 selection,
                 expected_selection,
             )? {
@@ -716,8 +794,8 @@ async fn reconcile_once(
         }
         SnapshotPreparationV2::Ready(prepared) => {
             if !selected_cloud_authority_is_current(
-                trusted_sessions,
-                &authority.fingerprint,
+                plugin_data_plane_credentials_v2,
+                &authority.configuration_fingerprint,
                 selection,
                 expected_selection,
             )? {
@@ -733,7 +811,7 @@ async fn reconcile_once(
                     debug_assert!(Arc::ptr_eq(&manager, &expected_manager));
                     let retirement = begin_selected_cloud_publication(
                         state,
-                        trusted_sessions,
+                        plugin_data_plane_credentials_v2,
                         authority,
                         selection,
                         expected_selection,
@@ -756,14 +834,17 @@ async fn reconcile_once(
             receipt
         }
     };
-    post_receipt(
-        &client,
-        &authority.base_url,
-        authority.credential.as_str(),
-        &distribution,
-        &receipt,
-    )
-    .await
+    if authority.ack_participation {
+        post_receipt(
+            &client,
+            &authority.base_url,
+            authority.credential.as_str(),
+            &distribution,
+            &receipt,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 fn persist_receipt(
@@ -782,25 +863,28 @@ fn persist_receipt(
     .map_err(|error| error.to_string())
 }
 
-fn cloud_authority_is_current(
-    trusted_sessions: &TrustedSessionBroker,
-    expected_fingerprint: &str,
+fn plugin_data_plane_authority_is_current_v2(
+    plugin_data_plane_credentials_v2: &PluginDataPlaneCredentialBrokerV2,
+    expected_configuration_fingerprint: &str,
 ) -> Result<bool, String> {
-    load_cloud_authority(trusted_sessions).map(|authority| {
-        authority
-            .as_ref()
-            .is_some_and(|authority| authority.fingerprint == expected_fingerprint)
+    load_plugin_data_plane_authority_v2(plugin_data_plane_credentials_v2).map(|authority| {
+        authority.as_ref().is_some_and(|authority| {
+            authority.configuration_fingerprint == expected_configuration_fingerprint
+        })
     })
 }
 
 fn selected_cloud_authority_is_current(
-    trusted_sessions: &TrustedSessionBroker,
-    expected_fingerprint: &str,
+    plugin_data_plane_credentials_v2: &PluginDataPlaneCredentialBrokerV2,
+    expected_configuration_fingerprint: &str,
     selection: &Mutex<PlatformPluginAuthoritySelectionV2>,
     expected_selection: PlatformPluginAuthoritySelectionV2,
 ) -> Result<bool, String> {
     Ok(selection_is_current(selection, expected_selection)?
-        && cloud_authority_is_current(trusted_sessions, expected_fingerprint)?)
+        && plugin_data_plane_authority_is_current_v2(
+            plugin_data_plane_credentials_v2,
+            expected_configuration_fingerprint,
+        )?)
 }
 
 async fn fetch_distribution(
@@ -938,11 +1022,24 @@ mod tests {
         TargetHostDescriptorV2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
         DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
     };
+    use axum::{
+        extract::State,
+        http::{header::AUTHORIZATION, HeaderMap, Method, StatusCode},
+        routing::{get, post},
+        Json, Router,
+    };
     use serde_json::{json, Value};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+        sync::oneshot,
+        task::JoinHandle,
+    };
     use uuid::Uuid;
 
-    use crate::trusted_session::{TrustedSessionStore, TrustedSessionStoreError};
+    use crate::plugin_data_plane_credential_v2::{
+        PluginDataPlaneCredentialStoreErrorV2, PluginDataPlaneCredentialStoreV2,
+    };
 
     use super::super::session_store::DesktopSessionStore;
     use super::*;
@@ -953,33 +1050,133 @@ mod tests {
         "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     #[derive(Default)]
-    struct InMemoryTrustedSessionStore {
+    struct InMemoryPluginDataPlaneCredentialStoreV2 {
         raw: Mutex<Option<String>>,
     }
 
-    impl TrustedSessionStore for InMemoryTrustedSessionStore {
-        fn save_raw(&self, value: &str) -> Result<(), TrustedSessionStoreError> {
+    impl PluginDataPlaneCredentialStoreV2 for InMemoryPluginDataPlaneCredentialStoreV2 {
+        fn save_raw(&self, value: &str) -> Result<(), PluginDataPlaneCredentialStoreErrorV2> {
             *self
                 .raw
                 .lock()
-                .map_err(|_| TrustedSessionStoreError::Unavailable)? = Some(value.to_owned());
+                .map_err(|_| PluginDataPlaneCredentialStoreErrorV2::Unavailable)? =
+                Some(value.to_owned());
             Ok(())
         }
 
-        fn load_raw(&self) -> Result<Option<String>, TrustedSessionStoreError> {
+        fn load_raw(&self) -> Result<Option<String>, PluginDataPlaneCredentialStoreErrorV2> {
             self.raw
                 .lock()
                 .map(|raw| raw.clone())
-                .map_err(|_| TrustedSessionStoreError::Unavailable)
+                .map_err(|_| PluginDataPlaneCredentialStoreErrorV2::Unavailable)
         }
 
-        fn clear_raw(&self) -> Result<(), TrustedSessionStoreError> {
+        fn clear_raw(&self) -> Result<(), PluginDataPlaneCredentialStoreErrorV2> {
             self.raw
                 .lock()
                 .map(|mut raw| raw.take())
                 .map(|_| ())
-                .map_err(|_| TrustedSessionStoreError::Unavailable)
+                .map_err(|_| PluginDataPlaneCredentialStoreErrorV2::Unavailable)
         }
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct DataPlaneRequestV2 {
+        method: Method,
+        authorization: Option<String>,
+        body: Option<Value>,
+    }
+
+    #[derive(Clone)]
+    struct MockDataPlaneV2 {
+        distribution: Value,
+        requests: Arc<Mutex<Vec<DataPlaneRequestV2>>>,
+    }
+
+    impl MockDataPlaneV2 {
+        fn requests(&self) -> Vec<DataPlaneRequestV2> {
+            self.requests
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        }
+
+        fn record(&self, request: DataPlaneRequestV2) {
+            self.requests
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(request);
+        }
+    }
+
+    async fn serve_distribution_v2(
+        State(data_plane): State<MockDataPlaneV2>,
+        headers: HeaderMap,
+    ) -> (StatusCode, Json<Value>) {
+        data_plane.record(DataPlaneRequestV2 {
+            method: Method::GET,
+            authorization: authorization_v2(&headers),
+            body: None,
+        });
+        (StatusCode::OK, Json(data_plane.distribution.clone()))
+    }
+
+    async fn receive_receipt_v2(
+        State(data_plane): State<MockDataPlaneV2>,
+        headers: HeaderMap,
+        Json(body): Json<Value>,
+    ) -> StatusCode {
+        data_plane.record(DataPlaneRequestV2 {
+            method: Method::POST,
+            authorization: authorization_v2(&headers),
+            body: Some(body),
+        });
+        StatusCode::NO_CONTENT
+    }
+
+    fn authorization_v2(headers: &HeaderMap) -> Option<String> {
+        headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+    }
+
+    async fn spawn_data_plane_v2(
+        distribution: &ControlPlaneDistributionV2,
+    ) -> (String, MockDataPlaneV2, oneshot::Sender<()>, JoinHandle<()>) {
+        let data_plane = MockDataPlaneV2 {
+            distribution: serde_json::to_value(distribution).expect("distribution JSON"),
+            requests: Arc::new(Mutex::new(Vec::new())),
+        };
+        let app = Router::new()
+            .route(
+                "/control/api/v1/platform-plugins/v2/distribution",
+                get(serve_distribution_v2),
+            )
+            .route(
+                "/control/api/v1/platform-plugins/v2/data-plane-state",
+                post(receive_receipt_v2),
+            )
+            .with_state(data_plane.clone());
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("mock data-plane listener");
+        let address = listener.local_addr().expect("mock data-plane address");
+        let (shutdown, shutdown_rx) = oneshot::channel();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .expect("mock data-plane server");
+        });
+        (
+            format!("http://{address}/control"),
+            data_plane,
+            shutdown,
+            task,
+        )
     }
 
     fn test_state() -> Arc<LocalRuntimeState> {
@@ -1076,6 +1273,26 @@ mod tests {
         }
     }
 
+    fn plugin_data_plane_credentials_v2() -> PluginDataPlaneCredentialBrokerV2 {
+        PluginDataPlaneCredentialBrokerV2::new(Arc::new(
+            InMemoryPluginDataPlaneCredentialStoreV2::default(),
+        ))
+    }
+
+    fn plugin_data_plane_record_v2(
+        api_base_url: &str,
+        credential_fill: char,
+        ack_participation: bool,
+    ) -> PluginDataPlaneCredentialRecordV2 {
+        PluginDataPlaneCredentialRecordV2 {
+            version: 2,
+            api_base_url: api_base_url.to_owned(),
+            data_plane_id: DATA_PLANE_ID.to_owned(),
+            credential: format!("ms_dp_{}", credential_fill.to_string().repeat(64)),
+            ack_participation,
+        }
+    }
+
     #[test]
     fn cloud_authority_url_accepts_https_and_loopback_only() {
         assert!(validate_cloud_base_url(&trusted_record("https://example.com/control")).is_ok());
@@ -1155,14 +1372,252 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn workload_credential_rotation_preserves_last_good_and_uses_the_new_bearer() {
+        let distribution = bootstrap_distribution(23, "workload-credential-rotation");
+        let (api_base_url, data_plane, shutdown, task) = spawn_data_plane_v2(&distribution).await;
+        let state = test_state();
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
+        let first_secret = format!("ms_dp_{}", "d".repeat(64));
+        let second_secret = format!("ms_dp_{}", "e".repeat(64));
+        let first_record = plugin_data_plane_record_v2(&api_base_url, 'd', false);
+        assert_eq!(first_record.credential, first_secret);
+        plugin_data_plane_credentials_v2
+            .save(&first_record)
+            .expect("first data-plane credential");
+        let first = load_plugin_data_plane_authority_v2(&plugin_data_plane_credentials_v2)
+            .expect("first data-plane authority")
+            .expect("first data-plane authority record");
+        let stable_fingerprint = first.fingerprint.clone();
+        let first_configuration = first.configuration_fingerprint.clone();
+        drop(first);
+        let receipt = SnapshotApplyReceiptV2 {
+            status: ApplyStatusV2::Ack,
+            requested_version: distribution.envelope.version,
+            requested_digest: distribution.snapshot.digest.clone(),
+            applied_version: Some(distribution.envelope.version),
+            applied_digest: Some(distribution.snapshot.digest.clone()),
+            error_code: None,
+            error_message: None,
+        };
+        {
+            let mut connection = state.session_store.connection().expect("session store");
+            plugin_snapshots_v2::initialize_schema(&connection).expect("plugin snapshot schema");
+            plugin_snapshots_v2::record_requested(&connection, &stable_fingerprint, &distribution)
+                .expect("requested distribution");
+            plugin_snapshots_v2::record_receipt(
+                &mut connection,
+                &stable_fingerprint,
+                &distribution.envelope.nonce,
+                &receipt,
+            )
+            .expect("last-good receipt");
+        }
+        let mut reconciler = desktop_reconciler(&state);
+        activate_authority_source(
+            &state,
+            &mut reconciler,
+            &DesktopAuthoritySourceV2::Cloud(stable_fingerprint.clone()),
+        )
+        .await
+        .expect("persisted last-good activation");
+
+        drop(first_record);
+        let rotated_record = plugin_data_plane_record_v2(&api_base_url, 'e', false);
+        assert_eq!(rotated_record.credential, second_secret);
+        plugin_data_plane_credentials_v2
+            .save(&rotated_record)
+            .expect("rotated data-plane credential");
+        let rotated = load_plugin_data_plane_authority_v2(&plugin_data_plane_credentials_v2)
+            .expect("rotated data-plane authority")
+            .expect("rotated data-plane authority record");
+
+        assert_eq!(rotated.fingerprint, stable_fingerprint);
+        assert_ne!(rotated.configuration_fingerprint, first_configuration);
+        assert!(!rotated.fingerprint.contains(&first_secret));
+        assert!(!rotated.fingerprint.contains(&second_secret));
+        assert_eq!(
+            restore_last_good(&state, &rotated.fingerprint).expect("rotated last-good read"),
+            Some(distribution.clone())
+        );
+        assert!(!plugin_data_plane_authority_is_current_v2(
+            &plugin_data_plane_credentials_v2,
+            &first_configuration,
+        )
+        .expect("configuration currency"));
+        let expected_selection = PlatformPluginAuthoritySelectionV2 {
+            mode: PlatformPluginAuthorityModeV2::Cloud,
+            epoch: 1,
+        };
+        let selection = Mutex::new(expected_selection);
+
+        reconcile_once(
+            &state,
+            &plugin_data_plane_credentials_v2,
+            &rotated,
+            &selection,
+            expected_selection,
+            &mut reconciler,
+        )
+        .await
+        .expect("rotated workload reconcile");
+
+        assert_eq!(
+            data_plane.requests(),
+            vec![DataPlaneRequestV2 {
+                method: Method::GET,
+                authorization: Some(format!("Bearer {second_secret}")),
+                body: None,
+            }]
+        );
+        assert_eq!(
+            state
+                .platform_plugin_authority_v2
+                .acquire_generation()
+                .expect("last-good generation after rotation")
+                .descriptor()
+                .publication_version,
+            Some(23)
+        );
+
+        let _ = shutdown.send(());
+        task.await.expect("mock data-plane task");
+        reconciler.close().await;
+        state.platform_plugin_authority_v2.deactivate().await;
+    }
+
+    #[tokio::test]
+    async fn workload_poll_uses_dedicated_bearer_and_skips_receipt_by_default() {
+        let distribution = bootstrap_distribution(21, "workload-default-no-ack");
+        let (api_base_url, data_plane, shutdown, task) = spawn_data_plane_v2(&distribution).await;
+        let state = test_state();
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
+        let record = plugin_data_plane_record_v2(&api_base_url, 'f', false);
+        let credential = record.credential.clone();
+        plugin_data_plane_credentials_v2
+            .save(&record)
+            .expect("data-plane credential");
+        let authority = load_plugin_data_plane_authority_v2(&plugin_data_plane_credentials_v2)
+            .expect("data-plane authority")
+            .expect("data-plane authority record");
+        let expected_selection = PlatformPluginAuthoritySelectionV2 {
+            mode: PlatformPluginAuthorityModeV2::Cloud,
+            epoch: 1,
+        };
+        let selection = Mutex::new(expected_selection);
+        let mut reconciler = desktop_reconciler(&state);
+
+        reconcile_once(
+            &state,
+            &plugin_data_plane_credentials_v2,
+            &authority,
+            &selection,
+            expected_selection,
+            &mut reconciler,
+        )
+        .await
+        .expect("workload distribution reconcile");
+
+        assert_eq!(
+            data_plane.requests(),
+            vec![DataPlaneRequestV2 {
+                method: Method::GET,
+                authorization: Some(format!("Bearer {credential}")),
+                body: None,
+            }]
+        );
+        assert_eq!(
+            state
+                .platform_plugin_authority_v2
+                .acquire_generation()
+                .expect("published data-plane generation")
+                .descriptor()
+                .publication_version,
+            Some(21)
+        );
+
+        let _ = shutdown.send(());
+        task.await.expect("mock data-plane task");
+        reconciler.close().await;
+        state.platform_plugin_authority_v2.deactivate().await;
+    }
+
+    #[tokio::test]
+    async fn explicit_ack_participation_posts_the_exact_workload_receipt() {
+        let distribution = bootstrap_distribution(22, "workload-explicit-ack");
+        let expected_digest = distribution.snapshot.digest.clone();
+        let (api_base_url, data_plane, shutdown, task) = spawn_data_plane_v2(&distribution).await;
+        let state = test_state();
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
+        let record = plugin_data_plane_record_v2(&api_base_url, 'a', true);
+        let credential = record.credential.clone();
+        plugin_data_plane_credentials_v2
+            .save(&record)
+            .expect("data-plane credential");
+        let authority = load_plugin_data_plane_authority_v2(&plugin_data_plane_credentials_v2)
+            .expect("data-plane authority")
+            .expect("data-plane authority record");
+        let expected_selection = PlatformPluginAuthoritySelectionV2 {
+            mode: PlatformPluginAuthorityModeV2::Cloud,
+            epoch: 1,
+        };
+        let selection = Mutex::new(expected_selection);
+        let mut reconciler = desktop_reconciler(&state);
+
+        reconcile_once(
+            &state,
+            &plugin_data_plane_credentials_v2,
+            &authority,
+            &selection,
+            expected_selection,
+            &mut reconciler,
+        )
+        .await
+        .expect("workload distribution reconcile");
+
+        let requests = data_plane.requests();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].method, Method::GET);
+        assert_eq!(
+            requests[0].authorization,
+            Some(format!("Bearer {credential}"))
+        );
+        assert_eq!(requests[1].method, Method::POST);
+        assert_eq!(
+            requests[1].authorization,
+            Some(format!("Bearer {credential}"))
+        );
+        assert_eq!(
+            requests[1].body,
+            Some(json!({
+                "schema_version": 2,
+                "data_plane_id": "desktop-sidecar-v2",
+                "nonce": "workload-explicit-ack",
+                "receipt": {
+                    "status": "ack",
+                    "requested_version": 22,
+                    "requested_digest": expected_digest,
+                    "applied_version": 22,
+                    "applied_digest": expected_digest,
+                    "error_code": null,
+                    "error_message": null,
+                },
+            }))
+        );
+
+        let _ = shutdown.send(());
+        task.await.expect("mock data-plane task");
+        reconciler.close().await;
+        state.platform_plugin_authority_v2.deactivate().await;
+    }
+
+    #[tokio::test]
     async fn local_bootstrap_is_active_before_control_plane_start_returns() {
         let state = test_state();
-        let trusted_sessions =
-            TrustedSessionBroker::new(Arc::new(InMemoryTrustedSessionStore::default()));
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
 
         let control_plane = PlatformPluginControlPlaneReconcilerV2::start_with_intervals(
             Arc::clone(&state),
-            trusted_sessions,
+            plugin_data_plane_credentials_v2,
             Duration::from_secs(3600),
             Duration::from_secs(3600),
         )
@@ -1187,16 +1642,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn explicit_local_selection_ignores_an_existing_cloud_session() {
+    async fn explicit_local_selection_ignores_an_existing_data_plane_credential() {
         let state = test_state();
-        let trusted_sessions =
-            TrustedSessionBroker::new(Arc::new(InMemoryTrustedSessionStore::default()));
-        trusted_sessions
-            .save(trusted_record("https://example.com"))
-            .expect("cloud session");
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
+        plugin_data_plane_credentials_v2
+            .save(&plugin_data_plane_record_v2(
+                "https://example.com",
+                'a',
+                false,
+            ))
+            .expect("data-plane credential");
         let control_plane = PlatformPluginControlPlaneReconcilerV2::start_with_intervals(
             Arc::clone(&state),
-            trusted_sessions,
+            plugin_data_plane_credentials_v2,
             Duration::from_secs(3600),
             Duration::from_secs(3600),
         )
@@ -1220,11 +1678,10 @@ mod tests {
     #[tokio::test]
     async fn selected_cloud_without_a_record_never_falls_back_to_local() {
         let state = test_state();
-        let trusted_sessions =
-            TrustedSessionBroker::new(Arc::new(InMemoryTrustedSessionStore::default()));
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
         let control_plane = PlatformPluginControlPlaneReconcilerV2::start_with_intervals(
             Arc::clone(&state),
-            trusted_sessions,
+            plugin_data_plane_credentials_v2,
             Duration::from_secs(3600),
             Duration::from_secs(3600),
         )
@@ -1246,11 +1703,10 @@ mod tests {
     #[tokio::test]
     async fn queued_selection_commands_supersede_old_epochs_and_apply_the_latest_mode() {
         let state = test_state();
-        let trusted_sessions =
-            TrustedSessionBroker::new(Arc::new(InMemoryTrustedSessionStore::default()));
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
         let control_plane = PlatformPluginControlPlaneReconcilerV2::start_with_intervals(
             Arc::clone(&state),
-            trusted_sessions,
+            plugin_data_plane_credentials_v2,
             Duration::from_secs(3600),
             Duration::from_secs(3600),
         )
@@ -1286,7 +1742,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cloud_refresh_activates_its_scoped_last_good_after_the_session_appears() {
+    async fn cloud_refresh_activates_its_scoped_last_good_after_the_credential_appears() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("test control plane must bind");
@@ -1306,12 +1762,11 @@ mod tests {
                 .expect("404 response");
         });
         let state = test_state();
-        let trusted_sessions =
-            TrustedSessionBroker::new(Arc::new(InMemoryTrustedSessionStore::default()));
-        let record = trusted_record(&api_base_url);
-        let base_url = validate_cloud_base_url(&record).expect("cloud base URL");
-        let fingerprint =
-            authority_fingerprint(&base_url, &record.credential).expect("authority fingerprint");
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
+        let record = plugin_data_plane_record_v2(&api_base_url, 'b', false);
+        let base_url = validate_base_url_v2(&record.api_base_url).expect("cloud base URL");
+        let fingerprint = data_plane_authority_fingerprint_v2(&base_url, &record.data_plane_id)
+            .expect("authority fingerprint");
         let distribution = bootstrap_distribution(8, "cloud-session-appeared");
         let mut seed = PluginSnapshotReconcilerV2::new(desktop_loader());
         let receipt = seed.apply(&distribution).await;
@@ -1332,7 +1787,7 @@ mod tests {
         seed.close().await;
         let control_plane = PlatformPluginControlPlaneReconcilerV2::start_with_intervals(
             Arc::clone(&state),
-            trusted_sessions.clone(),
+            plugin_data_plane_credentials_v2.clone(),
             Duration::from_secs(3600),
             Duration::from_secs(3600),
         )
@@ -1347,7 +1802,9 @@ mod tests {
             .acquire_generation()
             .is_err());
 
-        trusted_sessions.save(record).expect("cloud session");
+        plugin_data_plane_credentials_v2
+            .save(&record)
+            .expect("data-plane credential");
         control_plane
             .refresh()
             .await
@@ -1365,12 +1822,15 @@ mod tests {
     #[tokio::test]
     async fn superseded_cloud_candidate_cannot_advance_durable_last_good() {
         let state = test_state();
-        let trusted_sessions =
-            TrustedSessionBroker::new(Arc::new(InMemoryTrustedSessionStore::default()));
-        trusted_sessions
-            .save(trusted_record("https://example.com"))
-            .expect("cloud session");
-        let authority = load_cloud_authority(&trusted_sessions)
+        let plugin_data_plane_credentials_v2 = plugin_data_plane_credentials_v2();
+        plugin_data_plane_credentials_v2
+            .save(&plugin_data_plane_record_v2(
+                "https://example.com",
+                'c',
+                false,
+            ))
+            .expect("data-plane credential");
+        let authority = load_plugin_data_plane_authority_v2(&plugin_data_plane_credentials_v2)
             .expect("cloud authority")
             .expect("cloud authority record");
         let accepted = bootstrap_distribution(1, "accepted-before-supersede");
@@ -1424,7 +1884,7 @@ mod tests {
 
         let retirement = begin_selected_cloud_publication(
             &state,
-            &trusted_sessions,
+            &plugin_data_plane_credentials_v2,
             &authority,
             &selection,
             expected_selection,
