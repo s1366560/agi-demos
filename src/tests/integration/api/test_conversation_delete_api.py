@@ -89,3 +89,36 @@ async def test_get_and_title_update_use_generation_owned_conversation_crud(
     persisted = await test_db.get(Conversation, conversation_id)
     assert persisted is not None
     assert persisted.title == "After"
+
+
+async def test_create_and_list_use_generation_owned_conversation_collection(
+    authenticated_async_client,
+    test_db,
+    test_project_db,
+) -> None:
+    create_response = await authenticated_async_client.post(
+        "/api/v1/agent/conversations",
+        json={
+            "project_id": test_project_db.id,
+            "title": "Created by V2 collection",
+        },
+    )
+
+    assert create_response.status_code == status.HTTP_201_CREATED
+    created = create_response.json()
+    assert created["project_id"] == test_project_db.id
+    assert created["tenant_id"] == test_project_db.tenant_id
+    assert created["title"] == "Created by V2 collection"
+
+    list_response = await authenticated_async_client.get(
+        "/api/v1/agent/conversations",
+        params={"project_id": test_project_db.id},
+    )
+
+    assert list_response.status_code == status.HTTP_200_OK
+    listed = list_response.json()
+    assert any(item["id"] == created["id"] for item in listed["items"])
+    test_db.expire_all()
+    persisted = await test_db.get(Conversation, created["id"])
+    assert persisted is not None
+    assert persisted.title == "Created by V2 collection"

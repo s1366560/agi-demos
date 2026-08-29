@@ -33,6 +33,12 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     UserProject,
 )
+from src.infrastructure.plugins.v2.conversation_collection_repository import (
+    SqlConversationCollectionRepositoryV2,
+)
+from src.infrastructure.plugins.v2.conversation_collection_services import (
+    InvalidConversationAgentSelectionV2,
+)
 from src.infrastructure.workspace_core.authority import AvernetWorkspaceAuthority
 from src.infrastructure.workspace_core.client import WorkspaceCoreClient
 
@@ -142,6 +148,30 @@ def _conversation_http_authority(service: object, db: object) -> SimpleNamespace
     return SimpleNamespace(service=service, db=db)
 
 
+def _conversation_collection_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
+def _sql_collection_service(
+    db: AsyncSession,
+    *,
+    default_use_case: object | None = None,
+) -> SimpleNamespace:
+    repository = SqlConversationCollectionRepositoryV2(db)
+    return SimpleNamespace(
+        list_conversations=(
+            default_use_case.execute if default_use_case is not None else repository.list_default
+        ),
+        count_conversations=(
+            default_use_case.count if default_use_case is not None else repository.count_default
+        ),
+        list_workspace_conversations=repository.list_workspace,
+        count_workspace_conversations=repository.count_workspace,
+        list_unbound_conversations=repository.list_unbound,
+        count_unbound_conversations=repository.count_unbound,
+    )
+
+
 def _db_with_project_access(
     *, allowed: bool = True, tenant_id: str = "tenant-1"
 ) -> SimpleNamespace:
@@ -160,6 +190,11 @@ def _patch_llm_client(monkeypatch: pytest.MonkeyPatch) -> None:
         conversations_router,
         "create_llm_client",
         AsyncMock(return_value=object()),
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "get_workspace_authority",
+        lambda request: request.app.state.workspace_authority,
     )
 
 
@@ -192,6 +227,10 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     current_user = SimpleNamespace(id="user-1")
     db = _db_with_project_access()
     conversation_http = _conversation_http_authority(FailingConversationAccessService(), db)
+    conversation_collection = _conversation_collection_authority(
+        SimpleNamespace(list_conversations=FailingListUseCase().execute),
+        db,
+    )
 
     route_calls: dict[str, Any] = {
         "list": lambda: conversations_router.list_conversations(
@@ -203,6 +242,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_collection=conversation_collection,
         ),
         "get": lambda: conversations_router.get_conversation(
             conversation_id="conversation-1",
@@ -494,6 +534,10 @@ async def test_list_conversations_expands_workspace_group_and_names(
     )
     use_case = ListUseCase([base_conversation], total=2)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session, default_use_case=use_case),
+        db_session,
+    )
     request = _request_with_container(
         container,
         authority=FakeWorkspaceAuthority(names={"ws-group": "Grouped Workspace"}),
@@ -516,6 +560,7 @@ async def test_list_conversations_expands_workspace_group_and_names(
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
         db=db_session,
+        conversation_collection=collection,
     )
 
     assert [item.id for item in response.items] == [
@@ -544,6 +589,10 @@ async def test_create_conversation_persists_authorized_workspace_link(
         workspace_id="workspace-core-only",
     )
     use_case = SimpleNamespace(execute=AsyncMock(return_value=created))
+    collection_service = SimpleNamespace(
+        create_conversation=use_case.execute,
+        after_create_committed=AsyncMock(),
+    )
     container = SimpleNamespace(
         create_conversation_use_case=lambda _llm: use_case, redis=lambda: None
     )
@@ -568,6 +617,7 @@ async def test_create_conversation_persists_authorized_workspace_link(
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
         db=db,
+        conversation_collection=_conversation_collection_authority(collection_service, db),
     )
 
     membership.assert_awaited_once()
@@ -581,6 +631,7 @@ async def test_create_conversation_persists_authorized_workspace_link(
     )
     assert response.workspace_id == "workspace-core-only"
     db.commit.assert_awaited_once()
+    collection_service.after_create_committed.assert_awaited_once_with(created)
 
 
 @pytest.mark.unit
@@ -621,6 +672,10 @@ async def test_list_conversations_caps_workspace_group_expansion(
     )
     use_case = ListUseCase([base_conversation], total=81)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session, default_use_case=use_case),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -642,6 +697,7 @@ async def test_list_conversations_caps_workspace_group_expansion(
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
         db=db_session,
+        conversation_collection=collection,
     )
 
     assert conversations_router._workspace_group_expansion_limit(5) == 5
@@ -770,6 +826,10 @@ async def test_list_conversations_filters_unbound_before_pagination(
 
     use_case = ListUseCase([], total=6)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session, default_use_case=use_case),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -789,6 +849,7 @@ async def test_list_conversations_filters_unbound_before_pagination(
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
         db=db_session,
+        conversation_collection=collection,
     )
 
     assert [item.id for item in response.items] == [
@@ -814,6 +875,7 @@ async def test_list_conversations_filters_unbound_before_pagination(
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
         db=db_session,
+        conversation_collection=collection,
     )
 
     assert [item.id for item in final_page.items] == [
@@ -877,6 +939,10 @@ async def test_unbound_filter_ignores_non_string_metadata_and_uses_legacy_fallba
     await db_session.flush()
 
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=5))
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -896,6 +962,7 @@ async def test_unbound_filter_ignores_non_string_metadata_and_uses_legacy_fallba
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
         db=db_session,
+        conversation_collection=collection,
     )
 
     assert {item.id for item in response.items} == {
@@ -907,12 +974,13 @@ async def test_unbound_filter_ignores_non_string_metadata_and_uses_legacy_fallba
     assert {item.workspace_id for item in response.items} == {None}
     assert response.total == 4
 
-    legacy_rows = await conversations_router._list_workspace_conversations(
-        db_session,
+    legacy_rows = await SqlConversationCollectionRepositoryV2(db_session).list_workspace(
         project_id="project-1",
         tenant_id="tenant-1",
         workspace_ids={"ws-legacy-malformed"},
         status=ConversationStatus.ACTIVE,
+        limit=None,
+        offset=0,
     )
     assert [conversation.id for conversation in legacy_rows] == [
         "workspace-worker:ws-legacy-malformed:task-1:agent-1:attempt-1"
@@ -1003,26 +1071,30 @@ async def test_workspace_filter_uses_same_precedence_as_response_projection(
     )
     await db_session.flush()
 
-    column_rows = await conversations_router._list_workspace_conversations(
-        db_session,
+    repository = SqlConversationCollectionRepositoryV2(db_session)
+    column_rows = await repository.list_workspace(
         project_id="project-1",
         tenant_id="tenant-1",
         workspace_ids={"ws-column"},
         status=ConversationStatus.ACTIVE,
+        limit=None,
+        offset=0,
     )
-    metadata_rows = await conversations_router._list_workspace_conversations(
-        db_session,
+    metadata_rows = await repository.list_workspace(
         project_id="project-1",
         tenant_id="tenant-1",
         workspace_ids={"ws-metadata"},
         status=ConversationStatus.ACTIVE,
+        limit=None,
+        offset=0,
     )
-    legacy_rows = await conversations_router._list_workspace_conversations(
-        db_session,
+    legacy_rows = await repository.list_workspace(
         project_id="project-1",
         tenant_id="tenant-1",
         workspace_ids={"ws-legacy"},
         status=ConversationStatus.ACTIVE,
+        limit=None,
+        offset=0,
     )
 
     assert [conversation.id for conversation in column_rows] == ["conversation-column-wins"]
@@ -1122,6 +1194,10 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
     await db_session.flush()
 
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=3))
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -1143,6 +1219,7 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-1",
         db=db_session,
+        conversation_collection=collection,
     )
 
     assert [item.id for item in response.items] == [
@@ -1181,6 +1258,10 @@ async def test_list_workspace_conversations_requires_workspace_membership(
     await db_session.flush()
 
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=0))
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -1200,6 +1281,7 @@ async def test_list_workspace_conversations_requires_workspace_membership(
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-workspace-list",
             db=db_session,
+            conversation_collection=collection,
         )
 
     assert exc_info.value.status_code == 403
@@ -1245,6 +1327,10 @@ async def test_list_workspace_conversations_uses_avernet_membership_authority(
     request.app.state.workspace_core_client = client
     request.app.state.workspace_authority = AvernetWorkspaceAuthority(client)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=0))
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session),
+        db_session,
+    )
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
@@ -1260,6 +1346,7 @@ async def test_list_workspace_conversations_uses_avernet_membership_authority(
         current_user=test_user,
         tenant_id=test_project_db.tenant_id,
         db=db_session,
+        conversation_collection=collection,
     )
 
     assert response.items == []
@@ -1470,6 +1557,9 @@ async def test_create_conversation_validation_errors_are_sanitized() -> None:
         create_conversation_use_case=lambda _llm: FailingCreateUseCase(),
     )
     db = _db_with_project_access()
+    collection_service = SimpleNamespace(
+        create_conversation=FailingCreateUseCase().execute,
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.create_conversation(
@@ -1478,6 +1568,7 @@ async def test_create_conversation_validation_errors_are_sanitized() -> None:
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
             db=db,
+            conversation_collection=_conversation_collection_authority(collection_service, db),
         )
 
     assert exc_info.value.status_code == 400
@@ -1515,15 +1606,15 @@ async def test_create_conversation_requires_project_access(
 async def test_create_conversation_rejects_inaccessible_selected_agent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    create_use_case = SimpleNamespace(execute=AsyncMock())
-    registry = SimpleNamespace(get_by_id=AsyncMock(return_value=None))
-    container = SimpleNamespace(
-        agent_registry=lambda: registry,
-        create_conversation_use_case=lambda _llm: create_use_case,
+    create = AsyncMock(
+        side_effect=InvalidConversationAgentSelectionV2("agent-from-another-project")
     )
-    monkeypatch.setattr(
-        conversations_router, "get_container_with_db", lambda _request, _db: container
+    collection_service = SimpleNamespace(
+        create_conversation=create,
+        after_create_committed=AsyncMock(),
     )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
     db = _db_with_project_access()
 
     with pytest.raises(HTTPException) as exc_info:
@@ -1532,20 +1623,25 @@ async def test_create_conversation_rejects_inaccessible_selected_agent(
                 project_id="project-1",
                 agent_config={"selected_agent_id": "agent-from-another-project"},
             ),
-            request=_request_with_container(container),
+            request=_request_with_container(SimpleNamespace()),
             current_user=SimpleNamespace(id="user-1"),
             tenant_id="tenant-1",
             db=db,
+            conversation_collection=_conversation_collection_authority(collection_service, db),
         )
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Invalid agent selection"
-    registry.get_by_id.assert_awaited_once_with(
-        "agent-from-another-project",
-        tenant_id="tenant-1",
+    create.assert_awaited_once_with(
         project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
+        title="New Conversation",
+        agent_config={"selected_agent_id": "agent-from-another-project"},
+        workspace_id=None,
     )
-    create_use_case.execute.assert_not_awaited()
+    static_container.assert_not_called()
+    conversations_router.create_llm_client.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -1570,28 +1666,30 @@ async def test_create_conversation_uses_authorized_project_tenant(
             )
 
     create_use_case = CapturingCreateUseCase()
-    container = SimpleNamespace(
-        create_conversation_use_case=lambda _llm: create_use_case,
-        redis=lambda: None,
+    collection_service = SimpleNamespace(
+        create_conversation=create_use_case.execute,
+        after_create_committed=AsyncMock(),
     )
-    monkeypatch.setattr(
-        conversations_router, "get_container_with_db", lambda _request, _db: container
-    )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
     db = _db_with_project_access(tenant_id="tenant-project")
 
     response = await conversations_router.create_conversation(
         data=CreateConversationRequest(project_id="project-1", title="Cross tenant"),
-        request=_request_with_container(container),
+        request=_request_with_container(SimpleNamespace()),
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-fallback",
         db=db,
+        conversation_collection=_conversation_collection_authority(collection_service, db),
     )
 
-    conversations_router.create_llm_client.assert_awaited_once_with("tenant-project")
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
     assert create_use_case.kwargs is not None
     assert create_use_case.kwargs["tenant_id"] == "tenant-project"
     assert response.tenant_id == "tenant-project"
     db.commit.assert_awaited_once()
+    collection_service.after_create_committed.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -1660,13 +1758,15 @@ async def test_list_conversations_uses_authorized_project_tenant(
     await db_session.flush()
 
     list_use_case = CapturingListUseCase()
-    container = SimpleNamespace(list_conversations_use_case=lambda _llm: list_use_case)
-    monkeypatch.setattr(
-        conversations_router, "get_container_with_db", lambda _request, _db: container
+    collection = _conversation_collection_authority(
+        _sql_collection_service(db_session, default_use_case=list_use_case),
+        db_session,
     )
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
 
     response = await conversations_router.list_conversations(
-        request=_request_with_container(container),
+        request=_request_with_container(SimpleNamespace()),
         project_id=project.id,
         status=None,
         limit=50,
@@ -1676,19 +1776,21 @@ async def test_list_conversations_uses_authorized_project_tenant(
         current_user=SimpleNamespace(id="user-1"),
         tenant_id="tenant-fallback",
         db=db_session,
+        conversation_collection=collection,
     )
 
-    conversations_router.create_llm_client.assert_awaited_once_with("tenant-project")
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
     assert list_use_case.execute_kwargs == {
         "project_id": project.id,
-        "user_id": "user-1",
+        "tenant_id": "tenant-project",
         "limit": 50,
         "offset": 0,
         "status": None,
     }
     assert list_use_case.count_kwargs == {
         "project_id": project.id,
-        "user_id": "user-1",
+        "tenant_id": "tenant-project",
         "status": None,
     }
     assert response.items == []

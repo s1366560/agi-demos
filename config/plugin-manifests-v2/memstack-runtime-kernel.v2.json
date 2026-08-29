@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:c5c5aa807a4249e7eadf493d8b4994cd39d616e3f7beab3c2c73965b35c95b16",
+        "digest": "sha256:441aaa9decfa848ac6e09ea05bb1240aac899a926ad753d7b21d2b968103d2c0",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4008,6 +4008,37 @@
       "artifact": {
         "digest": "sha256:12b9235f7539c6a0a54d9753d455e10b8a26577e4e8471c7f2d295860becd7d1",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/conversation-collection-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_collection_repository:_apply_conversation_collection_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.conversation-collection-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:a3d29d20769468661ddc0f0f39c1bd46f2cb223ca1374debb2289f2658327fa9",
+      "artifact": {
+        "digest": "sha256:258a9d03f4c2241128f7d693064583b9f5321ad178d5d41f68e69905dc857d21",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_collection_repository.py"
       }
     },
     {
@@ -7969,6 +8000,151 @@
       "artifact": {
         "digest": "sha256:a1048081b1bd0f037f4a92039c5cff5c538a2c447ab7a588ce6476f2d157cbfe",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/conversation-collection",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_collection_services:_apply_conversation_collection_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.conversation-collection",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repository",
+              "service": "service:persistence.conversation-collection-repository-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "agent_definitions",
+              "service": "service:agent-definition-resolver",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [
+            {
+              "event": "conversation.created",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "conversation_id",
+                  "project_id",
+                  "tenant_id",
+                  "title",
+                  "status",
+                  "created_at"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "title": { "type": "string", "minLength": 1 },
+                  "status": { "const": "active", "type": "string" },
+                  "created_at": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            }
+          ],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:cdf9ea7c837c2901f3ffcee49751b2b4aabf2efa6cb9859714b358b6df2d7b87",
+      "artifact": {
+        "digest": "sha256:57f8a5db7a344d272fd122f132329b7ba2e8f44928cc404998d788ebcb45d49a",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_collection_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/events/conversation-created-redis-publisher",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_collection_services:_apply_conversation_created_redis_publisher_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": [
+            {
+              "event": "conversation.created",
+              "mode": "serial",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "conversation_id",
+                  "project_id",
+                  "tenant_id",
+                  "title",
+                  "status",
+                  "created_at"
+                ],
+                "properties": {
+                  "conversation_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "tenant_id": { "type": "string", "minLength": 1 },
+                  "title": { "type": "string", "minLength": 1 },
+                  "status": { "const": "active", "type": "string" },
+                  "created_at": { "type": "string", "minLength": 1 }
+                }
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "null"
+              }
+            }
+          ]
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "redis-project-stream", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:d5c156fdac0bc214e29b6e51aa76722e4c899c631fffa1672afbabfa631e40a7",
+      "artifact": {
+        "digest": "sha256:57f8a5db7a344d272fd122f132329b7ba2e8f44928cc404998d788ebcb45d49a",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_collection_services.py"
       }
     },
     {

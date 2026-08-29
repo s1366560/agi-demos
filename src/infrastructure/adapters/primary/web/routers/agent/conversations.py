@@ -7,19 +7,14 @@ import logging
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import String, and_, case, func, select
+from sqlalchemy import and_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.sql import ColumnElement, Select, Subquery
-from sqlalchemy.sql.compiler import SQLCompiler
-from sqlalchemy.sql.functions import FunctionElement
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
-from src.application.services.conversation_events import publish_conversation_created
 from src.configuration.factories import create_llm_client
 from src.domain.model.agent import AgentExecutionEvent, ConversationStatus
 from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
@@ -29,6 +24,11 @@ from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityNotFoundError,
     WorkspaceAuthorityScope,
     WorkspaceAuthorityUnavailableError,
+)
+from src.infrastructure.adapters.primary.web.conversation_collection_http_application_authority_v2 import (
+    ConversationCollectionHttpApplicationAuthorityV2,
+    conversation_create_http_application_authority_dependency_v2,
+    conversation_list_http_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2 import (
     ConversationHttpApplicationAuthorityV2,
@@ -45,7 +45,6 @@ from src.infrastructure.adapters.primary.web.workspace_authority import (
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
-    AgentExecutionEvent as AgentExecutionEventModel,
     Conversation as ConversationModel,
     Message as MessageModel,
     Project,
@@ -53,11 +52,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     User,
     UserProject,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-    SqlConversationRepository,
-    conversation_activity_order,
-)
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.conversation_collection_services import (
+    InvalidConversationAgentSelectionV2,
+)
 
 from .schemas import (
     ConversationResponse,
@@ -129,75 +127,6 @@ CONVERSATION_LIST_DEFAULT_LIMIT = 10
 WORKSPACE_GROUP_EXPANSION_HARD_LIMIT = 25
 
 
-class _LegacyWorkspaceId(FunctionElement[str]):
-    type = String()
-    inherit_cache = True
-
-
-class _MetadataWorkspaceId(FunctionElement[str]):
-    type = String()
-    inherit_cache = True
-
-
-@compiles(_MetadataWorkspaceId, "postgresql")
-def _compile_metadata_workspace_id_postgresql(  # pyright: ignore[reportUnusedFunction]
-    element: _MetadataWorkspaceId,
-    compiler: SQLCompiler,
-    **_kwargs: object,
-) -> str:
-    metadata = next(iter(element.clauses))
-    compiled_metadata = compiler.process(metadata)
-    return (
-        "CASE "
-        f"WHEN json_typeof({compiled_metadata} -> 'workspace_id') = 'string' "
-        f"THEN NULLIF(TRIM({compiled_metadata} ->> 'workspace_id'), '') "
-        "ELSE NULL END"
-    )
-
-
-@compiles(_MetadataWorkspaceId, "sqlite")
-def _compile_metadata_workspace_id_sqlite(  # pyright: ignore[reportUnusedFunction]
-    element: _MetadataWorkspaceId,
-    compiler: SQLCompiler,
-    **_kwargs: object,
-) -> str:
-    metadata = next(iter(element.clauses))
-    compiled_metadata = compiler.process(metadata)
-    return (
-        "CASE "
-        f"WHEN json_type({compiled_metadata}, '$.workspace_id') = 'text' "
-        f"THEN NULLIF(TRIM(json_extract({compiled_metadata}, '$.workspace_id')), '') "
-        "ELSE NULL END"
-    )
-
-
-@compiles(_LegacyWorkspaceId, "postgresql")
-def _compile_legacy_workspace_id_postgresql(  # pyright: ignore[reportUnusedFunction]
-    element: _LegacyWorkspaceId,
-    compiler: SQLCompiler,
-    **_kwargs: object,
-) -> str:
-    conversation_id = next(iter(element.clauses))
-    compiled_id = compiler.process(conversation_id)
-    return f"NULLIF(TRIM(SPLIT_PART({compiled_id}, ':', 2)), '')"
-
-
-@compiles(_LegacyWorkspaceId, "sqlite")
-def _compile_legacy_workspace_id_sqlite(  # pyright: ignore[reportUnusedFunction]
-    element: _LegacyWorkspaceId,
-    compiler: SQLCompiler,
-    **_kwargs: object,
-) -> str:
-    conversation_id = next(iter(element.clauses))
-    compiled_id = compiler.process(conversation_id)
-    remainder = f"SUBSTR({compiled_id}, INSTR({compiled_id}, ':') + 1)"
-    segment_length = (
-        f"CASE INSTR({remainder}, ':') "
-        f"WHEN 0 THEN LENGTH({remainder}) ELSE INSTR({remainder}, ':') - 1 END"
-    )
-    return f"NULLIF(TRIM(SUBSTR({remainder}, 1, {segment_length})), '')"
-
-
 def _workspace_group_expansion_limit(page_limit: int) -> int:
     return min(page_limit, WORKSPACE_GROUP_EXPANSION_HARD_LIMIT)
 
@@ -232,61 +161,6 @@ def _linked_workspace_task_id_for_response(conversation: "Conversation") -> str 
     return conversation.linked_workspace_task_id or _linked_workspace_task_id_from_conversation_id(
         conversation.id
     )
-
-
-def _last_activity_subquery() -> Subquery:
-    return (
-        select(
-            AgentExecutionEventModel.conversation_id,
-            func.max(AgentExecutionEventModel.event_time_us).label("last_event_time_us"),
-        )
-        .group_by(AgentExecutionEventModel.conversation_id)
-        .subquery("last_activity")
-    )
-
-
-def _ordered_conversation_query() -> Select[tuple[ConversationModel]]:
-    last_activity_subq = _last_activity_subquery()
-    return (
-        select(ConversationModel)
-        .outerjoin(
-            last_activity_subq,
-            ConversationModel.id == last_activity_subq.c.conversation_id,
-        )
-        .order_by(
-            *conversation_activity_order(
-                cast("ColumnElement[int]", last_activity_subq.c.last_event_time_us)
-            )
-        )
-    )
-
-
-def _workspace_link_filter(workspace_ids: set[str]) -> ColumnElement[bool]:
-    return _effective_workspace_id_expression().in_(workspace_ids)
-
-
-def _effective_workspace_id_expression() -> ColumnElement[str | None]:
-    persisted_workspace_id = func.nullif(func.trim(ConversationModel.workspace_id), "")
-    metadata_workspace_id = _MetadataWorkspaceId(ConversationModel.meta)
-    legacy_workspace_id = case(
-        (
-            ConversationModel.id.like("workspace-%:%"),
-            _LegacyWorkspaceId(ConversationModel.id),
-        ),
-        else_=None,
-    )
-    return cast(
-        "ColumnElement[str | None]",
-        func.coalesce(
-            persisted_workspace_id,
-            metadata_workspace_id,
-            legacy_workspace_id,
-        ),
-    )
-
-
-def _unbound_workspace_filter() -> ColumnElement[bool]:
-    return _effective_workspace_id_expression().is_(None)
 
 
 def _conversation_list_filters(
@@ -528,106 +402,6 @@ async def _accessible_workspace_ids(
     return set(profiles)
 
 
-async def _list_workspace_conversations(
-    db: AsyncSession,
-    *,
-    project_id: str,
-    tenant_id: str,
-    workspace_ids: set[str],
-    status: ConversationStatus | None,
-    limit: int | None = None,
-    offset: int = 0,
-) -> list["Conversation"]:
-    if not workspace_ids:
-        return []
-
-    query = _ordered_conversation_query().where(
-        ConversationModel.project_id == project_id,
-        ConversationModel.tenant_id == tenant_id,
-        _workspace_link_filter(workspace_ids),
-    )
-    if status is not None:
-        query = query.where(ConversationModel.status == status.value)
-    if limit is not None:
-        query = query.offset(offset).limit(limit)
-
-    result = await db.execute(refresh_select_statement(query))
-    repo = SqlConversationRepository(db)
-    return [d for c in result.scalars().all() if (d := repo._to_domain(c)) is not None]
-
-
-async def _count_workspace_conversations(
-    db: AsyncSession,
-    *,
-    project_id: str,
-    tenant_id: str,
-    workspace_id: str,
-    status: ConversationStatus | None,
-) -> int:
-    query = (
-        select(func.count())
-        .select_from(ConversationModel)
-        .where(
-            ConversationModel.project_id == project_id,
-            ConversationModel.tenant_id == tenant_id,
-            _workspace_link_filter({workspace_id}),
-        )
-    )
-    if status is not None:
-        query = query.where(ConversationModel.status == status.value)
-    result = await db.execute(refresh_select_statement(query))
-    return result.scalar() or 0
-
-
-async def _list_unbound_conversations(
-    db: AsyncSession,
-    *,
-    project_id: str,
-    tenant_id: str,
-    user_id: str,
-    status: ConversationStatus | None,
-    limit: int,
-    offset: int,
-) -> list["Conversation"]:
-    query = _ordered_conversation_query().where(
-        ConversationModel.project_id == project_id,
-        ConversationModel.tenant_id == tenant_id,
-        ConversationModel.user_id == user_id,
-        _unbound_workspace_filter(),
-    )
-    if status is not None:
-        query = query.where(ConversationModel.status == status.value)
-    query = query.offset(offset).limit(limit)
-
-    result = await db.execute(refresh_select_statement(query))
-    repo = SqlConversationRepository(db)
-    return [d for c in result.scalars().all() if (d := repo._to_domain(c)) is not None]
-
-
-async def _count_unbound_conversations(
-    db: AsyncSession,
-    *,
-    project_id: str,
-    tenant_id: str,
-    user_id: str,
-    status: ConversationStatus | None,
-) -> int:
-    query = (
-        select(func.count())
-        .select_from(ConversationModel)
-        .where(
-            ConversationModel.project_id == project_id,
-            ConversationModel.tenant_id == tenant_id,
-            ConversationModel.user_id == user_id,
-            _unbound_workspace_filter(),
-        )
-    )
-    if status is not None:
-        query = query.where(ConversationModel.status == status.value)
-    result = await db.execute(refresh_select_statement(query))
-    return result.scalar() or 0
-
-
 def _merge_workspace_groups(
     base_conversations: list["Conversation"],
     workspace_conversations: list["Conversation"],
@@ -737,6 +511,9 @@ async def create_conversation(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_collection: ConversationCollectionHttpApplicationAuthorityV2 = Depends(
+        conversation_create_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Create a new conversation."""
     try:
@@ -744,13 +521,6 @@ async def create_conversation(
         tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            project_id=data.project_id,
-        )
-        container = get_container_with_db(request, db)
-        await _ensure_selected_agent_access(
-            data.agent_config,
-            container=container,
-            tenant_id=tenant_id,
             project_id=data.project_id,
         )
         if data.workspace_id:
@@ -762,9 +532,7 @@ async def create_conversation(
                 project_id=data.project_id,
                 workspace_id=data.workspace_id,
             )
-        llm = await create_llm_client(tenant_id)
-        use_case = container.create_conversation_use_case(llm)
-        conversation = await use_case.execute(
+        conversation = await conversation_collection.service.create_conversation(
             project_id=data.project_id,
             user_id=current_user.id,
             tenant_id=tenant_id,
@@ -774,19 +542,19 @@ async def create_conversation(
         )
         await db.commit()
         try:
-            redis_client = container.redis()
-            if redis_client is not None:
-                await publish_conversation_created(
-                    redis_client=redis_client,
-                    conversation=conversation,
-                )
+            await conversation_collection.service.after_create_committed(conversation)
         except Exception:
             logger.exception(
-                "Failed to publish conversation_created after conversation commit",
+                "Failed to dispatch conversation.created after conversation commit",
                 extra={"conversation_id": conversation.id, "project_id": conversation.project_id},
             )
         return ConversationResponse.from_domain(conversation)
 
+    except InvalidConversationAgentSelectionV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid agent selection"),
+        ) from exc
     except HTTPException:
         raise
     except (ValueError, AttributeError) as e:
@@ -845,6 +613,9 @@ async def list_conversations(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_collection: ConversationCollectionHttpApplicationAuthorityV2 = Depends(
+        conversation_list_http_application_authority_dependency_v2
+    ),
 ) -> PaginatedConversationsResponse:
     """List conversations for a project with pagination."""
     try:
@@ -872,8 +643,7 @@ async def list_conversations(
         )
 
         if requested_unbound_only:
-            conversations = await _list_unbound_conversations(
-                db,
+            conversations = await conversation_collection.service.list_unbound_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 user_id=current_user.id,
@@ -881,8 +651,7 @@ async def list_conversations(
                 limit=limit,
                 offset=offset,
             )
-            total = await _count_unbound_conversations(
-                db,
+            total = await conversation_collection.service.count_unbound_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 user_id=current_user.id,
@@ -897,8 +666,7 @@ async def list_conversations(
                 project_id=project_id,
                 workspace_id=requested_workspace_id,
             )
-            conversations = await _list_workspace_conversations(
-                db,
+            conversations = await conversation_collection.service.list_workspace_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 workspace_ids={requested_workspace_id},
@@ -906,28 +674,24 @@ async def list_conversations(
                 limit=limit,
                 offset=offset,
             )
-            total = await _count_workspace_conversations(
-                db,
+            total = await conversation_collection.service.count_workspace_conversations(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 workspace_id=requested_workspace_id,
                 status=conv_status,
             )
         else:
-            container = get_container_with_db(request, db)
-            llm = await create_llm_client(tenant_id)
-            use_case = container.list_conversations_use_case(llm)
-            conversations = await use_case.execute(
+            conversations = await conversation_collection.service.list_conversations(
                 project_id=project_id,
-                user_id=current_user.id,
+                tenant_id=tenant_id,
                 limit=limit,
                 offset=offset,
                 status=conv_status,
             )
 
-            total = await use_case.count(
+            total = await conversation_collection.service.count_conversations(
                 project_id=project_id,
-                user_id=current_user.id,
+                tenant_id=tenant_id,
                 status=conv_status,
             )
 
@@ -944,13 +708,15 @@ async def list_conversations(
                     project_id=project_id,
                     workspace_ids=workspace_ids,
                 )
-                workspace_conversations = await _list_workspace_conversations(
-                    db,
-                    project_id=project_id,
-                    tenant_id=tenant_id,
-                    workspace_ids=workspace_ids,
-                    status=conv_status,
-                    limit=_workspace_group_expansion_limit(limit),
+                workspace_conversations = (
+                    await conversation_collection.service.list_workspace_conversations(
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        workspace_ids=workspace_ids,
+                        status=conv_status,
+                        limit=_workspace_group_expansion_limit(limit),
+                        offset=0,
+                    )
                 )
                 conversations = _merge_workspace_groups(conversations, workspace_conversations)
 
