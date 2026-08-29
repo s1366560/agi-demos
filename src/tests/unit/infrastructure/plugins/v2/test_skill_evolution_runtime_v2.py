@@ -13,13 +13,20 @@ import pytest
 from src.infrastructure.plugins.v2 import skill_evolution_runtime as runtime_module
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
-from src.infrastructure.plugins.v2.llm_client_service import TENANT_LLM_CLIENT_FACTORY_MODULE_V2
+from src.infrastructure.plugins.v2.llm_client_service import (
+    TENANT_LLM_CLIENT_FACTORY_MODULE_V2,
+    TENANT_LLM_CLIENT_FACTORY_SERVICE_V2,
+)
+from src.infrastructure.plugins.v2.plugin_config_services import (
+    PLUGIN_CONFIG_APPLICATION_MODULE_V2,
+    PLUGIN_CONFIG_APPLICATION_SERVICE_V2,
+)
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
-from src.infrastructure.plugins.v2.reflection_runtime import REFLECTION_RUNTIME_MODULE_V2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.skill_evolution_runtime import (
     SKILL_EVOLUTION_LLM_CLIENTS_INJECT_V2,
+    SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2,
     SKILL_EVOLUTION_RUNTIME_MODULE_V2,
     SKILL_EVOLUTION_RUNTIME_SERVICE_V2,
     SKILL_EVOLUTION_SESSIONS_INJECT_V2,
@@ -190,8 +197,7 @@ async def test_skill_evolution_rejects_missing_llm_client_factory_without_fallba
         document,
         entries=tuple(
             replace(entry, enabled=False)
-            if entry.module_ref
-            in {TENANT_LLM_CLIENT_FACTORY_MODULE_V2, REFLECTION_RUNTIME_MODULE_V2}
+            if entry.module_ref == TENANT_LLM_CLIENT_FACTORY_MODULE_V2
             else entry
             for entry in document.entries
         ),
@@ -203,6 +209,56 @@ async def test_skill_evolution_rejects_missing_llm_client_factory_without_fallba
         await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
 
     assert error.value.code == "missing_inject_provider"
+    assert TENANT_LLM_CLIENT_FACTORY_SERVICE_V2 in str(error.value)
+
+
+async def test_skill_evolution_rejects_missing_plugin_config_service_without_fallback() -> None:
+    document = load_profile_document_v2(_PROFILE_PATH)
+    disabled = replace(
+        document,
+        entries=tuple(
+            replace(entry, enabled=False)
+            if entry.module_ref == PLUGIN_CONFIG_APPLICATION_MODULE_V2
+            else entry
+            for entry in document.entries
+        ),
+    )
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    snapshot = compose_profile_v2(disabled, {manifest.plugin_id: manifest}, generation=147)
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
+
+    assert error.value.code == "missing_inject_provider"
+    assert "builtin-skill-evolution-scheduler" in str(error.value)
+
+
+async def test_skill_evolution_rejects_wrong_plugin_config_alias_before_loading() -> None:
+    document = load_profile_document_v2(_PROFILE_PATH)
+    broken = replace(
+        document,
+        entries=tuple(
+            replace(
+                entry,
+                inject={
+                    **entry.inject,
+                    SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2: (
+                        "service:persistence.skill-repository-provider"
+                    ),
+                },
+            )
+            if entry.module_ref == SKILL_EVOLUTION_RUNTIME_MODULE_V2
+            else entry
+            for entry in document.entries
+        ),
+    )
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    snapshot = compose_profile_v2(broken, {manifest.plugin_id: manifest}, generation=148)
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
+
+    assert error.value.code == "inject_service_mismatch"
     assert "builtin-skill-evolution-scheduler" in str(error.value)
 
 
@@ -229,6 +285,7 @@ def test_skill_evolution_contract_and_static_authority_retirement_are_explicit()
 
     assert runtime_entry.inject == {
         SKILL_EVOLUTION_LLM_CLIENTS_INJECT_V2: "service:llm.tenant-client-factory",
+        SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2: PLUGIN_CONFIG_APPLICATION_SERVICE_V2,
         SKILL_EVOLUTION_SESSIONS_INJECT_V2: "service:persistence.async-session-factory",
     }
     assert runtime_entry.restart_policy.value == "process-boundary"

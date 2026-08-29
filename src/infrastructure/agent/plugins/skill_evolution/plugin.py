@@ -19,6 +19,9 @@ if TYPE_CHECKING:
         SkillEvolutionConfig,
     )
     from src.infrastructure.agent.plugins.skill_evolution.scheduler import LlmClientLease
+    from src.infrastructure.plugins.v2.plugin_config_repository_lease_v2 import (
+        PluginConfigRepositoryLeaseV2,
+    )
 
 PLUGIN_NAME = "skill-evolution"
 
@@ -61,11 +64,13 @@ class SkillEvolutionPlugin:
         config: SkillEvolutionConfig,
         skill_service: SkillService,
         llm_client_lease: LlmClientLease,
+        plugin_config_repository_lease: PluginConfigRepositoryLeaseV2,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ) -> None:
         self.config = config
         self.skill_service = skill_service
         self.llm_client_lease = llm_client_lease
+        self.plugin_config_repository_lease = plugin_config_repository_lease
         self.session_factory = session_factory
         self._loaded_skill_names_by_turn: dict[str, list[str]] = {}
         self._tool_events_by_turn: dict[str, list[dict[str, Any]]] = {}
@@ -108,6 +113,7 @@ class SkillEvolutionPlugin:
             aggregator=self.aggregator,
             engine=self.engine,
             llm_client_lease=llm_client_lease,
+            plugin_config_repository_lease=plugin_config_repository_lease,
             session_factory=session_factory,
         )
 
@@ -239,6 +245,8 @@ def build_skill_evolution_runtime(
     skill_service: Any = None,  # noqa: ANN401
     llm_client_lease: Any = None,  # noqa: ANN401
     session_factory: Any = None,  # noqa: ANN401
+    *,
+    plugin_config_repository_lease: Any,  # noqa: ANN401
 ) -> SkillEvolutionPlugin:
     """Initialize the full skill evolution runtime with dependencies.
 
@@ -251,6 +259,7 @@ def build_skill_evolution_runtime(
         skill_service: SkillService instance for reading/updating skills.
         llm_client_lease: Generation-pinned tenant LLM client lease factory.
         session_factory: SQLAlchemy async session factory for persistence.
+        plugin_config_repository_lease: Generation-pinned PluginConfig repository lease.
 
     Returns:
         The constructed SkillEvolutionPlugin instance.
@@ -266,6 +275,7 @@ def build_skill_evolution_runtime(
         config=config,
         skill_service=skill_service,
         llm_client_lease=llm_client_lease,
+        plugin_config_repository_lease=plugin_config_repository_lease,
         session_factory=session_factory,
     )
 

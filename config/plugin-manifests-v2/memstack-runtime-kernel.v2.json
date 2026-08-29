@@ -9860,6 +9860,11 @@
               "alias": "llm_clients",
               "service": "service:llm.tenant-client-factory",
               "version": "1.0.0"
+            },
+            {
+              "alias": "plugin_configs",
+              "service": "service:application.plugin-config-repository",
+              "version": "1.0.0"
             }
           ]
         },
@@ -9876,9 +9881,9 @@
           }
         }
       },
-      "contract_digest": "sha256:ff22eed2805f8cac5bac3f54afb79320c7dbd5611ac32c24ce31a1ec2e041617",
+      "contract_digest": "sha256:fd739d10b99712ea694142ebeb2a90b1fbe64ad8cb3f3ea8aa2627641c594d53",
       "artifact": {
-        "digest": "sha256:257595028e5d9d45985471dcc1ecc5000ab208eb29c0d871e7de525b3b44c1af",
+        "digest": "sha256:624f64e7fb6abd41ba8ef10aece2bcb937d3c07d72053d56448a8d5767f8f4a2",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_runtime.py"
       }
     },

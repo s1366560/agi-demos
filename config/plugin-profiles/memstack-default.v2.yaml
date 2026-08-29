@@ -3987,6 +3987,7 @@ profile:
       inject:
         sessions: service:persistence.async-session-factory
         llm_clients: service:llm.tenant-client-factory
+        plugin_configs: service:application.plugin-config-repository
       isolate: {}
       scope:
         kind: root

@@ -34,6 +34,9 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.plugins.skill_evolution.summarizer import (
         SessionSummarizer,
     )
+    from src.infrastructure.plugins.v2.plugin_config_repository_lease_v2 import (
+        PluginConfigRepositoryLeaseV2,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +72,7 @@ class EvolutionScheduler:
         aggregator: SkillSessionAggregator,
         engine: EvolutionEngine,
         llm_client_lease: LlmClientLease,
+        plugin_config_repository_lease: PluginConfigRepositoryLeaseV2,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ) -> None:
         self._config = config
@@ -77,6 +81,7 @@ class EvolutionScheduler:
         self._aggregator = aggregator
         self._engine = engine
         self._llm_client_lease = llm_client_lease
+        self._plugin_config_repository_lease = plugin_config_repository_lease
         self._session_factory = session_factory
         self._task: asyncio.Task[None] | None = None
         self._run_lock = asyncio.Lock()
@@ -342,7 +347,10 @@ class EvolutionScheduler:
 
             repo = SkillEvolutionRepository(db)
             run_config = await _load_tenant_config(
-                db, tenant_id=tenant_id, default_config=self._config
+                self._plugin_config_repository_lease,
+                db,
+                tenant_id=tenant_id,
+                default_config=self._config,
             )
             self._summarizer._config = run_config
             self._judge._config = run_config
@@ -467,23 +475,17 @@ class EvolutionScheduler:
 
 
 async def _load_tenant_config(
+    repository_lease: PluginConfigRepositoryLeaseV2,
     db: AsyncSession,
     *,
     tenant_id: str,
     default_config: SkillEvolutionConfig,
 ) -> SkillEvolutionConfig:
-    from sqlalchemy.exc import SQLAlchemyError
-
-    from src.infrastructure.adapters.secondary.persistence.plugin_config_repository import (
-        PluginConfigRepository,
-    )
-
-    try:
-        row = await PluginConfigRepository(db).get_by_tenant_and_plugin(
+    async with repository_lease(db=db, tenant_id=tenant_id) as authority:
+        row = await authority.repository.get_by_tenant_and_plugin(
             tenant_id=tenant_id,
             plugin_name="skill_evolution",
         )
-    except (AttributeError, SQLAlchemyError):
+    if row is None:
         return default_config
-    config = row.config if row is not None and isinstance(row.config, dict) else {}
-    return default_config.with_overrides(config)
+    return default_config.with_overrides(row.config)

@@ -7,6 +7,7 @@ import json
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,6 +20,21 @@ from src.infrastructure.agent.plugins.skill_evolution.aggregation import (
 )
 from src.infrastructure.agent.plugins.skill_evolution.config import SkillEvolutionConfig
 from src.infrastructure.agent.plugins.skill_evolution.plugin import SkillEvolutionPlugin
+
+
+class _EmptyPluginConfigRepository:
+    async def get_by_tenant_and_plugin(
+        self,
+        tenant_id: str,
+        plugin_name: str,
+    ) -> None:
+        del tenant_id, plugin_name
+        return None
+
+
+@asynccontextmanager
+async def _empty_plugin_config_repository_lease(**_kwargs: object):
+    yield SimpleNamespace(repository=_EmptyPluginConfigRepository())
 
 
 @pytest.mark.unit
@@ -50,12 +66,14 @@ async def test_turn_capture_state_is_owned_by_each_plugin_instance() -> None:
         config=SkillEvolutionConfig(enabled=False),
         skill_service=MagicMock(),
         llm_client_lease=MagicMock(),
+        plugin_config_repository_lease=_empty_plugin_config_repository_lease,
         session_factory="session-factory-a",
     )
     plugin_b = SkillEvolutionPlugin(
         config=SkillEvolutionConfig(enabled=False),
         skill_service=MagicMock(),
         llm_client_lease=MagicMock(),
+        plugin_config_repository_lease=_empty_plugin_config_repository_lease,
         session_factory="session-factory-b",
     )
     plugin_a.collector.capture_from_hook = AsyncMock(return_value=[])
@@ -1072,6 +1090,7 @@ class TestV2LifecycleRegistration:
             config=SkillEvolutionConfig(enabled=False),
             skill_service=MagicMock(),
             llm_client_lease=MagicMock(),
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
             session_factory=None,
         )
         assert plugin.config.enabled is False
@@ -1084,6 +1103,7 @@ class TestV2LifecycleRegistration:
             config=SkillEvolutionConfig(enabled=False),
             skill_service=MagicMock(),
             llm_client_lease=MagicMock(),
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
             session_factory=object(),
         )
         plugin.collector = collector
@@ -1142,6 +1162,7 @@ class TestV2LifecycleRegistration:
             config=SkillEvolutionConfig(enabled=False),
             skill_service=MagicMock(),
             llm_client_lease=MagicMock(),
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
             session_factory=object(),
         )
         plugin.collector = collector
@@ -1179,6 +1200,7 @@ class TestEvolutionScheduler:
             aggregator=MagicMock(),
             engine=MagicMock(),
             llm_client_lease=MagicMock(),
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
             session_factory=session_factory or MagicMock(),
         )
 
@@ -1447,6 +1469,7 @@ class TestSkillEvolutionEndToEnd:
                 config=config,
                 skill_service=FakeSkillService(session_factory),
                 llm_client_lease=fake_llm_client_lease,
+                plugin_config_repository_lease=_empty_plugin_config_repository_lease,
                 session_factory=session_factory,
             )
 

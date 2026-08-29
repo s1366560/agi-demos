@@ -22,6 +22,8 @@ from .llm_client_service import (
     TenantLlmClientFactoryProtocolV2,
     lease_tenant_llm_client_v2,
 )
+from .plugin_config_repository_lease_v2 import lease_plugin_config_repository_v2
+from .plugin_config_services import PluginConfigApplicationResolverProtocolV2
 from .runtime import (
     ContextV2,
     EffectResultV2,
@@ -34,6 +36,7 @@ SKILL_EVOLUTION_RUNTIME_MODULE_V2 = "builtin://memstack/runtime/skill-evolution-
 SKILL_EVOLUTION_RUNTIME_SERVICE_V2 = "service:runtime.skill-evolution-scheduler"
 SKILL_EVOLUTION_SESSIONS_INJECT_V2 = "sessions"
 SKILL_EVOLUTION_LLM_CLIENTS_INJECT_V2 = "llm_clients"
+SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2 = "plugin_configs"
 
 _ENABLED_ENV_V2 = "SKILL_EVOLUTION_ENABLED"
 
@@ -148,6 +151,7 @@ class SkillEvolutionSchedulerRuntimeV2:
                     skill_service=None,
                     llm_client_lease=lease_tenant_llm_client_v2,
                     session_factory=sessions.factory,
+                    plugin_config_repository_lease=lease_plugin_config_repository_v2,
                 )
                 if not isinstance(plugin, SkillEvolutionPluginProtocolV2):
                     raise RuntimeV2Error(
@@ -270,6 +274,12 @@ def skill_evolution_scheduler_definition_v2(
                 "invalid_skill_evolution_llm_clients",
                 "Skill Evolution LLM client inject has an invalid implementation",
             )
+        plugin_configs = context.require(SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2)
+        if not isinstance(plugin_configs, PluginConfigApplicationResolverProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_skill_evolution_plugin_configs",
+                "Skill Evolution plugin config inject has an invalid implementation",
+            )
         token = await runtime.acquire_generation(
             sessions=sessions,
             llm_clients=llm_clients,
@@ -315,6 +325,7 @@ def current_skill_evolution_scheduler_v2() -> SkillEvolutionSchedulerProtocolV2:
 
 __all__ = [
     "SKILL_EVOLUTION_LLM_CLIENTS_INJECT_V2",
+    "SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2",
     "SKILL_EVOLUTION_RUNTIME_MODULE_V2",
     "SKILL_EVOLUTION_RUNTIME_SERVICE_V2",
     "SKILL_EVOLUTION_SESSIONS_INJECT_V2",
