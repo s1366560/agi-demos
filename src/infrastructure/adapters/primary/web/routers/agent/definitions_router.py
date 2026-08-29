@@ -276,27 +276,6 @@ async def _validate_execution_backend_v2(
     return dict(backend)
 
 
-async def _accessible_definition_project_ids(
-    db: AsyncSession,
-    *,
-    current_user: User,
-    tenant_id: str,
-) -> set[str]:
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject.project_id)
-            .join(Project, UserProject.project_id == Project.id)
-            .where(
-                and_(
-                    UserProject.user_id == current_user.id,
-                    Project.tenant_id == tenant_id,
-                )
-            )
-        )
-    )
-    return {str(project_id) for project_id in result.scalars().all()}
-
-
 def _filter_agents_by_project_access(
     agents: list[Agent],
     accessible_project_ids: set[str],
@@ -437,9 +416,13 @@ async def list_definitions(  # noqa: PLR0913
     include_total: bool = False,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_definition_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    definition_authority: AgentDefinitionManagementHttpApplicationAuthorityV2 = Depends(
+        agent_definition_management_http_application_authority_dependency_v2
+    ),
 ) -> list[dict[str, Any]] | DefinitionListResponse:
     try:
+        db = definition_authority.db
+        service = definition_authority.service
         await require_tenant_access(db, current_user, tenant_id)
         if scope not in {None, "all", "tenant"}:
             raise HTTPException(
@@ -455,17 +438,19 @@ async def list_definitions(  # noqa: PLR0913
         safe_limit = max(limit, 0)
         safe_offset = max(offset, 0)
         if project_id:
-            await _ensure_project_definition_access(
-                db,
-                current_user=current_user,
+            has_access = await service.has_project_access(
+                user_id=str(current_user.id),
                 tenant_id=tenant_id,
                 project_id=project_id,
             )
-        container = get_container_with_db(request, db)
-        registry = container.agent_registry()
+            if not has_access:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=_("Access denied"),
+                )
 
         if project_id:
-            agents = await registry.list_by_project(
+            agents = await service.list_by_project(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 enabled_only=enabled_only,
@@ -476,7 +461,7 @@ async def list_definitions(  # noqa: PLR0913
                 sort=sort,
             )
             total = (
-                await registry.count_by_project(
+                await service.count_by_project(
                     project_id=project_id,
                     tenant_id=tenant_id,
                     enabled_only=enabled_only,
@@ -490,12 +475,11 @@ async def list_definitions(  # noqa: PLR0913
             if scope == "tenant":
                 accessible_project_ids: set[str] = set()
             else:
-                accessible_project_ids = await _accessible_definition_project_ids(
-                    db,
-                    current_user=current_user,
+                accessible_project_ids = await service.accessible_project_ids(
+                    user_id=str(current_user.id),
                     tenant_id=tenant_id,
                 )
-            agents = await registry.list_by_tenant(
+            agents = await service.list_by_tenant(
                 tenant_id=tenant_id,
                 enabled_only=enabled_only,
                 limit=safe_limit,
@@ -507,7 +491,7 @@ async def list_definitions(  # noqa: PLR0913
             )
             agents = _filter_agents_by_project_access(agents, accessible_project_ids)
             total = (
-                await registry.count_by_tenant(
+                await service.count_by_tenant(
                     tenant_id=tenant_id,
                     enabled_only=enabled_only,
                     project_ids=accessible_project_ids,

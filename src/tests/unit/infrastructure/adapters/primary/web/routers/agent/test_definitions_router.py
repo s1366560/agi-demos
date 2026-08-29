@@ -56,11 +56,19 @@ def _make_definition_authority(
     db: MagicMock,
     *,
     project_access: bool = True,
+    accessible_project_ids: set[str] | None = None,
 ) -> SimpleNamespace:
     service = MagicMock()
     service.create_agent = AsyncMock(side_effect=lambda agent: agent)
     service.has_project_access = AsyncMock(return_value=project_access)
+    service.accessible_project_ids = AsyncMock(
+        return_value={"proj-1"} if accessible_project_ids is None else accessible_project_ids
+    )
     service.external_agent_enabled = AsyncMock(return_value=True)
+    service.list_by_project = registry.list_by_project
+    service.count_by_project = registry.count_by_project
+    service.list_by_tenant = registry.list_by_tenant
+    service.count_by_tenant = registry.count_by_tenant
     return SimpleNamespace(db=db, service=service, registry=registry)
 
 
@@ -198,13 +206,13 @@ class TestDefinitionsRouterA2AConfig:
     @pytest.mark.asyncio
     async def test_list_definitions_requires_project_access_for_project_filter(self):
         db = _make_db(project_member=False)
-        container = _make_container(_make_registry())
+        authority = _make_definition_authority(
+            _make_registry(),
+            db,
+            project_access=False,
+        )
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=container,
-            ) as get_container,
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -216,12 +224,16 @@ class TestDefinitionsRouterA2AConfig:
                 project_id="proj-1",
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Access denied"
-        get_container.assert_not_called()
+        authority.service.has_project_access.assert_awaited_once_with(
+            user_id="user-1",
+            tenant_id="tenant-1",
+            project_id="proj-1",
+        )
 
     @pytest.mark.asyncio
     async def test_list_definitions_filters_project_scoped_agents_by_project_access(self):
@@ -234,13 +246,13 @@ class TestDefinitionsRouterA2AConfig:
                 _make_agent(id="hidden-agent", project_id="proj-2", name="hidden-agent"),
             ]
         )
-        container = _make_container(registry)
+        authority = _make_definition_authority(
+            registry,
+            db,
+            accessible_project_ids={"proj-1"},
+        )
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=container,
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -251,11 +263,15 @@ class TestDefinitionsRouterA2AConfig:
                 project_id=None,
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         assert [agent["id"] for agent in response] == ["tenant-agent", "visible-agent"]
-        registry.list_by_tenant.assert_awaited_once()
+        authority.service.accessible_project_ids.assert_awaited_once_with(
+            user_id="user-1",
+            tenant_id="tenant-1",
+        )
+        authority.service.list_by_tenant.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_list_definitions_can_return_access_scoped_pagination_metadata(self):
@@ -268,13 +284,13 @@ class TestDefinitionsRouterA2AConfig:
             ]
         )
         registry.count_by_tenant = AsyncMock(return_value=2)
-        container = _make_container(registry)
+        authority = _make_definition_authority(
+            registry,
+            db,
+            accessible_project_ids={"proj-1"},
+        )
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=container,
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -292,7 +308,7 @@ class TestDefinitionsRouterA2AConfig:
                 include_total=True,
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         assert response.model_dump()["total"] == 2
@@ -300,7 +316,7 @@ class TestDefinitionsRouterA2AConfig:
             "tenant-agent",
             "visible-agent",
         ]
-        registry.list_by_tenant.assert_awaited_once_with(
+        authority.service.list_by_tenant.assert_awaited_once_with(
             tenant_id="tenant-1",
             enabled_only=False,
             limit=20,
@@ -310,7 +326,7 @@ class TestDefinitionsRouterA2AConfig:
             search="agent",
             sort="name",
         )
-        registry.count_by_tenant.assert_awaited_once_with(
+        authority.service.count_by_tenant.assert_awaited_once_with(
             tenant_id="tenant-1",
             enabled_only=False,
             project_ids={"proj-1"},

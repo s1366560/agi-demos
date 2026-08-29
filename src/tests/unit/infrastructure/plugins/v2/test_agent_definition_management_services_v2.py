@@ -17,6 +17,7 @@ from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.routers.agent.definitions_router import (
     create_definition,
+    list_definitions,
 )
 from src.infrastructure.plugins.v2.agent_definition_management_services import (
     AGENT_DEFINITION_MANAGEMENT_MODULE_V2,
@@ -169,3 +170,11 @@ def test_create_route_has_no_static_definition_container() -> None:
     assert "get_container_with_db" not in source
     assert "agent_orchestrator" not in source
     assert "ACPExternalAgentConfigRepository" not in source
+
+
+def test_list_route_has_no_static_definition_container() -> None:
+    source = inspect.getsource(list_definitions)
+
+    assert "get_container_with_db" not in source
+    assert "agent_registry" not in source
+    assert "_accessible_definition_project_ids" not in source

@@ -322,7 +322,7 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         "src.infrastructure.adapters.primary.web.conversation_participant_http_application_authority_v2.conversation_participant_http_application_authority_dependency_v2": 6,
         "src.infrastructure.adapters.primary.web.conversation_revision_http_application_authority_v2.conversation_revision_http_application_authority_dependency_v2": 3,
         "src.infrastructure.adapters.primary.web.agent_event_query_http_application_authority_v2.agent_event_query_http_application_authority_dependency_v2": 2,
-        "src.infrastructure.adapters.primary.web.agent_definition_management_http_application_authority_v2.agent_definition_management_http_application_authority_dependency_v2": 1,
+        "src.infrastructure.adapters.primary.web.agent_definition_management_http_application_authority_v2.agent_definition_management_http_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.agent_execution_resume_http_application_authority_v2.agent_execution_resume_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.agent_workflow_status_http_application_authority_v2.agent_workflow_status_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2.agent_execution_query_application_authority_dependency_v2": 2,
@@ -333,7 +333,7 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         "src.infrastructure.adapters.primary.web.project_access_http_application_authority_v2.project_access_query_http_application_authority_dependency_v2": 9,
         "src.infrastructure.adapters.primary.web.routers.agent.definitions_router._get_selected_definition_tenant_id": 6,
         "src.infrastructure.adapters.primary.web.workflow_pattern_application_authority_v2.workflow_pattern_application_authority_dependency_v2": 5,
-        "src.infrastructure.adapters.secondary.persistence.database.get_db": 60,
+        "src.infrastructure.adapters.secondary.persistence.database.get_db": 59,
     }
     assert claimed.v2_owned_row_ids == ("agent",)
 
