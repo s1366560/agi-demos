@@ -15,7 +15,7 @@ import logging
 import uuid
 import zipfile
 from base64 import b64encode
-from collections.abc import Collection, Mapping
+from collections.abc import AsyncIterator, Collection, Mapping
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path, PurePosixPath
@@ -37,7 +37,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.di_container import DIContainer
 from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.domain.model.agent.skill.skill_version import SkillVersion
 from src.domain.model.agent.skill_source import SkillSource
@@ -47,6 +46,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
+from src.infrastructure.adapters.primary.web.skill_repository_http_application_authority_v2 import (
+    skill_repository_http_application_authority_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
@@ -58,15 +60,6 @@ from src.infrastructure.plugins.v2.skill_evolution_runtime import (
 )
 from src.infrastructure.skill.markdown_parser import MarkdownParser, SkillMarkdown
 from src.infrastructure.skill.validator import AgentSkillsValidator
-
-
-def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
-    """
-    Get DI container with database session for the current request.
-    """
-    app_container: DIContainer = request.app.state.container
-    return app_container.with_db(db)
-
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +102,22 @@ async def _get_selected_skill_tenant_id(
 
     await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
     return selected_tenant_id
+
+
+async def _get_skill_repository_v2(
+    request: Request,
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[SkillRepositoryPort]:
+    """Hold the pinned V2 operation while a Skill handler uses its repository."""
+    async with skill_repository_http_application_authority_v2(
+        request=request,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    ) as authority:
+        yield authority.repository
 
 
 # === Pydantic Models ===
@@ -956,6 +965,7 @@ async def create_skill(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillResponse:
     """
     Create a new skill.
@@ -987,8 +997,7 @@ async def create_skill(
             project_id=data.project_id,
         )
 
-        container = get_container_with_db(request, db)
-        repo = container.skill_repository()
+        repo = skill_repository
 
         full_content, name, description, tools, package_metadata, version_label = (
             _parsed_skill_payload(
@@ -1054,7 +1063,7 @@ async def create_skill(
 
 
 @router.get("/", response_model=SkillListResponse)
-async def list_skills(
+async def list_skills(  # noqa: PLR0913
     request: Request,
     search_query: str | None = Query(
         None, alias="search", description="Search by name/description"
@@ -1071,6 +1080,7 @@ async def list_skills(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillListResponse:
     """
     List all skills for the current tenant.
@@ -1082,8 +1092,7 @@ async def list_skills(
 
     from src.application.services.skill_service import SkillService
 
-    container = get_container_with_db(request, db)
-    skill_repo = container.skill_repository()
+    skill_repo = skill_repository
 
     skill_status = SkillStatus(status_filter) if status_filter else None
     skill_scope = SkillScope(scope_filter) if scope_filter else None
@@ -1132,12 +1141,12 @@ async def get_skill(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillResponse:
     """
     Get a specific skill by ID.
     """
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    repo = skill_repository
     skill = await _get_readable_skill_or_404(
         db=db,
         repo=repo,
@@ -1163,12 +1172,12 @@ async def update_skill(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillResponse:
     """
     Update an existing skill.
     """
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    repo = skill_repository
     skill = await repo.get_by_id(skill_id)
 
     if not skill:
@@ -1296,12 +1305,12 @@ async def delete_skill(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> None:
     """
     Delete a skill.
     """
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    repo = skill_repository
     skill = await repo.get_by_id(skill_id)
 
     if not skill:
@@ -1337,12 +1346,12 @@ async def update_skill_status(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillResponse:
     """
     Update skill status (active, disabled, deprecated).
     """
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    repo = skill_repository
     skill = await repo.get_by_id(skill_id)
 
     if not skill:
@@ -1416,6 +1425,7 @@ async def list_system_skills(
     status_filter: str | None = Query(None, alias="status", description="Filter by status"),
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillListResponse:
     """
     List all system-level skills.
@@ -1427,8 +1437,7 @@ async def list_system_skills(
 
     from src.application.services.skill_service import SkillService
 
-    container = get_container_with_db(request, db)
-    skill_repo = container.skill_repository()
+    skill_repo = skill_repository
 
     # Get the SkillService to load system skills from filesystem
     skill_service = SkillService.create(
@@ -1477,14 +1486,14 @@ async def get_skill_content(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillContentResponse:
     """
     Get the full content of a skill.
 
     Returns the complete SKILL.md content for editing.
     """
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    repo = skill_repository
     skill = await repo.get_by_id(skill_id)
 
     if not skill:
@@ -1523,6 +1532,7 @@ async def update_skill_content(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillResponse:
     """
     Update the full content of a skill.
@@ -1530,8 +1540,7 @@ async def update_skill_content(
     System skills cannot be modified directly. Use tenant skill configs
     to override them instead.
     """
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    repo = skill_repository
     skill = await repo.get_by_id(skill_id)
 
     if not skill:
@@ -1639,6 +1648,7 @@ async def import_skill_package(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillLifecycleResponse:
     """Import SKILL.md plus resources into the tenant or project skill library."""
     scope = _validate_skill_scope(data.scope, data.project_id)
@@ -1651,8 +1661,7 @@ async def import_skill_package(
         project_id=data.project_id,
     )
 
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    repo = skill_repository
     existing = await _find_existing_skill(
         repo,
         tenant_id=tenant_id,
@@ -1735,6 +1744,7 @@ async def import_skill_zip_package(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillLifecycleResponse:
     """Import a zipped skill directory containing one SKILL.md plus bundled files."""
     if archive.filename and not archive.filename.lower().endswith(".zip"):
@@ -1757,6 +1767,7 @@ async def import_skill_zip_package(
         tenant_id=tenant_id,
         current_user=current_user,
         db=db,
+        skill_repository=skill_repository,
     )
 
 
@@ -1771,14 +1782,14 @@ async def export_skill_package(
     tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
 ) -> SkillPackageResponse:
     """Export a skill's latest SKILL.md snapshot and bundled resource files."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
     )
 
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
+    repo = skill_repository
     skill = await _get_readable_skill_or_404(
         db=db,
         repo=repo,

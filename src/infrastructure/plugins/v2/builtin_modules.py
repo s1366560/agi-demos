@@ -130,6 +130,7 @@ from .session_event_log import builtin_session_event_log_definition_v2
 from .shares_services import shares_service_definitions_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
 from .skill_evolution_runtime import skill_evolution_scheduler_definition_v2
+from .skill_repository_services import skill_repository_service_definitions_v2
 from .smtp_config_services import smtp_config_service_definitions_v2
 from .subagent_management_services import subagent_management_definitions_v2
 from .subagent_run_registry_service import (
@@ -379,6 +380,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         docker_event_monitor_definition_v2(),
         llm_health_runtime_definition_v2(),
         skill_evolution_scheduler_definition_v2(),
+        *skill_repository_service_definitions_v2(),
         *background_task_service_definitions_v2(),
         *conversation_access_service_definitions_v2(),
         *agent_definition_management_definitions_v2(),

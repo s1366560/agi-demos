@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:e4fe8c92b52ee40268832a78dab8d406acaaa7ca54ddee1ea34c72e8d4d1495f",
+        "digest": "sha256:9f52551f697fe64e06fe121a66e4d38945280fe3115f9670390ff902ce2a324f",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4942,6 +4942,74 @@
       "artifact": {
         "digest": "sha256:887e219813a3e8f736338f5bcc1d43f2ed4c8fdaddec21bd5c1a599c97717c10",
         "source": "repo+python://src/infrastructure/plugins/v2/task_log_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/skill-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.skill_repository_services:_apply_skill_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.skill-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:0ce457230a3b252da1f3740ecbda1a42dc582e3a0b87274377d3dd632793ffc0",
+      "artifact": {
+        "digest": "sha256:5ef7f736921bc21b74d9cd38cb282a9b274136ed59a9812f529b42e8c65a20af",
+        "source": "repo+python://src/infrastructure/plugins/v2/skill_repository_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/skill-repository",
+      "entrypoint": "src.infrastructure.plugins.v2.skill_repository_services:_apply_skill_repository_application_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.skill-repository",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repository_provider",
+              "service": "service:persistence.skill-repository-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:43a292c45323a7cba9ba0ab6bb43c7e4b1bfc963db4f8956547c05b11bbe43e7",
+      "artifact": {
+        "digest": "sha256:5ef7f736921bc21b74d9cd38cb282a9b274136ed59a9812f529b42e8c65a20af",
+        "source": "repo+python://src/infrastructure/plugins/v2/skill_repository_services.py"
       }
     },
     {
