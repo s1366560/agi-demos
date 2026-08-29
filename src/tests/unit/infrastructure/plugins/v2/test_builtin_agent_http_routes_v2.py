@@ -315,7 +315,8 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
     assert Counter(_immediate_dependency_ids(claimed_app)) == {
         "src.infrastructure.adapters.primary.web.conversation_collection_http_application_authority_v2.conversation_create_http_application_authority_dependency_v2": 1,
         "src.infrastructure.adapters.primary.web.conversation_collection_http_application_authority_v2.conversation_list_http_application_authority_dependency_v2": 1,
-        "src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2.conversation_http_application_authority_dependency_v2": 3,
+        "src.infrastructure.adapters.primary.web.conversation_config_http_application_authority_v2.conversation_config_http_application_authority_dependency_v2": 1,
+        "src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2.conversation_http_application_authority_dependency_v2": 4,
         "src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2.agent_execution_query_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 92,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user_tenant": 31,

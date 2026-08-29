@@ -39,6 +39,7 @@ from src.infrastructure.plugins.v2.conversation_collection_repository import (
 from src.infrastructure.plugins.v2.conversation_collection_services import (
     InvalidConversationAgentSelectionV2,
 )
+from src.infrastructure.plugins.v2.conversation_config_services import ConversationConfigServiceV2
 from src.infrastructure.workspace_core.authority import AvernetWorkspaceAuthority
 from src.infrastructure.workspace_core.client import WorkspaceCoreClient
 
@@ -61,6 +62,13 @@ class FailingConversationAccessService:
     update_conversation_title = AsyncMock(
         side_effect=RuntimeError("internal conversation access secret")
     )
+
+
+class FailingConversationConfigService:
+    update_conversation_config = AsyncMock(
+        side_effect=RuntimeError("internal conversation config secret")
+    )
+    access = SimpleNamespace(cache=SimpleNamespace(invalidate=AsyncMock()))
 
 
 class FailingDb:
@@ -152,6 +160,10 @@ def _conversation_collection_authority(service: object, db: object) -> SimpleNam
     return SimpleNamespace(service=service, db=db)
 
 
+def _conversation_config_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
 def _sql_collection_service(
     db: AsyncSession,
     *,
@@ -231,6 +243,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
         SimpleNamespace(list_conversations=FailingListUseCase().execute),
         db,
     )
+    conversation_config = _conversation_config_authority(FailingConversationConfigService(), db)
 
     route_calls: dict[str, Any] = {
         "list": lambda: conversations_router.list_conversations(
@@ -288,6 +301,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_config=conversation_config,
         ),
         "mode": lambda: conversations_router.update_conversation_mode(
             conversation_id="conversation-1",
@@ -323,7 +337,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
-    if route_name in {"delete", "title"}:
+    if route_name in {"delete", "title", "config"}:
         db.rollback.assert_awaited_once()
 
 
@@ -1827,8 +1841,10 @@ async def test_project_scoped_conversation_routes_require_project_access(
         get_conversation=AsyncMock(),
         delete_conversation=AsyncMock(),
         update_conversation_title=AsyncMock(),
+        update_conversation_config=AsyncMock(),
     )
     conversation_http = _conversation_http_authority(conversation_service, db)
+    conversation_config = _conversation_config_authority(conversation_service, db)
     route_calls: dict[str, Any] = {
         "get": lambda: conversations_router.get_conversation(
             conversation_id="conversation-1",
@@ -1874,6 +1890,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_config=conversation_config,
         ),
         "mode": lambda: conversations_router.update_conversation_mode(
             conversation_id="conversation-1",
@@ -1912,6 +1929,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
     conversation_service.get_conversation.assert_not_awaited()
     conversation_service.delete_conversation.assert_not_awaited()
     conversation_service.update_conversation_title.assert_not_awaited()
+    conversation_service.update_conversation_config.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -2056,6 +2074,7 @@ def test_conversation_crud_handlers_have_no_static_container_or_llm_fallback() -
         conversations_router.get_conversation,
         conversations_router.delete_conversation,
         conversations_router.update_conversation_title,
+        conversations_router.update_conversation_config,
         conversations_router.update_conversation_mode,
     ):
         source = inspect.getsource(handler)
@@ -2066,9 +2085,7 @@ def test_conversation_crud_handlers_have_no_static_container_or_llm_fallback() -
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_update_conversation_config_distinguishes_omitted_fields_from_explicit_null(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_update_conversation_config_distinguishes_omitted_fields_from_explicit_null() -> None:
     original_config = {
         "selected_agent_id": "agent-1",
         "llm_model_override": "gpt-reasoning",
@@ -2083,18 +2100,21 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
         title="Config clear contract",
         agent_config=dict(original_config),
     )
-    conversation_repo = SimpleNamespace(save=AsyncMock())
-    agent_service = SimpleNamespace(
+
+    async def save_conversation(**kwargs: Any) -> Conversation:
+        return kwargs["conversation"]
+
+    access = SimpleNamespace(
         get_conversation=AsyncMock(return_value=conversation),
-        _conversation_repo=conversation_repo,
+        save_scoped_conversation=AsyncMock(side_effect=save_conversation),
+        cache=SimpleNamespace(invalidate=AsyncMock()),
     )
-    container = SimpleNamespace(agent_service=lambda _llm: agent_service)
-    monkeypatch.setattr(
-        conversations_router,
-        "get_container_with_db",
-        lambda _request, _db: container,
+    config_service = ConversationConfigServiceV2(
+        access=access,
+        agent_definitions=SimpleNamespace(resolve=AsyncMock()),
     )
     db = _db_with_project_access()
+    authority = _conversation_config_authority(config_service, db)
     omitted = UpdateConversationConfigRequest()
     explicit_clear = UpdateConversationConfigRequest(
         selected_agent_id=None,
@@ -2117,6 +2137,7 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
         db=db,
+        conversation_config=authority,
     )
 
     assert conversation.agent_config == original_config
@@ -2130,6 +2151,7 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
         db=db,
+        conversation_config=authority,
     )
 
     expected_cleared_config = {
@@ -2140,11 +2162,42 @@ async def test_update_conversation_config_distinguishes_omitted_fields_from_expl
     }
     assert conversation.agent_config == expected_cleared_config
     assert cleared_response.agent_config == expected_cleared_config
-    assert conversation_repo.save.await_args_list == [
-        ((conversation,), {}),
-        ((conversation,), {}),
-    ]
+    assert access.save_scoped_conversation.await_count == 2
     assert db.commit.await_count == 2
+    assert access.cache.invalidate.await_args_list == [
+        ((conversation.project_id,), {}),
+        ((conversation.project_id,), {}),
+    ]
+    conversations_router.create_llm_client.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_update_conversation_config_rejects_inaccessible_selected_agent() -> None:
+    service = SimpleNamespace(
+        update_conversation_config=AsyncMock(
+            side_effect=InvalidConversationAgentSelectionV2("agent-from-another-project")
+        ),
+        access=SimpleNamespace(cache=SimpleNamespace(invalidate=AsyncMock())),
+    )
+    db = _db_with_project_access()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.update_conversation_config(
+            conversation_id="conversation-1",
+            data=UpdateConversationConfigRequest(selected_agent_id="agent-from-another-project"),
+            request=MagicMock(),
+            project_id="project-1",
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+            conversation_config=_conversation_config_authority(service, db),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid agent selection"
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit

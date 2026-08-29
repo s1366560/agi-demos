@@ -3137,6 +3137,22 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-conversation-config
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/conversation-config
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        conversation_access: service:application.conversation-access
+        agent_definitions: service:agent-definition-resolver
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-conversation-collection
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

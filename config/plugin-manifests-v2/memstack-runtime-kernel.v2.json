@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:441aaa9decfa848ac6e09ea05bb1240aac899a926ad753d7b21d2b968103d2c0",
+        "digest": "sha256:c2c4caf725c4e9e3057109a33221be153263e35530b281dcbccdb606f795b6c7",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -8000,6 +8000,48 @@
       "artifact": {
         "digest": "sha256:a1048081b1bd0f037f4a92039c5cff5c538a2c447ab7a588ce6476f2d157cbfe",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/conversation-config",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_config_services:_apply_conversation_config_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.conversation-config",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "conversation_access",
+              "service": "service:application.conversation-access",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "agent_definitions",
+              "service": "service:agent-definition-resolver",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:823cd30c9ca131462c1650404364325279bac9a48c30d077e72e54d030f9c3f1",
+      "artifact": {
+        "digest": "sha256:21d55e605f0c12c9ff2c6efa962513be398cafdea976f1d9b0ec9f27f6a3aa07",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_config_services.py"
       }
     },
     {

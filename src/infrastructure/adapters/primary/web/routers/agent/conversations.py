@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.configuration.factories import create_llm_client
 from src.domain.model.agent import AgentExecutionEvent, ConversationStatus
-from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.domain.ports.repositories.agent_repository import AgentExecutionEventRepository
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
@@ -29,6 +28,10 @@ from src.infrastructure.adapters.primary.web.conversation_collection_http_applic
     ConversationCollectionHttpApplicationAuthorityV2,
     conversation_create_http_application_authority_dependency_v2,
     conversation_list_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.conversation_config_http_application_authority_v2 import (
+    ConversationConfigHttpApplicationAuthorityV2,
+    conversation_config_http_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2 import (
     ConversationHttpApplicationAuthorityV2,
@@ -56,6 +59,7 @@ from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.conversation_collection_services import (
     InvalidConversationAgentSelectionV2,
 )
+from src.infrastructure.plugins.v2.conversation_config_services import ConversationConfigPatchV2
 
 from .schemas import (
     ConversationResponse,
@@ -68,7 +72,6 @@ from .schemas import (
 from .utils import get_container_with_db
 
 if TYPE_CHECKING:
-    from src.configuration.di_container import DIContainer
     from src.domain.model.agent.conversation.conversation import Conversation
 
 router = APIRouter()
@@ -207,30 +210,6 @@ async def _ensure_project_access(
             detail=_("Access denied"),
         )
     return str(project_tenant_id)
-
-
-async def _ensure_selected_agent_access(
-    agent_config: dict[str, Any] | None,
-    *,
-    container: "DIContainer",
-    tenant_id: str,
-    project_id: str,
-) -> None:
-    selected_agent_id = selected_agent_id_from_config(agent_config)
-    if selected_agent_id is None:
-        return
-
-    registry = container.agent_registry()
-    agent = await registry.get_by_id(
-        selected_agent_id,
-        tenant_id=tenant_id,
-        project_id=project_id,
-    )
-    if agent is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Invalid agent selection"),
-        )
 
 
 async def _load_owned_conversation_row(
@@ -955,60 +934,52 @@ async def update_conversation_config(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_config: ConversationConfigHttpApplicationAuthorityV2 = Depends(
+        conversation_config_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Update conversation-level LLM configuration (model override, LLM params)."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
+        authorized_tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        fields = data.model_fields_set
+        conversation = await conversation_config.service.update_conversation_config(
             conversation_id=conversation_id,
             project_id=project_id,
-            user_id=current_user.id,
+            tenant_id=authorized_tenant_id,
+            user_id=str(current_user.id),
+            patch=ConversationConfigPatchV2(
+                selected_agent_id_present="selected_agent_id" in fields,
+                selected_agent_id=data.selected_agent_id,
+                llm_model_override_present="llm_model_override" in fields,
+                llm_model_override=data.llm_model_override,
+                llm_overrides_present="llm_overrides" in fields,
+                llm_overrides=data.llm_overrides,
+            ),
         )
-        if not conversation:
+        if conversation is None:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        config_patch: dict[str, Any] = {}
-        fields = data.model_fields_set
-        if "selected_agent_id" in fields:
-            selected_agent_id = data.selected_agent_id.strip() if data.selected_agent_id else ""
-            selected_agent_config = (
-                {"selected_agent_id": selected_agent_id} if selected_agent_id else {}
-            )
-            await _ensure_selected_agent_access(
-                selected_agent_config,
-                container=container,
-                tenant_id=tenant_id,
-                project_id=project_id,
-            )
-            config_patch["selected_agent_id"] = selected_agent_id or None
-        if "llm_model_override" in fields:
-            cleaned = data.llm_model_override.strip() if data.llm_model_override else ""
-            config_patch["llm_model_override"] = cleaned or None
-        if "llm_overrides" in fields:
-            cleaned_overrides = {
-                key: value for key, value in (data.llm_overrides or {}).items() if value is not None
-            }
-            config_patch["llm_overrides"] = cleaned_overrides or None
-
-        conversation.update_agent_config(config_patch)
-        await agent_service._conversation_repo.save(conversation)
-        await db.commit()
+        await conversation_config.db.commit()
+        await conversation_config.service.after_update_committed(project_id)
 
         return ConversationResponse.from_domain(conversation)
 
+    except InvalidConversationAgentSelectionV2 as exc:
+        await conversation_config.db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid agent selection"),
+        ) from exc
     except HTTPException:
+        await conversation_config.db.rollback()
         raise
     except Exception as exc:
-        await db.rollback()
+        await conversation_config.db.rollback()
         logger.exception("Error updating conversation config")
         raise HTTPException(
             status_code=500, detail=_("Failed to update conversation config")
