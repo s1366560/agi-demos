@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:22711ca234c03e7b6f4bfbd631d7f40e597e4a0c681c7ea5d3322a5089f2e319",
+        "digest": "sha256:4b176031bf04fd099d92add11783e159e8c5afe255970f447a8983c8ecef4747",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4362,6 +4362,79 @@
       "artifact": {
         "digest": "sha256:61a78ec33a2651c1d218459eb1c868486762176d036d704034788b454662ef9c",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_message_history_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/agent-graph-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_graph_management_services:_apply_agent_graph_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.agent-graph-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:aa80f4f9257f0f04d67cdbb3a6163212875d2cbcb053203c4c8655626cbad5d3",
+      "artifact": {
+        "digest": "sha256:4f8a087c2f7e5d0b84553254f3b55d928b24c0afe07e7f073b05a09616585138",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_graph_management_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/agent-graph-management",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_graph_management_services:_apply_agent_graph_management_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.agent-graph-management",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repositories",
+              "service": "service:persistence.agent-graph-repository-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "agent_orchestration",
+              "service": "service:agent.orchestration-runtime",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-providers", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:353b3fa2f714a0e8488f3e71516fea57cc9c50e79f104edfbebb5c9ccbbe735b",
+      "artifact": {
+        "digest": "sha256:4f8a087c2f7e5d0b84553254f3b55d928b24c0afe07e7f073b05a09616585138",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_graph_management_services.py"
       }
     },
     {

@@ -28,6 +28,7 @@ from .agent_definition_management_services import agent_definition_management_de
 from .agent_event_query_services import agent_event_query_service_definitions_v2
 from .agent_execution_query_services import agent_execution_query_service_definitions_v2
 from .agent_execution_resume_services import agent_execution_resume_definition_v2
+from .agent_graph_management_services import agent_graph_management_definitions_v2
 from .agent_hitl_tools import builtin_agent_hitl_tool_contribution_definition_v2
 from .agent_lifecycle_notifier import (
     AgentLifecycleConnectionManagerV2,
@@ -387,6 +388,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *conversation_collection_service_definitions_v2(),
         *agent_event_query_service_definitions_v2(),
         *agent_message_history_service_definitions_v2(),
+        *agent_graph_management_definitions_v2(),
         agent_execution_resume_definition_v2(),
         agent_workflow_status_definition_v2(),
         agent_subagent_control_definition_v2(),
