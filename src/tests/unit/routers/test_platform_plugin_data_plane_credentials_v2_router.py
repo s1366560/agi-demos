@@ -122,6 +122,32 @@ async def test_data_plane_credential_management_requires_platform_admin(
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
+async def test_data_plane_credential_cannot_access_management_endpoints(
+    db_session: AsyncSession,
+) -> None:
+    issued = await PlatformPluginDataPlaneCredentialRepositoryV2(db_session).issue(
+        data_plane_id="rust-server",
+        actor_id="plugin-v2-admin",
+    )
+    await db_session.commit()
+    app = FastAPI()
+    app.include_router(platform_plugins.router)
+
+    async def override_db() -> AsyncSession:
+        return db_session
+
+    app.dependency_overrides[get_db] = override_db
+    response = TestClient(app).get(
+        "/api/v1/platform-plugins/v2/data-plane-credentials",
+        headers={"Authorization": f"Bearer {issued.secret}"},
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json()["detail"] == (
+        "Invalid API key format. API keys should start with 'ms_sk_'"
+    )
+
+
 async def test_data_plane_credential_management_returns_stable_not_found(
     db_session: AsyncSession,
 ) -> None:
