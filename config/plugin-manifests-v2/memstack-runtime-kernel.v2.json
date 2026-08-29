@@ -4971,7 +4971,38 @@
       },
       "contract_digest": "sha256:0ce457230a3b252da1f3740ecbda1a42dc582e3a0b87274377d3dd632793ffc0",
       "artifact": {
-        "digest": "sha256:5ef7f736921bc21b74d9cd38cb282a9b274136ed59a9812f529b42e8c65a20af",
+        "digest": "sha256:0cc4fe5422ca310a331833e5de3145447afd87372ece3510b8611d7f2b54b6e4",
+        "source": "repo+python://src/infrastructure/plugins/v2/skill_repository_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/skill-version-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.skill_repository_services:_apply_skill_version_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.skill-version-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:eade572492f976d659641188b1f21689bd990755719adf8d87859fb6e79079c4",
+      "artifact": {
+        "digest": "sha256:0cc4fe5422ca310a331833e5de3145447afd87372ece3510b8611d7f2b54b6e4",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_repository_services.py"
       }
     },
@@ -4992,6 +5023,11 @@
               "alias": "repository_provider",
               "service": "service:persistence.skill-repository-provider",
               "version": "1.0.0"
+            },
+            {
+              "alias": "version_repository_provider",
+              "service": "service:persistence.skill-version-repository-provider",
+              "version": "1.0.0"
             }
           ]
         },
@@ -5006,9 +5042,9 @@
           }
         }
       },
-      "contract_digest": "sha256:43a292c45323a7cba9ba0ab6bb43c7e4b1bfc963db4f8956547c05b11bbe43e7",
+      "contract_digest": "sha256:eae4416004e91087424c22ac7cd38a60c3aad687f79162aaff4cae37885601b3",
       "artifact": {
-        "digest": "sha256:5ef7f736921bc21b74d9cd38cb282a9b274136ed59a9812f529b42e8c65a20af",
+        "digest": "sha256:0cc4fe5422ca310a331833e5de3145447afd87372ece3510b8611d7f2b54b6e4",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_repository_services.py"
       }
     },

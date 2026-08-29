@@ -1795,6 +1795,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-skill-version-repository-provider
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/persistence/skill-version-repository-provider
+      enabled: true
+      config:
+        strategy: request-async-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-skill-repository-application
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
@@ -1804,6 +1818,7 @@ profile:
         strategy: operation-scoped-provider
       inject:
         repository_provider: service:persistence.skill-repository-provider
+        version_repository_provider: service:persistence.skill-version-repository-provider
       isolate: {}
       scope:
         kind: root

@@ -649,6 +649,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
         evolution_jobs=[],
         evolution_sessions=[],
     )
+    version_repository = _MemoryVersionRepository(db)
     current_user = SimpleNamespace(id="user-1")
     access_guard = AsyncMock(
         side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
@@ -715,6 +716,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             current_user=current_user,
             db=db,
             skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
         "export": lambda: router.export_skill_package(
             request=SimpleNamespace(),
@@ -723,6 +725,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             current_user=current_user,
             db=db,
             skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
         "versions": lambda: router.list_skill_versions(
             skill_id=skill.id,
@@ -732,6 +735,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             current_user=current_user,
             db=db,
             skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
         "version": lambda: router.get_skill_version(
             skill_id=skill.id,
@@ -740,6 +744,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             current_user=current_user,
             db=db,
             skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
         "evolution": lambda: router.get_skill_evolution(
             skill_id=skill.id,
@@ -977,16 +982,10 @@ def test_skill_search_matches_name_description_version_and_metadata() -> None:
 
 
 @pytest.mark.unit
-async def test_import_skill_package_creates_skill_and_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_import_skill_package_creates_skill_and_version() -> None:
     repo = _MemorySkillRepository()
     db = SimpleNamespace(commit=AsyncMock(), versions=[])
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
 
     response = await router.import_skill_package(
         request=SimpleNamespace(),
@@ -997,6 +996,7 @@ async def test_import_skill_package_creates_skill_and_version(
         tenant_id="tenant-1",
         db=db,
         skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     assert response.action == "import"
@@ -1008,9 +1008,7 @@ async def test_import_skill_package_creates_skill_and_version(
 
 
 @pytest.mark.unit
-async def test_update_skill_content_validates_and_creates_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_update_skill_content_validates_and_creates_version() -> None:
     repo = _MemorySkillRepository()
     skill = Skill.create(
         tenant_id="tenant-1",
@@ -1021,11 +1019,7 @@ async def test_update_skill_content_validates_and_creates_version(
     )
     await repo.create(skill)
     db = SimpleNamespace(commit=AsyncMock(), versions=[])
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
 
     response = await router.update_skill_content(
         request=SimpleNamespace(),
@@ -1034,6 +1028,7 @@ async def test_update_skill_content_validates_and_creates_version(
         tenant_id="tenant-1",
         db=db,
         skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     updated = await repo.get_by_id(skill.id)
@@ -1049,16 +1044,10 @@ async def test_update_skill_content_validates_and_creates_version(
 
 
 @pytest.mark.unit
-async def test_import_skill_zip_package_creates_skill_and_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_import_skill_zip_package_creates_skill_and_version() -> None:
     repo = _MemorySkillRepository()
     db = SimpleNamespace(commit=AsyncMock(), versions=[])
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
     archive = SimpleNamespace(
         filename="alpha-skill.zip",
         read=AsyncMock(
@@ -1081,6 +1070,7 @@ async def test_import_skill_zip_package_creates_skill_and_version(
         tenant_id="tenant-1",
         db=db,
         skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     assert response.action == "import"
@@ -1130,9 +1120,7 @@ async def test_get_skill_reads_filesystem_skill_by_name(
 
 
 @pytest.mark.unit
-async def test_export_skill_package_uses_latest_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_export_skill_package_uses_latest_version() -> None:
     repo = _MemorySkillRepository()
     skill = Skill.create(
         tenant_id="tenant-1",
@@ -1154,11 +1142,7 @@ async def test_export_skill_package_uses_latest_version(
             )
         ]
     )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
 
     response = await router.export_skill_package(
         request=SimpleNamespace(),
@@ -1166,6 +1150,7 @@ async def test_export_skill_package_uses_latest_version(
         tenant_id="tenant-1",
         db=db,
         skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     assert response.skill.name == "alpha-skill"
@@ -1176,7 +1161,6 @@ async def test_export_skill_package_uses_latest_version(
 
 @pytest.mark.unit
 async def test_export_filesystem_skill_includes_directory_resource_files(
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     repo = _MemorySkillRepository()
@@ -1201,11 +1185,7 @@ async def test_export_filesystem_skill_includes_directory_resource_files(
     skill.file_path = str(skill_md_path)
     await repo.create(skill)
     db = SimpleNamespace(versions=[])
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
+    version_repository = _MemoryVersionRepository(db)
 
     response = await router.export_skill_package(
         request=SimpleNamespace(),
@@ -1213,6 +1193,7 @@ async def test_export_filesystem_skill_includes_directory_resource_files(
         tenant_id="tenant-1",
         db=db,
         skill_repository=repo,
+        skill_version_repository=version_repository,
     )
 
     assert response.skill_md_content == SAMPLE_SKILL_MD
@@ -1223,9 +1204,7 @@ async def test_export_filesystem_skill_includes_directory_resource_files(
 
 
 @pytest.mark.unit
-async def test_get_skill_version_sanitizes_missing_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_get_skill_version_sanitizes_missing_version() -> None:
     repo = _MemorySkillRepository()
     skill = Skill.create(
         tenant_id="tenant-1",
@@ -1235,26 +1214,21 @@ async def test_get_skill_version_sanitizes_missing_version(
     )
     await repo.create(skill)
 
-    class _VersionRepository:
-        def __init__(self, _db: object) -> None:
-            pass
-
+    class _VersionRepository(_MemoryVersionRepository):
         async def get_by_version(self, _skill_id: str, _version_number: int) -> object | None:
             return None
 
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _VersionRepository,
-    )
+    db = SimpleNamespace(skill_repo=repo, versions=[])
+    version_repository = _VersionRepository(db)
 
     with pytest.raises(HTTPException) as exc_info:
         await router.get_skill_version(
             skill_id=skill.id,
             version_number=42,
-            db=SimpleNamespace(skill_repo=repo),
+            db=db,
             tenant={"id": "tenant-1"},
             skill_repository=repo,
+            skill_version_repository=version_repository,
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND

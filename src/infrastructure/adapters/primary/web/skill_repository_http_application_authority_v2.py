@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
+from src.domain.ports.repositories.skill_version_repository import SkillVersionRepositoryPort
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
@@ -34,6 +35,7 @@ class SkillRepositoryHttpApplicationAuthorityV2:
     operation: OperationContextV2
     db: AsyncSession
     repository: SkillRepositoryPort
+    version_repository: SkillVersionRepositoryPort
 
 
 @asynccontextmanager
@@ -66,16 +68,24 @@ async def skill_repository_http_application_authority_v2(
                 "invalid_skill_repository_application_resolver",
                 "Skill repository application service has an invalid resolver",
             )
-        repository = resolver.resolve(operation).repository
+        services = resolver.resolve(operation)
+        repository = services.repository
         if not isinstance(repository, SkillRepositoryPort):
             raise RuntimeV2Error(
                 "invalid_skill_repository",
                 "Skill repository Provider returned an invalid repository",
             )
+        version_repository = services.version_repository
+        if not isinstance(version_repository, SkillVersionRepositoryPort):
+            raise RuntimeV2Error(
+                "invalid_skill_version_repository",
+                "SkillVersion repository Provider returned an invalid repository",
+            )
         yield SkillRepositoryHttpApplicationAuthorityV2(
             operation=operation,
             db=db,
             repository=repository,
+            version_repository=version_repository,
         )
 
 

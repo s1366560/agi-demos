@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from inspect import signature
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
@@ -76,6 +78,7 @@ async def test_authority_uses_pinned_tenant_generation_and_operation_session() -
             assert authority.operation.context.scope.tenant_id == "tenant-a"
             assert authority.db is db
             assert authority.repository._session is db
+            assert authority.version_repository._session is db
             assert authority.operation.require(OPERATION_DB_SESSION_SERVICE_V2) is db
             assert authority.operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
                 "tenant_id": "tenant-a",
@@ -146,5 +149,74 @@ def test_skill_handlers_resolve_repository_only_from_v2_authority() -> None:
         parameter = signature(endpoint).parameters["skill_repository"]
         assert parameter.default.dependency is skills._get_skill_repository_v2
 
+    version_endpoints = (
+        skills.update_skill_content,
+        skills.import_skill_package,
+        skills.import_skill_zip_package,
+        skills.export_skill_package,
+        skills.list_skill_versions,
+        skills.get_skill_version,
+    )
+    for endpoint in version_endpoints:
+        parameter = signature(endpoint).parameters["skill_version_repository"]
+        assert parameter.default.dependency is skills._get_skill_version_repository_v2
+
+    skill_authority = signature(skills._get_skill_repository_v2).parameters["authority"]
+    version_authority = signature(skills._get_skill_version_repository_v2).parameters["authority"]
+    assert skill_authority.default.dependency is skills._get_skill_repository_authority_v2
+    assert version_authority.default.dependency is skills._get_skill_repository_authority_v2
+
     assert "get_container_with_db" not in vars(skills)
     assert "DIContainer" not in vars(skills)
+
+
+def test_fastapi_shares_one_authority_for_both_repository_dependencies() -> None:
+    app = FastAPI()
+    repository = object()
+    version_repository = object()
+    authority = SimpleNamespace(
+        repository=repository,
+        version_repository=version_repository,
+    )
+    lifecycle: list[str] = []
+
+    async def fake_authority() -> AsyncIterator[Any]:
+        lifecycle.append("enter")
+        yield authority
+        lifecycle.append("exit")
+
+    async def probe(
+        skill_repository: Any = Depends(skills._get_skill_repository_v2),
+        skill_version_repository: Any = Depends(skills._get_skill_version_repository_v2),
+    ) -> dict[str, bool]:
+        lifecycle.append("handler")
+        return {
+            "repository": skill_repository is repository,
+            "version_repository": skill_version_repository is version_repository,
+        }
+
+    app.dependency_overrides[skills._get_skill_repository_authority_v2] = fake_authority
+    _ = app.get("/probe")(probe)
+
+    with TestClient(app) as client:
+        response = client.get("/probe")
+
+    assert response.json() == {"repository": True, "version_repository": True}
+    assert lifecycle == ["enter", "handler", "exit"]
+
+
+def test_version_handlers_do_not_construct_sql_repository() -> None:
+    from inspect import getsource
+
+    migrated = (
+        skills._create_skill_version_snapshot,
+        skills.update_skill_content,
+        skills.import_skill_package,
+        skills.import_skill_zip_package,
+        skills.export_skill_package,
+        skills.list_skill_versions,
+        skills.get_skill_version,
+    )
+
+    for endpoint in migrated:
+        assert "SqlSkillVersionRepository" not in getsource(endpoint)
