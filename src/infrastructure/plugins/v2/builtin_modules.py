@@ -65,6 +65,7 @@ from .agent_task_session_tools import (
 )
 from .agent_turn_services import agent_turn_service_definitions_v2
 from .agent_worker_runtime import agent_worker_runtime_definition_v2
+from .agent_workflow_status_services import agent_workflow_status_definition_v2
 from .ai_tool_services import ai_tool_service_definitions_v2
 from .artifact_content_gc_runtime import artifact_content_gc_definitions_v2
 from .artifact_content_services import artifact_content_service_definitions_v2
@@ -382,6 +383,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *conversation_collection_service_definitions_v2(),
         *agent_event_query_service_definitions_v2(),
         agent_execution_resume_definition_v2(),
+        agent_workflow_status_definition_v2(),
         *agent_execution_query_service_definitions_v2(),
         *agent_recovery_stream_service_definitions_v2(),
         *agent_turn_service_definitions_v2(),

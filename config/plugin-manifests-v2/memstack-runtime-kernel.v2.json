@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:8913dee7520aed5eae90aa585cda393cc561ef80229f31afc5b5296e17e42205",
+        "digest": "sha256:6f261638c9706df83bbd8a3de3d4841d3e8a9ead9f3a4d4bece2f79b40809b91",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4321,6 +4321,37 @@
       "artifact": {
         "digest": "sha256:392a4d6e3c4532d74d04c37092230dc781e75313a98e4c118af0f72dce00c863",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_execution_resume_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/agent-workflow-status",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_workflow_status_services:_apply_agent_workflow_status_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.agent-workflow-status",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "ray-actor-status", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:0ada71ad5cbd8e1bef2920e39b43a1b2d369375f09dae5994c18490cd45ccbe1",
+      "artifact": {
+        "digest": "sha256:b5c4b76a386ea2a4508c8a110a4c8d7cee9c6870602041a35aa52bf06c65c54f",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_workflow_status_services.py"
       }
     },
     {

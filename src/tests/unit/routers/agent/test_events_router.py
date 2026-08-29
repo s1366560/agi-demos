@@ -26,6 +26,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.plugins.v2.agent_event_query_services import (
     AgentEventExecutionStatusV2,
 )
+from src.infrastructure.plugins.v2.agent_workflow_status_services import (
+    AgentWorkflowStatusStateV2,
+)
 from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 
 
@@ -150,6 +153,26 @@ class TestAgentEventsRouter:
         selected_db = db if db is not None else SimpleNamespace(commit=AsyncMock())
         return SimpleNamespace(db=selected_db, service=service), service
 
+    def _workflow_status_authority(
+        self,
+        *,
+        db: object | None = None,
+        absent: bool = False,
+        status_error: Exception | None = None,
+    ) -> tuple[SimpleNamespace, SimpleNamespace]:
+        status = None
+        if not absent:
+            status = AgentWorkflowStatusStateV2(
+                workflow_id="actor-a",
+                status="RUNNING",
+                started_at=None,
+            )
+        service = SimpleNamespace(
+            get_status=AsyncMock(return_value=status, side_effect=status_error),
+        )
+        selected_db = db if db is not None else SimpleNamespace()
+        return SimpleNamespace(db=selected_db, service=service), service
+
     @pytest.mark.asyncio
     async def test_get_workflow_status_rejects_user_outside_conversation_tenant(
         self,
@@ -162,17 +185,19 @@ class TestAgentEventsRouter:
         conversation_id = await self._seed_conversation(
             test_db, test_project_db, test_tenant_db, test_user
         )
+        workflow_authority, workflow_service = self._workflow_status_authority(db=test_db)
 
         with pytest.raises(HTTPException) as exc_info:
             await get_workflow_status(
                 conversation_id,
                 request=MagicMock(),
                 current_user=another_user,
-                db=test_db,
+                workflow_status_authority=workflow_authority,
             )
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Access denied to this conversation"
+        workflow_service.get_status.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_conversation_events_rejects_before_event_repo_access(
@@ -595,16 +620,13 @@ class TestAgentEventsRouter:
         async def accessible_conversation(*_args, **_kwargs):
             return SimpleNamespace(tenant_id="tenant-1", project_id="project-1")
 
-        async def failing_actor_lookup(*_args, **_kwargs):
-            raise RuntimeError("internal actor secret")
-
         self.monkeypatch.setattr(
             "src.infrastructure.adapters.primary.web.routers.agent.events._get_accessible_conversation",
             accessible_conversation,
         )
-        self.monkeypatch.setattr(
-            "src.infrastructure.agent.actor.actor_manager.get_actor_if_exists",
-            failing_actor_lookup,
+        workflow_authority, _workflow_service = self._workflow_status_authority(
+            db=test_db,
+            status_error=RuntimeError("internal actor secret"),
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -612,7 +634,7 @@ class TestAgentEventsRouter:
                 "conversation-secret",
                 request=MagicMock(),
                 current_user=test_user,
-                db=test_db,
+                workflow_status_authority=workflow_authority,
             )
 
         assert exc_info.value.status_code == 500
@@ -631,16 +653,13 @@ class TestAgentEventsRouter:
                 project_id="project-1",
             )
 
-        async def missing_actor(*_args, **_kwargs):
-            return None
-
         self.monkeypatch.setattr(
             "src.infrastructure.adapters.primary.web.routers.agent.events._get_accessible_conversation",
             accessible_conversation,
         )
-        self.monkeypatch.setattr(
-            "src.infrastructure.agent.actor.actor_manager.get_actor_if_exists",
-            missing_actor,
+        workflow_authority, workflow_service = self._workflow_status_authority(
+            db=test_db,
+            absent=True,
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -648,9 +667,45 @@ class TestAgentEventsRouter:
                 "conversation-secret",
                 request=MagicMock(),
                 current_user=test_user,
-                db=test_db,
+                workflow_status_authority=workflow_authority,
             )
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Actor not found"
         assert "conversation-secret" not in str(exc_info.value.detail)
+        workflow_service.get_status.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            agent_mode="default",
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_workflow_status_uses_v2_authority(
+        self,
+        test_db,
+        test_user,
+    ) -> None:
+        async def accessible_conversation(*_args, **_kwargs):
+            return SimpleNamespace(tenant_id="tenant-1", project_id="project-1")
+
+        self.monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.agent.events._get_accessible_conversation",
+            accessible_conversation,
+        )
+        workflow_authority, workflow_service = self._workflow_status_authority(db=test_db)
+
+        response = await get_workflow_status(
+            "conversation-status",
+            request=MagicMock(),
+            current_user=test_user,
+            workflow_status_authority=workflow_authority,
+        )
+
+        workflow_service.get_status.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            agent_mode="default",
+        )
+        assert response.workflow_id == "actor-a"
+        assert response.status == "RUNNING"
+        assert response.started_at is None

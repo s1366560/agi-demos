@@ -10,7 +10,6 @@ Provides endpoints for event management and execution monitoring:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -23,6 +22,10 @@ from src.infrastructure.adapters.primary.web.agent_event_query_http_application_
 from src.infrastructure.adapters.primary.web.agent_execution_resume_http_application_authority_v2 import (
     AgentExecutionResumeHttpApplicationAuthorityV2,
     agent_execution_resume_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.agent_workflow_status_http_application_authority_v2 import (
+    AgentWorkflowStatusHttpApplicationAuthorityV2,
+    agent_workflow_status_http_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -317,51 +320,37 @@ async def get_workflow_status(
     request: Request,
     message_id: str | None = Query(None, description="Message ID to get workflow status for"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    workflow_status_authority: AgentWorkflowStatusHttpApplicationAuthorityV2 = Depends(
+        agent_workflow_status_http_application_authority_dependency_v2
+    ),
 ) -> WorkflowStatusResponse:
     """
     Get the Ray Actor status for an agent execution.
     """
     try:
-        from src.infrastructure.adapters.secondary.ray.client import await_ray
-        from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
-
         conversation = await _get_accessible_conversation(
-            conversation_id, current_user, db, request
+            conversation_id,
+            current_user,
+            workflow_status_authority.db,
+            request,
         )
 
-        actor = await get_actor_if_exists(
+        status = await workflow_status_authority.service.get_status(
             tenant_id=conversation.tenant_id,
             project_id=conversation.project_id,
             agent_mode="default",
         )
-        if not actor:
+        if status is None:
             raise HTTPException(
                 status_code=404,
                 detail=_("Actor not found"),
             )
 
-        status = await await_ray(actor.status.remote())
-        status_text = (
-            "RUNNING"
-            if status.is_executing
-            else "IDLE"
-            if status.is_initialized
-            else "UNINITIALIZED"
-        )
-
-        started_at = None
-        if status.created_at:
-            try:
-                started_at = datetime.fromisoformat(status.created_at)
-            except Exception:
-                started_at = None
-
         return WorkflowStatusResponse(
-            workflow_id=status.actor_id,
+            workflow_id=status.workflow_id,
             run_id=None,
-            status=status_text,
-            started_at=started_at,
+            status=status.status,
+            started_at=status.started_at,
             completed_at=None,
             current_step=None,
             total_steps=None,
