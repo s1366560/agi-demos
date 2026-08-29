@@ -5,7 +5,6 @@ CRUD operations for Agent conversations.
 
 import logging
 import uuid
-from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -16,8 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.configuration.factories import create_llm_client
-from src.domain.model.agent import AgentExecutionEvent, ConversationStatus
-from src.domain.ports.repositories.agent_repository import AgentExecutionEventRepository
+from src.domain.model.agent import ConversationStatus
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
     WorkspaceAuthorityNotFoundError,
@@ -32,6 +30,10 @@ from src.infrastructure.adapters.primary.web.conversation_collection_http_applic
 from src.infrastructure.adapters.primary.web.conversation_config_http_application_authority_v2 import (
     ConversationConfigHttpApplicationAuthorityV2,
     conversation_config_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.conversation_generation_http_application_authority_v2 import (
+    ConversationGenerationHttpApplicationAuthorityV2,
+    conversation_generation_http_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2 import (
     ConversationHttpApplicationAuthorityV2,
@@ -60,6 +62,9 @@ from src.infrastructure.plugins.v2.conversation_collection_services import (
     InvalidConversationAgentSelectionV2,
 )
 from src.infrastructure.plugins.v2.conversation_config_services import ConversationConfigPatchV2
+from src.infrastructure.plugins.v2.conversation_generation_services import (
+    ConversationGenerationSourceMissingV2,
+)
 
 from .schemas import (
     ConversationResponse,
@@ -76,55 +81,6 @@ if TYPE_CHECKING:
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-_CONVERSATION_MESSAGE_EVENT_TYPES = {
-    "assistant_message",
-    "turn_admitted",
-    "user_message",
-}
-_CONVERSATION_ROLE_BY_EVENT_TYPE = {
-    "assistant_message": "assistant",
-    "user_message": "user",
-}
-_EVENT_TIME_UPPER_BOUND = (1 << 63) - 1
-
-
-async def _load_conversation_message_events(
-    event_repository: AgentExecutionEventRepository,
-    *,
-    conversation_id: str,
-    limit: int,
-) -> list[AgentExecutionEvent]:
-    """Load the latest public message events, including V2 turn admission."""
-    return await event_repository.get_events(
-        conversation_id=conversation_id,
-        limit=limit,
-        event_types=_CONVERSATION_MESSAGE_EVENT_TYPES,
-        before_time_us=_EVENT_TIME_UPPER_BOUND,
-    )
-
-
-def _project_conversation_message(event: AgentExecutionEvent) -> tuple[str, str] | None:
-    """Return a role/content pair only for an explicitly typed message event."""
-    event_type = getattr(event.event_type, "value", event.event_type)
-    payload = event.event_data if isinstance(event.event_data, Mapping) else {}
-    if event_type == "turn_admitted":
-        raw_model_message = payload.get("model_message")
-        if not isinstance(raw_model_message, Mapping):
-            return None
-        if raw_model_message.get("role") != "user":
-            return None
-        content = raw_model_message.get("content")
-        if not isinstance(content, str):
-            return None
-        return ("user", content)
-
-    role = _CONVERSATION_ROLE_BY_EVENT_TYPE.get(event_type)
-    content = payload.get("content")
-    if role is None or not isinstance(content, str):
-        return None
-    return (role, content)
-
 
 CONVERSATION_LIST_DEFAULT_LIMIT = 10
 WORKSPACE_GROUP_EXPANSION_HARD_LIMIT = 25
@@ -1103,6 +1059,9 @@ async def generate_conversation_title(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_generation: ConversationGenerationHttpApplicationAuthorityV2 = Depends(
+        conversation_generation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """
     Generate and update a friendly conversation title based on the first user message.
@@ -1112,64 +1071,34 @@ async def generate_conversation_title(
     """
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
+        authorized_tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        if authorized_tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail=_("Access denied"))
+        conversation = await conversation_generation.service.generate_title(
             conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
         )
-
-        if not conversation:
+        if conversation is None:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
+        await conversation_generation.db.commit()
+        await conversation_generation.service.after_update_committed()
+        return ConversationResponse.from_domain(conversation)
 
-        message_events = await _load_conversation_message_events(
-            container.agent_execution_event_repository(),
-            conversation_id=conversation_id,
-            limit=10,
-        )
-
-        first_user_message = None
-        for event in message_events:
-            projected_message = _project_conversation_message(event)
-            if projected_message is not None and projected_message[0] == "user":
-                first_user_message = projected_message[1]
-                break
-
-        if not first_user_message:
-            raise HTTPException(
-                status_code=400, detail=_("No user message found to generate title from")
-            )
-
-        # Use DB provider config (same as ReActAgent) for title generation
-        title_llm = await agent_service.get_title_llm()
-        generated_title = await agent_service.generate_conversation_title(
-            first_message=first_user_message,
-            llm=title_llm,
-        )
-
-        updated_conversation = await agent_service.update_conversation_title(
-            conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
-            title=generated_title,
-        )
-
-        if not updated_conversation:
-            raise HTTPException(status_code=500, detail=_("Failed to update conversation title"))
-
-        return ConversationResponse.from_domain(updated_conversation)
-
+    except ConversationGenerationSourceMissingV2 as exc:
+        await conversation_generation.db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=_("No user message found to generate title from"),
+        ) from exc
     except HTTPException:
+        await conversation_generation.db.rollback()
         raise
     except Exception as exc:
+        await conversation_generation.db.rollback()
         logger.exception("Error generating conversation title")
         raise HTTPException(
             status_code=500, detail=_("Failed to generate conversation title")
@@ -1187,79 +1116,41 @@ async def generate_summary(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_generation: ConversationGenerationHttpApplicationAuthorityV2 = Depends(
+        conversation_generation_http_application_authority_dependency_v2
+    ),
 ) -> ConversationResponse:
     """Generate an AI summary of the conversation."""
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
+        authorized_tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        agent_service = container.agent_service(llm)
-
-        conversation = await agent_service.get_conversation(
+        if authorized_tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail=_("Access denied"))
+        conversation = await conversation_generation.service.generate_summary(
             conversation_id=conversation_id,
-            project_id=project_id,
-            user_id=current_user.id,
         )
-        if not conversation:
+        if conversation is None:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        message_events = await _load_conversation_message_events(
-            container.agent_execution_event_repository(),
-            conversation_id=conversation_id,
-            limit=50,
-        )
-
-        messages_text = ""
-        for event in message_events:
-            projected_message = _project_conversation_message(event)
-            if projected_message is None:
-                continue
-            role, content = projected_message
-            if content:
-                messages_text += f"{role}: {content[:500]}\n"
-
-        if not messages_text.strip():
-            raise HTTPException(
-                status_code=400,
-                detail=_("No messages found to generate summary from"),
-            )
-
-        title_llm = await agent_service.get_title_llm()
-        from src.domain.llm_providers.llm_types import Message as LLMMessage
-
-        prompt = (
-            "Summarize this conversation in 1-2 concise sentences. "
-            "Focus on the main topic and key outcomes.\n\n"
-            f"Messages:\n{messages_text[:3000]}\n\nSummary:"
-        )
-        response = await title_llm.ainvoke(
-            [
-                LLMMessage.system(
-                    "You are a helpful assistant that generates concise conversation summaries."
-                ),
-                LLMMessage.user(prompt),
-            ]
-        )
-        summary = response.content.strip()
-        if len(summary) > 500:
-            summary = summary[:497] + "..."
-
-        conversation.summary = summary
-        from datetime import datetime
-
-        conversation.updated_at = datetime.now(UTC)
-        await agent_service._conversation_repo.save_and_commit(conversation)  # type: ignore[attr-defined]
-
+        await conversation_generation.db.commit()
+        await conversation_generation.service.after_update_committed()
         return ConversationResponse.from_domain(conversation)
 
+    except ConversationGenerationSourceMissingV2 as exc:
+        await conversation_generation.db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=_("No messages found to generate summary from"),
+        ) from exc
     except HTTPException:
+        await conversation_generation.db.rollback()
         raise
     except Exception as exc:
+        await conversation_generation.db.rollback()
         logger.exception("Error generating conversation summary")
         raise HTTPException(
             status_code=500,

@@ -3153,6 +3153,38 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-conversation-enrichment-judge
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/judgment/conversation-enrichment
+      enabled: true
+      config:
+        strategy: required-agent-tool-call
+      inject:
+        llm_clients: service:llm.tenant-client-factory
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-conversation-generation
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/conversation-generation
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        conversation_access: service:application.conversation-access
+        session_log: service:session-event-log
+        enrichment_judge: service:judgment.conversation-enrichment
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-conversation-collection
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

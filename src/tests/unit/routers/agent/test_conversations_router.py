@@ -40,6 +40,9 @@ from src.infrastructure.plugins.v2.conversation_collection_services import (
     InvalidConversationAgentSelectionV2,
 )
 from src.infrastructure.plugins.v2.conversation_config_services import ConversationConfigServiceV2
+from src.infrastructure.plugins.v2.conversation_generation_services import (
+    ConversationGenerationSourceMissingV2,
+)
 from src.infrastructure.workspace_core.authority import AvernetWorkspaceAuthority
 from src.infrastructure.workspace_core.client import WorkspaceCoreClient
 
@@ -69,6 +72,12 @@ class FailingConversationConfigService:
         side_effect=RuntimeError("internal conversation config secret")
     )
     access = SimpleNamespace(cache=SimpleNamespace(invalidate=AsyncMock()))
+
+
+class FailingConversationGenerationService:
+    generate_title = AsyncMock(side_effect=RuntimeError("internal title generation secret"))
+    generate_summary = AsyncMock(side_effect=RuntimeError("internal summary generation secret"))
+    after_update_committed = AsyncMock()
 
 
 class FailingDb:
@@ -164,6 +173,10 @@ def _conversation_config_authority(service: object, db: object) -> SimpleNamespa
     return SimpleNamespace(service=service, db=db)
 
 
+def _conversation_generation_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
 def _sql_collection_service(
     db: AsyncSession,
     *,
@@ -244,6 +257,10 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
         db,
     )
     conversation_config = _conversation_config_authority(FailingConversationConfigService(), db)
+    conversation_generation = _conversation_generation_authority(
+        FailingConversationGenerationService(),
+        db,
+    )
 
     route_calls: dict[str, Any] = {
         "list": lambda: conversations_router.list_conversations(
@@ -320,6 +337,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_generation=conversation_generation,
         ),
         "summary": lambda: conversations_router.generate_summary(
             conversation_id="conversation-1",
@@ -328,6 +346,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_generation=conversation_generation,
         ),
     }
 
@@ -337,13 +356,13 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
-    if route_name in {"delete", "title", "config"}:
+    if route_name in {"delete", "title", "config", "generate_title", "summary"}:
         db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_generate_title_reads_typed_turn_admission_model_message(
+async def test_generate_title_uses_v2_generation_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     conversation = Conversation(
@@ -355,38 +374,16 @@ async def test_generate_title_reads_typed_turn_admission_model_message(
         status=ConversationStatus.ACTIVE,
         created_at=datetime.now(UTC),
     )
-    event_repo = SimpleNamespace(
-        get_events=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    event_type="turn_admitted",
-                    event_data={
-                        "role": "assistant",
-                        "content": "legacy fallback must not be used",
-                        "model_message": {
-                            "role": "user",
-                            "content": "Plan the typed admission migration",
-                        },
-                    },
-                )
-            ]
-        )
+    generation_service = SimpleNamespace(
+        generate_title=AsyncMock(return_value=conversation),
+        after_update_committed=AsyncMock(),
     )
-    title_llm = object()
-    agent_service = SimpleNamespace(
-        get_conversation=AsyncMock(return_value=conversation),
-        get_title_llm=AsyncMock(return_value=title_llm),
-        generate_conversation_title=AsyncMock(return_value=conversation.title),
-        update_conversation_title=AsyncMock(return_value=conversation),
-    )
-    container = SimpleNamespace(
-        agent_service=lambda _llm: agent_service,
-        agent_execution_event_repository=lambda: event_repo,
-    )
+    db = _db_with_project_access()
+    static_container = MagicMock()
     monkeypatch.setattr(
         conversations_router,
         "get_container_with_db",
-        lambda _request, _db: container,
+        static_container,
     )
     monkeypatch.setattr(
         conversations_router,
@@ -396,29 +393,25 @@ async def test_generate_title_reads_typed_turn_admission_model_message(
 
     response = await conversations_router.generate_conversation_title(
         conversation_id=conversation.id,
-        request=_request_with_container(container),
+        request=_request_with_container(SimpleNamespace()),
         project_id=conversation.project_id,
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
-        db=_db_with_project_access(),
+        db=db,
+        conversation_generation=_conversation_generation_authority(generation_service, db),
     )
 
     assert response.title == "Typed admission title"
-    agent_service.generate_conversation_title.assert_awaited_once_with(
-        first_message="Plan the typed admission migration",
-        llm=title_llm,
-    )
-    event_repo.get_events.assert_awaited_once()
-    assert event_repo.get_events.await_args.kwargs["event_types"] == {
-        "assistant_message",
-        "turn_admitted",
-        "user_message",
-    }
+    generation_service.generate_title.assert_awaited_once_with(conversation_id=conversation.id)
+    db.commit.assert_awaited_once()
+    generation_service.after_update_committed.assert_awaited_once_with()
+    static_container.assert_not_called()
+    conversations_router.create_llm_client.assert_not_awaited()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_generate_summary_projects_typed_turn_admission_as_user(
+async def test_generate_summary_uses_v2_generation_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     conversation = Conversation(
@@ -430,43 +423,17 @@ async def test_generate_summary_projects_typed_turn_admission_as_user(
         status=ConversationStatus.ACTIVE,
         created_at=datetime.now(UTC),
     )
-    event_repo = SimpleNamespace(
-        get_events=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    event_type="turn_admitted",
-                    event_data={
-                        "content": "legacy fallback must not be used",
-                        "model_message": {
-                            "role": "user",
-                            "content": "Summarize typed history",
-                        },
-                    },
-                ),
-                SimpleNamespace(
-                    event_type="assistant_message",
-                    event_data={"role": "assistant", "content": "Typed history is ready."},
-                ),
-            ]
-        )
+    conversation.summary = "Typed admission summary"
+    generation_service = SimpleNamespace(
+        generate_summary=AsyncMock(return_value=conversation),
+        after_update_committed=AsyncMock(),
     )
-    title_llm = SimpleNamespace(
-        ainvoke=AsyncMock(return_value=SimpleNamespace(content="Typed admission summary"))
-    )
-    conversation_repo = SimpleNamespace(save_and_commit=AsyncMock())
-    agent_service = SimpleNamespace(
-        get_conversation=AsyncMock(return_value=conversation),
-        get_title_llm=AsyncMock(return_value=title_llm),
-        _conversation_repo=conversation_repo,
-    )
-    container = SimpleNamespace(
-        agent_service=lambda _llm: agent_service,
-        agent_execution_event_repository=lambda: event_repo,
-    )
+    db = _db_with_project_access()
+    static_container = MagicMock()
     monkeypatch.setattr(
         conversations_router,
         "get_container_with_db",
-        lambda _request, _db: container,
+        static_container,
     )
     monkeypatch.setattr(
         conversations_router,
@@ -476,43 +443,176 @@ async def test_generate_summary_projects_typed_turn_admission_as_user(
 
     response = await conversations_router.generate_summary(
         conversation_id=conversation.id,
-        request=_request_with_container(container),
+        request=_request_with_container(SimpleNamespace()),
         project_id=conversation.project_id,
         current_user=SimpleNamespace(id=conversation.user_id),
         tenant_id=conversation.tenant_id,
-        db=_db_with_project_access(),
+        db=db,
+        conversation_generation=_conversation_generation_authority(generation_service, db),
     )
 
-    prompt = title_llm.ainvoke.await_args.args[0][1].content
-    assert "user: Summarize typed history" in prompt
-    assert "assistant: Typed history is ready." in prompt
-    assert "legacy fallback must not be used" not in prompt
     assert response.summary == "Typed admission summary"
-    conversation_repo.save_and_commit.assert_awaited_once_with(conversation)
+    generation_service.generate_summary.assert_awaited_once_with(conversation_id=conversation.id)
+    db.commit.assert_awaited_once()
+    generation_service.after_update_committed.assert_awaited_once_with()
+    static_container.assert_not_called()
+    conversations_router.create_llm_client.assert_not_awaited()
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_name", ["title", "summary"])
+async def test_conversation_generation_commits_before_cache_invalidation(
+    route_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conversation = Conversation(
+        id="conversation-generation-order",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Generated title",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    order: list[str] = []
+
+    async def after_update_committed() -> None:
+        order.append("invalidate")
+
+    service = SimpleNamespace(
+        generate_title=AsyncMock(return_value=conversation),
+        generate_summary=AsyncMock(return_value=conversation),
+        after_update_committed=AsyncMock(side_effect=after_update_committed),
+    )
+    db = _db_with_project_access()
+
+    async def commit() -> None:
+        order.append("commit")
+
+    db.commit.side_effect = commit
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    kwargs = {
+        "conversation_id": conversation.id,
+        "request": MagicMock(),
+        "project_id": conversation.project_id,
+        "current_user": SimpleNamespace(id=conversation.user_id),
+        "tenant_id": conversation.tenant_id,
+        "db": db,
+        "conversation_generation": _conversation_generation_authority(service, db),
+    }
+
+    if route_name == "title":
+        await conversations_router.generate_conversation_title(**kwargs)
+    else:
+        await conversations_router.generate_summary(**kwargs)
+
+    assert order == ["commit", "invalidate"]
+    db.rollback.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "model_message",
+    ("route_name", "expected_detail"),
     [
-        None,
-        {"role": "assistant", "content": "not user input"},
-        {"role": "user", "content": {"text": "not a string"}},
+        ("title", "Failed to generate conversation title"),
+        ("summary", "Failed to generate conversation summary"),
     ],
 )
-def test_conversation_projection_rejects_malformed_typed_turn_admission(
-    model_message: object,
+async def test_conversation_generation_commit_failure_never_invalidates_cache(
+    route_name: str,
+    expected_detail: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    event = SimpleNamespace(
-        event_type="turn_admitted",
-        event_data={
-            "role": "user",
-            "content": "legacy fallback must not be used",
-            "model_message": model_message,
-        },
+    conversation = Conversation(
+        id="conversation-generation-commit-failure",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Generated title",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
     )
+    service = SimpleNamespace(
+        generate_title=AsyncMock(return_value=conversation),
+        generate_summary=AsyncMock(return_value=conversation),
+        after_update_committed=AsyncMock(),
+    )
+    db = _db_with_project_access()
+    db.commit.side_effect = RuntimeError("commit secret")
+    monkeypatch.setattr(
+        conversations_router,
+        "_ensure_project_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    kwargs = {
+        "conversation_id": conversation.id,
+        "request": MagicMock(),
+        "project_id": conversation.project_id,
+        "current_user": SimpleNamespace(id=conversation.user_id),
+        "tenant_id": conversation.tenant_id,
+        "db": db,
+        "conversation_generation": _conversation_generation_authority(service, db),
+    }
 
-    assert conversations_router._project_conversation_message(event) is None
+    with pytest.raises(HTTPException) as exc_info:
+        if route_name == "title":
+            await conversations_router.generate_conversation_title(**kwargs)
+        else:
+            await conversations_router.generate_summary(**kwargs)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == expected_detail
+    assert "commit secret" not in exc_info.value.detail
+    service.after_update_committed.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("route_name", "expected_detail"),
+    [
+        ("title", "No user message found to generate title from"),
+        ("summary", "No messages found to generate summary from"),
+    ],
+)
+async def test_conversation_generation_maps_missing_sources_to_public_errors(
+    route_name: str,
+    expected_detail: str,
+) -> None:
+    service = SimpleNamespace(
+        generate_title=AsyncMock(side_effect=ConversationGenerationSourceMissingV2("title")),
+        generate_summary=AsyncMock(side_effect=ConversationGenerationSourceMissingV2("summary")),
+        after_update_committed=AsyncMock(),
+    )
+    db = _db_with_project_access()
+    authority = _conversation_generation_authority(service, db)
+    kwargs = {
+        "conversation_id": "conversation-1",
+        "request": MagicMock(),
+        "project_id": "project-1",
+        "current_user": SimpleNamespace(id="user-1"),
+        "tenant_id": "tenant-1",
+        "db": db,
+        "conversation_generation": authority,
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        if route_name == "title":
+            await conversations_router.generate_conversation_title(**kwargs)
+        else:
+            await conversations_router.generate_summary(**kwargs)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == expected_detail
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
 
 
 @pytest.mark.unit
@@ -1842,9 +1942,13 @@ async def test_project_scoped_conversation_routes_require_project_access(
         delete_conversation=AsyncMock(),
         update_conversation_title=AsyncMock(),
         update_conversation_config=AsyncMock(),
+        generate_title=AsyncMock(),
+        generate_summary=AsyncMock(),
+        after_update_committed=AsyncMock(),
     )
     conversation_http = _conversation_http_authority(conversation_service, db)
     conversation_config = _conversation_config_authority(conversation_service, db)
+    conversation_generation = _conversation_generation_authority(conversation_service, db)
     route_calls: dict[str, Any] = {
         "get": lambda: conversations_router.get_conversation(
             conversation_id="conversation-1",
@@ -1909,6 +2013,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_generation=conversation_generation,
         ),
         "summary": lambda: conversations_router.generate_summary(
             conversation_id="conversation-1",
@@ -1917,6 +2022,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_generation=conversation_generation,
         ),
     }
 
@@ -1930,6 +2036,8 @@ async def test_project_scoped_conversation_routes_require_project_access(
     conversation_service.delete_conversation.assert_not_awaited()
     conversation_service.update_conversation_title.assert_not_awaited()
     conversation_service.update_conversation_config.assert_not_awaited()
+    conversation_service.generate_title.assert_not_awaited()
+    conversation_service.generate_summary.assert_not_awaited()
 
 
 @pytest.mark.unit
@@ -2076,11 +2184,15 @@ def test_conversation_crud_handlers_have_no_static_container_or_llm_fallback() -
         conversations_router.update_conversation_title,
         conversations_router.update_conversation_config,
         conversations_router.update_conversation_mode,
+        conversations_router.generate_conversation_title,
+        conversations_router.generate_summary,
     ):
         source = inspect.getsource(handler)
         assert "create_llm_client" not in source
         assert "get_container_with_db" not in source
         assert ".agent_service(" not in source
+        assert "_conversation_repo" not in source
+        assert ".save_and_commit(" not in source
 
 
 @pytest.mark.unit

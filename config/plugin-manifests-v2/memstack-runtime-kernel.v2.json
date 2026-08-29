@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:c2c4caf725c4e9e3057109a33221be153263e35530b281dcbccdb606f795b6c7",
+        "digest": "sha256:aec4385a1c4cdbcde4ba9c02a206191dfe0b34497b791231a6db0289b8817720",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -8042,6 +8042,90 @@
       "artifact": {
         "digest": "sha256:21d55e605f0c12c9ff2c6efa962513be398cafdea976f1d9b0ec9f27f6a3aa07",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/judgment/conversation-enrichment",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_enrichment_judge:_apply_conversation_enrichment_judge_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:judgment.conversation-enrichment",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "llm_clients",
+              "service": "service:llm.tenant-client-factory",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "required-agent-tool-call", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:52e6c8b1e8d907e8dd4fd4fe36cbfff265cd8e7941bd75d7a0ff88214eb2fdc0",
+      "artifact": {
+        "digest": "sha256:0ff11ebf2cb04a9d999d975a4ebc722e8f2ca2cb3a12adf23e91fe8d392a7d3e",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_enrichment_judge.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/conversation-generation",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_generation_services:_apply_conversation_generation_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.conversation-generation",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "conversation_access",
+              "service": "service:application.conversation-access",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "session_log",
+              "service": "service:session-event-log",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "enrichment_judge",
+              "service": "service:judgment.conversation-enrichment",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:23ac0f06872b9eedd8014e1e77c83d6a7d584776e8a5bb0e99359d588ee36572",
+      "artifact": {
+        "digest": "sha256:686b80185824e267e9c0b4f303d49b3c52574e4dd56b1086fdccc1e48a665b4e",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_generation_services.py"
       }
     },
     {
