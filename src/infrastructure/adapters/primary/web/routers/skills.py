@@ -2548,24 +2548,24 @@ async def apply_skill_evolution_job(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
-    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_evolution_skill_repository_v2),
+    skill_version_repository: SkillVersionRepositoryPort = Depends(
+        _get_skill_evolution_version_repository_v2
+    ),
+    evolution_repository: SkillEvolutionRepositoryProtocolV2 = Depends(
+        _get_skill_evolution_repository_v2
+    ),
 ) -> SkillEvolutionJobResponse:
     """Apply a pending evolution job and create a new SkillVersion."""
     from pathlib import Path
 
     from src.application.services.skill_service import SkillService
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
-        SqlSkillVersionRepository,
-    )
-    from src.infrastructure.agent.plugins.skill_evolution.repository import (
-        SkillEvolutionRepository,
-    )
     from src.infrastructure.agent.plugins.skill_evolution.skill_merger import (
         SkillMerger,
     )
 
     tenant_id = _normalize_tenant_id(tenant)
-    evolution_repo = SkillEvolutionRepository(db)
+    evolution_repo = evolution_repository
     job = await evolution_repo.get_job(job_id)
     _validate_pending_evolution_job(job, tenant_id=tenant_id)
     assert job is not None
@@ -2577,7 +2577,7 @@ async def apply_skill_evolution_job(
         current_user=current_user,
         tenant_id=tenant_id,
     )
-    skill_version_repo = SqlSkillVersionRepository(db)
+    skill_version_repo = skill_version_repository
     skill_service = SkillService.create(
         skill_repository=skill_repo,
         base_path=Path.cwd(),
