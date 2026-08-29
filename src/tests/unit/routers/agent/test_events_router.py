@@ -21,6 +21,10 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserTenant,
 )
+from src.infrastructure.plugins.v2.agent_event_query_services import (
+    AgentEventExecutionStatusV2,
+)
+from src.infrastructure.plugins.v2.workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 
 
 class _WorkspaceAuthority:
@@ -75,7 +79,43 @@ class TestAgentEventsRouter:
             workspace_role,
             unavailable=workspace_unavailable,
         )
+        request.app.state.workspace_core_runtime_service_v2 = WorkspaceCoreRuntimeServiceV2(
+            settings=SimpleNamespace(),
+            client=SimpleNamespace(),
+            authority=request.app.state.workspace_authority,
+            context_judge=SimpleNamespace(),
+            plan_judge=SimpleNamespace(),
+            autonomy_judge=SimpleNamespace(),
+            access_verifier=SimpleNamespace(),
+            event_sink=SimpleNamespace(),
+            agent_runtime_provider=SimpleNamespace(),
+            provider_adapter=SimpleNamespace(),
+        )
         return request
+
+    def _event_query(
+        self,
+        *,
+        events: list[object] | None = None,
+        event_error: Exception | None = None,
+        status_error: Exception | None = None,
+    ) -> tuple[SimpleNamespace, SimpleNamespace]:
+        service = SimpleNamespace(
+            get_events=AsyncMock(
+                return_value=list(events or []),
+                side_effect=event_error,
+            ),
+            get_execution_status=AsyncMock(
+                return_value=AgentEventExecutionStatusV2(
+                    is_running=False,
+                    last_event_time_us=0,
+                    last_event_counter=0,
+                    current_message_id=None,
+                ),
+                side_effect=status_error,
+            ),
+        )
+        return SimpleNamespace(service=service), service
 
     @pytest.mark.asyncio
     async def test_get_workflow_status_rejects_user_outside_conversation_tenant(
@@ -114,6 +154,7 @@ class TestAgentEventsRouter:
             test_db, test_project_db, test_tenant_db, test_user
         )
         container = SimpleNamespace(agent_execution_event_repository=MagicMock())
+        event_query, event_service = self._event_query()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_conversation_events(
@@ -121,10 +162,11 @@ class TestAgentEventsRouter:
                 request=self._request_with_container(container),
                 current_user=another_user,
                 db=test_db,
+                event_query=event_query,
             )
 
         assert exc_info.value.status_code == 403
-        container.agent_execution_event_repository.assert_not_called()
+        event_service.get_events.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_conversation_events_rejects_same_tenant_non_owner_private_conversation(
@@ -149,6 +191,7 @@ class TestAgentEventsRouter:
         )
         await test_db.commit()
         container = SimpleNamespace(agent_execution_event_repository=MagicMock())
+        event_query, event_service = self._event_query()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_conversation_events(
@@ -156,11 +199,12 @@ class TestAgentEventsRouter:
                 request=self._request_with_container(container),
                 current_user=another_user,
                 db=test_db,
+                event_query=event_query,
             )
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Access denied to this conversation"
-        container.agent_execution_event_repository.assert_not_called()
+        event_service.get_events.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_conversation_events_rejects_project_member_without_workspace_membership(
@@ -208,6 +252,7 @@ class TestAgentEventsRouter:
         )
         await test_db.commit()
         container = SimpleNamespace(agent_execution_event_repository=MagicMock())
+        event_query, event_service = self._event_query()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_conversation_events(
@@ -218,11 +263,12 @@ class TestAgentEventsRouter:
                 limit=1000,
                 current_user=another_user,
                 db=test_db,
+                event_query=event_query,
             )
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Access denied to this conversation"
-        container.agent_execution_event_repository.assert_not_called()
+        event_service.get_events.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_conversation_events_allows_workspace_member_for_workspace_conversation(
@@ -262,12 +308,8 @@ class TestAgentEventsRouter:
             )
         )
         await test_db.commit()
-        event_repo = SimpleNamespace(get_events=AsyncMock(return_value=[]))
-        container = SimpleNamespace(agent_execution_event_repository=lambda: event_repo)
-        self.monkeypatch.setattr(
-            "src.infrastructure.adapters.primary.web.routers.agent.events.get_container_with_db",
-            lambda _request, _db: container,
-        )
+        container = SimpleNamespace()
+        event_query, event_service = self._event_query()
 
         response = await get_conversation_events(
             conversation_id,
@@ -277,10 +319,11 @@ class TestAgentEventsRouter:
             limit=1000,
             current_user=another_user,
             db=test_db,
+            event_query=event_query,
         )
 
         assert response.events == []
-        event_repo.get_events.assert_awaited_once()
+        event_service.get_events.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_workspace_conversation_fails_closed_when_core_is_unavailable(
@@ -314,6 +357,7 @@ class TestAgentEventsRouter:
         )
         await test_db.commit()
         container = SimpleNamespace(agent_execution_event_repository=MagicMock())
+        event_query, event_service = self._event_query()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_conversation_events(
@@ -321,10 +365,12 @@ class TestAgentEventsRouter:
                 request=self._request_with_container(container, workspace_unavailable=True),
                 current_user=another_user,
                 db=test_db,
+                event_query=event_query,
             )
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail["code"] == "WORKSPACE_CORE_UNAVAILABLE"
+        event_service.get_events.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_execution_status_rejects_before_event_repo_access(
@@ -339,6 +385,7 @@ class TestAgentEventsRouter:
             test_db, test_project_db, test_tenant_db, test_user
         )
         container = SimpleNamespace(agent_execution_event_repository=MagicMock(), redis=MagicMock())
+        event_query, event_service = self._event_query()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_execution_status(
@@ -346,11 +393,11 @@ class TestAgentEventsRouter:
                 request=self._request_with_container(container),
                 current_user=another_user,
                 db=test_db,
+                event_query=event_query,
             )
 
         assert exc_info.value.status_code == 403
-        container.agent_execution_event_repository.assert_not_called()
-        container.redis.assert_not_called()
+        event_service.get_execution_status.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_resume_execution_rejects_before_resume_service_access(
@@ -391,10 +438,9 @@ class TestAgentEventsRouter:
         async def accessible_conversation(*_args, **_kwargs):
             return SimpleNamespace(tenant_id="tenant-1", project_id="project-1")
 
-        container = SimpleNamespace(
-            agent_execution_event_repository=lambda: SimpleNamespace(
-                get_events=AsyncMock(side_effect=RuntimeError("internal event secret"))
-            )
+        container = SimpleNamespace()
+        event_query, _event_service = self._event_query(
+            event_error=RuntimeError("internal event secret")
         )
         self.monkeypatch.setattr(
             "src.infrastructure.adapters.primary.web.routers.agent.events._get_accessible_conversation",
@@ -407,6 +453,7 @@ class TestAgentEventsRouter:
                 request=self._request_with_container(container),
                 current_user=test_user,
                 db=test_db,
+                event_query=event_query,
             )
 
         assert exc_info.value.status_code == 500
@@ -422,11 +469,9 @@ class TestAgentEventsRouter:
         async def accessible_conversation(*_args, **_kwargs):
             return SimpleNamespace(tenant_id="tenant-1", project_id="project-1")
 
-        container = SimpleNamespace(
-            agent_execution_event_repository=lambda: SimpleNamespace(
-                get_last_event_time=AsyncMock(side_effect=RuntimeError("internal status secret"))
-            ),
-            redis=lambda: None,
+        container = SimpleNamespace()
+        event_query, _event_service = self._event_query(
+            status_error=RuntimeError("internal status secret")
         )
         self.monkeypatch.setattr(
             "src.infrastructure.adapters.primary.web.routers.agent.events._get_accessible_conversation",
@@ -439,6 +484,7 @@ class TestAgentEventsRouter:
                 request=self._request_with_container(container),
                 current_user=test_user,
                 db=test_db,
+                event_query=event_query,
             )
 
         assert exc_info.value.status_code == 500

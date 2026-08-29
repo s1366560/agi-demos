@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:9961edeef3cbe9ccc53f9b872ecf8bd740424f399fc5ea763cdc897e37e70452",
+        "digest": "sha256:fdd8ba04dbc543c7fd59c4242b7a70a0f32652bc721d48e175564827250ea324",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4211,6 +4211,79 @@
       "artifact": {
         "digest": "sha256:fd723b431db3ad157aeed4e5ebb0561bf23ab0a0519ae67da3a4f6686b276460",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/agent-event-query-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_event_query_services:_apply_agent_event_query_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.agent-event-query-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8e2f3a9719f088eaf5d3f3598e87e60526db6c20414f184df2719b53282cd1c4",
+      "artifact": {
+        "digest": "sha256:478690f1485f0870568c92a4f9eadba0708e491825b52e8ef16892137de52daf",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_event_query_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/agent-event-query",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_event_query_services:_apply_agent_event_query_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.agent-event-query",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repositories",
+              "service": "service:persistence.agent-event-query-repository-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "redis",
+              "service": "service:runtime.redis-client",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-providers", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:6d4792ce73a2edaba6c9a3fc2ea4d11e3c5bcbbb6c81912e8ca72f9255721c42",
+      "artifact": {
+        "digest": "sha256:478690f1485f0870568c92a4f9eadba0708e491825b52e8ef16892137de52daf",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_event_query_services.py"
       }
     },
     {

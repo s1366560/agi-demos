@@ -321,6 +321,7 @@ def test_agent_row_preserves_route_order_openapi_and_recursive_dependencies() ->
         "src.infrastructure.adapters.primary.web.conversation_http_application_authority_v2.conversation_http_application_authority_dependency_v2": 4,
         "src.infrastructure.adapters.primary.web.conversation_participant_http_application_authority_v2.conversation_participant_http_application_authority_dependency_v2": 6,
         "src.infrastructure.adapters.primary.web.conversation_revision_http_application_authority_v2.conversation_revision_http_application_authority_dependency_v2": 3,
+        "src.infrastructure.adapters.primary.web.agent_event_query_http_application_authority_v2.agent_event_query_http_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.agent_execution_query_application_authority_v2.agent_execution_query_application_authority_dependency_v2": 2,
         "src.infrastructure.adapters.primary.web.routers.agent.binding_router.agent_binding_http_application_authority_dependency_v2": 6,
         "src.infrastructure.adapters.primary.web.dependencies.auth_dependencies.get_current_user": 92,

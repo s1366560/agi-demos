@@ -24,6 +24,7 @@ from .agent_definition import (
     builtin_agent_definition_contribution_v2,
     builtin_agent_definition_v2,
 )
+from .agent_event_query_services import agent_event_query_service_definitions_v2
 from .agent_execution_query_services import agent_execution_query_service_definitions_v2
 from .agent_hitl_tools import builtin_agent_hitl_tool_contribution_definition_v2
 from .agent_lifecycle_notifier import (
@@ -378,6 +379,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         conversation_enrichment_judge_definition_v2(),
         conversation_generation_definition_v2(),
         *conversation_collection_service_definitions_v2(),
+        *agent_event_query_service_definitions_v2(),
         *agent_execution_query_service_definitions_v2(),
         *agent_recovery_stream_service_definitions_v2(),
         *agent_turn_service_definitions_v2(),

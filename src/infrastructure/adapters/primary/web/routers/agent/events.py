@@ -16,6 +16,10 @@ from typing import Any, cast
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.agent_event_query_http_application_authority_v2 import (
+    AgentEventQueryHttpApplicationAuthorityV2,
+    agent_event_query_http_application_authority_dependency_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
@@ -31,62 +35,9 @@ from .schemas import (
     RecoveryInfo,
     WorkflowStatusResponse,
 )
-from .utils import get_container_with_db
 
 logger = logging.getLogger(__name__)
 _TENANT_ADMIN_ROLES = frozenset({"admin", "owner"})
-
-
-async def _check_redis_running(redis_client: Any, conversation_id: str) -> tuple[bool, str | None]:
-    """Check Redis for active execution state."""
-    if not redis_client:
-        return False, None
-    running_key = f"agent:running:{conversation_id}"
-    running_message_id = await redis_client.get(running_key)
-    logger.warning(
-        f"[ExecutionStatus] Redis check for {running_key}: "
-        + f"value={running_message_id}, is_running={bool(running_message_id)}"
-    )
-    if not running_message_id:
-        return False, None
-    msg_id = (
-        running_message_id.decode() if isinstance(running_message_id, bytes) else running_message_id
-    )
-    return True, msg_id
-
-
-async def _check_stream_recovery(
-    redis_client: Any,
-    conversation_id: str,
-    current_message_id: str | None,
-    last_event_time_us: int,
-    recovery_info: RecoveryInfo,
-) -> None:
-    """Check Redis Stream for live events and update recovery_info in place."""
-    if not (redis_client and current_message_id):
-        return
-    import redis.asyncio as redis
-
-    if not isinstance(redis_client, redis.Redis):
-        return
-    stream_key = f"agent:events:{conversation_id}"
-    try:
-        stream_info = await redis_client.xinfo_stream(stream_key)
-        if not stream_info:
-            return
-        recovery_info.stream_exists = True
-        recovery_info.recovery_source = "stream"
-        last_entry = await redis_client.xrevrange(stream_key, count=1)
-        if not last_entry:
-            return
-        _, fields = last_entry[0]
-        time_us_raw = fields.get(b"event_time_us") or fields.get("event_time_us")
-        if time_us_raw:
-            stream_time_us = int(time_us_raw)
-            if stream_time_us > last_event_time_us:
-                recovery_info.can_recover = True
-    except redis.ResponseError:
-        pass
 
 
 async def _get_resume_service(db: AsyncSession) -> Any:
@@ -199,6 +150,9 @@ async def get_conversation_events(
     limit: int = Query(1000, ge=1, le=10000, description="Maximum events to return"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    event_query: AgentEventQueryHttpApplicationAuthorityV2 = Depends(
+        agent_event_query_http_application_authority_dependency_v2
+    ),
 ) -> EventReplayResponse:
     """
     Get SSE events for a conversation, used for replaying execution state.
@@ -208,17 +162,8 @@ async def get_conversation_events(
     between conversations.
     """
     try:
-        assert request is not None
         await _get_accessible_conversation(conversation_id, current_user, db, request)
-
-        container = get_container_with_db(request, db)
-        event_repo = container.agent_execution_event_repository()
-
-        if not event_repo:
-            # Event replay not configured
-            return EventReplayResponse(events=[], has_more=False)
-
-        events = await event_repo.get_events(
+        events = await event_query.service.get_events(
             conversation_id=conversation_id,
             from_time_us=from_time_us,
             from_counter=from_counter,
@@ -254,6 +199,9 @@ async def get_execution_status(
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    event_query: AgentEventQueryHttpApplicationAuthorityV2 = Depends(
+        agent_event_query_http_application_authority_dependency_v2
+    ),
 ) -> ExecutionStatusResponse:
     """
     Get the current execution status of a conversation with optional recovery info.
@@ -267,57 +215,24 @@ async def get_execution_status(
     """
     try:
         await _get_accessible_conversation(conversation_id, current_user, db, request)
-
-        assert request is not None
-        container = get_container_with_db(request, db)
-        event_repo = container.agent_execution_event_repository()
-        redis_client = container.redis()
-
-        if not event_repo:
-            # Event replay not configured
-            return ExecutionStatusResponse(
-                is_running=False,
-                last_event_time_us=0,
-                last_event_counter=0,
-                current_message_id=None,
-                conversation_id=conversation_id,
-            )
-
-        # Get last event time
-        last_event_time_us, last_event_counter = await event_repo.get_last_event_time(
-            conversation_id
+        status_state = await event_query.service.get_execution_status(
+            conversation_id=conversation_id,
+            include_recovery=include_recovery,
+            from_time_us=from_time_us,
         )
-
-        # Check Redis for active execution
-        is_running, current_message_id = await _check_redis_running(redis_client, conversation_id)
-        # If not running from Redis check, get current message ID from last event
-        if not current_message_id and last_event_time_us > 0:
-            events = await event_repo.get_events(
-                conversation_id=conversation_id,
-                limit=1,
-            )
-            if events:
-                current_message_id = events[-1].message_id
         response = ExecutionStatusResponse(
-            is_running=is_running,
-            last_event_time_us=last_event_time_us,
-            last_event_counter=last_event_counter,
-            current_message_id=current_message_id,
+            is_running=status_state.is_running,
+            last_event_time_us=status_state.last_event_time_us,
+            last_event_counter=status_state.last_event_counter,
+            current_message_id=status_state.current_message_id,
             conversation_id=conversation_id,
         )
-        # Include recovery info if requested
-        if include_recovery:
+        if status_state.recovery is not None:
             recovery_info = RecoveryInfo(
-                can_recover=last_event_time_us > from_time_us,
-                recovery_source="database" if last_event_time_us > 0 else "none",
-                missed_events_count=0,
-            )
-            await _check_stream_recovery(
-                redis_client,
-                conversation_id,
-                current_message_id,
-                last_event_time_us,
-                recovery_info,
+                can_recover=status_state.recovery.can_recover,
+                stream_exists=status_state.recovery.stream_exists,
+                recovery_source=status_state.recovery.recovery_source,
+                missed_events_count=status_state.recovery.missed_events_count,
             )
             response.recovery = recovery_info
 
