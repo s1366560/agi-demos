@@ -22,6 +22,9 @@ from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.agent.workspace_plan.pipeline import DRONE_PROVIDER
 
 from .agent_capabilities import AgentCapabilityCatalogProtocolV2
+from .cicd_pipeline_repository_services import (
+    CicdPipelineRepositoryProviderProtocolV2,
+)
 from .packaged_skill import build_packaged_skill_v2
 from .plugin_config_operation_authority_v2 import (
     plugin_config_child_operation_authority_v2,
@@ -40,6 +43,7 @@ DRONE_TOOL_MODULE_V2 = "builtin://memstack/agent/tool/drone"
 DRONE_SKILL_MODULE_V2 = "builtin://memstack/agent/skill/drone"
 DRONE_TOOL_SERVICE_V2 = "service:agent-tool.drone"
 DRONE_PLUGIN_CONFIGS_INJECT_V2 = "plugin_configs"
+DRONE_PIPELINE_REPOSITORY_INJECT_V2 = "pipeline_repository"
 DRONE_DEFAULTS_SERVICE_V2 = "service:drone-defaults"
 DRONE_SECRET_PATHS_SERVICE_V2 = "service:drone-secret-paths"
 DRONE_INFRASTRUCTURE_SERVICE_V2 = "service:drone-infrastructure"
@@ -125,6 +129,7 @@ async def cicd_run_pipeline_tool(
     ctx: ToolContext,
     *,
     _plugin_config_resolver: PluginConfigApplicationResolverProtocolV2,
+    _pipeline_repository_provider: CicdPipelineRepositoryProviderProtocolV2,
     repository: str | None = None,
     repo: str | None = None,
     provider: str = DRONE_PROVIDER,
@@ -150,6 +155,7 @@ async def cicd_run_pipeline_tool(
             ) as authority:
                 service = CicdPipelineService(
                     session,
+                    pipeline_repository=_pipeline_repository_provider.build(authority.operation),
                     plugin_config_repository=authority.repository,
                 )
                 summary = await service.run_pipeline(
@@ -209,11 +215,13 @@ class DroneToolCapabilityV2:
 def _bind_drone_tool_v2(
     tool: ToolInfo,
     plugin_config_resolver: PluginConfigApplicationResolverProtocolV2,
+    pipeline_repository_provider: CicdPipelineRepositoryProviderProtocolV2,
 ) -> ToolInfo:
     async def execute(ctx: ToolContext, **kwargs: object) -> object:
         return await tool.execute(
             ctx,
             _plugin_config_resolver=plugin_config_resolver,
+            _pipeline_repository_provider=pipeline_repository_provider,
             **kwargs,
         )
 
@@ -223,10 +231,15 @@ def _bind_drone_tool_v2(
 def _drone_tool_set_v2(
     tool: ToolInfo,
     plugin_config_resolver: PluginConfigApplicationResolverProtocolV2,
+    pipeline_repository_provider: CicdPipelineRepositoryProviderProtocolV2,
 ) -> ToolSetV2:
     from src.infrastructure.agent.core.tool_converter import convert_tools
 
-    bound_tool = _bind_drone_tool_v2(tool, plugin_config_resolver)
+    bound_tool = _bind_drone_tool_v2(
+        tool,
+        plugin_config_resolver,
+        pipeline_repository_provider,
+    )
     tools = {CICD_RUN_PIPELINE_TOOL_NAME: bound_tool}
     return ToolSetV2(
         tools=MappingProxyType(tools),
@@ -253,6 +266,12 @@ def _apply_drone_tool_contribution_v2(  # pyright: ignore[reportUnusedFunction]
             "invalid_drone_plugin_configs",
             "Drone tool contribution received an invalid PluginConfig resolver",
         )
+    pipeline_repository = context.require(DRONE_PIPELINE_REPOSITORY_INJECT_V2)
+    if not isinstance(pipeline_repository, CicdPipelineRepositoryProviderProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_drone_pipeline_repository",
+            "Drone tool contribution received an invalid pipeline repository Provider",
+        )
     contribution_config = {key: value for key, value in config.items() if key != "source_id"}
     defaults = MappingProxyType({**_DRONE_PROFILE_DEFAULTS_V2, **contribution_config})
     capability = DroneToolCapabilityV2(source_id=source_id, defaults=defaults)
@@ -278,7 +297,11 @@ def _apply_drone_tool_contribution_v2(  # pyright: ignore[reportUnusedFunction]
     )
     return catalog.register_tools(
         source_id,
-        lambda **_kwargs: _drone_tool_set_v2(cicd_run_pipeline_tool, plugin_configs),
+        lambda **_kwargs: _drone_tool_set_v2(
+            cicd_run_pipeline_tool,
+            plugin_configs,
+            pipeline_repository,
+        ),
     )
 
 
@@ -325,6 +348,7 @@ __all__ = [
     "CICD_RUN_PIPELINE_TOOL_NAME",
     "DRONE_DEFAULTS_SERVICE_V2",
     "DRONE_INFRASTRUCTURE_SERVICE_V2",
+    "DRONE_PIPELINE_REPOSITORY_INJECT_V2",
     "DRONE_PLUGIN_CONFIGS_INJECT_V2",
     "DRONE_SECRET_PATHS_SERVICE_V2",
     "DRONE_SKILL_MODULE_V2",

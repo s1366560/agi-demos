@@ -19,6 +19,9 @@ from src.infrastructure.plugins.v2.boundary import (
     pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.cicd_pipeline_repository_services import (
+    CICD_PIPELINE_REPOSITORY_PROVIDER_SERVICE_V2,
+)
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.plugin_config_services import (
     PLUGIN_CONFIG_APPLICATION_SERVICE_V2,
@@ -34,6 +37,7 @@ _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 _DRONE_PLUGIN_CONFIGS_INJECT_V2 = "plugin_configs"
+_DRONE_PIPELINE_REPOSITORY_INJECT_V2 = "pipeline_repository"
 _DRONE_TOOL_MODULE_V2 = "builtin://memstack/agent/tool/drone"
 
 
@@ -56,6 +60,20 @@ class _Resolver:
         return PluginConfigApplicationServicesV2(repository=self.repository)
 
 
+class _PipelineRepository:
+    pass
+
+
+class _PipelineRepositoryProvider:
+    def __init__(self) -> None:
+        self.operation = None
+        self.repository = _PipelineRepository()
+
+    def build(self, operation):
+        self.operation = operation
+        return self.repository
+
+
 async def test_bound_drone_tool_injects_repository_from_parent_generation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -70,6 +88,7 @@ async def test_bound_drone_tool_injects_repository_from_parent_generation(
     drone_module = import_module("src.infrastructure.plugins.v2.drone_capabilities")
     db = AsyncSession()
     resolver = _Resolver()
+    pipeline_repository_provider = _PipelineRepositoryProvider()
     captured: dict[str, object] = {}
 
     @asynccontextmanager
@@ -77,8 +96,15 @@ async def test_bound_drone_tool_injects_repository_from_parent_generation(
         yield db
 
     class _Service:
-        def __init__(self, session, *, plugin_config_repository) -> None:
+        def __init__(
+            self,
+            session,
+            *,
+            pipeline_repository,
+            plugin_config_repository,
+        ) -> None:
             captured["session"] = session
+            captured["pipeline_repository"] = pipeline_repository
             captured["repository"] = plugin_config_repository
 
         async def run_pipeline(self, request):
@@ -113,6 +139,7 @@ async def test_bound_drone_tool_injects_repository_from_parent_generation(
             bound = drone_module._bind_drone_tool_v2(
                 drone_module.cicd_run_pipeline_tool,
                 resolver,
+                pipeline_repository_provider,
             )
             result = await bound.execute(
                 SimpleNamespace(
@@ -126,8 +153,10 @@ async def test_bound_drone_tool_injects_repository_from_parent_generation(
 
         assert result.is_error is False
         assert captured["session"] is db
+        assert captured["pipeline_repository"] is pipeline_repository_provider.repository
         assert captured["repository"] is resolver.repository
         assert resolver.operation is not None
+        assert pipeline_repository_provider.operation is resolver.operation
         assert resolver.operation.descriptor.generation == 1022
         assert resolver.operation.phase is FiberPhaseV2.DISPOSED
     finally:
@@ -165,11 +194,41 @@ async def test_drone_rejects_wrong_plugin_config_alias_before_loading() -> None:
     assert "builtin-drone-tool" in str(error.value)
 
 
-def test_drone_profile_declares_plugin_config_consumer_alias() -> None:
+async def test_drone_rejects_wrong_pipeline_repository_alias_before_loading() -> None:
+    document = load_profile_document_v2(_PROFILE_PATH)
+    broken = replace(
+        document,
+        entries=tuple(
+            replace(
+                entry,
+                inject={
+                    **entry.inject,
+                    _DRONE_PIPELINE_REPOSITORY_INJECT_V2: (
+                        "service:persistence.skill-repository-provider"
+                    ),
+                },
+            )
+            if entry.module_ref == _DRONE_TOOL_MODULE_V2
+            else entry
+            for entry in document.entries
+        ),
+    )
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    snapshot = compose_profile_v2(broken, {manifest.plugin_id: manifest}, generation=1024)
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
+
+    assert error.value.code == "inject_service_mismatch"
+    assert "builtin-drone-tool" in str(error.value)
+
+
+def test_drone_profile_declares_required_consumer_aliases() -> None:
     document = load_profile_document_v2(_PROFILE_PATH)
     entry = next(item for item in document.entries if item.module_ref == _DRONE_TOOL_MODULE_V2)
 
     assert entry.inject == {
         "catalog": "service:tool-set-catalog",
         _DRONE_PLUGIN_CONFIGS_INJECT_V2: PLUGIN_CONFIG_APPLICATION_SERVICE_V2,
+        _DRONE_PIPELINE_REPOSITORY_INJECT_V2: CICD_PIPELINE_REPOSITORY_PROVIDER_SERVICE_V2,
     }

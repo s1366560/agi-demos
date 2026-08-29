@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:1dec98dc1e84721e8f0762ac8548163e627767270993c029b04b6cbf630ea0dc",
+        "digest": "sha256:f2ab48280700f51488ed1955efa6db686105f46159a28a003e50aa99e51b1daf",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4945,6 +4945,37 @@
       }
     },
     {
+      "module_ref": "builtin://memstack/persistence/cicd-pipeline-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.cicd_pipeline_repository_services:_apply_cicd_pipeline_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.cicd-pipeline-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:5c3f0f1c994241f2bcf2a9a8c1ebde2487d51c8919dd4333b7dd8d48f1177af1",
+      "artifact": {
+        "digest": "sha256:2c6fa30bdc14ede0b8e88227f079e4e4f80a6cb0c9be877d3eabe8529e734349",
+        "source": "repo+python://src/infrastructure/plugins/v2/cicd_pipeline_repository_services.py"
+      }
+    },
+    {
       "module_ref": "builtin://memstack/persistence/plugin-config-repository-provider",
       "entrypoint": "src.infrastructure.plugins.v2.plugin_config_services:_apply_plugin_config_repository_provider_v2",
       "targets": ["python"],
@@ -8880,6 +8911,11 @@
               "alias": "plugin_configs",
               "service": "service:application.plugin-config-repository",
               "version": "1.0.0"
+            },
+            {
+              "alias": "pipeline_repository",
+              "service": "service:persistence.cicd-pipeline-repository-provider",
+              "version": "1.0.0"
             }
           ]
         },
@@ -8897,9 +8933,9 @@
           }
         }
       },
-      "contract_digest": "sha256:79bf8d5fe422df5350f5dfbe5a1c2863834380304ca378e5c04117117582da3e",
+      "contract_digest": "sha256:0ec493af3f0f63c2ad40c4a3e331a33e505545bada796fdb7cf3c390cd1a27e7",
       "artifact": {
-        "digest": "sha256:62d5404f68addf1bf717467ff1f96e2d4a3ba9a8e1419c90c8135b392a4c9569",
+        "digest": "sha256:4bbad935fa5e44444814bac173032f8540b53cb56e72e369ab6cd0416853822d",
         "source": "repo+python://src/infrastructure/plugins/v2/drone_capabilities.py"
       }
     },
@@ -9750,7 +9786,7 @@
       },
       "contract_digest": "sha256:df128a48eac4a6de212b4780282ec26f0676c150ec55291f6bfbe15a4aea29c7",
       "artifact": {
-        "digest": "sha256:62d5404f68addf1bf717467ff1f96e2d4a3ba9a8e1419c90c8135b392a4c9569",
+        "digest": "sha256:4bbad935fa5e44444814bac173032f8540b53cb56e72e369ab6cd0416853822d",
         "source": "repo+python://src/infrastructure/plugins/v2/drone_capabilities.py"
       }
     },

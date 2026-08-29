@@ -85,6 +85,7 @@ from .channel_adapters import (
     builtin_feishu_channel_adapter_definition_v2,
 )
 from .channel_runtime import ChannelRuntimeManagerV2, channel_runtime_definition_v2
+from .cicd_pipeline_repository_services import cicd_pipeline_repository_definition_v2
 from .cluster_services import cluster_service_definitions_v2
 from .conversation_access_services import conversation_access_service_definitions_v2
 from .conversation_collection_repository import conversation_collection_repository_definition_v2
@@ -384,6 +385,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         docker_event_monitor_definition_v2(),
         llm_health_runtime_definition_v2(),
         skill_evolution_scheduler_definition_v2(),
+        cicd_pipeline_repository_definition_v2(),
         *plugin_config_service_definitions_v2(),
         *skill_evolution_repository_service_definitions_v2(),
         *skill_repository_service_definitions_v2(),
