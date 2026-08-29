@@ -60,6 +60,7 @@ from .agent_sandbox_mcp_tools import (
     builtin_agent_sandbox_mcp_tool_contribution_definition_v2,
 )
 from .agent_skill_mcp_service import builtin_skill_mcp_manager_definition_v2
+from .agent_subagent_control_services import agent_subagent_control_definition_v2
 from .agent_system_api_tool import builtin_agent_system_api_tool_contribution_definition_v2
 from .agent_task_session_tools import (
     builtin_agent_task_session_tool_contribution_definitions_v2,
@@ -386,6 +387,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *agent_event_query_service_definitions_v2(),
         agent_execution_resume_definition_v2(),
         agent_workflow_status_definition_v2(),
+        agent_subagent_control_definition_v2(),
         *agent_execution_query_service_definitions_v2(),
         *agent_recovery_stream_service_definitions_v2(),
         *agent_turn_service_definitions_v2(),
