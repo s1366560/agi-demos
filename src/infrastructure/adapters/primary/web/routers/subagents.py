@@ -25,6 +25,9 @@ from src.infrastructure.adapters.primary.web.routers.agent.access import require
 from src.infrastructure.adapters.primary.web.subagent_http_application_authority_v2 import (
     subagent_http_application_authority_v2,
 )
+from src.infrastructure.adapters.primary.web.subagent_template_http_application_authority_v2 import (
+    subagent_template_http_application_authority_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
@@ -33,6 +36,11 @@ from src.infrastructure.plugins.v2.subagent_management_services import (
     SubAgentAccessDeniedV2,
     SubAgentAlreadyExistsV2,
     SubAgentNotFoundV2,
+)
+from src.infrastructure.plugins.v2.subagent_template_management_services import (
+    SubAgentTemplateAlreadyExistsV2,
+    SubAgentTemplateBuiltinMutationV2,
+    SubAgentTemplateNotFoundV2,
 )
 
 
@@ -68,33 +76,6 @@ async def _get_selected_subagent_tenant_id(
     return selected_tenant_id
 
 
-async def _ensure_project_access(
-    *,
-    project_id: str | None,
-    tenant_id: str,
-    current_user: User,
-    db: AsyncSession,
-) -> None:
-    if project_id is None:
-        return
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(Project.id)
-            .join(UserProject, UserProject.project_id == Project.id)
-            .where(
-                and_(
-                    Project.id == project_id,
-                    Project.tenant_id == tenant_id,
-                    UserProject.user_id == current_user.id,
-                )
-            )
-        )
-    )
-    if result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied"))
-
-
 async def _accessible_project_ids(
     *,
     tenant_id: str,
@@ -114,26 +95,6 @@ async def _accessible_project_ids(
         )
     )
     return {str(project_id) for project_id in result.scalars().all()}
-
-
-async def _ensure_subagent_access(
-    *,
-    subagent: SubAgent,
-    tenant_id: str,
-    current_user: User,
-    db: AsyncSession,
-) -> None:
-    if subagent.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("SubAgent not found"),
-        )
-    await _ensure_project_access(
-        project_id=subagent.project_id,
-        tenant_id=tenant_id,
-        current_user=current_user,
-        db=db,
-    )
 
 
 async def _filter_accessible_subagents(
@@ -820,27 +781,34 @@ async def list_subagent_templates(
     limit: int = Query(50, ge=1, le=100, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     tenant_id: str = Depends(_get_selected_subagent_tenant_id),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateListResponse:
     """
     List published subagent templates with optional filtering.
     """
-    container = get_container_with_db(request, db)
-    repo = container.subagent_template_repository()
-    templates = await repo.list_templates(
-        tenant_id=tenant_id,
-        category=category,
-        query=query,
-        published_only=True,
-        limit=limit,
-        offset=offset,
-    )
-    total = await repo.count_templates(tenant_id=tenant_id, category=category)
-
-    return TemplateListResponse(
-        templates=[TemplateResponse(**t) for t in templates],
-        total=total,
-    )
+    try:
+        async with subagent_template_http_application_authority_v2(
+            request=request,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        ) as authority:
+            page = await authority.service.list_published(
+                category=category,
+                query=query,
+                limit=limit,
+                offset=offset,
+            )
+            return TemplateListResponse(
+                templates=[TemplateResponse(**template) for template in page.templates],
+                total=page.total,
+            )
+    except SubAgentTemplateNotFoundV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Template not found"),
+        ) from exc
 
 
 @router.post(
@@ -852,44 +820,47 @@ async def create_template(
     request: Request,
     data: TemplateCreate,
     tenant_id: str = Depends(_get_selected_subagent_tenant_id),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateResponse:
     """
     Create a new subagent template.
     """
-    container = get_container_with_db(request, db)
-    repo = container.subagent_template_repository()
-
-    # Check uniqueness
-    existing = await repo.get_by_name(tenant_id, data.name, data.version)
-    if existing:
+    try:
+        async with subagent_template_http_application_authority_v2(
+            request=request,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        ) as authority:
+            created = await authority.service.create(data.model_dump())
+            logger.info("Template created through V2: %s (%s)", created["id"], data.name)
+            return TemplateResponse(**created)
+    except SubAgentTemplateAlreadyExistsV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=_("Template already exists"),
-        )
-
-    template_data = data.model_dump()
-    template_data["tenant_id"] = tenant_id
-    created = await repo.create(template_data)
-    await db.commit()
-
-    logger.info(f"Template created: {created['id']} ({data.name})")
-    return TemplateResponse(**created)
+        ) from exc
 
 
 @router.get("/templates/categories")
 async def list_template_categories(
     request: Request,
     tenant_id: str = Depends(_get_selected_subagent_tenant_id),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     List all available template categories.
     """
-    container = get_container_with_db(request, db)
-    repo = container.subagent_template_repository()
-    categories = await repo.list_categories(tenant_id)
-    return {"categories": categories}
+    async with subagent_template_http_application_authority_v2(
+        request=request,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    ) as authority:
+        categories = await authority.service.list_categories()
+        return {"categories": categories}
 
 
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
@@ -897,22 +868,26 @@ async def get_template(
     request: Request,
     template_id: str,
     tenant_id: str = Depends(_get_selected_subagent_tenant_id),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateResponse:
     """
     Get a specific template by ID.
     """
-    container = get_container_with_db(request, db)
-    repo = container.subagent_template_repository()
-    template = await repo.get_by_id(template_id)
-
-    if not template or template["tenant_id"] != tenant_id:
+    try:
+        async with subagent_template_http_application_authority_v2(
+            request=request,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        ) as authority:
+            template = await authority.service.require_template(template_id)
+            return TemplateResponse(**template)
+    except SubAgentTemplateNotFoundV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Template not found"),
-        )
-
-    return TemplateResponse(**template)
+        ) from exc
 
 
 @router.put("/templates/{template_id}", response_model=TemplateResponse)
@@ -921,34 +896,35 @@ async def update_template(
     template_id: str,
     data: TemplateUpdate,
     tenant_id: str = Depends(_get_selected_subagent_tenant_id),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateResponse:
     """
     Update an existing template.
     """
-    container = get_container_with_db(request, db)
-    repo = container.subagent_template_repository()
-    template = await repo.get_by_id(template_id)
-
-    if not template or template["tenant_id"] != tenant_id:
+    try:
+        async with subagent_template_http_application_authority_v2(
+            request=request,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        ) as authority:
+            updated = await authority.service.update(
+                template_id,
+                data.model_dump(exclude_unset=True),
+            )
+            logger.info("Template updated through V2: %s", template_id)
+            return TemplateResponse(**updated)
+    except SubAgentTemplateNotFoundV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Template not found"),
-        )
-
-    if template["is_builtin"]:
+        ) from exc
+    except SubAgentTemplateBuiltinMutationV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Cannot modify builtin templates"),
-        )
-
-    update_data = data.model_dump(exclude_unset=True)
-    updated = await repo.update(template_id, update_data)
-    await db.commit()
-
-    logger.info(f"Template updated: {template_id}")
-    assert updated is not None
-    return TemplateResponse(**updated)
+        ) from exc
 
 
 @router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -956,30 +932,31 @@ async def delete_template(
     request: Request,
     template_id: str,
     tenant_id: str = Depends(_get_selected_subagent_tenant_id),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Delete a template.
     """
-    container = get_container_with_db(request, db)
-    repo = container.subagent_template_repository()
-    template = await repo.get_by_id(template_id)
-
-    if not template or template["tenant_id"] != tenant_id:
+    try:
+        async with subagent_template_http_application_authority_v2(
+            request=request,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        ) as authority:
+            await authority.service.delete(template_id)
+            logger.info("Template deleted through V2: %s", template_id)
+    except SubAgentTemplateNotFoundV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Template not found"),
-        )
-
-    if template["is_builtin"]:
+        ) from exc
+    except SubAgentTemplateBuiltinMutationV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Cannot delete builtin templates"),
-        )
-
-    deleted = await repo.delete(template_id)
-    await db.commit()
-    logger.info("Template deleted: %s deleted=%s", template_id, deleted)
+        ) from exc
 
 
 @router.post(
@@ -991,52 +968,36 @@ async def install_template(
     request: Request,
     template_id: str,
     tenant_id: str = Depends(_get_selected_subagent_tenant_id),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
     """
     Create a SubAgent from a template (install).
     """
-    container = get_container_with_db(request, db)
-    template_repo = container.subagent_template_repository()
-    template = await template_repo.get_by_id(template_id)
-
-    if not template or template["tenant_id"] != tenant_id:
+    try:
+        async with subagent_template_http_application_authority_v2(
+            request=request,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        ) as authority:
+            created = await authority.service.install(template_id)
+            logger.info(
+                "SubAgent installed from template through V2: %s (%s)",
+                created.id,
+                created.name,
+            )
+            return subagent_to_response(created)
+    except SubAgentTemplateNotFoundV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Template not found"),
-        )
-
-    subagent_repo = container.subagent_repository()
-
-    # Check if SubAgent already exists
-    existing = await subagent_repo.get_by_name(tenant_id, template["name"])
-    if existing:
+        ) from exc
+    except SubAgentAlreadyExistsV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=_("SubAgent already exists"),
-        )
-
-    subagent = SubAgent.create(
-        tenant_id=tenant_id,
-        name=template["name"],
-        display_name=template.get("display_name") or template["name"],
-        system_prompt=template["system_prompt"],
-        trigger_description=template.get("trigger_description") or template["name"],
-        trigger_keywords=template.get("trigger_keywords", []),
-        trigger_examples=template.get("trigger_examples", []),
-        model=AgentModel(template.get("model", "inherit")),
-        max_tokens=template.get("max_tokens", 4096),
-        temperature=template.get("temperature", 0.7),
-        max_iterations=template.get("max_iterations", 10),
-        allowed_tools=template.get("allowed_tools", ["*"]),
-    )
-
-    created = await subagent_repo.create(subagent)
-    await template_repo.increment_install_count(template_id)
-    await db.commit()
-
-    logger.info(f"SubAgent installed from template: {created.id} ({template['name']})")
-    return subagent_to_response(created)
+        ) from exc
 
 
 @router.post(
@@ -1054,47 +1015,30 @@ async def export_subagent_as_template(
     """
     Export an existing SubAgent as a reusable template.
     """
-    container = get_container_with_db(request, db)
-    subagent_repo = container.subagent_repository()
-    subagent = await subagent_repo.get_by_id(subagent_id)
-
-    if not subagent or subagent.tenant_id != tenant_id:
+    try:
+        async with subagent_template_http_application_authority_v2(
+            request=request,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        ) as authority:
+            created = await authority.service.export_subagent(subagent_id)
+            logger.info(
+                "SubAgent exported as template through V2: %s from %s",
+                created["id"],
+                subagent_id,
+            )
+            return TemplateResponse(**created)
+    except SubAgentNotFoundV2 as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("SubAgent not found"),
-        )
-    await _ensure_subagent_access(
-        subagent=subagent,
-        tenant_id=tenant_id,
-        current_user=current_user,
-        db=db,
-    )
-
-    template_repo = container.subagent_template_repository()
-
-    template_data = {
-        "tenant_id": tenant_id,
-        "name": subagent.name,
-        "display_name": subagent.display_name,
-        "description": f"Exported from SubAgent: {subagent.display_name}",
-        "category": "custom",
-        "system_prompt": subagent.system_prompt,
-        "trigger_description": subagent.trigger.description,
-        "trigger_keywords": list(subagent.trigger.keywords),
-        "trigger_examples": list(subagent.trigger.examples),
-        "model": subagent.model.value,
-        "max_tokens": subagent.max_tokens,
-        "temperature": subagent.temperature,
-        "max_iterations": subagent.max_iterations,
-        "allowed_tools": list(subagent.allowed_tools),
-        "is_published": True,
-    }
-
-    created = await template_repo.create(template_data)
-    await db.commit()
-
-    logger.info(f"SubAgent exported as template: {created['id']} from {subagent_id}")
-    return TemplateResponse(**created)
+        ) from exc
+    except SubAgentAccessDeniedV2 as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied"),
+        ) from exc
 
 
 @router.get("/{subagent_id}", response_model=SubAgentResponse)
@@ -1387,6 +1331,7 @@ async def match_subagent(
 async def seed_templates(
     request: Request,
     tenant_id: str = Depends(_get_selected_subagent_tenant_id),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -1394,13 +1339,14 @@ async def seed_templates(
 
     Idempotent: skips templates that already exist.
     """
-    from src.infrastructure.adapters.secondary.persistence.seed_templates import (
-        seed_builtin_templates,
-    )
-
-    container = get_container_with_db(request, db)
-    repo = container.subagent_template_repository()
-    created = await seed_builtin_templates(repo, tenant_id)
-    await db.commit()
-
-    return {"created": created, "message": f"Seeded {created} builtin templates"}
+    async with subagent_template_http_application_authority_v2(
+        request=request,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    ) as authority:
+        created = await authority.service.seed_builtin()
+        return {
+            "created": created,
+            "message": _("Seeded %(count)s builtin templates") % {"count": created},
+        }

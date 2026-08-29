@@ -136,6 +136,9 @@ from .subagent_run_registry_service import (
     SubAgentRunRegistryFactoryV2,
     subagent_run_registry_definition_v2,
 )
+from .subagent_template_management_services import (
+    subagent_template_management_definitions_v2,
+)
 from .support_ticket_services import support_ticket_service_definitions_v2
 from .system_prompt import builtin_system_prompt_definition_v2
 from .task_log_services import task_log_service_definitions_v2
@@ -391,6 +394,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *agent_message_history_service_definitions_v2(),
         *agent_graph_management_definitions_v2(),
         *subagent_management_definitions_v2(),
+        *subagent_template_management_definitions_v2(),
         agent_execution_resume_definition_v2(),
         agent_workflow_status_definition_v2(),
         agent_subagent_control_definition_v2(),

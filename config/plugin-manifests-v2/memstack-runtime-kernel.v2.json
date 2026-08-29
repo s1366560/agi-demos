@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:693cbff45c3d186047158d78f71ffd5ece16f49d2adbac335e9faa781524217a",
+        "digest": "sha256:3a251dc9a4c7f2626b5df54db7c8b57eaff73562c04bd70b2d0b63d688c8db24",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4503,6 +4503,79 @@
       "artifact": {
         "digest": "sha256:9d1c9a320489abddc688505416ef01a27898df84b0c0b4a621ef40bbee54b12c",
         "source": "repo+python://src/infrastructure/plugins/v2/subagent_management_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/subagent-template-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.subagent_template_management_services:_apply_subagent_template_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.subagent-template-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:72dfe20c743d192cb4f60b22c156c949df9737653ce3a26e5de12be9d99e51a5",
+      "artifact": {
+        "digest": "sha256:a94a706af18df76babb1d45d470b7c1978e6449c41cb603a4b5032e014c28517",
+        "source": "repo+python://src/infrastructure/plugins/v2/subagent_template_management_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/subagent-template-management",
+      "entrypoint": "src.infrastructure.plugins.v2.subagent_template_management_services:_apply_subagent_template_management_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.subagent-template-management",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "subagents",
+              "service": "service:persistence.subagent-repository-provider",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "templates",
+              "service": "service:persistence.subagent-template-repository-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:65bce84f4915ab230a94e776d12f37dbabbd25bf1812b83a709dd0ff800bc182",
+      "artifact": {
+        "digest": "sha256:a94a706af18df76babb1d45d470b7c1978e6449c41cb603a4b5032e014c28517",
+        "source": "repo+python://src/infrastructure/plugins/v2/subagent_template_management_services.py"
       }
     },
     {

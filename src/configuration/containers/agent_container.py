@@ -51,9 +51,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_skill_repository impo
 from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
     SqlSubAgentRepository,
 )
-from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_repository import (
-    SqlSubAgentTemplateRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
     SqlToolExecutionRecordRepository,
 )
@@ -166,11 +163,6 @@ class AgentContainer:
         """Get SqlSubAgentRepository for subagent persistence."""
         assert self._db is not None
         return SqlSubAgentRepository(self._db)
-
-    def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
-        """Get SqlSubAgentTemplateRepository for template marketplace."""
-        assert self._db is not None
-        return SqlSubAgentTemplateRepository(self._db)
 
     def agent_registry(self) -> Any:
         """Get SqlAgentRegistryRepository for agent definition persistence."""
