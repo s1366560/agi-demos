@@ -5,14 +5,11 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.secondary.persistence.models import CicdPipelineRunModel
-from src.infrastructure.adapters.secondary.persistence.plugin_config_repository import (
-    PluginConfigRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.sql_cicd_pipeline import (
     SqlCicdPipelineRepository,
 )
@@ -25,6 +22,11 @@ from src.infrastructure.agent.workspace_plan.pipeline_provider_registry import (
     PipelineProviderUnavailableError,
     require_pipeline_provider,
 )
+
+if TYPE_CHECKING:
+    from src.infrastructure.plugins.v2.plugin_config_services import (
+        PluginConfigRepositoryProtocolV2,
+    )
 
 DRONE_PLUGIN_NAME = "drone-pipeline-plugin"
 
@@ -112,10 +114,12 @@ class CicdPipelineService:
         self,
         session: AsyncSession,
         *,
+        plugin_config_repository: PluginConfigRepositoryProtocolV2,
         provider_factory: PipelineProviderFactory | None = None,
     ) -> None:
         self._session = session
         self._pipeline_repo = SqlCicdPipelineRepository(session)
+        self._plugin_config_repository = plugin_config_repository
         self._provider_factory = provider_factory
 
     async def run_pipeline(self, request: CicdPipelineRunRequest) -> CicdPipelineRunSummary:
@@ -225,7 +229,7 @@ class CicdPipelineService:
     ) -> PipelineContractSpec:
         if contract.provider != DRONE_PROVIDER:
             return contract
-        plugin_config = await PluginConfigRepository(self._session).get_by_tenant_and_plugin(
+        plugin_config = await self._plugin_config_repository.get_by_tenant_and_plugin(
             request.tenant_id, DRONE_PLUGIN_NAME
         )
         if plugin_config is None:

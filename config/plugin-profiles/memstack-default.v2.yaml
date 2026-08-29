@@ -3473,6 +3473,7 @@ profile:
         source_id: builtin-drone-tool
       inject:
         catalog: service:tool-set-catalog
+        plugin_configs: service:application.plugin-config-repository
       isolate: {}
       scope:
         kind: root

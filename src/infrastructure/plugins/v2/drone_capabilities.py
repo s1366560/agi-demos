@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -23,6 +23,10 @@ from src.infrastructure.agent.workspace_plan.pipeline import DRONE_PROVIDER
 
 from .agent_capabilities import AgentCapabilityCatalogProtocolV2
 from .packaged_skill import build_packaged_skill_v2
+from .plugin_config_operation_authority_v2 import (
+    plugin_config_child_operation_authority_v2,
+)
+from .plugin_config_services import PluginConfigApplicationResolverProtocolV2
 from .runtime import ContextV2, RuntimeV2Error
 from .tool_set import ToolSetCatalogProtocolV2, ToolSetV2
 
@@ -35,13 +39,12 @@ CICD_RUN_PIPELINE_TOOL_NAME = "cicd_run_pipeline"
 DRONE_TOOL_MODULE_V2 = "builtin://memstack/agent/tool/drone"
 DRONE_SKILL_MODULE_V2 = "builtin://memstack/agent/skill/drone"
 DRONE_TOOL_SERVICE_V2 = "service:agent-tool.drone"
+DRONE_PLUGIN_CONFIGS_INJECT_V2 = "plugin_configs"
 DRONE_DEFAULTS_SERVICE_V2 = "service:drone-defaults"
 DRONE_SECRET_PATHS_SERVICE_V2 = "service:drone-secret-paths"
 DRONE_INFRASTRUCTURE_SERVICE_V2 = "service:drone-infrastructure"
 
-_DRONE_SKILL_DIGEST_V2 = (
-    "sha256:cfd27c693239ac952ec9cd20b093020c53ca63be7c3d1c736b0b3611f78d5d47"
-)
+_DRONE_SKILL_DIGEST_V2 = "sha256:cfd27c693239ac952ec9cd20b093020c53ca63be7c3d1c736b0b3611f78d5d47"
 _DRONE_TOOL_SOURCE_V2 = "builtin-drone-tool"
 _DRONE_SKILL_SOURCE_V2 = "builtin-drone-skill"
 _REPOSITORY_ROOT_V2 = Path(__file__).resolve().parents[4]
@@ -121,6 +124,7 @@ def _json(data: object) -> str:
 async def cicd_run_pipeline_tool(
     ctx: ToolContext,
     *,
+    _plugin_config_resolver: PluginConfigApplicationResolverProtocolV2,
     repository: str | None = None,
     repo: str | None = None,
     provider: str = DRONE_PROVIDER,
@@ -134,24 +138,36 @@ async def cicd_run_pipeline_tool(
     """Run a repository CI/CD pipeline from a normal chat turn."""
 
     try:
+        from .boundary import current_operation_context_v2
+
+        parent_operation = current_operation_context_v2()
         async with async_session_factory() as session:
-            service = CicdPipelineService(session)
-            summary = await service.run_pipeline(
-                CicdPipelineRunRequest(
-                    conversation_id=ctx.conversation_id,
-                    project_id=ctx.project_id,
-                    tenant_id=ctx.tenant_id,
-                    user_id=ctx.user_id,
-                    repository=repository or repo,
-                    provider=provider,
-                    branch=branch,
-                    commit=commit,
-                    target=target,
-                    params=params,
-                    wait=wait,
-                    reason=reason,
+            async with plugin_config_child_operation_authority_v2(
+                parent_operation=parent_operation,
+                resolver=_plugin_config_resolver,
+                db=session,
+                consumer="cicd-pipeline",
+            ) as authority:
+                service = CicdPipelineService(
+                    session,
+                    plugin_config_repository=authority.repository,
                 )
-            )
+                summary = await service.run_pipeline(
+                    CicdPipelineRunRequest(
+                        conversation_id=ctx.conversation_id,
+                        project_id=ctx.project_id,
+                        tenant_id=ctx.tenant_id,
+                        user_id=ctx.user_id,
+                        repository=repository or repo,
+                        provider=provider,
+                        branch=branch,
+                        commit=commit,
+                        target=target,
+                        params=params,
+                        wait=wait,
+                        reason=reason,
+                    )
+                )
             payload = {"ok": True, **summary.to_json()}
             return ToolResult(
                 output=_json(payload),
@@ -190,10 +206,28 @@ class DroneToolCapabilityV2:
     defaults: Mapping[str, object]
 
 
-def _drone_tool_set_v2(tool: ToolInfo) -> ToolSetV2:
+def _bind_drone_tool_v2(
+    tool: ToolInfo,
+    plugin_config_resolver: PluginConfigApplicationResolverProtocolV2,
+) -> ToolInfo:
+    async def execute(ctx: ToolContext, **kwargs: object) -> object:
+        return await tool.execute(
+            ctx,
+            _plugin_config_resolver=plugin_config_resolver,
+            **kwargs,
+        )
+
+    return replace(tool, execute=execute)
+
+
+def _drone_tool_set_v2(
+    tool: ToolInfo,
+    plugin_config_resolver: PluginConfigApplicationResolverProtocolV2,
+) -> ToolSetV2:
     from src.infrastructure.agent.core.tool_converter import convert_tools
 
-    tools = {CICD_RUN_PIPELINE_TOOL_NAME: tool}
+    bound_tool = _bind_drone_tool_v2(tool, plugin_config_resolver)
+    tools = {CICD_RUN_PIPELINE_TOOL_NAME: bound_tool}
     return ToolSetV2(
         tools=MappingProxyType(tools),
         definitions=tuple(convert_tools(tools)),
@@ -213,9 +247,13 @@ def _apply_drone_tool_contribution_v2(  # pyright: ignore[reportUnusedFunction]
             "invalid_service_implementation",
             "Drone tool contribution received an invalid tool catalog",
         )
-    contribution_config = {
-        key: value for key, value in config.items() if key != "source_id"
-    }
+    plugin_configs = context.require(DRONE_PLUGIN_CONFIGS_INJECT_V2)
+    if not isinstance(plugin_configs, PluginConfigApplicationResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_drone_plugin_configs",
+            "Drone tool contribution received an invalid PluginConfig resolver",
+        )
+    contribution_config = {key: value for key, value in config.items() if key != "source_id"}
     defaults = MappingProxyType({**_DRONE_PROFILE_DEFAULTS_V2, **contribution_config})
     capability = DroneToolCapabilityV2(source_id=source_id, defaults=defaults)
     _ = context.provide(
@@ -240,7 +278,7 @@ def _apply_drone_tool_contribution_v2(  # pyright: ignore[reportUnusedFunction]
     )
     return catalog.register_tools(
         source_id,
-        lambda **_kwargs: _drone_tool_set_v2(cicd_run_pipeline_tool),
+        lambda **_kwargs: _drone_tool_set_v2(cicd_run_pipeline_tool, plugin_configs),
     )
 
 
@@ -287,6 +325,7 @@ __all__ = [
     "CICD_RUN_PIPELINE_TOOL_NAME",
     "DRONE_DEFAULTS_SERVICE_V2",
     "DRONE_INFRASTRUCTURE_SERVICE_V2",
+    "DRONE_PLUGIN_CONFIGS_INJECT_V2",
     "DRONE_SECRET_PATHS_SERVICE_V2",
     "DRONE_SKILL_MODULE_V2",
     "DRONE_TOOL_MODULE_V2",

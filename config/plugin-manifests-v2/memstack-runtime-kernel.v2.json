@@ -8802,6 +8802,11 @@
               "alias": "catalog",
               "service": "service:tool-set-catalog",
               "version": "1.0.0"
+            },
+            {
+              "alias": "plugin_configs",
+              "service": "service:application.plugin-config-repository",
+              "version": "1.0.0"
             }
           ]
         },
@@ -8819,9 +8824,9 @@
           }
         }
       },
-      "contract_digest": "sha256:1aa9d24dc269fb5e9b7fa00aff99d4e1474c458e8f9d528157c2421908b7431a",
+      "contract_digest": "sha256:79bf8d5fe422df5350f5dfbe5a1c2863834380304ca378e5c04117117582da3e",
       "artifact": {
-        "digest": "sha256:bf37d19df402994e0fbf6d7e2ea0af062ac7fb285453afbe5ff48e9f485b5fcc",
+        "digest": "sha256:62d5404f68addf1bf717467ff1f96e2d4a3ba9a8e1419c90c8135b392a4c9569",
         "source": "repo+python://src/infrastructure/plugins/v2/drone_capabilities.py"
       }
     },
@@ -9672,7 +9677,7 @@
       },
       "contract_digest": "sha256:df128a48eac4a6de212b4780282ec26f0676c150ec55291f6bfbe15a4aea29c7",
       "artifact": {
-        "digest": "sha256:bf37d19df402994e0fbf6d7e2ea0af062ac7fb285453afbe5ff48e9f485b5fcc",
+        "digest": "sha256:62d5404f68addf1bf717467ff1f96e2d4a3ba9a8e1419c90c8135b392a4c9569",
         "source": "repo+python://src/infrastructure/plugins/v2/drone_capabilities.py"
       }
     },

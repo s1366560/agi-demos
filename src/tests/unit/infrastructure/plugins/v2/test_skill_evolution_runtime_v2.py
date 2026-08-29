@@ -38,6 +38,8 @@ pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
+_DRONE_SKILL_MODULE_V2 = "builtin://memstack/agent/skill/drone"
+_DRONE_TOOL_MODULE_V2 = "builtin://memstack/agent/tool/drone"
 
 
 @pytest.fixture(autouse=True)
@@ -218,7 +220,12 @@ async def test_skill_evolution_rejects_missing_plugin_config_service_without_fal
         document,
         entries=tuple(
             replace(entry, enabled=False)
-            if entry.module_ref == PLUGIN_CONFIG_APPLICATION_MODULE_V2
+            if entry.module_ref
+            in {
+                PLUGIN_CONFIG_APPLICATION_MODULE_V2,
+                _DRONE_SKILL_MODULE_V2,
+                _DRONE_TOOL_MODULE_V2,
+            }
             else entry
             for entry in document.entries
         ),
