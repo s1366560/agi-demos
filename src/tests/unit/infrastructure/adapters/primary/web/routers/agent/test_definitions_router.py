@@ -42,15 +42,6 @@ def _make_registry() -> MagicMock:
     return registry
 
 
-def _make_container(registry: MagicMock) -> SimpleNamespace:
-    orchestrator = MagicMock()
-    orchestrator.create_agent = AsyncMock(side_effect=lambda agent: agent)
-    return SimpleNamespace(
-        agent_registry=lambda: registry,
-        agent_orchestrator=lambda: orchestrator,
-    )
-
-
 def _make_definition_authority(
     registry: MagicMock,
     db: MagicMock,
@@ -69,6 +60,10 @@ def _make_definition_authority(
     service.count_by_project = registry.count_by_project
     service.list_by_tenant = registry.list_by_tenant
     service.count_by_tenant = registry.count_by_tenant
+    service.get_by_id = registry.get_by_id
+    service.update_agent = registry.update
+    service.delete_agent = registry.delete
+    service.set_enabled = registry.set_enabled
     return SimpleNamespace(db=db, service=service, registry=registry)
 
 
@@ -343,7 +338,11 @@ class TestDefinitionsRouterA2AConfig:
         db = _make_db(project_member=False)
         registry = _make_registry()
         registry.get_by_id = AsyncMock(return_value=_make_agent(project_id="proj-1"))
-        container = _make_container(registry)
+        authority = _make_definition_authority(
+            registry,
+            db,
+            project_access=False,
+        )
         current_user = SimpleNamespace(id="user-1")
 
         route_calls = {
@@ -352,7 +351,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=current_user,
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             ),
             "update": lambda: update_definition(
                 "agent-1",
@@ -360,14 +359,14 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=current_user,
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             ),
             "delete": lambda: delete_definition(
                 "agent-1",
                 request=MagicMock(),
                 current_user=current_user,
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             ),
             "enabled": lambda: set_definition_enabled(
                 "agent-1",
@@ -375,15 +374,11 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=current_user,
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             ),
         }
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=container,
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -614,13 +609,9 @@ class TestDefinitionsRouterA2AConfig:
         db = _make_db(project_member=False)
         registry = _make_registry()
         registry.get_by_id = AsyncMock(return_value=_make_agent(project_id=None))
-        container = _make_container(registry)
+        authority = _make_definition_authority(registry, db, project_access=False)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=container,
-            ) as get_container,
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -633,12 +624,11 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Access denied"
-        get_container.assert_not_called()
         registry.get_by_id.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -649,12 +639,9 @@ class TestDefinitionsRouterA2AConfig:
         db = _make_db()
         existing = _make_agent(agent_to_agent_enabled=False, agent_to_agent_allowlist=None)
         registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -666,7 +653,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         updated_agent = registry.update.await_args.args[0]
@@ -679,12 +666,9 @@ class TestDefinitionsRouterA2AConfig:
         db = _make_db()
         existing = _make_agent(agent_to_agent_enabled=True, agent_to_agent_allowlist=None)
         registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -696,7 +680,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         updated_agent = registry.update.await_args.args[0]
@@ -709,12 +693,9 @@ class TestDefinitionsRouterA2AConfig:
         db = _make_db()
         existing = _make_agent(agent_to_agent_enabled=True, agent_to_agent_allowlist=None)
         registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -726,7 +707,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         updated_agent = registry.update.await_args.args[0]
@@ -739,12 +720,9 @@ class TestDefinitionsRouterA2AConfig:
         db = _make_db()
         existing = _make_agent()
         registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -757,7 +735,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         assert exc_info.value.status_code == 400
@@ -772,12 +750,9 @@ class TestDefinitionsRouterA2AConfig:
         registry.update = AsyncMock(
             side_effect=IntegrityError("secret statement", "secret params", Exception("secret"))
         )
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -790,7 +765,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         assert exc_info.value.status_code == 409
@@ -804,12 +779,9 @@ class TestDefinitionsRouterA2AConfig:
         db = _make_db()
         existing = _make_agent()
         registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -821,7 +793,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         updated_agent = registry.update.await_args.args[0]
@@ -846,12 +818,9 @@ class TestDefinitionsRouterA2AConfig:
             keywords=["before"],
         )
         registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -871,7 +840,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         updated_agent = registry.update.await_args.args[0]
@@ -890,12 +859,9 @@ class TestDefinitionsRouterA2AConfig:
         db = _make_db()
         existing = _make_agent()
         registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -919,7 +885,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         updated_agent = registry.update.await_args.args[0]
@@ -944,12 +910,9 @@ class TestDefinitionsRouterA2AConfig:
             delegate_config=DelegateConfig.from_dict({"capability_tier": "read_write"}),
         )
         registry.get_by_id = AsyncMock(return_value=existing)
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -966,7 +929,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         updated_agent = registry.update.await_args.args[0]
@@ -986,12 +949,9 @@ class TestDefinitionsRouterA2AConfig:
         existing = _make_agent()
         registry.get_by_id = AsyncMock(return_value=existing)
         registry.set_enabled = AsyncMock(side_effect=ValueError("secret definition state"))
+        authority = _make_definition_authority(registry, db)
 
         with (
-            patch(
-                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
-                return_value=_make_container(registry),
-            ),
             patch(
                 "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
                 AsyncMock(),
@@ -1004,7 +964,7 @@ class TestDefinitionsRouterA2AConfig:
                 request=MagicMock(),
                 current_user=SimpleNamespace(id="user-1"),
                 tenant_id="tenant-1",
-                db=db,
+                definition_authority=authority,
             )
 
         assert exc_info.value.status_code == 400

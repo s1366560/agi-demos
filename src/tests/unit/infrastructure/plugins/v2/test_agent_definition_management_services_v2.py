@@ -17,7 +17,11 @@ from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.routers.agent.definitions_router import (
     create_definition,
+    delete_definition,
+    get_definition,
     list_definitions,
+    set_definition_enabled,
+    update_definition,
 )
 from src.infrastructure.plugins.v2.agent_definition_management_services import (
     AGENT_DEFINITION_MANAGEMENT_MODULE_V2,
@@ -122,6 +126,29 @@ async def test_create_agent_rejects_duplicate_without_write_or_commit() -> None:
     db.commit.assert_not_awaited()
 
 
+async def test_mutation_operations_commit_the_operation_session() -> None:
+    agent = _agent()
+    registry = MagicMock()
+    registry.update = AsyncMock(return_value=agent)
+    registry.delete = AsyncMock(return_value=True)
+    registry.set_enabled = AsyncMock(return_value=agent)
+    db = SimpleNamespace(commit=AsyncMock())
+    service = AgentDefinitionManagementServiceV2(
+        db=cast(Any, db),
+        registry=registry,
+        external_agents=MagicMock(),
+    )
+
+    assert await service.update_agent(agent) is agent
+    assert await service.delete_agent("agent-1") is True
+    assert await service.set_enabled("agent-1", True) is agent
+
+    registry.update.assert_awaited_once_with(agent)
+    registry.delete.assert_awaited_once_with("agent-1")
+    registry.set_enabled.assert_awaited_once_with("agent-1", True)
+    assert db.commit.await_count == 3
+
+
 def test_definition_management_modules_are_ordered_provider_then_consumer() -> None:
     document = load_profile_document_v2(_PROFILE_PATH)
     enabled_modules = tuple(entry.module_ref for entry in document.entries if entry.enabled)
@@ -178,3 +205,18 @@ def test_list_route_has_no_static_definition_container() -> None:
     assert "get_container_with_db" not in source
     assert "agent_registry" not in source
     assert "_accessible_definition_project_ids" not in source
+
+
+@pytest.mark.parametrize(
+    "route",
+    [get_definition, update_definition, delete_definition, set_definition_enabled],
+)
+def test_remaining_definition_routes_have_no_static_definition_container(route: Any) -> None:
+    source = inspect.getsource(route)
+
+    assert "get_container_with_db" not in source
+    assert "agent_registry" not in source
+    assert "_ensure_project_definition_access" not in source
+    assert "_ensure_existing_definition_access" not in source
+    assert "_validate_execution_backend(" not in source
+    assert "db.commit" not in source
