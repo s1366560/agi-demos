@@ -14,6 +14,7 @@ waitImage:
   pullPolicy: IfNotPresent
 
 config:
+  environment: development
   apiAllowedOrigins: "*"
   logLevel: INFO
   logFormat: json
@@ -28,6 +29,8 @@ config:
   requireApiKey: "true"
   queueBatchSize: "1"
   s3NoProxy: "true"
+  pluginV2RequiredDataPlaneIds: ""
+  pluginV2AckDeadlineSeconds: 30
   extraEnv: {}
 
 secrets:

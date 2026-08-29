@@ -57,6 +57,13 @@ The production profile expects these secrets to exist:
 - `memstack-neo4j-auth`: Neo4j chart password under key `NEO4J_AUTH`, formatted as `neo4j/<password>`.
 - `memstack-minio-env`: MinIO tenant environment under key `config.env`.
 
+The production values also set `ENVIRONMENT=production` and explicitly require the
+`python-api-v2` plugin data plane to acknowledge each immutable V2 publication within 30 seconds.
+This roster contains logical data planes deployed by this chart, not individual pod replicas.
+Browser and Desktop clients are ephemeral and are intentionally excluded. If another deployment
+template adds a persistent Rust server or sidecar plane, add its stable data-plane ID to
+`config.pluginV2RequiredDataPlaneIds`; Helm rejects a production render with an empty roster.
+
 Set `postgres.enabled=false`, `redis.enabled=false`, `neo4j.enabled=false`, or `minio.enabled=false` to use external managed services instead; the corresponding `*.external` endpoint values are required in that mode.
 
 LLM bootstrap keys can be passed with `secrets.providerApiKeys`:
