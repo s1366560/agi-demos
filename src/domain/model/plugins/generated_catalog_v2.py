@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:6bf007bf29ee51fc70ca2e7c7ac0ca3a9ec774fe46a9889d68a378c68d56b6'
-    'b1","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:3b66b2d974e6974abfa397f3c94fc2439bebe867ebb5dfbb775a630a5ba7fa'
+    '5e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1351,8 +1351,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'cf57153e4091663f3099ab0527","entrypoint":"src.infrastructure.plugins.v2.shares_services:'
     '_apply_shares_application_v2","module_ref":"builtin://memstack/application/shares-servic'
     'es","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]}'
-    ',{"artifact_digest":"sha256:f37a840a6b21b54b64a568973068fdb0b4505e5ae054c196932a24b28a35'
-    '4bcb","artifact_source":"repo+python://src/infrastructure/plugins/v2/skill_evolution_rep'
+    ',{"artifact_digest":"sha256:3283dfe2b9693fb635d720d72fb01e25b0bf6db5f49f64196bd8bb4c457e'
+    '871f","artifact_source":"repo+python://src/infrastructure/plugins/v2/skill_evolution_rep'
     'ository_services.py","contract":{"config_schema":{"$schema":"https://json-schema.org/dra'
     'ft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"opera'
     'tion-scoped-provider","type":"string"}},"required":["strategy"],"type":"object"},"events'
@@ -2925,8 +2925,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'act_digest":"sha256:bf428657666dc35d6ef30bf5a19cb2845b4f72d52137a8de97c49aa99a473375","e'
     'ntrypoint":"src.infrastructure.plugins.v2.shares_services:_apply_shares_provider_v2","mo'
     'dule_ref":"builtin://memstack/persistence/shares-provider","plugin_id":"memstack-runtime'
-    '-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:f37a8'
-    '40a6b21b54b64a568973068fdb0b4505e5ae054c196932a24b28a354bcb","artifact_source":"repo+pyt'
+    '-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:3283d'
+    'fe2b9693fb635d720d72fb01e25b0bf6db5f49f64196bd8bb4c457e871f","artifact_source":"repo+pyt'
     'hon://src/infrastructure/plugins/v2/skill_evolution_repository_services.py","contract":{'
     '"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPro'
     'perties":false,"properties":{"strategy":{"const":"request-async-session","type":"string"'
@@ -3441,7 +3441,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'nel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:6bf007bf29ee51fc70ca2e7c7ac0ca3a9ec774fe46a9889d68a378c68d56b6b1"
+    "sha256:3b66b2d974e6974abfa397f3c94fc2439bebe867ebb5dfbb775a630a5ba7fa5e"
 )
 # fmt: on
 

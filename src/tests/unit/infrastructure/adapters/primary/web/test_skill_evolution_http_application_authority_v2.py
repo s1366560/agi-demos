@@ -127,6 +127,13 @@ def test_read_handlers_resolve_repositories_only_from_composite_v2_authority() -
         assert "SkillEvolutionRepository(" not in source
         assert "SqlSkillVersionRepository(" not in source
 
+    reject_parameter = signature(skills.reject_skill_evolution_job).parameters[
+        "evolution_repository"
+    ]
+    assert reject_parameter.default.dependency is skills._get_skill_evolution_repository_v2
+    reject_source = getsource(skills.reject_skill_evolution_job)
+    assert "SkillEvolutionRepository(" not in reject_source
+
 
 def test_fastapi_shares_one_authority_for_all_repository_dependencies() -> None:
     app = FastAPI()

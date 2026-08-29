@@ -5039,7 +5039,7 @@
       },
       "contract_digest": "sha256:07bfd150e3a537bd55dd8ec4f2d68be5486a9f8cdf3c706de20577f5bb96d196",
       "artifact": {
-        "digest": "sha256:f37a840a6b21b54b64a568973068fdb0b4505e5ae054c196932a24b28a354bcb",
+        "digest": "sha256:3283dfe2b9693fb635d720d72fb01e25b0bf6db5f49f64196bd8bb4c457e871f",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_repository_services.py"
       }
     },
@@ -5076,7 +5076,7 @@
       },
       "contract_digest": "sha256:93da255a1b0130a74d24a8b30afc700f91f7c8ba3414e0000de9e7503fe8859b",
       "artifact": {
-        "digest": "sha256:f37a840a6b21b54b64a568973068fdb0b4505e5ae054c196932a24b28a354bcb",
+        "digest": "sha256:3283dfe2b9693fb635d720d72fb01e25b0bf6db5f49f64196bd8bb4c457e871f",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_repository_services.py"
       }
     },

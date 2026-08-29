@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:6bf007bf29ee51fc70ca2e7c7ac0ca3a9ec774fe46a9889d68a378c68d',
-  '56b6b1","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:3b66b2d974e6974abfa397f3c94fc2439bebe867ebb5dfbb775a630a5b',
+  'a7fa5e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1432,8 +1432,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '4091663f3099ab0527","entrypoint":"src.infrastructure.plugins.v2.shares_services:_app',
   'ly_shares_application_v2","module_ref":"builtin://memstack/application/shares-servic',
   'es","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["pytho',
-  'n"]},{"artifact_digest":"sha256:f37a840a6b21b54b64a568973068fdb0b4505e5ae054c196932a',
-  '24b28a354bcb","artifact_source":"repo+python://src/infrastructure/plugins/v2/skill_e',
+  'n"]},{"artifact_digest":"sha256:3283dfe2b9693fb635d720d72fb01e25b0bf6db5f49f64196bd8',
+  'bb4c457e871f","artifact_source":"repo+python://src/infrastructure/plugins/v2/skill_e',
   'volution_repository_services.py","contract":{"config_schema":{"$schema":"https://jso',
   'n-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strat',
   'egy":{"const":"operation-scoped-provider","type":"string"}},"required":["strategy"],',
@@ -3081,8 +3081,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '"sha256:bf428657666dc35d6ef30bf5a19cb2845b4f72d52137a8de97c49aa99a473375","entrypoin',
   't":"src.infrastructure.plugins.v2.shares_services:_apply_shares_provider_v2","module',
   '_ref":"builtin://memstack/persistence/shares-provider","plugin_id":"memstack-runtime',
-  '-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:f',
-  '37a840a6b21b54b64a568973068fdb0b4505e5ae054c196932a24b28a354bcb","artifact_source":"',
+  '-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:3',
+  '283dfe2b9693fb635d720d72fb01e25b0bf6db5f49f64196bd8bb4c457e871f","artifact_source":"',
   'repo+python://src/infrastructure/plugins/v2/skill_evolution_repository_services.py",',
   '"contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema',
   '","additionalProperties":false,"properties":{"strategy":{"const":"request-async-sess',
@@ -3627,4 +3627,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:6bf007bf29ee51fc70ca2e7c7ac0ca3a9ec774fe46a9889d68a378c68d56b6b1' as const;
+  'sha256:3b66b2d974e6974abfa397f3c94fc2439bebe867ebb5dfbb775a630a5ba7fa5e' as const;

@@ -2617,14 +2617,13 @@ async def reject_skill_evolution_job(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
+    evolution_repository: SkillEvolutionRepositoryProtocolV2 = Depends(
+        _get_skill_evolution_repository_v2
+    ),
 ) -> SkillEvolutionJobResponse:
     """Reject a pending evolution job without changing the target skill."""
-    from src.infrastructure.agent.plugins.skill_evolution.repository import (
-        SkillEvolutionRepository,
-    )
-
     tenant_id = _normalize_tenant_id(tenant)
-    evolution_repo = SkillEvolutionRepository(db)
+    evolution_repo = evolution_repository
     job = await evolution_repo.get_job(job_id)
     _validate_pending_evolution_job(job, tenant_id=tenant_id)
     assert job is not None

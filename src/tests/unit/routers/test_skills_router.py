@@ -1570,9 +1570,7 @@ Use this when a reusable review workflow is needed.
 
 
 @pytest.mark.unit
-async def test_reject_skill_evolution_job_does_not_create_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_reject_skill_evolution_job_does_not_create_version() -> None:
     created_at = datetime.now(UTC)
     db = SimpleNamespace(
         evolution_jobs=[
@@ -1593,15 +1591,14 @@ async def test_reject_skill_evolution_job_does_not_create_version(
         versions=[],
         commit=AsyncMock(),
     )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
+    evolution_repository = _MemoryEvolutionRepository(db)
 
     response = await router.reject_skill_evolution_job(
         job_id="job-reject",
         db=db,
         tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+        evolution_repository=evolution_repository,
     )
 
     assert response.status == "rejected"

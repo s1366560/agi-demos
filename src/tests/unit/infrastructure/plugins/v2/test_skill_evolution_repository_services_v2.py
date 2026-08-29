@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,6 +117,19 @@ async def test_provider_fails_closed_without_async_session() -> None:
         assert error.value.code == "invalid_operation_db_session"
     finally:
         await host.close()
+
+
+def test_repository_protocol_requires_status_mutation_authority() -> None:
+    read_only_repository = SimpleNamespace(
+        get_job=AsyncMock(),
+        list_jobs=AsyncMock(),
+        count_sessions_by_skill=AsyncMock(),
+        get_overview_stats=AsyncMock(),
+        get_skill_session_summaries=AsyncMock(),
+        list_recent_sessions=AsyncMock(),
+    )
+
+    assert not isinstance(read_only_repository, SkillEvolutionRepositoryProtocolV2)
 
 
 async def test_missing_provider_is_rejected_before_application_loading() -> None:
