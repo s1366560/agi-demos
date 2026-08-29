@@ -25,14 +25,16 @@ from sqlalchemy.ext.asyncio import (
 
 from src.configuration.config import get_settings
 from src.domain.model.plugins.generated_v2 import PublicationStatusV2
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2ApplyStateEventModel,
     PlatformPluginV2ApplyStateModel,
+    PlatformPluginV2DataPlaneCredentialModel,
     PlatformPluginV2PublicationModel,
-    User,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_data_plane_credential_repository_v2 import (
+    PlatformPluginDataPlaneCredentialRepositoryV2,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PlatformPluginPublicationPolicyV2,
@@ -150,6 +152,11 @@ async def _published_case(
         yield case
     finally:
         async with session_factory() as session:
+            await session.execute(
+                delete(PlatformPluginV2DataPlaneCredentialModel).where(
+                    PlatformPluginV2DataPlaneCredentialModel.data_plane_id == case.data_plane_id
+                )
+            )
             await session.execute(
                 delete(PlatformPluginV2ApplyStateEventModel).where(
                     PlatformPluginV2ApplyStateEventModel.requested_publication_id
@@ -338,6 +345,12 @@ async def test_concurrent_receipt_api_replays_are_idempotent_in_postgres(
     postgres_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     async with _published_case(postgres_session_factory) as case:
+        async with postgres_session_factory() as session:
+            issued = await PlatformPluginDataPlaneCredentialRepositoryV2(session).issue(
+                data_plane_id=case.data_plane_id,
+                actor_id="plugin-v2-postgres-user",
+            )
+            await session.commit()
         app = FastAPI()
         app.include_router(platform_plugins.router)
 
@@ -346,14 +359,6 @@ async def test_concurrent_receipt_api_replays_are_idempotent_in_postgres(
                 yield session
 
         app.dependency_overrides[get_db] = override_db
-        app.dependency_overrides[get_current_user] = lambda: User(
-            id="plugin-v2-postgres-user",
-            email="plugin-v2-postgres@example.com",
-            hashed_password="hashed",
-            full_name="Plugin V2 PostgreSQL User",
-            is_active=True,
-            is_superuser=True,
-        )
         payload = {
             "schema_version": 2,
             "data_plane_id": case.data_plane_id,
@@ -364,6 +369,7 @@ async def test_concurrent_receipt_api_replays_are_idempotent_in_postgres(
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
+            headers={"Authorization": f"Bearer {issued.secret}"},
         ) as client:
             responses = await asyncio.gather(
                 client.post("/api/v1/platform-plugins/v2/data-plane-state", json=payload),
@@ -383,3 +389,52 @@ async def test_concurrent_receipt_api_replays_are_idempotent_in_postgres(
                 )
             )
         assert event_count == 1
+
+
+async def test_receipt_api_rejects_forged_plane_binding_in_postgres(
+    postgres_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with _published_case(postgres_session_factory) as case:
+        async with postgres_session_factory() as session:
+            issued = await PlatformPluginDataPlaneCredentialRepositoryV2(session).issue(
+                data_plane_id=case.data_plane_id,
+                actor_id="plugin-v2-postgres-user",
+            )
+            await session.commit()
+        app = FastAPI()
+        app.include_router(platform_plugins.router)
+
+        async def override_db() -> AsyncIterator[AsyncSession]:
+            async with postgres_session_factory() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = override_db
+        payload = {
+            "schema_version": 2,
+            "data_plane_id": f"forged-{uuid.uuid4().hex}",
+            "nonce": case.publication.envelope.nonce,
+            "receipt": snapshot_apply_receipt_v2_to_payload(case.publication.receipt),
+        }
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            headers={"Authorization": f"Bearer {issued.secret}"},
+        ) as client:
+            response = await client.post(
+                "/api/v1/platform-plugins/v2/data-plane-state",
+                json=payload,
+            )
+
+        assert response.status_code == 403
+        assert response.json()["detail"]["code"] == "plugin_data_plane_identity_mismatch"
+        async with postgres_session_factory() as session:
+            event_count = await session.scalar(
+                select(func.count())
+                .select_from(PlatformPluginV2ApplyStateEventModel)
+                .where(
+                    PlatformPluginV2ApplyStateEventModel.requested_publication_id
+                    == case.publication_id
+                )
+            )
+        assert event_count == 0

@@ -22,6 +22,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2ApplyStateModel,
     User,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_data_plane_credential_repository_v2 import (
+    PlatformPluginDataPlaneCredentialRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
@@ -81,6 +84,21 @@ def _client(db: AsyncSession, *, superuser: bool = True) -> TestClient:
     return TestClient(app)
 
 
+async def _data_plane_client(
+    db: AsyncSession,
+    *,
+    data_plane_id: str,
+) -> TestClient:
+    issued = await PlatformPluginDataPlaneCredentialRepositoryV2(db).issue(
+        data_plane_id=data_plane_id,
+        actor_id="plugin-v2-user",
+    )
+    await db.commit()
+    client = _client(db)
+    client.headers["Authorization"] = f"Bearer {issued.secret}"
+    return client
+
+
 @pytest.mark.unit
 async def test_v2_distribution_endpoint_returns_complete_snapshot(
     db_session: AsyncSession,
@@ -89,31 +107,37 @@ async def test_v2_distribution_endpoint_returns_complete_snapshot(
     await PlatformPluginRepositoryV2(db_session).record_publication(publication)
     await db_session.commit()
 
-    response = _client(db_session).get("/api/v1/platform-plugins/v2/distribution")
+    client = await _data_plane_client(db_session, data_plane_id="desktop-sidecar")
+    response = client.get("/api/v1/platform-plugins/v2/distribution")
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json() == {"schema_version": 2, **distribution}
 
 
 @pytest.mark.unit
-async def test_v2_distribution_endpoint_allows_authenticated_non_admin(
+@pytest.mark.parametrize("authorization", (None, "Bearer ms_sk_user-api-key"))
+async def test_v2_distribution_endpoint_rejects_user_and_admin_bearer_fallback(
     db_session: AsyncSession,
+    authorization: str | None,
 ) -> None:
-    publication, distribution = await _publication()
+    publication, _distribution = await _publication()
     await PlatformPluginRepositoryV2(db_session).record_publication(publication)
     await db_session.commit()
+    headers = {} if authorization is None else {"Authorization": authorization}
 
-    response = _client(db_session, superuser=False).get("/api/v1/platform-plugins/v2/distribution")
+    response = _client(db_session).get(
+        "/api/v1/platform-plugins/v2/distribution",
+        headers=headers,
+    )
 
-    assert response.status_code == status.HTTP_200_OK
-    assert response.json() == {"schema_version": 2, **distribution}
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json()["detail"] == "Invalid plugin data-plane credential"
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("method", "path"),
     (
-        ("post", "/api/v1/platform-plugins/v2/data-plane-state"),
         ("get", "/api/v1/platform-plugins/v2/readiness"),
         ("get", "/api/v1/platform-plugins/v2/route-authority/readiness"),
         ("get", "/api/v1/platform-plugins/v2/publications/unknown/readiness"),
@@ -131,10 +155,30 @@ async def test_v2_management_endpoints_require_admin(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method", "path"),
+    (
+        ("get", "/api/v1/platform-plugins/v2/distribution"),
+        ("post", "/api/v1/platform-plugins/v2/data-plane-state"),
+    ),
+)
+async def test_v2_data_plane_endpoints_require_workload_credential(
+    db_session: AsyncSession,
+    method: str,
+    path: str,
+) -> None:
+    response = _client(db_session).request(method, path, json={})
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.json()["detail"] == "Invalid plugin data-plane credential"
+
+
+@pytest.mark.unit
 async def test_v2_distribution_endpoint_returns_404_without_publication(
     db_session: AsyncSession,
 ) -> None:
-    response = _client(db_session).get("/api/v1/platform-plugins/v2/distribution")
+    client = await _data_plane_client(db_session, data_plane_id="desktop-sidecar")
+    response = client.get("/api/v1/platform-plugins/v2/distribution")
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -348,7 +392,8 @@ async def test_v2_receipt_endpoint_records_exact_publication(
         },
     }
 
-    response = _client(db_session).post(
+    client = await _data_plane_client(db_session, data_plane_id="desktop-sidecar")
+    response = client.post(
         "/api/v1/platform-plugins/v2/data-plane-state",
         json=payload,
     )
@@ -362,10 +407,50 @@ async def test_v2_receipt_endpoint_records_exact_publication(
 
 
 @pytest.mark.unit
+async def test_v2_receipt_endpoint_rejects_credential_plane_mismatch(
+    db_session: AsyncSession,
+) -> None:
+    publication, _distribution = await _publication()
+    await PlatformPluginRepositoryV2(db_session).record_publication(
+        publication,
+        policy=PlatformPluginPublicationPolicyV2(
+            required_data_plane_ids=("desktop-sidecar", "rust-server"),
+            ack_deadline_seconds=30,
+        ),
+    )
+    await db_session.commit()
+    receipt = publication.receipt
+    client = await _data_plane_client(db_session, data_plane_id="rust-server")
+
+    response = client.post(
+        "/api/v1/platform-plugins/v2/data-plane-state",
+        json={
+            "schema_version": 2,
+            "data_plane_id": "desktop-sidecar",
+            "nonce": publication.envelope.nonce,
+            "receipt": {
+                "status": receipt.status.value,
+                "requested_version": receipt.requested_version,
+                "requested_digest": receipt.requested_digest,
+                "applied_version": receipt.applied_version,
+                "applied_digest": receipt.applied_digest,
+                "error_code": receipt.error_code,
+                "error_message": receipt.error_message,
+            },
+        },
+    )
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"]["code"] == "plugin_data_plane_identity_mismatch"
+    assert await db_session.scalar(select(PlatformPluginV2ApplyStateModel)) is None
+
+
+@pytest.mark.unit
 async def test_v2_receipt_endpoint_rejects_v1_with_stable_409(
     db_session: AsyncSession,
 ) -> None:
-    response = _client(db_session).post(
+    client = await _data_plane_client(db_session, data_plane_id="desktop-sidecar")
+    response = client.post(
         "/api/v1/platform-plugins/v2/data-plane-state",
         json={
             "schema_version": 1,
@@ -385,7 +470,8 @@ async def test_v2_receipt_endpoint_rejects_v1_with_stable_409(
 async def test_v2_receipt_endpoint_rejects_unknown_publication(
     db_session: AsyncSession,
 ) -> None:
-    response = _client(db_session).post(
+    client = await _data_plane_client(db_session, data_plane_id="desktop-sidecar")
+    response = client.post(
         "/api/v1/platform-plugins/v2/data-plane-state",
         json={
             "schema_version": 2,
@@ -421,7 +507,8 @@ async def test_v2_receipt_endpoint_rejects_inconsistent_ack(
     )
     await db_session.commit()
 
-    response = _client(db_session).post(
+    client = await _data_plane_client(db_session, data_plane_id="desktop-sidecar")
+    response = client.post(
         "/api/v1/platform-plugins/v2/data-plane-state",
         json={
             "schema_version": 2,
@@ -486,7 +573,8 @@ async def test_v2_receipt_endpoint_rejects_unregistered_ephemeral_plane(
     await db_session.commit()
     receipt = publication.receipt
 
-    response = _client(db_session).post(
+    client = await _data_plane_client(db_session, data_plane_id="web-ephemeral-session")
+    response = client.post(
         "/api/v1/platform-plugins/v2/data-plane-state",
         json={
             "schema_version": 2,
@@ -601,7 +689,7 @@ async def test_v2_readiness_endpoint_persists_timeout_and_accepts_late_recovery(
         now=datetime.now(UTC) - timedelta(seconds=31),
     )
     await db_session.commit()
-    client = _client(db_session)
+    client = await _data_plane_client(db_session, data_plane_id="desktop-sidecar")
 
     timed_out = client.get("/api/v1/platform-plugins/v2/readiness")
 

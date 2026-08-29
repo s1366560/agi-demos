@@ -27,6 +27,10 @@ from src.domain.model.plugins.generated_v2 import (
     SnapshotApplyReceiptV2,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.primary.web.dependencies.plugin_data_plane_auth_v2 import (
+    PlatformPluginDataPlanePrincipalV2,
+    get_plugin_data_plane_principal_v2,
+)
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     plugin_publication_policy_v2_from_app,
 )
@@ -273,7 +277,7 @@ async def revoke_data_plane_credential_v2(
 
 @router.get("/distribution", response_model=PlatformPluginDistributionResponseV2)
 async def get_distribution_v2(
-    _current_user: User = Depends(get_current_user),
+    _principal: PlatformPluginDataPlanePrincipalV2 = Depends(get_plugin_data_plane_principal_v2),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginDistributionResponseV2:
     """Return the newest complete distribution; data planes project targets locally."""
@@ -293,18 +297,18 @@ async def get_distribution_v2(
 @router.post("/data-plane-state", response_model=PlatformPluginApplyStateResponseV2)
 async def record_data_plane_state_v2(
     payload: dict[str, Any] = Body(...),
-    current_user: User = Depends(get_current_user),
+    principal: PlatformPluginDataPlanePrincipalV2 = Depends(get_plugin_data_plane_principal_v2),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginApplyStateResponseV2:
     """Persist one exact v2 ACK/NACK without accepting a legacy receipt shape."""
-    _require_platform_admin(current_user)
     try:
         request = _parse_receipt_request_v2(payload)
     except PluginProtocolV2Error as exc:
         _raise_protocol_error(exc)
+    _require_data_plane_binding_v2(request=request, principal=principal)
     try:
         _ = await PlatformPluginRepositoryV2(db).record_data_plane_receipt(
-            data_plane_id=request.data_plane_id,
+            data_plane_id=principal.data_plane_id,
             nonce=request.nonce,
             receipt=request.receipt,
         )
@@ -313,7 +317,7 @@ async def record_data_plane_state_v2(
         _raise_ledger_error(exc)
     await db.commit()
     return PlatformPluginApplyStateResponseV2(
-        data_plane_id=request.data_plane_id,
+        data_plane_id=principal.data_plane_id,
         nonce=request.nonce,
         receipt=snapshot_apply_receipt_v2_to_payload(request.receipt),
     )
@@ -590,6 +594,21 @@ def _parse_receipt_request_v2(payload: object) -> DataPlaneReceiptRequestV2:
         nonce=nonce,
         receipt=parse_snapshot_apply_receipt_v2(raw["receipt"]),
     )
+
+
+def _require_data_plane_binding_v2(
+    *,
+    request: DataPlaneReceiptRequestV2,
+    principal: PlatformPluginDataPlanePrincipalV2,
+) -> None:
+    if request.data_plane_id != principal.data_plane_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "plugin_data_plane_identity_mismatch",
+                "message": _("Plugin data-plane credential is not bound to the receipt data plane"),
+            },
+        )
 
 
 def _require_platform_admin(user: User) -> None:
