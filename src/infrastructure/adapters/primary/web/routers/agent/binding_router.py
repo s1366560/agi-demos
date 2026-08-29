@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.agent_binding import AgentBinding
 from src.domain.model.auth.user import User
+from src.infrastructure.adapters.primary.web.agent_binding_http_application_authority_v2 import (
+    AgentBindingHttpApplicationAuthorityV2,
+    agent_binding_http_application_authority_v2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
@@ -20,9 +25,13 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_binding_services import (
+    AgentBindingAgentUnavailableV2,
+    AgentBindingNotFoundV2,
+    AgentBindingScopeMismatchV2,
+)
 
 from .access import require_tenant_access
-from .utils import get_container_with_db
 
 logger = logging.getLogger(__name__)
 
@@ -91,22 +100,40 @@ async def _get_selected_binding_tenant_id(
     return selected_tenant_id
 
 
-@router.post("/bindings")
-async def create_binding(
-    body: CreateBindingRequest,
+async def agent_binding_http_application_authority_dependency_v2(
     request: Request,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(_get_selected_binding_tenant_id),
     db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[AgentBindingHttpApplicationAuthorityV2]:
+    async with agent_binding_http_application_authority_v2(
+        request=request,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        db=db,
+    ) as authority:
+        yield authority
+
+
+@router.post("/bindings")
+async def create_binding(
+    body: CreateBindingRequest,
+    current_user: User = Depends(get_current_user),
+    binding_authority: AgentBindingHttpApplicationAuthorityV2 = Depends(
+        agent_binding_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
-        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
-        container = get_container_with_db(request, db)
-        repo = container.agent_binding_repository()
+        await require_tenant_access(
+            binding_authority.db,
+            current_user,
+            binding_authority.tenant_id,
+            require_admin=True,
+        )
 
         binding = AgentBinding(
             id=str(uuid.uuid4()),
-            tenant_id=tenant_id,
+            tenant_id=binding_authority.tenant_id,
             agent_id=body.agent_id,
             channel_type=body.channel_type,
             channel_id=body.channel_id,
@@ -115,16 +142,15 @@ async def create_binding(
             group_id=body.group_id,
             priority=body.priority,
         )
-        agent_registry = container.agent_registry()
-        agent = await agent_registry.get_by_id(binding.agent_id, tenant_id=tenant_id)
-        if agent is None or agent.project_id is not None:
-            raise ValueError("Agent is not available for tenant-level binding")
+        created = await binding_authority.service.create(binding)
+        await binding_authority.db.commit()
+        return created.to_dict()
 
-        created = await repo.create(binding)
-        await db.commit()
-        return cast(dict[str, Any], created.to_dict())
-
-    except ValueError as e:
+    except (
+        AgentBindingAgentUnavailableV2,
+        AgentBindingScopeMismatchV2,
+        ValueError,
+    ) as e:
         raise HTTPException(status_code=400, detail=_("Invalid binding request")) from e
     except HTTPException:
         raise
@@ -138,32 +164,23 @@ async def create_binding(
 
 @router.get("/bindings")
 async def list_bindings(
-    request: Request,
     agent_id: str | None = None,
     enabled_only: bool = False,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(_get_selected_binding_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    binding_authority: AgentBindingHttpApplicationAuthorityV2 = Depends(
+        agent_binding_http_application_authority_dependency_v2
+    ),
 ) -> list[dict[str, Any]]:
     try:
-        await require_tenant_access(db, current_user, tenant_id)
-        container = get_container_with_db(request, db)
-        repo = container.agent_binding_repository()
-
-        if agent_id:
-            bindings = [
-                binding
-                for binding in await repo.list_by_agent(
-                    agent_id=agent_id,
-                    enabled_only=enabled_only,
-                )
-                if binding.tenant_id == tenant_id
-            ]
-        else:
-            bindings = await repo.list_by_tenant(
-                tenant_id=tenant_id,
-                enabled_only=enabled_only,
-            )
+        await require_tenant_access(
+            binding_authority.db,
+            current_user,
+            binding_authority.tenant_id,
+        )
+        bindings = await binding_authority.service.list_bindings(
+            agent_id=agent_id,
+            enabled_only=enabled_only,
+        )
 
         return [b.to_dict() for b in bindings]
 
@@ -180,27 +197,26 @@ async def list_bindings(
 @router.delete("/bindings/{binding_id}")
 async def delete_binding(
     binding_id: str,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(_get_selected_binding_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    binding_authority: AgentBindingHttpApplicationAuthorityV2 = Depends(
+        agent_binding_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
-        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
-        container = get_container_with_db(request, db)
-        repo = container.agent_binding_repository()
+        await require_tenant_access(
+            binding_authority.db,
+            current_user,
+            binding_authority.tenant_id,
+            require_admin=True,
+        )
+        deleted = await binding_authority.service.delete(binding_id)
+        await binding_authority.db.commit()
+        return {"deleted": deleted, "id": binding_id}
 
-        existing = await repo.get_by_id(binding_id)
-        if existing is None:
-            raise HTTPException(status_code=404, detail=_("Binding not found"))
-
-        if existing.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail=_("Access denied"))
-
-        await repo.delete(binding_id)
-        await db.commit()
-        return {"deleted": True, "id": binding_id}
-
+    except AgentBindingNotFoundV2 as e:
+        raise HTTPException(status_code=404, detail=_("Binding not found")) from e
+    except AgentBindingScopeMismatchV2 as e:
+        raise HTTPException(status_code=403, detail=_("Access denied")) from e
     except HTTPException:
         raise
     except Exception as e:
@@ -215,27 +231,29 @@ async def delete_binding(
 async def set_binding_enabled(
     binding_id: str,
     body: SetEnabledRequest,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(_get_selected_binding_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    binding_authority: AgentBindingHttpApplicationAuthorityV2 = Depends(
+        agent_binding_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     try:
-        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
-        container = get_container_with_db(request, db)
-        repo = container.agent_binding_repository()
+        await require_tenant_access(
+            binding_authority.db,
+            current_user,
+            binding_authority.tenant_id,
+            require_admin=True,
+        )
+        updated = await binding_authority.service.set_enabled(
+            binding_id,
+            enabled=body.enabled,
+        )
+        await binding_authority.db.commit()
+        return updated.to_dict()
 
-        existing = await repo.get_by_id(binding_id)
-        if existing is None:
-            raise HTTPException(status_code=404, detail=_("Binding not found"))
-
-        if existing.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail=_("Access denied"))
-
-        updated = await repo.set_enabled(binding_id, body.enabled)
-        await db.commit()
-        return cast(dict[str, Any], updated.to_dict())
-
+    except AgentBindingNotFoundV2 as e:
+        raise HTTPException(status_code=404, detail=_("Binding not found")) from e
+    except AgentBindingScopeMismatchV2 as e:
+        raise HTTPException(status_code=403, detail=_("Access denied")) from e
     except HTTPException:
         raise
     except ValueError as e:
@@ -251,20 +269,18 @@ async def set_binding_enabled(
 @router.get("/bindings/groups/{group_id}")
 async def list_group_bindings(
     group_id: str,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(_get_selected_binding_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    binding_authority: AgentBindingHttpApplicationAuthorityV2 = Depends(
+        agent_binding_http_application_authority_dependency_v2
+    ),
 ) -> list[dict[str, Any]]:
     try:
-        await require_tenant_access(db, current_user, tenant_id)
-        container = get_container_with_db(request, db)
-        repo = container.agent_binding_repository()
-
-        bindings = await repo.find_by_group(
-            tenant_id=tenant_id,
-            group_id=group_id,
+        await require_tenant_access(
+            binding_authority.db,
+            current_user,
+            binding_authority.tenant_id,
         )
+        bindings = await binding_authority.service.list_group(group_id)
 
         return [b.to_dict() for b in bindings]
 
@@ -281,10 +297,10 @@ async def list_group_bindings(
 @router.post("/bindings/test", response_model=TestBindingResponse)
 async def test_binding_match(
     body: TestBindingRequest,
-    request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(_get_selected_binding_tenant_id),
-    db: AsyncSession = Depends(get_db),
+    binding_authority: AgentBindingHttpApplicationAuthorityV2 = Depends(
+        agent_binding_http_application_authority_dependency_v2
+    ),
 ) -> TestBindingResponse:
     """Test which SubAgent would handle a message with given context.
 
@@ -298,22 +314,20 @@ async def test_binding_match(
         TestBindingResponse with matched agent info and confidence score
     """
     try:
-        await require_tenant_access(db, current_user, tenant_id)
-        container = get_container_with_db(request, db)
-        binding_repo = container.agent_binding_repository()
-        agent_registry = container.agent_registry()
-
-        # Resolve binding using specificity-based matching (with trace)
-        binding, raw_trace = await binding_repo.resolve_binding_with_trace(
-            tenant_id=tenant_id,
+        await require_tenant_access(
+            binding_authority.db,
+            current_user,
+            binding_authority.tenant_id,
+        )
+        match = await binding_authority.service.resolve_with_trace(
             channel_type=body.channel_type,
             channel_id=body.channel_id,
             account_id=body.account_id,
             peer_id=body.peer_id,
         )
-        trace_entries = [BindingTraceEntry(**entry) for entry in raw_trace]
+        trace_entries = [BindingTraceEntry.model_validate(entry) for entry in match.trace]
 
-        if binding is None:
+        if match.binding is None:
             return TestBindingResponse(
                 agent_id=None,
                 agent_name=None,
@@ -324,21 +338,17 @@ async def test_binding_match(
                 trace=trace_entries,
             )
 
-        # Get agent details
-        agent = await agent_registry.get_by_id(binding.agent_id, tenant_id=tenant_id)
-        agent_name = agent.name if agent else None
-
         # Calculate confidence based on specificity score
         # Max theoretical score: 15 (1+2+4+8 + priority)
         # Normalized to 0-1 range
         max_score = 15
-        confidence = min(1.0, binding.specificity_score / max_score)
+        confidence = min(1.0, match.binding.specificity_score / max_score)
 
         return TestBindingResponse(
-            agent_id=binding.agent_id,
-            agent_name=agent_name,
-            binding_id=binding.id,
-            specificity_score=binding.specificity_score,
+            agent_id=match.binding.agent_id,
+            agent_name=match.agent_name,
+            binding_id=match.binding.id,
+            specificity_score=match.binding.specificity_score,
             confidence=round(confidence, 2),
             matched=True,
             trace=trace_entries,

@@ -358,6 +358,53 @@ async def test_react_agent_resolves_persisted_definition_from_profile_provider()
 
 
 @pytest.mark.unit
+async def test_definition_resolver_supports_exact_tenant_operation_without_project_fallback() -> (
+    None
+):
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=4,
+        version=4,
+    )
+    selected = SimpleNamespace(
+        id="tenant-agent",
+        tenant_id="tenant-a",
+        project_id=None,
+    )
+    repository = SimpleNamespace(get_by_id=AsyncMock(return_value=selected))
+
+    try:
+        with patch(
+            "src.infrastructure.plugins.v2.agent_persisted_definition._build_agent_registry_v2",
+            return_value=repository,
+        ):
+            async with pin_operation_context_v2(
+                host,
+                operation_id="tenant-agent-definition-consumer",
+                scope=ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-a"),
+                services={OPERATION_DB_SESSION_SERVICE_V2: object()},
+            ) as operation:
+                resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+                assert isinstance(resolver, AgentDefinitionResolverV2)
+                result = await resolver.resolve(
+                    agent_id="tenant-agent",
+                    tenant_id="tenant-a",
+                    project_id=None,
+                )
+    finally:
+        await host.close()
+
+    assert result is selected
+    repository.get_by_id.assert_awaited_once_with(
+        agent_id="tenant-agent",
+        tenant_id="tenant-a",
+        project_id=None,
+    )
+
+
+@pytest.mark.unit
 def test_profile_declares_persisted_definition_provider() -> None:
     document = load_profile_document_v2(_PROFILE_PATH)
     entries = [

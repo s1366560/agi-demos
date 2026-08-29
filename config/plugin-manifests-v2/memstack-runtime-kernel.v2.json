@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:f8095a2e06bc51c0b912d8612246fbd44d8f654374bbb3a69a2dbbc5b25bb9cd",
+        "digest": "sha256:9961edeef3cbe9ccc53f9b872ecf8bd740424f399fc5ea763cdc897e37e70452",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -8128,8 +8128,42 @@
       },
       "contract_digest": "sha256:e8e12b66e3ad3e84bfa48f0558d56eadd8cd2ebe418b54e7795b842dc21aeaa6",
       "artifact": {
-        "digest": "sha256:a1048081b1bd0f037f4a92039c5cff5c538a2c447ab7a588ce6476f2d157cbfe",
+        "digest": "sha256:6c0cab7ec9922c39737b0405a1e304e4b82e49e108551e6cf05a153139b8fdcb",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/agent-bindings",
+      "entrypoint": "src.infrastructure.plugins.v2.agent_binding_services:_apply_agent_binding_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            { "service": "service:application.agent-bindings", "version": "1.0.0" }
+          ],
+          "requires": [
+            {
+              "alias": "agent_definitions",
+              "service": "service:agent-definition-resolver",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:d89d5f5c1951a64ef21e35bb4a598428a9ddfdbd4b2965fba0cc86a3ee161b49",
+      "artifact": {
+        "digest": "sha256:4eca6f623946ce03425af2ac074aa4877750f80797a083814813d6734b14d42d",
+        "source": "repo+python://src/infrastructure/plugins/v2/agent_binding_services.py"
       }
     },
     {
@@ -8631,7 +8665,7 @@
       },
       "contract_digest": "sha256:e212362bfde8905af8bbe24271cd1a85f1f8f45de025ff117801e8429db8531d",
       "artifact": {
-        "digest": "sha256:16935f6702693dc242e86d2d6589d5a967f12ac280c874ad1d32086ba858510a",
+        "digest": "sha256:9bf1b833edb7b5037513ed4892ede0fc006ef87b82463d9ed64d46aaaae436e2",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_persisted_definition.py"
       }
     },
@@ -8675,7 +8709,7 @@
       },
       "contract_digest": "sha256:94a9f647f558aa8cf89e7cc4d3361336e451bafff6bf5dad13e6e117e5b5ffd6",
       "artifact": {
-        "digest": "sha256:a1048081b1bd0f037f4a92039c5cff5c538a2c447ab7a588ce6476f2d157cbfe",
+        "digest": "sha256:6c0cab7ec9922c39737b0405a1e304e4b82e49e108551e6cf05a153139b8fdcb",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
       }
     },

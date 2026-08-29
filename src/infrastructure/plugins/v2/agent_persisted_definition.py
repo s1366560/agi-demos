@@ -36,7 +36,7 @@ async def _resolve_persisted_agent_definition_v2(
     *,
     agent_id: str,
     tenant_id: str,
-    project_id: str,
+    project_id: str | None,
 ) -> object | None:
     """Resolve one exact scoped definition from the pinned operation database."""
     from .boundary import OPERATION_DB_SESSION_SERVICE_V2, current_operation_context_v2

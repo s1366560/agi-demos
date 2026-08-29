@@ -34,7 +34,7 @@ BUILTIN_AGENT_DEFINITION_IDS_V2 = (
     BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
 )
 
-type AgentDefinitionFactoryV2 = Callable[[str, str], object]
+type AgentDefinitionFactoryV2 = Callable[[str, str | None], object]
 type AgentDefinitionProviderV2 = Callable[..., object | Awaitable[object | None] | None]
 type AgentDefinitionDisposerV2 = Callable[[], None | Awaitable[None]]
 
@@ -60,7 +60,7 @@ class AgentDefinitionCatalogProtocolV2(Protocol):
         *,
         agent_id: str,
         tenant_id: str,
-        project_id: str,
+        project_id: str | None,
     ) -> object | None: ...
 
     async def resolve_provider(
@@ -68,7 +68,7 @@ class AgentDefinitionCatalogProtocolV2(Protocol):
         *,
         agent_id: str,
         tenant_id: str,
-        project_id: str,
+        project_id: str | None,
     ) -> object | None: ...
 
 
@@ -133,7 +133,7 @@ class AgentDefinitionCatalogV2:
         *,
         agent_id: str,
         tenant_id: str,
-        project_id: str,
+        project_id: str | None,
     ) -> object | None:
         factory = self._factories.get(agent_id)
         if factory is None:
@@ -151,7 +151,7 @@ class AgentDefinitionCatalogV2:
         *,
         agent_id: str,
         tenant_id: str,
-        project_id: str,
+        project_id: str | None,
     ) -> object | None:
         if self._provider is None:
             return None
@@ -180,7 +180,7 @@ class AgentDefinitionResolverProtocolV2(Protocol):
         *,
         agent_id: str,
         tenant_id: str,
-        project_id: str,
+        project_id: str | None,
     ) -> object | None: ...
 
 
@@ -196,7 +196,7 @@ class AgentDefinitionResolverV2:
         *,
         agent_id: str,
         tenant_id: str,
-        project_id: str,
+        project_id: str | None,
     ) -> object | None:
         if not agent_id.strip():
             raise ValueError("agent_id must be non-empty")
@@ -253,7 +253,7 @@ def _apply_builtin_agent_definition_contribution_v2(
             "agent-definition catalog service has an invalid implementation",
         )
 
-    def factory(tenant_id: str, project_id: str) -> object:
+    def factory(tenant_id: str, project_id: str | None) -> object:
         definition = get_builtin_agent_by_id(
             agent_id,
             tenant_id=tenant_id,

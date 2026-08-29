@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .admin_dlq_services import admin_dlq_service_definitions_v2
+from .agent_binding_services import agent_binding_definition_v2
 from .agent_canvas_tools import builtin_agent_canvas_tool_contribution_definition_v2
 from .agent_capabilities import (
     builtin_agent_capability_definition_v2,
@@ -368,6 +369,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         skill_evolution_scheduler_definition_v2(),
         *background_task_service_definitions_v2(),
         *conversation_access_service_definitions_v2(),
+        agent_binding_definition_v2(),
         *conversation_context_status_definitions_v2(),
         *conversation_revision_definitions_v2(),
         conversation_collection_repository_definition_v2(),
