@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:4b176031bf04fd099d92add11783e159e8c5afe255970f447a8983c8ecef4747",
+        "digest": "sha256:693cbff45c3d186047158d78f71ffd5ece16f49d2adbac335e9faa781524217a",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4435,6 +4435,74 @@
       "artifact": {
         "digest": "sha256:4f8a087c2f7e5d0b84553254f3b55d928b24c0afe07e7f073b05a09616585138",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_graph_management_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/subagent-repository-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.subagent_management_services:_apply_subagent_repository_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.subagent-repository-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:afb28859cf0cdfe431a0b1c0f719b7fbfb7bebd2d7f80f8cdd0727b47c45725c",
+      "artifact": {
+        "digest": "sha256:9d1c9a320489abddc688505416ef01a27898df84b0c0b4a621ef40bbee54b12c",
+        "source": "repo+python://src/infrastructure/plugins/v2/subagent_management_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/subagent-management",
+      "entrypoint": "src.infrastructure.plugins.v2.subagent_management_services:_apply_subagent_management_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.subagent-management",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "repositories",
+              "service": "service:persistence.subagent-repository-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8ed3c738fb07aeb108fd351d6b2cc5ac0b5ce332fc09f55c3aee5ffc985d5e0d",
+      "artifact": {
+        "digest": "sha256:9d1c9a320489abddc688505416ef01a27898df84b0c0b4a621ef40bbee54b12c",
+        "source": "repo+python://src/infrastructure/plugins/v2/subagent_management_services.py"
       }
     },
     {

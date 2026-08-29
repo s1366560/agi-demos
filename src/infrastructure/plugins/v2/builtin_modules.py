@@ -131,6 +131,7 @@ from .shares_services import shares_service_definitions_v2
 from .sisyphus_runtime import sisyphus_runtime_definitions_v2
 from .skill_evolution_runtime import skill_evolution_scheduler_definition_v2
 from .smtp_config_services import smtp_config_service_definitions_v2
+from .subagent_management_services import subagent_management_definitions_v2
 from .subagent_run_registry_service import (
     SubAgentRunRegistryFactoryV2,
     subagent_run_registry_definition_v2,
@@ -389,6 +390,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *agent_event_query_service_definitions_v2(),
         *agent_message_history_service_definitions_v2(),
         *agent_graph_management_definitions_v2(),
+        *subagent_management_definitions_v2(),
         agent_execution_resume_definition_v2(),
         agent_workflow_status_definition_v2(),
         agent_subagent_control_definition_v2(),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -7,6 +9,11 @@ import pytest
 from fastapi import HTTPException, status
 
 from src.infrastructure.adapters.primary.web.routers import subagents as router
+from src.infrastructure.plugins.v2.subagent_management_services import (
+    SubAgentAccessDeniedV2,
+    SubAgentAccessV2,
+    SubAgentAlreadyExistsV2,
+)
 
 
 class _EmptyFilesystemLoader:
@@ -25,7 +32,11 @@ class _FilesystemLoaderWithAgent:
         return SimpleNamespace(
             subagents=[
                 SimpleNamespace(
-                    subagent=SimpleNamespace(name="secret-subagent"),
+                    subagent=_make_subagent(
+                        subagent_id="filesystem-subagent",
+                        name="secret-subagent",
+                        project_id=None,
+                    ),
                     file_info=SimpleNamespace(file_path="/tmp/secret-subagent.md"),
                 )
             ]
@@ -134,6 +145,43 @@ def _patch_container(monkeypatch: pytest.MonkeyPatch, container: _Container) -> 
     monkeypatch.setattr(router, "get_container_with_db", lambda *_args: container)
 
 
+def _management_service(
+    *,
+    subagent: router.SubAgent | None = None,
+    subagents: list[router.SubAgent] | None = None,
+) -> SimpleNamespace:
+    access = (
+        None
+        if subagent is None
+        else SubAgentAccessV2(
+            subagent=subagent,
+            tenant_id="tenant-1",
+            user_id="user-1",
+        )
+    )
+    return SimpleNamespace(
+        tenant_id="tenant-1",
+        user_id="user-1",
+        create=AsyncMock(side_effect=lambda item: item),
+        list_accessible=AsyncMock(return_value=subagents or []),
+        require_access=AsyncMock(return_value=access),
+        update=AsyncMock(side_effect=lambda _access, item: item),
+        delete=AsyncMock(return_value=None),
+        set_enabled=AsyncMock(return_value=subagent),
+    )
+
+
+def _patch_subagent_authority(
+    monkeypatch: pytest.MonkeyPatch,
+    service: object,
+) -> None:
+    @asynccontextmanager
+    async def authority(**_kwargs: object) -> AsyncIterator[SimpleNamespace]:
+        yield SimpleNamespace(service=service)
+
+    monkeypatch.setattr(router, "subagent_http_application_authority_v2", authority)
+
+
 def _make_subagent(
     *,
     subagent_id: str,
@@ -198,6 +246,7 @@ async def test_import_filesystem_subagent_sanitizes_missing_name(
         "src.infrastructure.agent.subagent.filesystem_loader.FileSystemSubAgentLoader",
         _EmptyFilesystemLoader,
     )
+    _patch_subagent_authority(monkeypatch, _management_service())
 
     with pytest.raises(HTTPException) as exc_info:
         await router.import_filesystem_subagent(
@@ -215,7 +264,9 @@ async def test_import_filesystem_subagent_sanitizes_missing_name(
 
 @pytest.mark.unit
 async def test_create_subagent_sanitizes_duplicate_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_container(monkeypatch, _Container())
+    service = _management_service()
+    service.create.side_effect = SubAgentAlreadyExistsV2("secret-subagent")
+    _patch_subagent_authority(monkeypatch, service)
 
     with pytest.raises(HTTPException) as exc_info:
         await router.create_subagent(
@@ -237,7 +288,7 @@ async def test_create_subagent_sanitizes_duplicate_name(monkeypatch: pytest.Monk
 
 @pytest.mark.unit
 async def test_create_subagent_value_error_is_sanitized(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_container(monkeypatch, _Container(subagent_repo=_EmptySubagentRepository()))
+    _patch_subagent_authority(monkeypatch, _management_service())
 
     with pytest.raises(HTTPException) as exc_info:
         await router.create_subagent(
@@ -262,7 +313,9 @@ async def test_create_subagent_value_error_is_sanitized(monkeypatch: pytest.Monk
 async def test_create_subagent_rejects_inaccessible_project(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _patch_container(monkeypatch, _Container(subagent_repo=_EmptySubagentRepository()))
+    service = _management_service()
+    service.create.side_effect = SubAgentAccessDeniedV2("project-other-tenant")
+    _patch_subagent_authority(monkeypatch, service)
     db = SimpleNamespace(
         execute=AsyncMock(return_value=_ScalarResult(None)),
         commit=AsyncMock(),
@@ -296,7 +349,9 @@ async def test_import_filesystem_subagent_sanitizes_duplicate_name(
         "src.infrastructure.agent.subagent.filesystem_loader.FileSystemSubAgentLoader",
         _FilesystemLoaderWithAgent,
     )
-    _patch_container(monkeypatch, _Container())
+    service = _management_service()
+    service.create.side_effect = SubAgentAlreadyExistsV2("secret-subagent")
+    _patch_subagent_authority(monkeypatch, service)
 
     with pytest.raises(HTTPException) as exc_info:
         await router.import_filesystem_subagent(
@@ -320,7 +375,9 @@ async def test_import_filesystem_subagent_rejects_inaccessible_project(
         "src.infrastructure.agent.subagent.filesystem_loader.FileSystemSubAgentLoader",
         _FilesystemLoaderWithAgent,
     )
-    _patch_container(monkeypatch, _Container(subagent_repo=_EmptySubagentRepository()))
+    service = _management_service()
+    service.create.side_effect = SubAgentAccessDeniedV2("project-other-tenant")
+    _patch_subagent_authority(monkeypatch, service)
     db = SimpleNamespace(
         execute=AsyncMock(return_value=_ScalarResult(None)),
         commit=AsyncMock(),
@@ -384,7 +441,14 @@ async def test_install_template_sanitizes_duplicate_subagent_name(
 
 @pytest.mark.unit
 async def test_update_subagent_sanitizes_duplicate_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_container(monkeypatch, _Container())
+    subagent = _make_subagent(
+        subagent_id="subagent-1",
+        name="current-subagent",
+        project_id=None,
+    )
+    service = _management_service(subagent=subagent)
+    service.update.side_effect = SubAgentAlreadyExistsV2("secret-new-name")
+    _patch_subagent_authority(monkeypatch, service)
 
     with pytest.raises(HTTPException) as exc_info:
         await router.update_subagent(
@@ -416,6 +480,9 @@ async def test_project_scoped_subagent_routes_require_project_access(
     )
     repo = _SubagentAccessRepository(subagent=subagent)
     _patch_container(monkeypatch, _Container(subagent_repo=repo))
+    service = _management_service(subagent=subagent)
+    service.require_access.side_effect = SubAgentAccessDeniedV2("project-hidden")
+    _patch_subagent_authority(monkeypatch, service)
     db = SimpleNamespace(
         execute=AsyncMock(return_value=_ScalarResult(None)),
         commit=AsyncMock(),
@@ -476,11 +543,14 @@ async def test_project_scoped_subagent_routes_require_project_access(
     repo.update.assert_not_awaited()
     repo.delete.assert_not_awaited()
     repo.set_enabled.assert_not_awaited()
+    service.update.assert_not_awaited()
+    service.delete.assert_not_awaited()
+    service.set_enabled.assert_not_awaited()
     assert db.commit.await_count == 0
 
 
 @pytest.mark.unit
-async def test_list_subagents_filters_project_scoped_agents_by_project_access(
+async def test_list_subagents_uses_v2_access_filtered_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tenant_subagent = _make_subagent(
@@ -493,16 +563,8 @@ async def test_list_subagents_filters_project_scoped_agents_by_project_access(
         name="visible-agent",
         project_id="project-visible",
     )
-    hidden_subagent = _make_subagent(
-        subagent_id="subagent-hidden",
-        name="hidden-agent",
-        project_id="project-hidden",
-    )
-    repo = _SubagentAccessRepository(subagents=[hidden_subagent, visible_subagent, tenant_subagent])
-    _patch_container(monkeypatch, _Container(subagent_repo=repo))
-    db = SimpleNamespace(
-        execute=AsyncMock(return_value=_ScalarResult(None, values=["project-visible"])),
-    )
+    service = _management_service(subagents=[visible_subagent, tenant_subagent])
+    _patch_subagent_authority(monkeypatch, service)
 
     response = await router.list_subagents(
         request=SimpleNamespace(),
@@ -515,7 +577,7 @@ async def test_list_subagents_filters_project_scoped_agents_by_project_access(
         offset=0,
         tenant_id="tenant-1",
         current_user=SimpleNamespace(id="user-1"),
-        db=db,
+        db=SimpleNamespace(),
     )
 
     assert response.total == 2
@@ -523,6 +585,7 @@ async def test_list_subagents_filters_project_scoped_agents_by_project_access(
         "subagent-visible",
         "subagent-tenant",
     }
+    service.list_accessible.assert_awaited_once_with(enabled_only=False)
 
 
 @pytest.mark.unit
@@ -545,8 +608,8 @@ async def test_list_subagents_searches_before_paginating(
     )
     beta_subagent.total_invocations = 12
     beta_subagent.success_rate = 0.75
-    repo = _SubagentAccessRepository(subagents=[alpha_subagent, beta_subagent])
-    _patch_container(monkeypatch, _Container(subagent_repo=repo))
+    service = _management_service(subagents=[alpha_subagent, beta_subagent])
+    _patch_subagent_authority(monkeypatch, service)
 
     response = await router.list_subagents(
         request=SimpleNamespace(),
@@ -567,6 +630,7 @@ async def test_list_subagents_searches_before_paginating(
     assert response.total_invocations == 12
     assert response.average_success_rate == 0.75
     assert [subagent.id for subagent in response.subagents] == ["subagent-beta"]
+    service.list_accessible.assert_awaited_once_with(enabled_only=False)
 
 
 @pytest.mark.unit
