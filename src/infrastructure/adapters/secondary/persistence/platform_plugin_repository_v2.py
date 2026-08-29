@@ -185,7 +185,7 @@ class PlatformPluginRepositoryV2:
         now: datetime | None = None,
     ) -> PlatformPluginPublicationReadinessV2 | None:
         """Return and refresh readiness for the newest requested publication."""
-        publication = await self._latest_publication(for_update=False)
+        publication = await self._latest_publication(for_update=True)
         if publication is None:
             return None
         return await self._publication_readiness_row(publication, _utc_now_v2(now))
@@ -199,9 +199,9 @@ class PlatformPluginRepositoryV2:
         """Return and refresh readiness for one exact publication nonce."""
         result = await self._session.execute(
             refresh_select_statement(
-                select(PlatformPluginV2PublicationModel).where(
-                    PlatformPluginV2PublicationModel.nonce == nonce
-                )
+                select(PlatformPluginV2PublicationModel)
+                .where(PlatformPluginV2PublicationModel.nonce == nonce)
+                .with_for_update()
             )
         )
         publication = result.scalar_one_or_none()
@@ -299,9 +299,9 @@ class PlatformPluginRepositoryV2:
             raise PlatformPluginLedgerV2Error("data_plane_id_invalid", "data_plane_id is required")
         result = await self._session.execute(
             refresh_select_statement(
-                select(PlatformPluginV2PublicationModel).where(
-                    PlatformPluginV2PublicationModel.nonce == nonce
-                )
+                select(PlatformPluginV2PublicationModel)
+                .where(PlatformPluginV2PublicationModel.nonce == nonce)
+                .with_for_update()
             )
         )
         publication = result.scalar_one_or_none()
