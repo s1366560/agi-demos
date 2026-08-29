@@ -770,6 +770,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             current_user=current_user,
             db=db,
             skill_repository=repo,
+            skill_version_repository=version_repository,
         ),
     }
 
@@ -780,6 +781,72 @@ async def test_project_skill_raw_id_routes_require_project_access(
     assert exc_info.value.detail == "Access denied"
     access_guard.assert_awaited_once()
     db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_rollback_skill_uses_injected_version_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Manages Agent Skills packages",
+        tools=["Read"],
+        full_content=SAMPLE_SKILL_MD,
+    )
+    await repo.create(skill)
+    db = SimpleNamespace(versions=[], commit=AsyncMock())
+    version_repository = _MemoryVersionRepository(db)
+    captured: dict[str, object] = {}
+
+    class _ReverseSync:
+        def __init__(
+            self,
+            *,
+            skill_repository: object,
+            skill_version_repository: object,
+            host_project_path: Path,
+        ) -> None:
+            captured.update(
+                skill_repository=skill_repository,
+                skill_version_repository=skill_version_repository,
+                host_project_path=host_project_path,
+            )
+
+        async def rollback_to_version(
+            self,
+            *,
+            skill_id: str,
+            version_number: int,
+        ) -> dict[str, object]:
+            captured.update(skill_id=skill_id, version_number=version_number)
+            return {"rolled_back": True}
+
+    monkeypatch.setattr(
+        "src.application.services.skill_reverse_sync.SkillReverseSync",
+        _ReverseSync,
+    )
+
+    response = await router.rollback_skill(
+        skill_id=skill.id,
+        request_body=router.SkillRollbackRequest(version_number=3),
+        db=db,
+        tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+        skill_repository=repo,
+        skill_version_repository=version_repository,
+    )
+
+    assert response.id == skill.id
+    assert captured == {
+        "skill_repository": repo,
+        "skill_version_repository": version_repository,
+        "host_project_path": Path.cwd(),
+        "skill_id": skill.id,
+        "version_number": 3,
+    }
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.unit

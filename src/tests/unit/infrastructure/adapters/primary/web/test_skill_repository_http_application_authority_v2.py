@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from inspect import signature
+from inspect import getsource, signature
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -154,6 +154,7 @@ def test_skill_handlers_resolve_repository_only_from_v2_authority() -> None:
         skills.export_skill_package,
         skills.list_skill_versions,
         skills.get_skill_version,
+        skills.rollback_skill,
     )
     for endpoint in version_endpoints:
         parameter = signature(endpoint).parameters["skill_version_repository"]
@@ -163,6 +164,7 @@ def test_skill_handlers_resolve_repository_only_from_v2_authority() -> None:
     version_authority = signature(skills._get_skill_version_repository_v2).parameters["authority"]
     assert skill_authority.default.dependency is skills._get_skill_repository_authority_v2
     assert version_authority.default.dependency is skills._get_skill_repository_authority_v2
+    assert "SqlSkillVersionRepository(" not in getsource(skills.rollback_skill)
 
     assert "get_container_with_db" not in vars(skills)
     assert "DIContainer" not in vars(skills)

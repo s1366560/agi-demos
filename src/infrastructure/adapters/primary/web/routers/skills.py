@@ -2914,17 +2914,16 @@ async def rollback_skill(
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
+    skill_version_repository: SkillVersionRepositoryPort = Depends(
+        _get_skill_version_repository_v2
+    ),
 ) -> SkillResponse:
     """Rollback a skill to a specific version. Creates a new version entry."""
     from pathlib import Path
 
     from src.application.services.skill_reverse_sync import SkillReverseSync
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
-        SqlSkillVersionRepository,
-    )
-
     skill_repo = skill_repository
-    version_repo = SqlSkillVersionRepository(db)
+    version_repo = skill_version_repository
 
     # Verify skill exists and belongs to tenant
     skill = await skill_repo.get_by_id(skill_id)
