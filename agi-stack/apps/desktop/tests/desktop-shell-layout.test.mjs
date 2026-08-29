@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const workbenchSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const mainProcessSource = readFileSync(
   new URL('../electron/main/index.ts', import.meta.url),
   'utf8',
@@ -237,7 +241,7 @@ test('workbench mounts the tab bar above a dedicated content layer', () => {
     appSource,
     /<div className="workbench-content">[\s\S]*?<DesktopRendererProductionRouterV2/,
   );
-  assert.match(appSource, /className="workbench-layout"/);
+  assert.match(workbenchSurfaceSource, /className="workbench-layout"/);
 });
 
 test('workbench grid reserves a 32px tab row', () => {

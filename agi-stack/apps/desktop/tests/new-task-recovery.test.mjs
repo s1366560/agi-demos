@@ -352,7 +352,7 @@ test('opening and cancelling New Task preserves the active conversation until ac
   assert.doesNotMatch(appSource, /setChatInput\(/);
   assert.match(
     appSource,
-    /composerResetKey=\{selectedConversation\?\.id \?\? config\.workspaceId\}/,
+    /composerResetKey:\s*selectedConversation\?\.id \?\? config\.workspaceId/,
   );
 });
 

@@ -148,7 +148,7 @@ test('selected cloud conversations expose the Web-compatible summary surface', (
   );
   assert.match(
     appSource,
-    /onRegenerateConversationSummary=\{regenerateConversationSummary\}/,
+    /onRegenerateConversationSummary:\s*regenerateConversationSummary/,
   );
   const summaryHandlerSource =
     appSource.match(

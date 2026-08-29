@@ -126,7 +126,7 @@ test('workspace activities reject cross-scope, non-authoritative, and malformed 
 test('Desktop routes live workspace activities into the overview audit trail', () => {
   assert.match(appSource, /applyWorkspaceActivityStreamEvent\(/);
   assert.match(appSource, /workspaceActivityEventsHeadRef/);
-  assert.match(appSource, /liveActivity=\{workspaceLiveActivity\}/);
+  assert.match(appSource, /liveActivity:\s*workspaceLiveActivity/);
   assert.match(overviewSource, /liveActivity = \[\]/);
   assert.match(overviewSource, /\[\.\.\.liveActivity, \.\.\.model\.recentActivity\]/);
 });

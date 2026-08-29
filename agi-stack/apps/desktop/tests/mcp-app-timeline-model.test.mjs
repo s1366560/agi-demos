@@ -143,7 +143,7 @@ test('Desktop preserves live MCP App evidence and exposes a reopenable timeline 
     appSource,
     /const mcpAppCanvasResult[\s\S]{0,180}mcpAppCanvasResult\.handled\) return existing/,
   );
-  assert.match(appSource, /onOpenMCPAppResult=/);
+  assert.match(appSource, /onOpenMCPAppResult:\s*openMCPAppResult/);
   assert.match(chatPanelSource, /onOpenMCPAppResult/);
   assert.match(chatTimelineSource, /kind: 'mcp_app_group'/);
   assert.match(chatTimelineSource, /groupMCPAppTimelineItems/);

@@ -342,7 +342,7 @@ test('canonical Agent Workspace fails closed instead of auto-sending through com
     chatPanelSource,
     /Boolean\(composeAheadScope\) &&\s+composeAheadFallbackAllowed &&\s+runInputDeliveryOptions\.length === 0/,
   );
-  assert.match(appSource, /composeAheadFallbackAllowed=\{false\}/);
+  assert.match(appSource, /composeAheadFallbackAllowed:\s*false/);
 });
 
 test('canonical terminal run authority overrides stale streaming signals', () => {
@@ -353,7 +353,7 @@ test('canonical terminal run authority overrides stale streaming signals', () =>
   );
   assert.match(
     appSource,
-    /canonicalRunStatus=\{currentArtifactRun\?\.status \?\? null\}/,
+    /canonicalRunStatus:\s*currentArtifactRun\?\.status \?\? null/,
   );
 });
 
