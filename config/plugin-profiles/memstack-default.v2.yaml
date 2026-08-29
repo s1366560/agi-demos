@@ -2901,6 +2901,37 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-subagent-selection-judge
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/judgment/subagent-selection
+      enabled: true
+      config:
+        strategy: required-agent-tool-call
+      inject:
+        llm_clients: service:llm.tenant-client-factory
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-subagent-selection
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/application/subagent-selection
+      enabled: true
+      config:
+        strategy: operation-scoped-provider
+      inject:
+        judge: service:judgment.subagent-selection
+        subagents: service:application.subagent-management
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-agent-recovery-stream
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

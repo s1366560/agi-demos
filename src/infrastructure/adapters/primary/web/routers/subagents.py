@@ -12,10 +12,8 @@ from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.configuration.di_container import DIContainer
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -25,13 +23,16 @@ from src.infrastructure.adapters.primary.web.routers.agent.access import require
 from src.infrastructure.adapters.primary.web.subagent_http_application_authority_v2 import (
     subagent_http_application_authority_v2,
 )
+from src.infrastructure.adapters.primary.web.subagent_selection_http_application_authority_v2 import (
+    subagent_selection_http_application_authority_v2,
+)
 from src.infrastructure.adapters.primary.web.subagent_template_http_application_authority_v2 import (
     subagent_template_http_application_authority_v2,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.subagent_management_services import (
     SubAgentAccessDeniedV2,
     SubAgentAlreadyExistsV2,
@@ -42,15 +43,6 @@ from src.infrastructure.plugins.v2.subagent_template_management_services import 
     SubAgentTemplateBuiltinMutationV2,
     SubAgentTemplateNotFoundV2,
 )
-
-
-def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
-    """
-    Get DI container with database session for the current request.
-    """
-    app_container: DIContainer = request.app.state.container
-    return app_container.with_db(db)
-
 
 logger = logging.getLogger(__name__)
 
@@ -74,49 +66,6 @@ async def _get_selected_subagent_tenant_id(
 
     await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
     return selected_tenant_id
-
-
-async def _accessible_project_ids(
-    *,
-    tenant_id: str,
-    current_user: User,
-    db: AsyncSession,
-) -> set[str]:
-    result = await db.execute(
-        refresh_select_statement(
-            select(Project.id)
-            .join(UserProject, UserProject.project_id == Project.id)
-            .where(
-                and_(
-                    Project.tenant_id == tenant_id,
-                    UserProject.user_id == current_user.id,
-                )
-            )
-        )
-    )
-    return {str(project_id) for project_id in result.scalars().all()}
-
-
-async def _filter_accessible_subagents(
-    subagents: list[SubAgent],
-    *,
-    tenant_id: str,
-    current_user: User,
-    db: AsyncSession,
-) -> list[SubAgent]:
-    if not any(subagent.project_id for subagent in subagents):
-        return subagents
-
-    project_ids = await _accessible_project_ids(
-        tenant_id=tenant_id,
-        current_user=current_user,
-        db=db,
-    )
-    return [
-        subagent
-        for subagent in subagents
-        if subagent.project_id is None or subagent.project_id in project_ids
-    ]
 
 
 # === Pydantic Models ===
@@ -248,7 +197,7 @@ class SubAgentListResponse(BaseModel):
 class SubAgentMatchRequest(BaseModel):
     """Schema for subagent matching request."""
 
-    task_description: str = Field(..., min_length=1, description="Task to match")
+    task_description: str = Field(..., min_length=1, max_length=8000, description="Task to match")
 
 
 class SubAgentMatchResponse(BaseModel):
@@ -1294,37 +1243,30 @@ async def match_subagent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentMatchResponse:
-    """
-    Find the best matching subagent for a task description.
-
-    Uses trigger keywords and LLM-based matching to find the most suitable subagent.
-    """
-    container = get_container_with_db(request, db)
-    repo = container.subagent_repository()
-
-    # First try keyword matching
-    keyword_matches = await repo.find_by_keywords(
-        tenant_id, data.task_description, enabled_only=True
-    )
-    keyword_matches = await _filter_accessible_subagents(
-        keyword_matches,
-        tenant_id=tenant_id,
-        current_user=current_user,
-        db=db,
-    )
-
-    if keyword_matches:
-        # Return the first keyword match with high confidence
+    """Select a SubAgent through the pinned generation's judgment authority."""
+    try:
+        async with subagent_selection_http_application_authority_v2(
+            request=request,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        ) as authority:
+            selection = await authority.service.match(data.task_description)
         return SubAgentMatchResponse(
-            subagent=subagent_to_response(keyword_matches[0]),
-            confidence=0.8,
+            subagent=(
+                subagent_to_response(selection.selected) if selection.selected is not None else None
+            ),
+            confidence=selection.confidence,
         )
-
-    # No keyword match found
-    return SubAgentMatchResponse(
-        subagent=None,
-        confidence=0.0,
-    )
+    except RuntimeV2Error as exc:
+        logger.warning("Pinned V2 SubAgent selection failed: code=%s", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": exc.code,
+                "message": _("SubAgent selection authority is unavailable"),
+            },
+        ) from exc
 
 
 @router.post("/templates/seed")

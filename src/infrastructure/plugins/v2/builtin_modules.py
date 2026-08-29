@@ -136,6 +136,7 @@ from .subagent_run_registry_service import (
     SubAgentRunRegistryFactoryV2,
     subagent_run_registry_definition_v2,
 )
+from .subagent_selection_services import subagent_selection_definitions_v2
 from .subagent_template_management_services import (
     subagent_template_management_definitions_v2,
 )
@@ -395,6 +396,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         *agent_graph_management_definitions_v2(),
         *subagent_management_definitions_v2(),
         *subagent_template_management_definitions_v2(),
+        *subagent_selection_definitions_v2(),
         agent_execution_resume_definition_v2(),
         agent_workflow_status_definition_v2(),
         agent_subagent_control_definition_v2(),
