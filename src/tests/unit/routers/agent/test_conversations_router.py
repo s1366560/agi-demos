@@ -40,6 +40,9 @@ from src.infrastructure.plugins.v2.conversation_collection_services import (
     InvalidConversationAgentSelectionV2,
 )
 from src.infrastructure.plugins.v2.conversation_config_services import ConversationConfigServiceV2
+from src.infrastructure.plugins.v2.conversation_context_status_services import (
+    ConversationContextStatusV2,
+)
 from src.infrastructure.plugins.v2.conversation_generation_services import (
     ConversationGenerationSourceMissingV2,
 )
@@ -72,6 +75,10 @@ class FailingConversationConfigService:
         side_effect=RuntimeError("internal conversation config secret")
     )
     access = SimpleNamespace(cache=SimpleNamespace(invalidate=AsyncMock()))
+
+
+class FailingConversationContextStatusService:
+    get_context_status = AsyncMock(side_effect=RuntimeError("internal context status secret"))
 
 
 class FailingConversationGenerationService:
@@ -173,6 +180,10 @@ def _conversation_config_authority(service: object, db: object) -> SimpleNamespa
     return SimpleNamespace(service=service, db=db)
 
 
+def _conversation_context_status_authority(service: object, db: object) -> SimpleNamespace:
+    return SimpleNamespace(service=service, db=db)
+
+
 def _conversation_generation_authority(service: object, db: object) -> SimpleNamespace:
     return SimpleNamespace(service=service, db=db)
 
@@ -215,6 +226,13 @@ def _patch_llm_client(monkeypatch: pytest.MonkeyPatch) -> None:
         conversations_router,
         "create_llm_client",
         AsyncMock(return_value=object()),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        conversations_router,
+        "get_container_with_db",
+        MagicMock(),
+        raising=False,
     )
     monkeypatch.setattr(
         conversations_router,
@@ -257,6 +275,10 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
         db,
     )
     conversation_config = _conversation_config_authority(FailingConversationConfigService(), db)
+    conversation_context_status = _conversation_context_status_authority(
+        FailingConversationContextStatusService(),
+        db,
+    )
     conversation_generation = _conversation_generation_authority(
         FailingConversationGenerationService(),
         db,
@@ -290,6 +312,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_context_status=conversation_context_status,
         ),
         "delete": lambda: conversations_router.delete_conversation(
             conversation_id="conversation-1",
@@ -1948,6 +1971,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
     )
     conversation_http = _conversation_http_authority(conversation_service, db)
     conversation_config = _conversation_config_authority(conversation_service, db)
+    conversation_context_status = _conversation_context_status_authority(conversation_service, db)
     conversation_generation = _conversation_generation_authority(conversation_service, db)
     route_calls: dict[str, Any] = {
         "get": lambda: conversations_router.get_conversation(
@@ -1966,6 +1990,7 @@ async def test_project_scoped_conversation_routes_require_project_access(
             current_user=current_user,
             tenant_id="tenant-1",
             db=db,
+            conversation_context_status=conversation_context_status,
         ),
         "delete": lambda: conversations_router.delete_conversation(
             conversation_id="conversation-1",
@@ -2038,6 +2063,79 @@ async def test_project_scoped_conversation_routes_require_project_access(
     conversation_service.update_conversation_config.assert_not_awaited()
     conversation_service.generate_title.assert_not_awaited()
     conversation_service.generate_summary.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_status_uses_v2_authority_without_llm_or_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    projected = ConversationContextStatusV2(
+        conversation_id="conversation-context",
+        message_count=17,
+        has_summary=True,
+        summary_tokens=321,
+        messages_in_summary=11,
+        compression_level="l2_summarize",
+        from_cache=True,
+    )
+    service = SimpleNamespace(get_context_status=AsyncMock(return_value=projected))
+    db = _db_with_project_access()
+    authority = _conversation_context_status_authority(service, db)
+    static_container = MagicMock()
+    monkeypatch.setattr(conversations_router, "get_container_with_db", static_container)
+    request = _request_with_container(SimpleNamespace())
+
+    response = await conversations_router.get_context_status(
+        conversation_id=projected.conversation_id,
+        request=request,
+        project_id="project-1",
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db,
+        conversation_context_status=authority,
+    )
+
+    assert response == {
+        "conversation_id": "conversation-context",
+        "message_count": 17,
+        "has_summary": True,
+        "summary_tokens": 321,
+        "messages_in_summary": 11,
+        "compression_level": "l2_summarize",
+        "from_cache": True,
+    }
+    service.get_context_status.assert_awaited_once_with(
+        conversation_id="conversation-context",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+    )
+    conversations_router.create_llm_client.assert_not_awaited()
+    static_container.assert_not_called()
+    request.app.state.container.with_db.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_context_status_hides_missing_or_cross_scope_conversation() -> None:
+    service = SimpleNamespace(get_context_status=AsyncMock(return_value=None))
+    db = _db_with_project_access()
+    authority = _conversation_context_status_authority(service, db)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.get_context_status(
+            conversation_id="conversation-other-scope",
+            request=_request_with_container(SimpleNamespace()),
+            project_id="project-1",
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+            conversation_context_status=authority,
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Conversation not found"
 
 
 @pytest.mark.unit

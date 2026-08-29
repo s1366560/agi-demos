@@ -14,7 +14,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
-from src.configuration.factories import create_llm_client
 from src.domain.model.agent import ConversationStatus
 from src.domain.ports.services.workspace_authority_port import (
     WorkspaceAuthorityAccessDeniedError,
@@ -30,6 +29,10 @@ from src.infrastructure.adapters.primary.web.conversation_collection_http_applic
 from src.infrastructure.adapters.primary.web.conversation_config_http_application_authority_v2 import (
     ConversationConfigHttpApplicationAuthorityV2,
     conversation_config_http_application_authority_dependency_v2,
+)
+from src.infrastructure.adapters.primary.web.conversation_context_status_http_application_authority_v2 import (
+    ConversationContextStatusHttpApplicationAuthorityV2,
+    conversation_context_status_http_application_authority_dependency_v2,
 )
 from src.infrastructure.adapters.primary.web.conversation_generation_http_application_authority_v2 import (
     ConversationGenerationHttpApplicationAuthorityV2,
@@ -74,7 +77,6 @@ from .schemas import (
     UpdateConversationModeRequest,
     UpdateConversationTitleRequest,
 )
-from .utils import get_container_with_db
 
 if TYPE_CHECKING:
     from src.domain.model.agent.conversation.conversation import Conversation
@@ -734,6 +736,9 @@ async def get_context_status(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
+    conversation_context_status: ConversationContextStatusHttpApplicationAuthorityV2 = Depends(
+        conversation_context_status_http_application_authority_dependency_v2
+    ),
 ) -> dict[str, Any]:
     """Get context window status for a conversation.
 
@@ -743,53 +748,23 @@ async def get_context_status(
     """
     try:
         assert request is not None
-        tenant_id = await _ensure_project_access(
+        authorized_tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
             project_id=project_id,
+            tenant_id=tenant_id,
         )
-        container = get_container_with_db(request, db)
-        llm = await create_llm_client(tenant_id)
-        use_case = container.get_conversation_use_case(llm)
-
-        conversation = await use_case.execute(
+        if authorized_tenant_id != tenant_id:
+            raise HTTPException(status_code=403, detail=_("Access denied"))
+        context_status = await conversation_context_status.service.get_context_status(
             conversation_id=conversation_id,
             project_id=project_id,
-            user_id=current_user.id,
+            tenant_id=authorized_tenant_id,
+            user_id=str(current_user.id),
         )
-        if not conversation:
+        if context_status is None:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
-
-        # Load cached context summary from conversation meta
-        adapter = container.context_summary_adapter()
-        summary = await adapter.get_summary(conversation_id)
-
-        result: dict[str, Any] = {
-            "conversation_id": conversation_id,
-            "message_count": conversation.message_count,
-            "has_summary": summary is not None,
-        }
-
-        if summary:
-            result.update(
-                {
-                    "summary_tokens": summary.summary_tokens,
-                    "messages_in_summary": summary.messages_covered_count,
-                    "compression_level": summary.compression_level,
-                    "from_cache": True,
-                }
-            )
-        else:
-            result.update(
-                {
-                    "summary_tokens": 0,
-                    "messages_in_summary": 0,
-                    "compression_level": "none",
-                    "from_cache": False,
-                }
-            )
-
-        return result
+        return context_status.to_dict()
 
     except HTTPException:
         raise

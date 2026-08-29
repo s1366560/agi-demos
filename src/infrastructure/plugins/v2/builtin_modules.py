@@ -82,6 +82,7 @@ from .conversation_access_services import conversation_access_service_definition
 from .conversation_collection_repository import conversation_collection_repository_definition_v2
 from .conversation_collection_services import conversation_collection_service_definitions_v2
 from .conversation_config_services import conversation_config_definition_v2
+from .conversation_context_status_services import conversation_context_status_definitions_v2
 from .conversation_enrichment_judge import conversation_enrichment_judge_definition_v2
 from .conversation_generation_services import conversation_generation_definition_v2
 from .cron_services import cron_service_definitions_v2
@@ -364,6 +365,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         skill_evolution_scheduler_definition_v2(),
         *background_task_service_definitions_v2(),
         *conversation_access_service_definitions_v2(),
+        *conversation_context_status_definitions_v2(),
         conversation_collection_repository_definition_v2(),
         conversation_config_definition_v2(),
         conversation_enrichment_judge_definition_v2(),

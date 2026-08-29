@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:aec4385a1c4cdbcde4ba9c02a206191dfe0b34497b791231a6db0289b8817720",
+        "digest": "sha256:138e5f68354f343ef943ee99f89a010760f65fbe16a12a9ec416ebb43137d1cb",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -4008,6 +4008,37 @@
       "artifact": {
         "digest": "sha256:fd723b431db3ad157aeed4e5ebb0561bf23ab0a0519ae67da3a4f6686b276460",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_access_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/persistence/context-summary-provider",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_context_status_services:_apply_context_summary_provider_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:persistence.context-summary-provider",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "request-async-session", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:13bffbb2168f9c8b1efaadfeff2e0f35d4182ca86dad048bc103178f9fe331f5",
+      "artifact": {
+        "digest": "sha256:00e0ab3a20908fb93f4af309ff4d288e6b3edaf1ea096b65b15cabf0e09bbc28",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_context_status_services.py"
       }
     },
     {
@@ -8042,6 +8073,48 @@
       "artifact": {
         "digest": "sha256:21d55e605f0c12c9ff2c6efa962513be398cafdea976f1d9b0ec9f27f6a3aa07",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_config_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/application/conversation-context-status",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_context_status_services:_apply_conversation_context_status_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:application.conversation-context-status",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "conversation_access",
+              "service": "service:application.conversation-access",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "context_summaries",
+              "service": "service:persistence.context-summary-provider",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "operation-scoped-provider", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:a491ea5a02f19afeb8607af4b2f3b0ac3cc70e3cd71ccb24c850093082ff7e93",
+      "artifact": {
+        "digest": "sha256:00e0ab3a20908fb93f4af309ff4d288e6b3edaf1ea096b65b15cabf0e09bbc28",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_context_status_services.py"
       }
     },
     {
