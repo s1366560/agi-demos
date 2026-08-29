@@ -60,6 +60,9 @@ from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
 from src.infrastructure.adapters.secondary.persistence.database import (
     async_session_factory,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_deadline_reconciler_v2 import (
+    PlatformPluginDeadlineReconcilerV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PlatformPluginPublicationPolicyV2,
 )
@@ -190,6 +193,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
         container = initialize_container(redis_client=redis_client)
 
         app.state.container = container
+        deadline_reconciler = PlatformPluginDeadlineReconcilerV2(
+            session_factory=async_session_factory,
+        )
+        app.state.platform_plugin_deadline_reconciler_v2 = deadline_reconciler
+        deadline_reconciler.start()
     except Exception:
         await shutdown_plugin_runtime_v2(app)
         raise

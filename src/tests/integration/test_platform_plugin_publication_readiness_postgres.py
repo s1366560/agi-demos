@@ -313,6 +313,27 @@ async def test_late_ack_remains_ready_after_sessions_reopen(
             assert reopened.status is PublicationStatusV2.READY
 
 
+async def test_deadline_sweep_persists_timeout_without_read_query_in_postgres(
+    postgres_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with _published_case(
+        postgres_session_factory,
+        deadline_seconds=1,
+        already_expired=True,
+    ) as case:
+        async with postgres_session_factory() as session:
+            reconciled = await PlatformPluginRepositoryV2(session).reconcile_publication_deadlines(
+                now=datetime.now(UTC)
+            )
+            await session.commit()
+        assert reconciled == 1
+
+        async with postgres_session_factory() as session:
+            row = await session.get(PlatformPluginV2PublicationModel, case.publication_id)
+            assert row is not None
+            assert row.status == PublicationStatusV2.DEGRADED.value
+
+
 async def test_concurrent_receipt_api_replays_are_idempotent_in_postgres(
     postgres_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

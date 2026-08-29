@@ -212,6 +212,38 @@ class PlatformPluginRepositoryV2:
             )
         return await self._publication_readiness_row(publication, _utc_now_v2(now))
 
+    async def reconcile_publication_deadlines(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 100,
+    ) -> int:
+        """Persist terminal readiness for a bounded batch of overdue publications."""
+        if isinstance(limit, bool) or not 1 <= limit <= 1000:
+            raise ValueError("plugin v2 deadline reconciliation limit must be between 1 and 1000")
+        observed_at = _utc_now_v2(now)
+        result = await self._session.execute(
+            refresh_select_statement(
+                select(PlatformPluginV2PublicationModel)
+                .where(
+                    PlatformPluginV2PublicationModel.status
+                    == PublicationStatusV2.RECONCILING.value,
+                    PlatformPluginV2PublicationModel.ack_deadline_at <= observed_at,
+                )
+                .order_by(
+                    PlatformPluginV2PublicationModel.ack_deadline_at,
+                    PlatformPluginV2PublicationModel.requested_version,
+                    PlatformPluginV2PublicationModel.id,
+                )
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+        )
+        publications = list(result.scalars())
+        for publication in publications:
+            await self._refresh_publication_status(publication, observed_at)
+        return len(publications)
+
     async def republish_last_globally_ready(
         self,
         *,

@@ -317,6 +317,29 @@ async def test_v2_publication_timeout_degrades_then_late_ack_recovers(
 
 
 @pytest.mark.unit
+async def test_v2_deadline_sweep_persists_timeout_without_read_query(
+    db_session: AsyncSession,
+) -> None:
+    now = datetime(2026, 8, 22, 9, 15, tzinfo=UTC)
+    publication, _distribution = await _publication(generation=3, version=3)
+    repository = PlatformPluginRepositoryV2(db_session)
+    row = await repository.record_publication(
+        publication,
+        policy=PlatformPluginPublicationPolicyV2(
+            required_data_plane_ids=("rust-server",),
+            ack_deadline_seconds=30,
+        ),
+        now=now,
+    )
+
+    reconciled = await repository.reconcile_publication_deadlines(now=now + timedelta(seconds=30))
+
+    assert reconciled == 1
+    assert row.status == PublicationStatusV2.DEGRADED.value
+    assert row.status_updated_at == now + timedelta(seconds=30)
+
+
+@pytest.mark.unit
 async def test_v2_historical_readiness_uses_append_only_receipt_events(
     db_session: AsyncSession,
 ) -> None:

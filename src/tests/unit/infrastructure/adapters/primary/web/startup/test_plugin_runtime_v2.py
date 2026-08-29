@@ -24,6 +24,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2ApplyStateModel,
     PlatformPluginV2PublicationModel,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_deadline_reconciler_v2 import (
+    PlatformPluginDeadlineReconcilerV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginPublicationPolicyV2,
     PlatformPluginRepositoryV2,
@@ -40,6 +43,18 @@ from src.infrastructure.plugins.v2.http_routes import RouteDefinitionV2, RouteTa
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+
+
+@pytest.mark.unit
+async def test_shutdown_stops_publication_deadline_reconciler_without_runtime_host() -> None:
+    app = FastAPI()
+    deadline_reconciler = AsyncMock(spec=PlatformPluginDeadlineReconcilerV2)
+    app.state.platform_plugin_deadline_reconciler_v2 = deadline_reconciler
+
+    await shutdown_plugin_runtime_v2(app)
+
+    deadline_reconciler.stop.assert_awaited_once_with()
+    assert app.state.platform_plugin_deadline_reconciler_v2 is None
 
 
 @pytest.mark.unit

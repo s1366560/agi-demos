@@ -17,6 +17,9 @@ from src.domain.model.plugins.generated_v2 import (
     ScopeKindV2,
     ScopeV2,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_deadline_reconciler_v2 import (
+    PlatformPluginDeadlineReconcilerV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PlatformPluginPublicationPolicyV2,
 )
@@ -441,6 +444,14 @@ async def _record_startup_publication_v2(
 
 async def shutdown_plugin_runtime_v2(app: FastAPI) -> None:
     """Retire the current v2 generation and wait for Fiber disposal."""
+    deadline_reconciler = getattr(
+        app.state,
+        "platform_plugin_deadline_reconciler_v2",
+        None,
+    )
+    if isinstance(deadline_reconciler, PlatformPluginDeadlineReconcilerV2):
+        await deadline_reconciler.stop()
+        app.state.platform_plugin_deadline_reconciler_v2 = None
     host = getattr(app.state, "platform_plugin_runtime_v2", None)
     if not isinstance(host, PlatformPluginRuntimeHostV2):
         return
