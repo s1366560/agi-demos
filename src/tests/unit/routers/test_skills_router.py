@@ -664,16 +664,6 @@ async def test_project_skill_raw_id_routes_require_project_access(
         side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     )
     monkeypatch.setattr(router, "_ensure_project_skill_access", access_guard)
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     route_calls = {
         "get": lambda: router.get_skill(
             request=SimpleNamespace(),
@@ -762,6 +752,8 @@ async def test_project_skill_raw_id_routes_require_project_access(
             current_user=current_user,
             db=db,
             skill_repository=repo,
+            skill_version_repository=version_repository,
+            evolution_repository=_MemoryEvolutionRepository(db),
             plugin_config_repository=plugin_config_repository,
         ),
         "evolution_run": lambda: router.run_skill_evolution(
@@ -1295,22 +1287,14 @@ async def test_get_skill_evolution_returns_route_and_trigger_metadata(
             SimpleNamespace(tenant_id="tenant-1", skill_name="alpha-skill"),
         ],
     )
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     response = await router.get_skill_evolution(
         skill_id=skill.id,
         limit=20,
         db=db,
         tenant={"id": "tenant-1"},
         skill_repository=repo,
+        skill_version_repository=_MemoryVersionRepository(db),
+        evolution_repository=_MemoryEvolutionRepository(db),
         plugin_config_repository=_plugin_config_repository(),
     )
 
@@ -1417,11 +1401,6 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
             ),
         ],
     )
-    monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
-        _MemoryEvolutionRepository,
-    )
-
     response = await router.get_skill_evolution_overview(
         skill_limit=20,
         session_limit=20,
@@ -1429,6 +1408,7 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
         db=db,
         tenant={"id": "tenant-1"},
         current_user=SimpleNamespace(id="user-1"),
+        evolution_repository=_MemoryEvolutionRepository(db),
         plugin_config_repository=_plugin_config_repository(),
     )
 

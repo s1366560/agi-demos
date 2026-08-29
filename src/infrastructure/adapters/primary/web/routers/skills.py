@@ -51,6 +51,10 @@ from src.infrastructure.adapters.primary.web.plugin_config_http_application_auth
     plugin_config_http_application_authority_v2,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
+from src.infrastructure.adapters.primary.web.skill_evolution_http_application_authority_v2 import (
+    SkillEvolutionHttpApplicationAuthorityV2,
+    skill_evolution_http_application_authority_v2,
+)
 from src.infrastructure.adapters.primary.web.skill_repository_http_application_authority_v2 import (
     SkillRepositoryHttpApplicationAuthorityV2,
     skill_repository_http_application_authority_v2,
@@ -63,6 +67,9 @@ from src.infrastructure.plugins.v2.plugin_config_services import (
     PluginConfigRepositoryProtocolV2,
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.skill_evolution_repository_services import (
+    SkillEvolutionRepositoryProtocolV2,
+)
 from src.infrastructure.plugins.v2.skill_evolution_runtime import (
     SkillEvolutionSchedulerProtocolV2,
     current_skill_evolution_scheduler_v2,
@@ -168,6 +175,58 @@ async def _get_plugin_config_repository_v2(
 ) -> PluginConfigRepositoryProtocolV2:
     """Resolve plugin configuration persistence from the request-owned V2 authority."""
     return authority.repository
+
+
+async def _get_skill_evolution_authority_v2(
+    request: Request,
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AsyncIterator[SkillEvolutionHttpApplicationAuthorityV2]:
+    """Hold one pinned operation for every SkillEvolution repository dependency."""
+    async with skill_evolution_http_application_authority_v2(
+        request=request,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    ) as authority:
+        yield authority
+
+
+async def _get_skill_evolution_repository_v2(
+    authority: SkillEvolutionHttpApplicationAuthorityV2 = Depends(
+        _get_skill_evolution_authority_v2
+    ),
+) -> SkillEvolutionRepositoryProtocolV2:
+    """Resolve SkillEvolution persistence from the shared request operation."""
+    return authority.evolution_repository
+
+
+async def _get_skill_evolution_skill_repository_v2(
+    authority: SkillEvolutionHttpApplicationAuthorityV2 = Depends(
+        _get_skill_evolution_authority_v2
+    ),
+) -> SkillRepositoryPort:
+    """Resolve Skill persistence from the shared SkillEvolution operation."""
+    return authority.skill_repository
+
+
+async def _get_skill_evolution_version_repository_v2(
+    authority: SkillEvolutionHttpApplicationAuthorityV2 = Depends(
+        _get_skill_evolution_authority_v2
+    ),
+) -> SkillVersionRepositoryPort:
+    """Resolve SkillVersion persistence from the shared SkillEvolution operation."""
+    return authority.skill_version_repository
+
+
+async def _get_skill_evolution_plugin_config_repository_v2(
+    authority: SkillEvolutionHttpApplicationAuthorityV2 = Depends(
+        _get_skill_evolution_authority_v2
+    ),
+) -> PluginConfigRepositoryProtocolV2:
+    """Resolve PluginConfig persistence from the shared SkillEvolution operation."""
+    return authority.plugin_config_repository
 
 
 # === Pydantic Models ===
@@ -2421,17 +2480,16 @@ async def get_skill_evolution_overview(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
+    evolution_repository: SkillEvolutionRepositoryProtocolV2 = Depends(
+        _get_skill_evolution_repository_v2
+    ),
     plugin_config_repository: PluginConfigRepositoryProtocolV2 = Depends(
-        _get_plugin_config_repository_v2
+        _get_skill_evolution_plugin_config_repository_v2
     ),
 ) -> SkillEvolutionOverviewResponse:
     """Return tenant-wide evolution capture, scoring, and job state."""
-    from src.infrastructure.agent.plugins.skill_evolution.repository import (
-        SkillEvolutionRepository,
-    )
-
     tenant_id = _normalize_tenant_id(tenant)
-    repo = SkillEvolutionRepository(db)
+    repo = evolution_repository
     config = await _load_skill_evolution_config(plugin_config_repository, tenant_id)
     accessible_project_ids = await _accessible_skill_project_ids(
         db,
@@ -2659,19 +2717,18 @@ async def get_skill_evolution(
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
-    skill_repository: SkillRepositoryPort = Depends(_get_skill_repository_v2),
+    skill_repository: SkillRepositoryPort = Depends(_get_skill_evolution_skill_repository_v2),
+    skill_version_repository: SkillVersionRepositoryPort = Depends(
+        _get_skill_evolution_version_repository_v2
+    ),
+    evolution_repository: SkillEvolutionRepositoryProtocolV2 = Depends(
+        _get_skill_evolution_repository_v2
+    ),
     plugin_config_repository: PluginConfigRepositoryProtocolV2 = Depends(
-        _get_plugin_config_repository_v2
+        _get_skill_evolution_plugin_config_repository_v2
     ),
 ) -> SkillEvolutionDetailResponse:
     """Return trigger metadata, evolution jobs, and version route for a skill."""
-    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
-        SqlSkillVersionRepository,
-    )
-    from src.infrastructure.agent.plugins.skill_evolution.repository import (
-        SkillEvolutionRepository,
-    )
-
     tenant_id = _normalize_tenant_id(tenant)
     config = await _load_skill_evolution_config(plugin_config_repository, tenant_id)
     skill_repo = skill_repository
@@ -2683,10 +2740,10 @@ async def get_skill_evolution(
         skill=skill,
     )
 
-    version_repo = SqlSkillVersionRepository(db)
+    version_repo = skill_version_repository
     versions = await version_repo.list_by_skill(skill_id, limit=limit, offset=0)
 
-    evolution_repo = SkillEvolutionRepository(db)
+    evolution_repo = evolution_repository
     jobs = await evolution_repo.list_jobs(
         tenant_id=tenant_id,
         skill_name=skill.name,

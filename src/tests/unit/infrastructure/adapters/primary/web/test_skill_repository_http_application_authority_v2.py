@@ -138,7 +138,6 @@ def test_skill_handlers_resolve_repository_only_from_v2_authority() -> None:
         skills.import_skill_zip_package,
         skills.export_skill_package,
         skills.apply_skill_evolution_job,
-        skills.get_skill_evolution,
         skills.run_skill_evolution,
         skills.list_skill_versions,
         skills.get_skill_version,

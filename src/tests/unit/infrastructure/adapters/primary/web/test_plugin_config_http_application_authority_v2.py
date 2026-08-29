@@ -124,8 +124,6 @@ def test_config_handlers_resolve_repository_only_from_v2_authority() -> None:
     endpoints = (
         skills.get_skill_evolution_config,
         skills.update_skill_evolution_config,
-        skills.get_skill_evolution_overview,
-        skills.get_skill_evolution,
     )
     for endpoint in endpoints:
         parameter = signature(endpoint).parameters["plugin_config_repository"]
