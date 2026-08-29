@@ -26,11 +26,11 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.plugins.skill_evolution.config import (
         SkillEvolutionConfig,
     )
-    from src.infrastructure.agent.plugins.skill_evolution.repository import (
-        SkillEvolutionRepository,
-    )
     from src.infrastructure.agent.plugins.skill_evolution.skill_merger import (
         SkillMerger,
+    )
+    from src.infrastructure.plugins.v2.skill_evolution_repository_services import (
+        SkillEvolutionRepositoryProtocolV2,
     )
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ class EvolutionEngine:
         self,
         groups: dict[str, SkillSessionGroup],
         llm_client: LLMClient,
-        repo: SkillEvolutionRepository,
+        repo: SkillEvolutionRepositoryProtocolV2,
         *,
         tenant_id: str,
         project_id: str | None = None,
@@ -246,7 +246,7 @@ class EvolutionEngine:
     async def _apply_job(
         self,
         job: SkillEvolutionJob,
-        repo: SkillEvolutionRepository,
+        repo: SkillEvolutionRepositoryProtocolV2,
         *,
         tenant_id: str,
         project_id: str | None = None,
@@ -351,7 +351,7 @@ def _strip_json_payload(content: str) -> str:
 
 
 async def _get_existing_job_for_sessions(
-    repo: SkillEvolutionRepository,
+    repo: SkillEvolutionRepositoryProtocolV2,
     *,
     tenant_id: str,
     skill_name: str,

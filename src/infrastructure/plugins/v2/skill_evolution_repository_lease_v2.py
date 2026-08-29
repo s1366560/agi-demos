@@ -10,6 +10,8 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
+from src.domain.ports.repositories.skill_version_repository import SkillVersionRepositoryPort
 
 from .runtime import OperationContextV2, RuntimeV2Error
 from .skill_evolution_repository_services import (
@@ -17,6 +19,10 @@ from .skill_evolution_repository_services import (
     SkillEvolutionRepositoryApplicationResolverProtocolV2,
     SkillEvolutionRepositoryApplicationServicesV2,
     SkillEvolutionRepositoryProtocolV2,
+)
+from .skill_repository_services import (
+    SKILL_REPOSITORY_APPLICATION_SERVICE_V2,
+    SkillRepositoryApplicationResolverProtocolV2,
 )
 
 
@@ -26,6 +32,8 @@ class SkillEvolutionRepositoryAuthorityV2:
 
     operation: OperationContextV2
     repository: SkillEvolutionRepositoryProtocolV2
+    skill_repository: SkillRepositoryPort
+    skill_version_repository: SkillVersionRepositoryPort
 
 
 type SkillEvolutionRepositoryLeaseV2 = Callable[
@@ -108,9 +116,34 @@ async def lease_skill_evolution_repository_v2(
                 )
             services = _require_application_services_v2(resolver.resolve(operation))
             repository = _require_repository_v2(services.repository)
+            skill_resolver = operation.require(SKILL_REPOSITORY_APPLICATION_SERVICE_V2)
+            if not isinstance(
+                skill_resolver,
+                SkillRepositoryApplicationResolverProtocolV2,
+            ):
+                raise RuntimeV2Error(
+                    "invalid_skill_repository_application_resolver",
+                    "Resolved Skill application service has an invalid resolver",
+                )
+            skill_services = skill_resolver.resolve(operation)
+            if not isinstance(skill_services.repository, SkillRepositoryPort):
+                raise RuntimeV2Error(
+                    "invalid_skill_repository",
+                    "Skill application services returned an invalid repository",
+                )
+            if not isinstance(
+                skill_services.version_repository,
+                SkillVersionRepositoryPort,
+            ):
+                raise RuntimeV2Error(
+                    "invalid_skill_version_repository",
+                    "Skill application services returned an invalid version repository",
+                )
             yield SkillEvolutionRepositoryAuthorityV2(
                 operation=operation,
                 repository=repository,
+                skill_repository=skill_services.repository,
+                skill_version_repository=skill_services.version_repository,
             )
 
 

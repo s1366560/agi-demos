@@ -60,6 +60,8 @@ async def test_background_lease_pins_generation_tenant_operation_and_exact_sessi
             assert lease.operation.context.scope.kind is ScopeKindV2.TENANT
             assert lease.operation.context.scope.tenant_id == "tenant-a"
             assert lease.repository._session is db
+            assert lease.skill_repository._session is db
+            assert lease.skill_version_repository._session is db
             assert lease.operation.require(OPERATION_DB_SESSION_SERVICE_V2) is db
             assert lease.operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
                 "tenant_id": "tenant-a"

@@ -35,6 +35,7 @@ from .skill_evolution_repository_lease_v2 import lease_skill_evolution_repositor
 from .skill_evolution_repository_services import (
     SkillEvolutionRepositoryApplicationResolverProtocolV2,
 )
+from .skill_repository_services import SkillRepositoryApplicationResolverProtocolV2
 
 SKILL_EVOLUTION_RUNTIME_MODULE_V2 = "builtin://memstack/runtime/skill-evolution-scheduler"
 SKILL_EVOLUTION_RUNTIME_SERVICE_V2 = "service:runtime.skill-evolution-scheduler"
@@ -42,6 +43,7 @@ SKILL_EVOLUTION_SESSIONS_INJECT_V2 = "sessions"
 SKILL_EVOLUTION_LLM_CLIENTS_INJECT_V2 = "llm_clients"
 SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2 = "plugin_configs"
 SKILL_EVOLUTION_REPOSITORIES_INJECT_V2 = "repositories"
+SKILL_EVOLUTION_SKILLS_INJECT_V2 = "skills"
 
 _ENABLED_ENV_V2 = "SKILL_EVOLUTION_ENABLED"
 
@@ -295,6 +297,12 @@ def skill_evolution_scheduler_definition_v2(
                 "invalid_skill_evolution_repositories",
                 "Skill Evolution repositories inject has an invalid implementation",
             )
+        skills = context.require(SKILL_EVOLUTION_SKILLS_INJECT_V2)
+        if not isinstance(skills, SkillRepositoryApplicationResolverProtocolV2):
+            raise RuntimeV2Error(
+                "invalid_skill_evolution_skills",
+                "Skill Evolution Skill repositories inject has an invalid implementation",
+            )
         token = await runtime.acquire_generation(
             sessions=sessions,
             llm_clients=llm_clients,
@@ -345,6 +353,7 @@ __all__ = [
     "SKILL_EVOLUTION_RUNTIME_MODULE_V2",
     "SKILL_EVOLUTION_RUNTIME_SERVICE_V2",
     "SKILL_EVOLUTION_SESSIONS_INJECT_V2",
+    "SKILL_EVOLUTION_SKILLS_INJECT_V2",
     "AsyncSessionFactoryProviderProtocolV2",
     "SkillEvolutionPluginProtocolV2",
     "SkillEvolutionRuntimeBuilderV2",

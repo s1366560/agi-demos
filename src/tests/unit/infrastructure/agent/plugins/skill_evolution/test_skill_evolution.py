@@ -40,7 +40,11 @@ async def _empty_plugin_config_repository_lease(**_kwargs: object):
 
 @asynccontextmanager
 async def _empty_skill_evolution_repository_lease(**_kwargs: object):
-    yield SimpleNamespace(repository=MagicMock())
+    yield SimpleNamespace(
+        repository=MagicMock(),
+        skill_repository=MagicMock(),
+        skill_version_repository=MagicMock(),
+    )
 
 
 def _skill_evolution_repository_lease(repository: object):
@@ -53,11 +57,21 @@ def _skill_evolution_repository_lease(repository: object):
 
 @asynccontextmanager
 async def _direct_skill_evolution_repository_lease(*, db: object, **_kwargs: object):
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+        SqlSkillRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
+        SqlSkillVersionRepository,
+    )
     from src.infrastructure.agent.plugins.skill_evolution.repository import (
         SkillEvolutionRepository,
     )
 
-    yield SimpleNamespace(repository=SkillEvolutionRepository(db))
+    yield SimpleNamespace(
+        repository=SkillEvolutionRepository(db),
+        skill_repository=SqlSkillRepository(db),
+        skill_version_repository=SqlSkillVersionRepository(db),
+    )
 
 
 @pytest.mark.unit
@@ -1232,8 +1246,86 @@ class TestEvolutionScheduler:
             engine=MagicMock(),
             llm_client_lease=MagicMock(),
             plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=_empty_skill_evolution_repository_lease,
             session_factory=session_factory or MagicMock(),
         )
+
+    @pytest.mark.asyncio
+    async def test_cycle_uses_one_v2_repository_authority_without_static_constructors(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.aggregation import (
+            SkillSessionGroup,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.scheduler import (
+            EvolutionScheduler,
+        )
+
+        db = SimpleNamespace(commit=AsyncMock())
+        evolution_repository = SimpleNamespace(
+            get_unprocessed_sessions=AsyncMock(return_value=[]),
+            get_unscored_sessions=AsyncMock(return_value=[]),
+            cleanup_old_sessions=AsyncMock(return_value=0),
+        )
+        skill_repository = object()
+        skill_version_repository = object()
+        repository_leases: list[dict[str, object]] = []
+
+        @asynccontextmanager
+        async def session_factory():
+            yield db
+
+        @asynccontextmanager
+        async def repository_lease(**kwargs: object):
+            repository_leases.append(dict(kwargs))
+            yield SimpleNamespace(
+                repository=evolution_repository,
+                skill_repository=skill_repository,
+                skill_version_repository=skill_version_repository,
+            )
+
+        llm_client = object()
+
+        @asynccontextmanager
+        async def llm_client_lease(**_kwargs: object):
+            yield llm_client
+
+        summarizer = MagicMock()
+        judge = MagicMock()
+        aggregator = MagicMock()
+        aggregator.aggregate = AsyncMock(
+            return_value={"skill-a": SkillSessionGroup(skill_name="skill-a")}
+        )
+        engine = MagicMock(last_blocked_by_review_count=0)
+        engine.evolve_all = AsyncMock(return_value=[])
+        scheduler = EvolutionScheduler(
+            config=SkillEvolutionConfig(enabled=True),
+            summarizer=summarizer,
+            judge=judge,
+            aggregator=aggregator,
+            engine=engine,
+            llm_client_lease=llm_client_lease,
+            plugin_config_repository_lease=_empty_plugin_config_repository_lease,
+            skill_evolution_repository_lease=repository_lease,
+            session_factory=session_factory,
+        )
+
+        result = await scheduler.run_once(tenant_id="tenant-1")
+
+        assert result["groups"] == 1
+        assert repository_leases == [{"db": db, "tenant_id": "tenant-1"}]
+        aggregator.aggregate.assert_awaited_once_with(
+            evolution_repository,
+            tenant_id="tenant-1",
+            project_id=None,
+            filter_project_id=False,
+        )
+        engine.evolve_all.assert_awaited_once()
+        evolve_kwargs = engine.evolve_all.await_args.kwargs
+        assert evolve_kwargs["skill_repository"] is skill_repository
+        assert evolve_kwargs["skill_version_repository"] is skill_version_repository
+        source = getsource(EvolutionScheduler._execute_cycle)
+        assert "SkillEvolutionRepository(" not in source
+        assert "SqlSkillRepository(" not in source
+        assert "SqlSkillVersionRepository(" not in source
 
     @pytest.mark.asyncio
     async def test_capture_requests_are_coalesced_per_tenant_project_skill(self) -> None:

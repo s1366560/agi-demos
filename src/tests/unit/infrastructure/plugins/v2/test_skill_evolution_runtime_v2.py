@@ -35,7 +35,12 @@ from src.infrastructure.plugins.v2.skill_evolution_runtime import (
     SKILL_EVOLUTION_RUNTIME_MODULE_V2,
     SKILL_EVOLUTION_RUNTIME_SERVICE_V2,
     SKILL_EVOLUTION_SESSIONS_INJECT_V2,
+    SKILL_EVOLUTION_SKILLS_INJECT_V2,
     SkillEvolutionSchedulerRuntimeV2,
+)
+from src.infrastructure.plugins.v2.skill_repository_services import (
+    SKILL_REPOSITORY_APPLICATION_MODULE_V2,
+    SKILL_REPOSITORY_APPLICATION_SERVICE_V2,
 )
 
 pytestmark = pytest.mark.unit
@@ -266,6 +271,27 @@ async def test_skill_evolution_rejects_missing_repository_service_without_fallba
     assert "builtin-skill-evolution-scheduler" in str(error.value)
 
 
+async def test_skill_evolution_rejects_missing_skill_repository_service_without_fallback() -> None:
+    document = load_profile_document_v2(_PROFILE_PATH)
+    disabled = replace(
+        document,
+        entries=tuple(
+            replace(entry, enabled=False)
+            if entry.module_ref == SKILL_REPOSITORY_APPLICATION_MODULE_V2
+            else entry
+            for entry in document.entries
+        ),
+    )
+    manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    snapshot = compose_profile_v2(disabled, {manifest.plugin_id: manifest}, generation=150)
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
+
+    assert error.value.code == "missing_inject_provider"
+    assert "builtin-skill-evolution-scheduler" in str(error.value)
+
+
 async def test_skill_evolution_rejects_wrong_plugin_config_alias_before_loading() -> None:
     document = load_profile_document_v2(_PROFILE_PATH)
     broken = replace(
@@ -321,6 +347,7 @@ def test_skill_evolution_contract_and_static_authority_retirement_are_explicit()
         SKILL_EVOLUTION_PLUGIN_CONFIGS_INJECT_V2: PLUGIN_CONFIG_APPLICATION_SERVICE_V2,
         SKILL_EVOLUTION_REPOSITORIES_INJECT_V2: (SKILL_EVOLUTION_REPOSITORY_APPLICATION_SERVICE_V2),
         SKILL_EVOLUTION_SESSIONS_INJECT_V2: "service:persistence.async-session-factory",
+        SKILL_EVOLUTION_SKILLS_INJECT_V2: SKILL_REPOSITORY_APPLICATION_SERVICE_V2,
     }
     assert runtime_entry.restart_policy.value == "process-boundary"
     assert lifecycle_entry.inject == {

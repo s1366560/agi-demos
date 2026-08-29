@@ -5039,7 +5039,7 @@
       },
       "contract_digest": "sha256:07bfd150e3a537bd55dd8ec4f2d68be5486a9f8cdf3c706de20577f5bb96d196",
       "artifact": {
-        "digest": "sha256:8faec79e3c21e6a40e2f715c122022e425ffec4a7f50221ecef24a9fc10c45bb",
+        "digest": "sha256:3ec2c30cc3690428a40f359a4859116670f71ae2221b416455aa1a31531e55c8",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_repository_services.py"
       }
     },
@@ -5076,7 +5076,7 @@
       },
       "contract_digest": "sha256:93da255a1b0130a74d24a8b30afc700f91f7c8ba3414e0000de9e7503fe8859b",
       "artifact": {
-        "digest": "sha256:8faec79e3c21e6a40e2f715c122022e425ffec4a7f50221ecef24a9fc10c45bb",
+        "digest": "sha256:3ec2c30cc3690428a40f359a4859116670f71ae2221b416455aa1a31531e55c8",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_repository_services.py"
       }
     },
@@ -9943,6 +9943,11 @@
               "alias": "repositories",
               "service": "service:application.skill-evolution-repository",
               "version": "1.0.0"
+            },
+            {
+              "alias": "skills",
+              "service": "service:application.skill-repository",
+              "version": "1.0.0"
             }
           ]
         },
@@ -9959,9 +9964,9 @@
           }
         }
       },
-      "contract_digest": "sha256:a77d952464ccd0bfee106e91d4a9453926e3322ce4d2bb89ffaa0cc4bf7bfa1c",
+      "contract_digest": "sha256:f82b7609f4092641c08a22dbe8e98e715ea65d0fafd03581fdc3ef4e569a772c",
       "artifact": {
-        "digest": "sha256:81511b5402b7b8b09f759da3e85d808b5dbaeb59ec1ed5e17bd3eefd10c408b6",
+        "digest": "sha256:afafc00ad75422dfc011bdf79dd42740063b32aa199bafdbd48a068d9dd924a8",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_runtime.py"
       }
     },

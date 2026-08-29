@@ -119,6 +119,7 @@ class SkillEvolutionPlugin:
             engine=self.engine,
             llm_client_lease=llm_client_lease,
             plugin_config_repository_lease=plugin_config_repository_lease,
+            skill_evolution_repository_lease=skill_evolution_repository_lease,
             session_factory=session_factory,
         )
 

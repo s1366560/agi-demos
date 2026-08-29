@@ -37,6 +37,9 @@ if TYPE_CHECKING:
     from src.infrastructure.plugins.v2.plugin_config_repository_lease_v2 import (
         PluginConfigRepositoryLeaseV2,
     )
+    from src.infrastructure.plugins.v2.skill_evolution_repository_lease_v2 import (
+        SkillEvolutionRepositoryLeaseV2,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,7 @@ class EvolutionScheduler:
         engine: EvolutionEngine,
         llm_client_lease: LlmClientLease,
         plugin_config_repository_lease: PluginConfigRepositoryLeaseV2,
+        skill_evolution_repository_lease: SkillEvolutionRepositoryLeaseV2,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ) -> None:
         self._config = config
@@ -82,6 +86,7 @@ class EvolutionScheduler:
         self._engine = engine
         self._llm_client_lease = llm_client_lease
         self._plugin_config_repository_lease = plugin_config_repository_lease
+        self._skill_evolution_repository_lease = skill_evolution_repository_lease
         self._session_factory = session_factory
         self._task: asyncio.Task[None] | None = None
         self._run_lock = asyncio.Lock()
@@ -335,17 +340,6 @@ class EvolutionScheduler:
         }
 
         async with self._session_factory() as db:
-            from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-                SqlSkillRepository,
-            )
-            from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
-                SqlSkillVersionRepository,
-            )
-            from src.infrastructure.agent.plugins.skill_evolution.repository import (
-                SkillEvolutionRepository,
-            )
-
-            repo = SkillEvolutionRepository(db)
             run_config = await _load_tenant_config(
                 self._plugin_config_repository_lease,
                 db,
@@ -356,9 +350,16 @@ class EvolutionScheduler:
             self._judge._config = run_config
             self._aggregator._config = run_config
             self._engine._config = run_config
-            skill_repo = SqlSkillRepository(db)
-            skill_version_repo = SqlSkillVersionRepository(db)
-            async with self._llm_client_lease(db=db, tenant_id=tenant_id) as llm_client:
+            async with (
+                self._skill_evolution_repository_lease(
+                    db=db,
+                    tenant_id=tenant_id,
+                ) as repository_authority,
+                self._llm_client_lease(db=db, tenant_id=tenant_id) as llm_client,
+            ):
+                repo = repository_authority.repository
+                skill_repo = repository_authority.skill_repository
+                skill_version_repo = repository_authority.skill_version_repository
                 # Stage 1: Summarize unprocessed sessions
                 unprocessed = await repo.get_unprocessed_sessions(
                     tenant_id=tenant_id,

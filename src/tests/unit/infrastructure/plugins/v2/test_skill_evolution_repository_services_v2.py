@@ -121,6 +121,18 @@ async def test_provider_fails_closed_without_async_session() -> None:
 
 def test_repository_protocol_requires_status_mutation_authority() -> None:
     read_only_repository = SimpleNamespace(
+        save_session=AsyncMock(),
+        get_conversation_trace_events=AsyncMock(),
+        get_unprocessed_sessions=AsyncMock(),
+        get_unscored_sessions=AsyncMock(),
+        update_summary=AsyncMock(),
+        update_scores=AsyncMock(),
+        get_sessions_by_skill=AsyncMock(),
+        get_scored_sessions_grouped_by_skill=AsyncMock(),
+        cleanup_old_sessions=AsyncMock(),
+        save_job=AsyncMock(),
+        has_job_for_sessions=AsyncMock(),
+        get_job_for_sessions=AsyncMock(),
         get_job=AsyncMock(),
         list_jobs=AsyncMock(),
         count_sessions_by_skill=AsyncMock(),

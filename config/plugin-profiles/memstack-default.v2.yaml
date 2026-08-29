@@ -4019,6 +4019,7 @@ profile:
         llm_clients: service:llm.tenant-client-factory
         plugin_configs: service:application.plugin-config-repository
         repositories: service:application.skill-evolution-repository
+        skills: service:application.skill-repository
       isolate: {}
       scope:
         kind: root

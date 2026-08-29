@@ -49,6 +49,97 @@ class SkillEvolutionRepositoryProtocolV2(Protocol):
         session: SkillEvolutionSession,
     ) -> SkillEvolutionSession: ...
 
+    async def get_conversation_trace_events(
+        self,
+        *,
+        conversation_id: str,
+        limit: int = 120,
+    ) -> list[dict[str, object]]: ...
+
+    async def get_unprocessed_sessions(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        min_skill_sessions: int = 1,
+        limit: int = 50,
+    ) -> list[SkillEvolutionSession]: ...
+
+    async def get_unscored_sessions(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        min_skill_sessions: int = 1,
+        limit: int = 50,
+    ) -> list[SkillEvolutionSession]: ...
+
+    async def update_summary(
+        self,
+        session_id: str,
+        *,
+        trajectory: dict[str, object],
+        summary: str,
+    ) -> None: ...
+
+    async def update_scores(
+        self,
+        session_id: str,
+        *,
+        judge_scores: dict[str, object],
+        overall_score: float,
+    ) -> None: ...
+
+    async def get_sessions_by_skill(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        min_score: float | None = None,
+        limit: int = 100,
+    ) -> list[SkillEvolutionSession]: ...
+
+    async def get_scored_sessions_grouped_by_skill(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        min_sessions: int = 5,
+        min_avg_score: float = 0.6,
+    ) -> list[dict[str, object]]: ...
+
+    async def cleanup_old_sessions(self, *, retention_days: int = 30) -> int: ...
+
+    async def save_job(self, job: SkillEvolutionJob) -> SkillEvolutionJob: ...
+
+    async def has_job_for_sessions(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        session_ids: list[str],
+    ) -> bool: ...
+
+    async def get_job_for_sessions(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        session_ids: list[str],
+        excluded_statuses: set[str] | None = None,
+    ) -> SkillEvolutionJob | None: ...
+
     async def update_job_status(
         self,
         job_id: str,
