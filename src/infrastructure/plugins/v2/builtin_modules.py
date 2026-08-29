@@ -112,6 +112,7 @@ from .llm_health_runtime import llm_health_runtime_definition_v2
 from .mcp_services import mcp_service_definitions_v2
 from .memory_services import memory_service_definitions_v2
 from .notification_services import notification_service_definitions_v2
+from .plugin_config_services import plugin_config_service_definitions_v2
 from .project_access_services import project_access_definitions_v2
 from .project_tenant_services import project_tenant_service_definitions_v2
 from .redis_runtime import RedisRuntimeFactoryV2, redis_runtime_definition_v2
@@ -380,6 +381,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         docker_event_monitor_definition_v2(),
         llm_health_runtime_definition_v2(),
         skill_evolution_scheduler_definition_v2(),
+        *plugin_config_service_definitions_v2(),
         *skill_repository_service_definitions_v2(),
         *background_task_service_definitions_v2(),
         *conversation_access_service_definitions_v2(),

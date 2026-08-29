@@ -229,6 +229,14 @@ class _MemoryVersionRepository:
         return len([version for version in self._db.versions if version.skill_id == skill_id])
 
 
+def _plugin_config_repository(config: dict[str, object] | None = None) -> SimpleNamespace:
+    row = SimpleNamespace(config=config) if config is not None else None
+    return SimpleNamespace(
+        get_by_tenant_and_plugin=AsyncMock(return_value=row),
+        upsert=AsyncMock(),
+    )
+
+
 class _MemoryEvolutionRepository:
     def __init__(self, db: SimpleNamespace) -> None:
         self._db = db
@@ -650,6 +658,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
         evolution_sessions=[],
     )
     version_repository = _MemoryVersionRepository(db)
+    plugin_config_repository = _plugin_config_repository()
     current_user = SimpleNamespace(id="user-1")
     access_guard = AsyncMock(
         side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
@@ -753,6 +762,7 @@ async def test_project_skill_raw_id_routes_require_project_access(
             current_user=current_user,
             db=db,
             skill_repository=repo,
+            plugin_config_repository=plugin_config_repository,
         ),
         "evolution_run": lambda: router.run_skill_evolution(
             skill_id=skill.id,
@@ -1301,6 +1311,7 @@ async def test_get_skill_evolution_returns_route_and_trigger_metadata(
         db=db,
         tenant={"id": "tenant-1"},
         skill_repository=repo,
+        plugin_config_repository=_plugin_config_repository(),
     )
 
     assert response.skill_name == "alpha-skill"
@@ -1418,6 +1429,7 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
         db=db,
         tenant={"id": "tenant-1"},
         current_user=SimpleNamespace(id="user-1"),
+        plugin_config_repository=_plugin_config_repository(),
     )
 
     assert response.stats.total_sessions == 2
@@ -1850,10 +1862,38 @@ async def test_update_skill_evolution_config_requires_tenant_admin(
             db=db,
             tenant={"id": "tenant-1"},
             current_user=SimpleNamespace(id="user-1"),
+            plugin_config_repository=_plugin_config_repository(),
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
     db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_update_skill_evolution_config_uses_v2_repository_and_handler_commit() -> None:
+    db = SimpleNamespace(commit=AsyncMock())
+    repository = _plugin_config_repository({"enabled": False, "publish_mode": "review"})
+
+    response = await router.update_skill_evolution_config(
+        payload=router.SkillEvolutionConfigUpdateRequest(enabled=True, publish_mode="direct"),
+        db=db,
+        tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+        plugin_config_repository=repository,
+    )
+
+    assert response.enabled is True
+    assert response.publish_mode == "direct"
+    repository.get_by_tenant_and_plugin.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        plugin_name="skill_evolution",
+    )
+    repository.upsert.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        plugin_name="skill_evolution",
+        config=response.model_dump(),
+    )
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.unit
