@@ -92,7 +92,12 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-workbench-surface"
     )
-    assert len(entries) == 314
+    session_canvas_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-session-canvas-surface"
+    )
+    assert len(entries) == 319
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -103,13 +108,31 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
             "schema_version": 1,
         },
     }
-    assert shell_index < workbench_index
+    assert shell_index < session_canvas_index < workbench_index
     assert entries[shell_index]["config"] == {
         "id": "desktop.authenticated-shell-surface",
         "kind": "ui-slot",
         "order": 80,
         "payload": {
-            "artifact_refs": ["desktop.ui-slots.authenticated-shell-surface.v1"],
+            "artifact_refs": ["desktop.ui-slots.authenticated-shell-surface.v2"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[session_canvas_index]["config"] == {
+        "id": "desktop.session-canvas-surface",
+        "kind": "ui-slot",
+        "order": 85,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.session-canvas-surface.v1"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[workbench_index]["config"] == {
+        "id": "desktop.workbench-surface",
+        "kind": "ui-slot",
+        "order": 90,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.workbench-surface.v2"],
             "schema_version": 1,
         },
     }

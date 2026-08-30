@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Cross2Icon, GlobeIcon, LayoutIcon, ReaderIcon } from '@radix-ui/react-icons';
 
@@ -12,16 +12,22 @@ import type {
   SessionRunAction,
 } from '../session/sessionViewModel';
 import type { SessionCanvasControls } from '../session/workspaceReviewPanelModel';
+import { DesktopRendererSessionCanvasV2 } from '../../plugins/DesktopRendererSessionCanvasV2';
+import type { DesktopSessionCanvasInputV2 } from '../../plugins/DesktopSessionCanvasSurfaceV2';
 import './DesktopRightSidebar.css';
 
 export type DesktopRightPanel = 'context' | 'canvas' | 'browser';
+
+export type DesktopRightSidebarCanvasV2 =
+  | Readonly<{ kind: 'available'; input: DesktopSessionCanvasInputV2 }>
+  | Readonly<{ kind: 'unavailable' }>;
 
 const RIGHT_SIDEBAR_WIDTH_STORAGE_KEY = 'agistack.desktop.rightSidebarWidth';
 const RIGHT_SIDEBAR_WIDTH_CONSTRAINTS = { min: 220, max: 520, default: 280 } as const;
 
 type DesktopRightSidebarProps = {
   activePanel: DesktopRightPanel;
-  canvasAvailable: boolean;
+  canvas: DesktopRightSidebarCanvasV2;
   viewModel: SessionDetailViewModel | null;
   runActionPending: SessionRunAction | null;
   onRunAction: (action: SessionRunAction, feedback?: string) => void;
@@ -29,7 +35,6 @@ type DesktopRightSidebarProps = {
   onSelectPanel: (panel: DesktopRightPanel) => void;
   onCloseCanvas: () => void;
   onClose: () => void;
-  renderCanvas: ((controls: SessionCanvasControls) => ReactNode) | null;
 };
 
 /**
@@ -41,7 +46,7 @@ type DesktopRightSidebarProps = {
  */
 export function DesktopRightSidebar({
   activePanel,
-  canvasAvailable,
+  canvas,
   viewModel,
   runActionPending,
   onRunAction,
@@ -49,7 +54,6 @@ export function DesktopRightSidebar({
   onSelectPanel,
   onCloseCanvas,
   onClose,
-  renderCanvas,
 }: DesktopRightSidebarProps) {
   const { t } = useI18n();
   const panelWidth = useResizablePanelWidth(
@@ -100,9 +104,9 @@ export function DesktopRightSidebar({
   };
 
   const canvasContent =
-    effectivePanel === 'canvas' && canvasAvailable && renderCanvas
-      ? renderCanvas(canvasControls)
-      : null;
+    effectivePanel === 'canvas' && canvas.kind === 'available' ? (
+      <DesktopRendererSessionCanvasV2 input={canvas.input} controls={canvasControls} />
+    ) : null;
 
   const panelTitle =
     effectivePanel === 'canvas'
@@ -167,7 +171,7 @@ export function DesktopRightSidebar({
           aria-label={t('rightbar.canvas')}
           aria-pressed={effectivePanel === 'canvas'}
           title={t('rightbar.canvas')}
-          disabled={!canvasAvailable || viewModel === null}
+          disabled={canvas.kind === 'unavailable' || viewModel === null}
           onClick={() => onSelectPanel('canvas')}
         >
           <LayoutIcon />

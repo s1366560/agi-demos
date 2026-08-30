@@ -302,7 +302,11 @@ test('right sidebar hosts the context rail and canvas behind an activity bar', (
   // context/canvas stay session-scoped, browser does not.
   assert.match(rightSidebarSource, /desktop-right-activity-bar/);
   assert.equal((rightSidebarSource.match(/aria-pressed=\{effectivePanel ===/g) ?? []).length, 3);
-  assert.match(rightSidebarSource, /disabled=\{!canvasAvailable \|\| viewModel === null\}/);
+  assert.match(
+    rightSidebarSource,
+    /disabled=\{canvas\.kind === 'unavailable' \|\| viewModel === null\}/,
+  );
+  assert.match(rightSidebarSource, /<DesktopRendererSessionCanvasV2/u);
   assert.match(rightSidebarSource, /<SessionContextRail/);
   assert.match(rightSidebarSource, /<BrowserPanel/);
   // Canvas layout maps to panel width: focus widens, split restores default.

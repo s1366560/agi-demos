@@ -78,6 +78,7 @@ import { resolveNativeOAuthResumePath } from './features/auth/nativeOAuthSession
 import type { ChatWorkflowTarget } from './features/chat/ChatWorkflowStrip';
 import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuthorityStateV2';
 import type { DesktopAuthenticatedShellViewModelV2 } from './plugins/DesktopAuthenticatedShellSurfaceV2';
+import type { DesktopSessionCanvasInputV2 } from './plugins/DesktopSessionCanvasSurfaceV2';
 import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRendererAppCompositionV2';
 import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
 import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
@@ -151,6 +152,7 @@ import {
   type ArtifactVersionAction,
 } from './features/session/sessionArtifactModel';
 import {
+  chatWorkflowTargetForReviewTab,
   defaultSessionCanvasTab,
   shouldShowSessionCanvas,
   type SessionCanvasTabId,
@@ -203,7 +205,6 @@ import {
   respondableHitlRequestsForProjection,
   type SessionRunAction,
 } from './features/session/sessionViewModel';
-import { type SessionCanvasControls } from './features/session/workspaceReviewPanelModel';
 import { socketEventMatchesSessionScope } from './features/session/sessionScope';
 import { sessionActivityPresence } from './features/session/sessionNarrativeModel';
 import {
@@ -457,10 +458,6 @@ import {
   type RuntimeHealthState,
   type RuntimeTarget,
 } from './features/runtime/runStatusModel';
-import {
-  WorkspaceReviewPanel,
-  chatWorkflowTargetForReviewTab,
-} from './features/session/WorkspaceReviewPanel';
 import { useDesktopAuth } from './hooks/useDesktopAuth';
 import { useAgentConversation } from './hooks/useAgentConversation';
 
@@ -6372,104 +6369,103 @@ export function App() {
     />
   );
 
-  const renderWorkspaceReviewPanel = (sessionControls?: SessionCanvasControls) => (
-    <WorkspaceReviewPanel
-      activeTab={reviewTab}
-      socketEvents={workspaceEventInputs}
-      timelineItems={conversationTimeline.items}
-      artifacts={workspaceArtifacts}
-      artifactVersions={displaySessionProjection?.artifactVersions ?? []}
-      artifactCanvas={artifactCanvasState}
-      artifactClient={artifactApi}
-      mcpAppCanvas={mcpAppCanvasState}
-      mcpAppApi={api}
-      mcpAppProjectId={config.projectId}
-      mcpAppSandboxProxyUrl={desktopMCPAppSandboxProxyUrl(config.apiBaseUrl)}
-      onSendMCPAppMessage={(message) => sendChatMessage(message, [])}
-      artifactDeliveries={displaySessionProjection?.artifactDeliveries ?? []}
-      toolInvocations={displaySessionProjection?.toolInvocations ?? []}
-      currentRun={currentArtifactRun}
-      changeSnapshot={changeSnapshot}
-      changeSnapshotLoading={changeSnapshotLoading}
-      changeSnapshotError={changeSnapshotError}
-      changeScope={changeScope}
-      availableChangeScopes={availableChangeScopes}
-      changeReferences={runInputReferences}
-      changeComments={commentsForConversation(
-        changeCommentsByConversation,
-        changeSnapshot?.conversation_id,
-      )}
-      onAddChangeComment={handleAddChangeComment}
-      onRemoveChangeComment={handleRemoveChangeComment}
-      onSendChangeComments={handleSendChangeComments}
-      artifactActionPending={artifactActionPending}
-      terminal={terminal}
-      terminalBinding={terminalBinding}
-      terminalError={terminalProxy.error}
-      terminalLines={terminalProxy.lines}
-      terminalBusy={sandboxBusy}
-      terminalInteractiveCapability={terminalInteractiveCapability}
-      sandboxRuntime={sandboxRuntime}
-      capabilityMode={sessionDetailViewModel?.capabilityMode ?? 'unavailable'}
-      approvalRequests={displaySessionProjection?.pendingHitl ?? []}
-      currentPlan={displaySessionProjection?.currentPlan ?? null}
-      taskListPlanTasks={
-        displaySessionProjection?.planAuthority.kind === 'agent_task_list'
-          ? displaySessionProjection.tasks
-          : []
-      }
-      canResumeTaskListReview={
-        displaySessionProjection?.planAuthority.kind === 'agent_task_list' &&
-        sessionTaskListPlanRecovery?.canResume === true
-      }
-      sessionCapabilities={sessionProjection?.capabilities ?? null}
-      sessionPlanApprovalPending={sessionPlanApprovalPending}
-      respondableHitlRequestIds={respondableHitlRequestIds}
-      sessionDataAvailable={displaySessionProjection !== null}
-      authorityNotice={sessionAuthorityNotice}
-      onAuthorityAction={
-        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined
-      }
-      currentRunId={sessionDetailViewModel?.runId ?? null}
-      sessionViewModel={sessionDetailViewModel}
-      onRespondToHitl={respondToHitlWithSteering}
-      onApprovePlan={approveSessionPlan}
-      onResumeTaskListReview={resumeSessionTaskListReview}
-      onArtifactAction={handleArtifactAction}
-      onSelectArtifactCanvasTab={(artifactId) => {
-        setArtifactCanvasState((current) => {
-          const next = selectArtifactCanvasTab(current, artifactId);
-          artifactCanvasStateRef.current = next;
-          return next;
-        });
-      }}
-      onSelectMCPAppCanvasTab={(tabId) => {
-        setMCPAppCanvasState((current) => {
-          const next = selectMCPAppCanvasTab(current, tabId);
-          mcpAppCanvasStateRef.current = next;
-          return next;
-        });
-      }}
-      onCloseMCPAppCanvasTab={(tabId) => {
+  const desktopSessionCanvasInputV2: DesktopSessionCanvasInputV2 = {
+    actions: {
+      onAddChangeComment: handleAddChangeComment,
+      onApprovePlan: approveSessionPlan,
+      onArtifactAction: handleArtifactAction,
+      onAuthorityAction:
+        sessionProjectionState.status === 'error' ? invalidateSessionAuthority : undefined,
+      onChangeScope: setChangeScope,
+      onCloseMCPAppCanvasTab: (tabId) => {
         setMCPAppCanvasState((current) => {
           const next = closeMCPAppCanvasTab(current, tabId);
           mcpAppCanvasStateRef.current = next;
           return next;
         });
-      }}
-      onStartTerminal={() => void startTerminal()}
-      onTerminalInput={terminalProxy.sendInput}
-      onTerminalResize={terminalProxy.resize}
-      onRefreshChanges={() => void loadRunChanges()}
-      onChangeScope={setChangeScope}
-      onToggleChangeReference={(reference) =>
-        setRunInputReferences((current) => toggleRunInputReference(current, reference))
-      }
-      onOpenAgentSession={(conversationId) => void openAgentSession(conversationId)}
-      onTabChange={setReviewTab}
-      sessionControls={sessionControls}
-    />
-  );
+      },
+      onOpenAgentSession: (conversationId) => void openAgentSession(conversationId),
+      onRefreshChanges: () => void loadRunChanges(),
+      onRemoveChangeComment: handleRemoveChangeComment,
+      onRespondToHitl: respondToHitlWithSteering,
+      onResumeTaskListReview: resumeSessionTaskListReview,
+      onSelectArtifactCanvasTab: (artifactId) => {
+        setArtifactCanvasState((current) => {
+          const next = selectArtifactCanvasTab(current, artifactId);
+          artifactCanvasStateRef.current = next;
+          return next;
+        });
+      },
+      onSelectMCPAppCanvasTab: (tabId) => {
+        setMCPAppCanvasState((current) => {
+          const next = selectMCPAppCanvasTab(current, tabId);
+          mcpAppCanvasStateRef.current = next;
+          return next;
+        });
+      },
+      onSendChangeComments: handleSendChangeComments,
+      onSendMCPAppMessage: (message) => sendChatMessage(message, []),
+      onStartTerminal: () => void startTerminal(),
+      onTabChange: setReviewTab,
+      onTerminalInput: terminalProxy.sendInput,
+      onTerminalResize: terminalProxy.resize,
+      onToggleChangeReference: (reference) =>
+        setRunInputReferences((current) => toggleRunInputReference(current, reference)),
+    },
+    meta: {
+      artifactClient: artifactApi,
+      mcpAppApi: api,
+      mcpAppProjectId: config.projectId,
+      mcpAppSandboxProxyUrl: desktopMCPAppSandboxProxyUrl(config.apiBaseUrl),
+      sandboxRuntime,
+      terminalInteractiveCapability,
+    },
+    state: {
+      activeTab: reviewTab,
+      approvalRequests: displaySessionProjection?.pendingHitl ?? [],
+      artifactActionPending,
+      artifactCanvas: artifactCanvasState,
+      artifactDeliveries: displaySessionProjection?.artifactDeliveries ?? [],
+      artifacts: workspaceArtifacts,
+      artifactVersions: displaySessionProjection?.artifactVersions ?? [],
+      authorityNotice: sessionAuthorityNotice,
+      availableChangeScopes,
+      canResumeTaskListReview:
+        displaySessionProjection?.planAuthority.kind === 'agent_task_list' &&
+        sessionTaskListPlanRecovery?.canResume === true,
+      capabilityMode: sessionDetailViewModel?.capabilityMode ?? 'unavailable',
+      changeComments: commentsForConversation(
+        changeCommentsByConversation,
+        changeSnapshot?.conversation_id,
+      ),
+      changeReferences: runInputReferences,
+      changeScope,
+      changeSnapshot,
+      changeSnapshotError,
+      changeSnapshotLoading,
+      currentPlan: displaySessionProjection?.currentPlan ?? null,
+      currentRun: currentArtifactRun,
+      currentRunId: sessionDetailViewModel?.runId ?? null,
+      mcpAppCanvas: mcpAppCanvasState,
+      respondableHitlRequestIds,
+      sessionCapabilities: sessionProjection?.capabilities ?? null,
+      sessionDataAvailable: displaySessionProjection !== null,
+      sessionPlanApprovalPending,
+      sessionViewModel: sessionDetailViewModel,
+      socketEvents: workspaceEventInputs,
+      taskListPlanTasks:
+        displaySessionProjection?.planAuthority.kind === 'agent_task_list'
+          ? displaySessionProjection.tasks
+          : [],
+      terminal,
+      terminalBinding,
+      terminalBusy: sandboxBusy,
+      terminalError: terminalProxy.error,
+      terminalLines: terminalProxy.lines,
+      timelineItems: conversationTimeline.items,
+      toolInvocations: displaySessionProjection?.toolInvocations ?? [],
+    },
+  };
 
   const selectDesktopWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => {
     if (!showRuntimeConfig) return createWorkspaceWorkbenchViewV2();
@@ -6722,7 +6718,9 @@ export function App() {
               kind: 'visible',
               props: {
                 activePanel: activeRightPanel,
-                canvasAvailable: showReviewPanel,
+                canvas: showReviewPanel
+                  ? { kind: 'available', input: desktopSessionCanvasInputV2 }
+                  : { kind: 'unavailable' },
                 viewModel: sessionDetailViewModel,
                 runActionPending: sessionRunActionPending,
                 onRunAction: (action, feedback) =>
@@ -6731,9 +6729,6 @@ export function App() {
                 onSelectPanel: handleSelectRightPanel,
                 onCloseCanvas: handleCloseCanvas,
                 onClose: () => setRightSidebarOpen(false),
-                renderCanvas: showReviewPanel
-                  ? (controls) => renderWorkspaceReviewPanel(controls)
-                  : null,
               },
             }
           : { kind: 'hidden' },

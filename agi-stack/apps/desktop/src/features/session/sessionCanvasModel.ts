@@ -1,3 +1,5 @@
+import type { ReviewTab } from '../../appShellTypes';
+import type { ChatWorkflowTarget } from '../chat/ChatPanel';
 import type { SessionCapabilityMode } from './sessionViewModel';
 
 export type SessionCanvasTabId =
@@ -93,4 +95,12 @@ export function sessionCanvasTabs(mode: SessionCapabilityMode): SessionCanvasTab
     primary: [tabs.overview, tabs.plan, tabs.artifacts],
     secondary: [],
   };
+}
+
+export function chatWorkflowTargetForReviewTab(tab: ReviewTab): ChatWorkflowTarget {
+  if (tab === 'pull' || tab === 'checks') return 'pull';
+  if (tab === 'background' || tab === 'activity') return 'background';
+  if (tab === 'artifacts' || tab === 'apps') return 'artifacts';
+  if (tab === 'changes') return 'changes';
+  return 'plan';
 }

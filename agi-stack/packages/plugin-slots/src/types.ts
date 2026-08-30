@@ -11,6 +11,7 @@ export type UiSlotKind =
   | 'composer_action'
   | 'mcp_canvas'
   | 'authenticated_shell_surface'
+  | 'session_canvas_surface'
   | 'workbench_surface';
 
 export interface UiSlotDefinition {

@@ -5,8 +5,10 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
+  DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   projectDesktopAuthenticatedShellCompositionV2,
+  projectDesktopSessionCanvasCompositionV2,
   projectDesktopWorkbenchCompositionV2,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererCompositionPortV2.js');
 
@@ -28,12 +30,25 @@ const workbenchSlot = Object.freeze({
   permission: 'ui.workbench',
   sandbox: true,
 });
+const sessionCanvasSlot = Object.freeze({
+  pluginId: 'builtin-shell',
+  slot: 'session_canvas_surface',
+  id: 'session-canvas',
+  contract: 'ui-builtin:desktop-session-canvas-surface',
+  moduleRef: DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
+  permission: 'ui.session-canvas',
+  sandbox: true,
+});
 
 function authority(status = 'ready', slotDefinitions = [workbenchSlot]) {
   return Object.freeze({ status, slotDefinitions });
 }
 
-function composition({ shell = AuthenticatedShellSurface, workbench = WorkbenchSurface } = {}) {
+function composition({
+  sessionCanvas = SessionCanvasSurface,
+  shell = AuthenticatedShellSurface,
+  workbench = WorkbenchSurface,
+} = {}) {
   return Object.freeze({
     createAuthenticationRouteRegistry() {
       throw new Error('not used');
@@ -46,6 +61,11 @@ function composition({ shell = AuthenticatedShellSurface, workbench = WorkbenchS
         ? shell
         : null;
     },
+    resolveSessionCanvasSurface(definition) {
+      return definition.moduleRef === DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2
+        ? sessionCanvas
+        : null;
+    },
     resolveWorkbenchSurface(definition) {
       return definition.moduleRef === DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2 ? workbench : null;
     },
@@ -53,6 +73,10 @@ function composition({ shell = AuthenticatedShellSurface, workbench = WorkbenchS
 }
 
 function AuthenticatedShellSurface() {
+  return null;
+}
+
+function SessionCanvasSurface() {
   return null;
 }
 
@@ -167,6 +191,77 @@ test('authenticated shell composition rejects unavailable and wrong modules', ()
   );
   assert.deepEqual(
     projectDesktopAuthenticatedShellCompositionV2(authority('disabled', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_disabled',
+    }),
+  );
+});
+
+test('session canvas composition resolves one explicit active V2 surface contribution', () => {
+  assert.deepEqual(
+    projectDesktopSessionCanvasCompositionV2(
+      authority('ready', [sessionCanvasSlot]),
+      composition(),
+    ),
+    Object.freeze({ status: 'ready', Surface: SessionCanvasSurface }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionCanvasCompositionV2(authority('loading', []), composition()),
+    Object.freeze({ status: 'loading' }),
+  );
+});
+
+test('session canvas composition fails closed for missing, ambiguous, and wrong modules', () => {
+  assert.deepEqual(
+    projectDesktopSessionCanvasCompositionV2(authority('ready', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_session_canvas_contribution_missing',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionCanvasCompositionV2(
+      authority('ready', [sessionCanvasSlot, { ...sessionCanvasSlot, id: 'duplicate' }]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_session_canvas_contribution_ambiguous',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionCanvasCompositionV2(
+      authority('ready', [{ ...sessionCanvasSlot, moduleRef: 'builtin:wrong-session-canvas' }]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_session_canvas_module_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionCanvasCompositionV2(
+      authority('ready', [sessionCanvasSlot]),
+      composition({ sessionCanvas: null }),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_session_canvas_module_unavailable',
+    }),
+  );
+});
+
+test('session canvas composition preserves generation failure without static fallback', () => {
+  assert.deepEqual(
+    projectDesktopSessionCanvasCompositionV2(authority('unavailable', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionCanvasCompositionV2(authority('disabled', []), composition()),
     Object.freeze({
       status: 'unavailable',
       reasonCode: 'desktop_renderer_generation_disabled',

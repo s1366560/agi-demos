@@ -17,6 +17,7 @@ import {
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import { DesktopAuthenticatedShellSurfaceV2 } from './DesktopAuthenticatedShellSurfaceV2';
+import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
@@ -34,6 +35,7 @@ import {
 } from './desktopRendererArtifactCatalogV2';
 import {
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
+  DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   type DesktopRendererCompositionPortV2,
   type DesktopRendererWorkbenchSurfaceV2,
@@ -82,6 +84,8 @@ export function createDesktopRendererAppCompositionPortV2(
     },
     resolveAuthenticatedShellSurface: (definition: UiSlotDefinition) =>
       validAuthenticatedShellDefinitionV2(definition) ? DesktopAuthenticatedShellSurfaceV2 : null,
+    resolveSessionCanvasSurface: (definition: UiSlotDefinition) =>
+      validSessionCanvasDefinitionV2(definition) ? DesktopSessionCanvasSurfaceV2 : null,
     resolveWorkbenchSurface: (definition: UiSlotDefinition) =>
       validWorkbenchDefinitionV2(definition) ? DesktopWorkbenchSurfaceV2 : null,
   });
@@ -95,6 +99,18 @@ function validAuthenticatedShellDefinitionV2(definition: UiSlotDefinition): bool
     definition.contract === 'ui-builtin:desktop-authenticated-shell-surface' &&
     definition.moduleRef === DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.authenticated-shell' &&
+    definition.sandbox
+  );
+}
+
+function validSessionCanvasDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'session_canvas_surface' &&
+    definition.id === 'session-canvas' &&
+    definition.contract === 'ui-builtin:desktop-session-canvas-surface' &&
+    definition.moduleRef === DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.session-canvas' &&
     definition.sandbox
   );
 }
