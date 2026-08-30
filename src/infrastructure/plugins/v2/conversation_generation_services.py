@@ -35,6 +35,8 @@ CONVERSATION_GENERATION_ENRICHMENT_JUDGE_INJECT_V2 = "enrichment_judge"
 
 _OPERATION_IDENTITY_SERVICE_V2 = "service:operation.identity"
 _CONVERSATION_MESSAGE_ROLES = frozenset({"assistant", "user"})
+_DEFAULT_CONVERSATION_TITLES_V2 = frozenset({"New Chat", "New Conversation"})
+_INITIAL_TITLE_MAX_MESSAGE_COUNT_V2 = 4
 
 
 class ConversationGenerationSourceMissingV2(RuntimeError):
@@ -83,6 +85,20 @@ class ConversationGenerationServiceV2:
         conversation = await self._scoped_conversation(conversation_id)
         if conversation is None:
             return None
+        return await self._generate_title(conversation)
+
+    async def generate_initial_title(self, *, conversation_id: str) -> Conversation | None:
+        """Generate once for an early conversation that still has a default title."""
+        conversation = await self._scoped_conversation(conversation_id)
+        if conversation is None:
+            return None
+        if conversation.title not in _DEFAULT_CONVERSATION_TITLES_V2:
+            return None
+        if conversation.message_count > _INITIAL_TITLE_MAX_MESSAGE_COUNT_V2:
+            return None
+        return await self._generate_title(conversation)
+
+    async def _generate_title(self, conversation: Conversation) -> Conversation:
         raw_messages = await self.session_log.materialize_model_messages(
             conversation_id=conversation.id,
         )

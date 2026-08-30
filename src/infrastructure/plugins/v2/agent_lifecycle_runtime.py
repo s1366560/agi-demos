@@ -9,12 +9,13 @@ from typing import Any, Protocol, cast, runtime_checkable
 from src.infrastructure.agent.memory.runtime import MemoryRuntimeProtocol
 from src.infrastructure.audit.audit_log_service import get_audit_service
 
+from .agent_events import (
+    AGENT_AFTER_TURN_COMPLETE_EVENT_V2,
+    AGENT_BEFORE_PROMPT_BUILD_EVENT_V2,
+    AGENT_CONTEXT_OVERFLOW_EVENT_V2,
+    AGENT_SKILL_TOOL_OBSERVED_EVENT_V2,
+)
 from .runtime import ContextV2, PluginDefinitionV2, RuntimeV2Error, generated_contract_digest_v2
-
-AGENT_BEFORE_PROMPT_BUILD_EVENT_V2 = "agent.before_prompt_build"
-AGENT_CONTEXT_OVERFLOW_EVENT_V2 = "agent.context_overflow"
-AGENT_AFTER_TURN_COMPLETE_EVENT_V2 = "agent.after_turn_complete"
-AGENT_SKILL_TOOL_OBSERVED_EVENT_V2 = "agent.skill_tool_observed"
 
 MEMORY_LIFECYCLE_MODULE_V2 = "builtin://memstack/agent/memory-lifecycle"
 SKILL_EVOLUTION_LIFECYCLE_MODULE_V2 = "builtin://memstack/agent/skill-evolution-lifecycle"
@@ -221,12 +222,15 @@ def _apply_skill_evolution_lifecycle_v2(
 
 
 def agent_lifecycle_definitions_v2() -> tuple[PluginDefinitionV2, ...]:
+    from .conversation_title_lifecycle import conversation_title_lifecycle_definition_v2
+
     return (
         PluginDefinitionV2(
             module_ref=SKILL_EVOLUTION_LIFECYCLE_MODULE_V2,
             contract_digest=generated_contract_digest_v2(SKILL_EVOLUTION_LIFECYCLE_MODULE_V2),
             apply=_apply_skill_evolution_lifecycle_v2,
         ),
+        conversation_title_lifecycle_definition_v2(),
         PluginDefinitionV2(
             module_ref=MEMORY_LIFECYCLE_MODULE_V2,
             contract_digest=generated_contract_digest_v2(MEMORY_LIFECYCLE_MODULE_V2),

@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from datetime import UTC, datetime
+from inspect import getsource
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -55,6 +56,15 @@ def _build_service(
     return service
 
 
+def test_connect_chat_stream_has_no_title_generation_side_effect() -> None:
+    source = getsource(AgentService.connect_chat_stream)
+
+    assert "_handle_title_generation" not in source
+    assert "_trigger_title_generation" not in source
+    assert not hasattr(AgentService, "_handle_title_generation")
+    assert not hasattr(AgentService, "_trigger_title_generation")
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_connect_chat_stream_skips_db_replay_when_disabled() -> None:
@@ -90,7 +100,6 @@ async def test_connect_chat_stream_skips_db_replay_when_disabled() -> None:
 
     service._event_bus.stream_read = _stream_read
     service._read_delayed_events = AsyncMock(return_value=[])
-    service._handle_title_generation = AsyncMock()
 
     events = []
     async for event in service.connect_chat_stream(
@@ -188,7 +197,6 @@ async def test_connect_chat_stream_honors_cursor_without_db_replay() -> None:
 
     service._event_bus.stream_read = _stream_read
     service._read_delayed_events = AsyncMock(return_value=[])
-    service._handle_title_generation = AsyncMock()
 
     events = []
     async for event in service.connect_chat_stream(
@@ -244,7 +252,6 @@ async def test_connect_chat_stream_keeps_higher_cursor_than_replay() -> None:
     service._replay_db_events = AsyncMock(return_value=([], 31, 1, False))
     service._event_bus.stream_read = _stream_read
     service._read_delayed_events = AsyncMock(return_value=[])
-    service._handle_title_generation = AsyncMock()
 
     events = []
     async for event in service.connect_chat_stream(
@@ -312,7 +319,6 @@ async def test_connect_chat_stream_persists_live_tool_execution_records() -> Non
     service._replay_db_events = AsyncMock(return_value=([], 0, 0, False))
     service._event_bus.stream_read = _stream_read
     service._read_delayed_events = AsyncMock(return_value=[])
-    service._handle_title_generation = AsyncMock()
 
     events = []
     async for event in service.connect_chat_stream(
@@ -652,85 +658,6 @@ async def test_replay_db_events_repairs_task_update_for_wrong_conversation() -> 
         message_id="msg-1",
     )
     service._load_task_snapshot.assert_awaited_once_with("conv-1")
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_extract_first_user_message_scopes_event_lookup_to_conversation() -> None:
-    service = _build_service()
-    service._agent_execution_event_repo.get_events_by_message.return_value = [
-        SimpleNamespace(
-            event_type="user_message",
-            event_data={"content": "hello"},
-        )
-    ]
-
-    content = await service._extract_first_user_message("conv-1", "msg-1")
-
-    assert content == "hello"
-    service._agent_execution_event_repo.get_events_by_message.assert_awaited_once_with(
-        conversation_id="conv-1",
-        message_id="msg-1",
-    )
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_extract_title_seed_exchange_reads_user_and_assistant_message() -> None:
-    service = _build_service()
-    service._agent_execution_event_repo.get_events_by_message.return_value = [
-        SimpleNamespace(
-            event_type="user_message",
-            event_data={"content": "it still fails"},
-        ),
-        SimpleNamespace(
-            event_type="thought",
-            event_data={"content": "not title material"},
-        ),
-        SimpleNamespace(
-            event_type="assistant_message",
-            event_data={"content": "The traceback points to FastAPI dependency injection."},
-        ),
-    ]
-
-    user_message, assistant_message = await service._extract_title_seed_exchange(
-        "conv-1",
-        "msg-1",
-    )
-
-    assert user_message == "it still fails"
-    assert assistant_message == "The traceback points to FastAPI dependency injection."
-    service._agent_execution_event_repo.get_events_by_message.assert_awaited_once_with(
-        conversation_id="conv-1",
-        message_id="msg-1",
-    )
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_extract_title_seed_exchange_reads_typed_v2_admission() -> None:
-    service = _build_service()
-    service._agent_execution_event_repo.get_events_by_message.return_value = [
-        SimpleNamespace(
-            event_type="turn_admitted",
-            event_data={
-                "content": "typed title seed",
-                "model_message": {"role": "user", "content": "typed title seed"},
-            },
-        ),
-        SimpleNamespace(
-            event_type="assistant_message",
-            event_data={"content": "typed title response"},
-        ),
-    ]
-
-    user_message, assistant_message = await service._extract_title_seed_exchange(
-        "conv-1",
-        "msg-typed-v2",
-    )
-
-    assert user_message == "typed title seed"
-    assert assistant_message == "typed title response"
 
 
 @pytest.mark.unit

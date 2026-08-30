@@ -1,13 +1,10 @@
 """Conversation CRUD operations extracted from AgentService."""
 
-import asyncio
 import logging
-import re
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from src.domain.llm_providers.llm_types import LLMClient, Message as LLMMessage
 from src.domain.model.agent import (
     AgentExecutionEvent,
     Conversation,
@@ -26,9 +23,6 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
-
-_TITLE_PREFIX_RE = re.compile(r"^\s*(?:title|标题)\s*[:：]\s*", re.IGNORECASE)
-_TITLE_TRAILING_PUNCTUATION = "。！？.!?;；:："
 
 
 class ConversationManager:
@@ -195,96 +189,6 @@ class ConversationManager:
             len(title),
         )
         return conversation
-
-    async def generate_conversation_title(
-        self,
-        first_message: str,
-        llm: LLMClient,
-        assistant_response: str | None = None,
-    ) -> str:
-        """Generate a friendly, concise title for a conversation."""
-        user_snippet = first_message[:500]
-        assistant_snippet = (assistant_response or "")[:500]
-        exchange = f"User: {user_snippet}"
-        if assistant_snippet:
-            exchange = f"{exchange}\n\nAssistant: {assistant_snippet}"
-
-        prompt = f"""Generate a short, friendly title (max 50 characters) for a conversation that starts with this message:
-
-{exchange}
-
-Guidelines:
-- Be concise and descriptive
-- Use the user's language (English, Chinese, etc.)
-- Focus on the main topic or question
-- Maximum 50 characters
-- Return ONLY the title, no explanation
-- No quotes, no prefixes like "Title:", no punctuation at the end
-
-Title:"""
-
-        max_retries = 3
-        base_delay = 1.0
-
-        for attempt in range(max_retries):
-            try:
-                response = await llm.ainvoke(
-                    [
-                        LLMMessage.system(
-                            "You are a helpful assistant that generates concise conversation titles."
-                        ),
-                        LLMMessage.user(prompt),
-                    ]
-                )
-
-                title = self._normalize_generated_title(str(response.content or ""))
-                if not title:
-                    title = self._generate_fallback_title(first_message)
-
-                logger.info("Generated conversation title title_len=%d", len(title))
-                return title
-
-            except Exception as e:
-                logger.warning(
-                    "[generate_conversation_title] Attempt %d/%d failed: error_type=%s",
-                    attempt + 1,
-                    max_retries,
-                    type(e).__name__,
-                )
-
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2**attempt)
-                    logger.info(f"Retrying in {delay}s...")
-                    await asyncio.sleep(delay)
-                else:
-                    logger.error(f"All {max_retries} retries exhausted for title generation")
-                    return self._generate_fallback_title(first_message)
-
-        return "New Conversation"
-
-    def _normalize_generated_title(self, raw_title: str) -> str:
-        """Normalize an LLM-generated conversation title."""
-        title = raw_title.strip().strip('"').strip("'").strip()
-        title = _TITLE_PREFIX_RE.sub("", title).strip()
-        title = title.rstrip(_TITLE_TRAILING_PUNCTUATION).strip()
-
-        if len(title) > 50:
-            title = title[:47].rstrip() + "..."
-        return title
-
-    def _generate_fallback_title(self, first_message: str) -> str:
-        """Generate a fallback title from the first message when LLM fails."""
-        content = first_message.strip()
-
-        if len(content) > 40:
-            truncated = content[:40]
-            last_space = truncated.rfind(" ")
-            if last_space > 20:
-                truncated = truncated[:last_space]
-            content = truncated + "..."
-
-        logger.info("Using fallback title title_len=%d", len(content))
-        return content or "New Conversation"
 
     async def get_conversation_messages(
         self,

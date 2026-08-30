@@ -74,6 +74,17 @@ def _conversation() -> Conversation:
     )
 
 
+def _initial_conversation(
+    *,
+    title: str = "New Conversation",
+    message_count: int = 2,
+) -> Conversation:
+    conversation = _conversation()
+    conversation.title = title
+    conversation.message_count = message_count
+    return conversation
+
+
 def _service(
     *,
     conversation: Conversation | None,
@@ -256,6 +267,72 @@ async def test_generate_title_uses_ordered_session_log_and_structured_judge() ->
         ),
     )
     access.save_scoped_conversation.assert_awaited_once()
+
+
+async def test_generate_initial_title_updates_only_default_early_conversation() -> None:
+    conversation = _initial_conversation()
+    service, access, session_log, judge = _service(
+        conversation=conversation,
+        messages=[{"role": "user", "content": "Move title generation into V2"}],
+        judgment_value="V2 lifecycle title",
+    )
+
+    updated = await service.generate_initial_title(conversation_id=conversation.id)
+
+    assert updated is conversation
+    assert conversation.title == "V2 lifecycle title"
+    session_log.materialize_model_messages.assert_awaited_once_with(
+        conversation_id=conversation.id,
+    )
+    judge.judge.assert_awaited_once()
+    access.save_scoped_conversation.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("title", "message_count"),
+    [
+        ("Manually named", 2),
+        ("New Conversation", 5),
+        ("New Chat", 8),
+    ],
+)
+async def test_generate_initial_title_skips_custom_or_late_conversation(
+    title: str,
+    message_count: int,
+) -> None:
+    conversation = _initial_conversation(title=title, message_count=message_count)
+    service, access, session_log, judge = _service(
+        conversation=conversation,
+        messages=[{"role": "user", "content": "Must not be judged"}],
+        judgment_value="Unexpected title",
+    )
+
+    updated = await service.generate_initial_title(conversation_id=conversation.id)
+
+    assert updated is None
+    assert conversation.title == title
+    session_log.materialize_model_messages.assert_not_awaited()
+    judge.judge.assert_not_awaited()
+    access.save_scoped_conversation.assert_not_awaited()
+
+
+async def test_generate_initial_title_is_idempotent_after_first_success() -> None:
+    conversation = _initial_conversation()
+    service, access, session_log, judge = _service(
+        conversation=conversation,
+        messages=[{"role": "user", "content": "Generate once"}],
+        judgment_value="Generated once",
+    )
+
+    first = await service.generate_initial_title(conversation_id=conversation.id)
+    second = await service.generate_initial_title(conversation_id=conversation.id)
+
+    assert first is conversation
+    assert second is None
+    assert conversation.title == "Generated once"
+    assert session_log.materialize_model_messages.await_count == 1
+    assert judge.judge.await_count == 1
+    assert access.save_scoped_conversation.await_count == 1
 
 
 async def test_generate_summary_filters_ordered_session_log_for_structured_judge() -> None:

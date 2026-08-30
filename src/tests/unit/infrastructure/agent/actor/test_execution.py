@@ -113,6 +113,46 @@ async def test_publish_event_to_stream_redacts_sensitive_tool_output() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_title_generated_uses_standard_actor_stream_envelope() -> None:
+    redis_client = MagicMock()
+    redis_client.xadd = AsyncMock()
+    descriptor = {
+        "generation": 901,
+        "version": 901,
+        "digest": "a" * 64,
+    }
+
+    await execution._publish_event_to_stream(
+        conversation_id="conversation-a",
+        event={
+            "type": "title_generated",
+            "data": {
+                "conversation_id": "conversation-a",
+                "title": "Lifecycle title",
+                "plugin_generation": descriptor,
+                "operation_id": "ray-turn:message-a:conversation-title:child",
+                "parent_operation_id": "ray-turn:message-a",
+            },
+        },
+        message_id="message-a",
+        event_time_us=100,
+        event_counter=3,
+        redis_client=redis_client,
+    )
+
+    _stream_key, message = redis_client.xadd.await_args.args[:2]
+    payload = json.loads(message["data"])
+    assert payload["type"] == "title_generated"
+    assert payload["event_time_us"] == 100
+    assert payload["event_counter"] == 3
+    assert payload["message_id"] == "message-a"
+    assert payload["data"]["message_id"] == "message-a"
+    assert payload["data"]["plugin_generation"] == descriptor
+    assert payload["data"]["parent_operation_id"] == "ray-turn:message-a"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_resolve_chat_runtime_overrides_ignores_workspace_worker_overrides() -> None:
     """Workspace workers must use the selected agent definition as runtime authority."""
     request = ProjectChatRequest(

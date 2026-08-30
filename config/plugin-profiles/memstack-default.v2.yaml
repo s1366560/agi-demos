@@ -4056,6 +4056,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-conversation-title-lifecycle
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/agent/conversation-title-lifecycle
+      enabled: true
+      config: {}
+      inject:
+        sessions: service:persistence.async-session-factory
+        conversation_generation: service:application.conversation-generation
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-memory-lifecycle
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

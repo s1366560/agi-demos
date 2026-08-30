@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, cast, override, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.agent_service import AgentService
-from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.agent_repository import (
     AgentExecutionEventRepository,
     AgentExecutionRepository,
@@ -86,11 +85,7 @@ class SqlAgentTurnRepositoryFactoryV2:
 
 
 class AgentTurnServiceV2(AgentService):
-    """Native turn service whose title LLM remains generation injected."""
-
-    @override
-    async def _get_title_llm(self) -> LLMClient:
-        return self._llm
+    """Native turn service with no stream-consumer enrichment side effects."""
 
 
 @runtime_checkable

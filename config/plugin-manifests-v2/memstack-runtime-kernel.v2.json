@@ -4784,7 +4784,7 @@
       },
       "contract_digest": "sha256:1596d54d9666ffe28507fea0ed5de59a0b141bbffe00d076cf1fed9e3b03ff44",
       "artifact": {
-        "digest": "sha256:155fd126f5009c1a2ad70449a993f2edba819756b6c6d7ac07a618ebd3bc6c59",
+        "digest": "sha256:c77fbfe8ee27fc79889ae14a68f310d2600534c4eba651ff9bb80209fa29090c",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_recovery_stream_services.py"
       }
     },
@@ -4815,7 +4815,7 @@
       },
       "contract_digest": "sha256:68664cd7a56ddb25e75c2d55df30d89a86be1a07a67f3cb85e4f671310e2d3eb",
       "artifact": {
-        "digest": "sha256:2f152615047ed345d7de93c986066ff1c4ad20e0c5a31254c64c2d5e9b48dc66",
+        "digest": "sha256:d97e6c4f0a15f664153caf3c0e41c761d90ff3d3f67d4f60b598d8110f0a500f",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_turn_services.py"
       }
     },
@@ -4862,7 +4862,7 @@
       },
       "contract_digest": "sha256:8b1cab84c152f63f1159f266f6798137a24e8979c4004b01c72fc504ab93bdda",
       "artifact": {
-        "digest": "sha256:155fd126f5009c1a2ad70449a993f2edba819756b6c6d7ac07a618ebd3bc6c59",
+        "digest": "sha256:c77fbfe8ee27fc79889ae14a68f310d2600534c4eba651ff9bb80209fa29090c",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_recovery_stream_services.py"
       }
     },
@@ -4909,7 +4909,7 @@
       },
       "contract_digest": "sha256:c1a4c303223c4279469c2cffa142d3c8e216924b920b1d9b11bceabb4833a38c",
       "artifact": {
-        "digest": "sha256:2f152615047ed345d7de93c986066ff1c4ad20e0c5a31254c64c2d5e9b48dc66",
+        "digest": "sha256:d97e6c4f0a15f664153caf3c0e41c761d90ff3d3f67d4f60b598d8110f0a500f",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_turn_services.py"
       }
     },
@@ -9323,7 +9323,7 @@
       },
       "contract_digest": "sha256:23ac0f06872b9eedd8014e1e77c83d6a7d584776e8a5bb0e99359d588ee36572",
       "artifact": {
-        "digest": "sha256:686b80185824e267e9c0b4f303d49b3c52574e4dd56b1086fdccc1e48a665b4e",
+        "digest": "sha256:957956463f5c68d009849a490e54a81c6b9b2ad3c68702f2d5a06ae9ea8c483e",
         "source": "repo+python://src/infrastructure/plugins/v2/conversation_generation_services.py"
       }
     },
@@ -10066,8 +10066,58 @@
       },
       "contract_digest": "sha256:95503e10028c08a5e8e7996b787978fef5978d70183beed8145f12a9b9f3071d",
       "artifact": {
-        "digest": "sha256:4b14e599a9920cdfd33588afb0094e67b976a997ecae40fe31e5efda1eb24cbb",
+        "digest": "sha256:2ac45d2c2fdce18020152669fd712da73ff3b7a567ee02c1393e086bd5b7aa7e",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_lifecycle_runtime.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/agent/conversation-title-lifecycle",
+      "entrypoint": "src.infrastructure.plugins.v2.conversation_title_lifecycle:_apply_conversation_title_lifecycle_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [],
+          "requires": [
+            {
+              "alias": "sessions",
+              "service": "service:persistence.async-session-factory",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "conversation_generation",
+              "service": "service:application.conversation-generation",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": {
+          "emits": [],
+          "handles": [
+            {
+              "event": "agent.after_turn_complete",
+              "mode": "waterfall",
+              "payload_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object"
+              },
+              "result_schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object"
+              }
+            }
+          ]
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      },
+      "contract_digest": "sha256:940b513ed5973a3549ba48e0e20c961a1f458b26e66cf38d7c69a96dc67507c9",
+      "artifact": {
+        "digest": "sha256:145decb3c43bd58db2c3ebdf20e6d258ef1d244dabf68e5115b931b0a882462a",
+        "source": "repo+python://src/infrastructure/plugins/v2/conversation_title_lifecycle.py"
       }
     },
     {
@@ -10131,7 +10181,7 @@
       },
       "contract_digest": "sha256:31b0b61ff6c2abd808c54f9343b46cd4dabac3e69df0b547bd9ca12475ee5fc0",
       "artifact": {
-        "digest": "sha256:4b14e599a9920cdfd33588afb0094e67b976a997ecae40fe31e5efda1eb24cbb",
+        "digest": "sha256:2ac45d2c2fdce18020152669fd712da73ff3b7a567ee02c1393e086bd5b7aa7e",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_lifecycle_runtime.py"
       }
     },

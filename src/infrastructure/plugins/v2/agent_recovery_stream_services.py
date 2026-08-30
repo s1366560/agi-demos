@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, cast, override, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.agent_service import AgentService
-from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.agent_repository import (
     AgentExecutionEventRepository,
     AgentExecutionRepository,
@@ -88,11 +87,7 @@ class SqlAgentRecoveryStreamRepositoryFactoryV2:
 
 
 class AgentRecoveryStreamServiceV2(AgentService):
-    """Agent stream service whose title LLM remains generation injected."""
-
-    @override
-    async def _get_title_llm(self) -> LLMClient:
-        return self._llm
+    """Generation-owned Agent stream service for replay and recovery."""
 
 
 @runtime_checkable
