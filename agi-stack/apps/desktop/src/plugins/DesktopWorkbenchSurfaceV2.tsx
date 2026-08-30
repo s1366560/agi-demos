@@ -2,14 +2,15 @@ import type { ComponentProps } from 'react';
 
 import { ChatPanel } from '../features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from '../features/chat/PlatformPluginConversationSlots';
-import { MyWorkQueue } from '../features/my-work/MyWorkQueue';
 import { SessionWorkspace } from '../features/session/SessionWorkspace';
 import { NewThreadComposer } from '../features/task/NewThreadComposer';
 import { WorkspaceCollaborationCanvas } from '../features/workspace/WorkspaceCollaborationCanvas';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { useI18n } from '../i18n';
 import type { DesktopActivityInboxInputV2 } from './DesktopActivityInboxSurfaceV2';
+import type { DesktopMyWorkQueueInputV2 } from './DesktopMyWorkQueueSurfaceV2';
 import { DesktopRendererActivityInboxV2 } from './DesktopRendererActivityInboxV2';
+import { DesktopRendererMyWorkQueueV2 } from './DesktopRendererMyWorkQueueV2';
 
 type DesktopWorkbenchWorkspaceViewV2 = Readonly<{
   kind: 'workspace';
@@ -24,7 +25,7 @@ type DesktopWorkbenchChatViewV2 = Readonly<{
 
 type DesktopWorkbenchBoardViewV2 = Readonly<{
   kind: 'board';
-  queue: Readonly<ComponentProps<typeof MyWorkQueue>>;
+  myWorkQueue: DesktopMyWorkQueueInputV2;
 }>;
 
 type DesktopWorkbenchActivityViewV2 = Readonly<{
@@ -109,7 +110,7 @@ function renderDesktopWorkbenchViewV2(view: DesktopWorkbenchViewV2) {
         </>
       );
     case 'board':
-      return <MyWorkQueue {...view.queue} />;
+      return <DesktopRendererMyWorkQueueV2 input={view.myWorkQueue} />;
     case 'activity':
       return <DesktopRendererActivityInboxV2 input={view.activityInbox} />;
     case 'home':

@@ -6263,7 +6263,7 @@ export function App() {
 
   const createBoardWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
     kind: 'board',
-    queue: {
+    myWorkQueue: {
       items: dataset.myWork,
       error: dataset.myWorkError,
       loading: connection === 'loading' || myWorkRefreshing,

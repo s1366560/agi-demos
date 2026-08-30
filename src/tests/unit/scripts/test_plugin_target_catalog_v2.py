@@ -102,12 +102,17 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-activity-inbox-surface"
     )
+    my_work_queue_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-my-work-queue-surface"
+    )
     desktop_routes_index = next(
         index
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 320
+    assert len(entries) == 321
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -122,6 +127,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         shell_index
         < session_canvas_index
         < workbench_index
+        < my_work_queue_index
         < activity_inbox_index
         < desktop_routes_index
     )
@@ -149,6 +155,15 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         "order": 90,
         "payload": {
             "artifact_refs": ["desktop.ui-slots.workbench-surface.v2"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[my_work_queue_index]["config"] == {
+        "id": "desktop.my-work-queue-surface",
+        "kind": "ui-slot",
+        "order": 94,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.my-work-queue-surface.v1"],
             "schema_version": 1,
         },
     }

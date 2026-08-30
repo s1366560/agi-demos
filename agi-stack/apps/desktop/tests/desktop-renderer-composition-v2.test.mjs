@@ -6,10 +6,12 @@ const require = createRequire(import.meta.url);
 const {
   DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
+  DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   projectDesktopActivityInboxCompositionV2,
   projectDesktopAuthenticatedShellCompositionV2,
+  projectDesktopMyWorkQueueCompositionV2,
   projectDesktopSessionCanvasCompositionV2,
   projectDesktopWorkbenchCompositionV2,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererCompositionPortV2.js');
@@ -31,6 +33,15 @@ const authenticatedShellSlot = Object.freeze({
   contract: 'ui-builtin:desktop-authenticated-shell-surface',
   moduleRef: DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   permission: 'ui.authenticated-shell',
+  sandbox: true,
+});
+const myWorkQueueSlot = Object.freeze({
+  pluginId: 'builtin-shell',
+  slot: 'my_work_queue_surface',
+  id: 'my-work-queue',
+  contract: 'ui-builtin:desktop-my-work-queue-surface',
+  moduleRef: DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
+  permission: 'ui.my-work-queue',
   sandbox: true,
 });
 const workbenchSlot = Object.freeze({
@@ -58,6 +69,7 @@ function authority(status = 'ready', slotDefinitions = [workbenchSlot]) {
 
 function composition({
   activityInbox = ActivityInboxSurface,
+  myWorkQueue = MyWorkQueueSurface,
   sessionCanvas = SessionCanvasSurface,
   shell = AuthenticatedShellSurface,
   workbench = WorkbenchSurface,
@@ -79,6 +91,11 @@ function composition({
         ? shell
         : null;
     },
+    resolveMyWorkQueueSurface(definition) {
+      return definition.moduleRef === DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2
+        ? myWorkQueue
+        : null;
+    },
     resolveSessionCanvasSurface(definition) {
       return definition.moduleRef === DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2
         ? sessionCanvas
@@ -95,6 +112,10 @@ function AuthenticatedShellSurface() {
 }
 
 function ActivityInboxSurface() {
+  return null;
+}
+
+function MyWorkQueueSurface() {
   return null;
 }
 
@@ -355,6 +376,79 @@ test('activity inbox composition preserves generation failure without static fal
   );
   assert.deepEqual(
     projectDesktopActivityInboxCompositionV2(authority('disabled', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_disabled',
+    }),
+  );
+});
+
+test('My Work queue composition resolves one explicit active V2 surface contribution', () => {
+  assert.deepEqual(
+    projectDesktopMyWorkQueueCompositionV2(
+      authority('ready', [myWorkQueueSlot]),
+      composition(),
+    ),
+    Object.freeze({ status: 'ready', Surface: MyWorkQueueSurface }),
+  );
+  assert.deepEqual(
+    projectDesktopMyWorkQueueCompositionV2(authority('loading', []), composition()),
+    Object.freeze({ status: 'loading' }),
+  );
+});
+
+test('My Work queue composition fails closed for missing, ambiguous, and wrong modules', () => {
+  assert.deepEqual(
+    projectDesktopMyWorkQueueCompositionV2(authority('ready', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_my_work_queue_contribution_missing',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopMyWorkQueueCompositionV2(
+      authority('ready', [myWorkQueueSlot, { ...myWorkQueueSlot, id: 'duplicate' }]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_my_work_queue_contribution_ambiguous',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopMyWorkQueueCompositionV2(
+      authority('ready', [
+        { ...myWorkQueueSlot, moduleRef: 'builtin:wrong-my-work-queue' },
+      ]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_my_work_queue_module_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopMyWorkQueueCompositionV2(
+      authority('ready', [myWorkQueueSlot]),
+      composition({ myWorkQueue: null }),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_my_work_queue_module_unavailable',
+    }),
+  );
+});
+
+test('My Work queue composition preserves generation failure without static fallback', () => {
+  assert.deepEqual(
+    projectDesktopMyWorkQueueCompositionV2(authority('unavailable', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopMyWorkQueueCompositionV2(authority('disabled', []), composition()),
     Object.freeze({
       status: 'unavailable',
       reasonCode: 'desktop_renderer_generation_disabled',

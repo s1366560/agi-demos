@@ -11,6 +11,7 @@ const {
   DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
+  DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_AGENT_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2,
@@ -40,6 +41,9 @@ const {
 const {
   createDesktopRendererAppCompositionPortV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererAppCompositionV2.js");
+const {
+  DesktopMyWorkQueueSurfaceV2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopMyWorkQueueSurfaceV2.js");
 const {
   isDesktopNavigationRouteEnabledV2,
   projectDesktopNavigationRegistryV2,
@@ -106,6 +110,34 @@ const appComposition = createDesktopRendererAppCompositionPortV2({
   setSettingsWindowOpen: () => undefined,
   settingsRouteCloseNavigationRef: { current: null },
   commitRuntimeConfig: () => undefined,
+});
+
+test("My Work queue resolver requires the exact builtin V2 slot contract", () => {
+  const definition = Object.freeze({
+    pluginId: "builtin-shell",
+    slot: "my_work_queue_surface",
+    id: "my-work-queue",
+    contract: "ui-builtin:desktop-my-work-queue-surface",
+    moduleRef: "builtin:desktop-my-work-queue-surface",
+    permission: "ui.my-work-queue",
+    sandbox: true,
+  });
+
+  assert.equal(
+    appComposition.resolveMyWorkQueueSurface(definition),
+    DesktopMyWorkQueueSurfaceV2,
+  );
+  for (const invalid of [
+    { ...definition, pluginId: "third-party-shell" },
+    { ...definition, slot: "workbench_surface" },
+    { ...definition, id: "wrong-my-work-queue" },
+    { ...definition, contract: "ui-builtin:wrong-my-work-queue-surface" },
+    { ...definition, moduleRef: "builtin:wrong-my-work-queue-surface" },
+    { ...definition, permission: "ui.wrong-my-work-queue" },
+    { ...definition, sandbox: false },
+  ]) {
+    assert.equal(appComposition.resolveMyWorkQueueSurface(invalid), null);
+  }
 });
 
 test("desktop V2 UI-slot artifacts reject runtime signed module references", () => {
@@ -282,16 +314,22 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       300,
     ),
     contribution(
+      "desktop.my-work-queue-surface",
+      "ui-slot",
+      [DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2],
+      301,
+    ),
+    contribution(
       "desktop.activity-inbox-surface",
       "ui-slot",
       [DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2],
-      301,
+      302,
     ),
     contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
-      302,
+      303,
     ),
   ]);
 
@@ -324,6 +362,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
+      [DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
@@ -663,6 +702,17 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
   assert.deepEqual(artifacts[26].slotDefinitions, [
     {
       pluginId: "builtin-shell",
+      slot: "my_work_queue_surface",
+      id: "my-work-queue",
+      contract: "ui-builtin:desktop-my-work-queue-surface",
+      moduleRef: "builtin:desktop-my-work-queue-surface",
+      permission: "ui.my-work-queue",
+      sandbox: true,
+    },
+  ]);
+  assert.deepEqual(artifacts[27].slotDefinitions, [
+    {
+      pluginId: "builtin-shell",
       slot: "activity_inbox_surface",
       id: "activity-inbox",
       contract: "ui-builtin:desktop-activity-inbox-surface",
@@ -671,9 +721,9 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.equal(artifacts[27].slotDefinitions.length, 2);
+  assert.equal(artifacts[28].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[27].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[28].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

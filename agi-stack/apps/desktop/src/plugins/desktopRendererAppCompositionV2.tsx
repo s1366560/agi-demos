@@ -18,6 +18,7 @@ import type { DesktopRouteModule } from '../features/navigation/desktopRouteModu
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import { DesktopActivityInboxSurfaceV2 } from './DesktopActivityInboxSurfaceV2';
 import { DesktopAuthenticatedShellSurfaceV2 } from './DesktopAuthenticatedShellSurfaceV2';
+import { DesktopMyWorkQueueSurfaceV2 } from './DesktopMyWorkQueueSurfaceV2';
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
@@ -37,6 +38,7 @@ import {
 import {
   DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
+  DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   type DesktopRendererCompositionPortV2,
@@ -88,6 +90,8 @@ export function createDesktopRendererAppCompositionPortV2(
       validActivityInboxDefinitionV2(definition) ? DesktopActivityInboxSurfaceV2 : null,
     resolveAuthenticatedShellSurface: (definition: UiSlotDefinition) =>
       validAuthenticatedShellDefinitionV2(definition) ? DesktopAuthenticatedShellSurfaceV2 : null,
+    resolveMyWorkQueueSurface: (definition: UiSlotDefinition) =>
+      validMyWorkQueueDefinitionV2(definition) ? DesktopMyWorkQueueSurfaceV2 : null,
     resolveSessionCanvasSurface: (definition: UiSlotDefinition) =>
       validSessionCanvasDefinitionV2(definition) ? DesktopSessionCanvasSurfaceV2 : null,
     resolveWorkbenchSurface: (definition: UiSlotDefinition) =>
@@ -115,6 +119,18 @@ function validAuthenticatedShellDefinitionV2(definition: UiSlotDefinition): bool
     definition.contract === 'ui-builtin:desktop-authenticated-shell-surface' &&
     definition.moduleRef === DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.authenticated-shell' &&
+    definition.sandbox
+  );
+}
+
+function validMyWorkQueueDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'my_work_queue_surface' &&
+    definition.id === 'my-work-queue' &&
+    definition.contract === 'ui-builtin:desktop-my-work-queue-surface' &&
+    definition.moduleRef === DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.my-work-queue' &&
     definition.sandbox
   );
 }
