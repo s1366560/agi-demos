@@ -9,11 +9,12 @@ import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
 import { WorkbenchTabBar } from '../features/chrome/WorkbenchTabBar';
 import { CommandPalette } from '../features/navigation/CommandPalette';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
-import { KeyboardShortcutsDialog } from '../features/navigation/KeyboardShortcutsDialog';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import { WorkspaceCreateDialog } from '../features/workspace/WorkspaceCreateDialog';
 import { WorkspaceSettingsDialog } from '../features/workspace/WorkspaceSettingsDialog';
 import type { ResolvedTheme } from '../theme';
+import type { DesktopKeyboardShortcutsInputV2 } from './DesktopKeyboardShortcutsSurfaceV2';
+import { DesktopRendererKeyboardShortcutsV2 } from './DesktopRendererKeyboardShortcutsV2';
 import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
 import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
 import type { DesktopSettingsWindowInputV2 } from './DesktopSettingsWindowSurfaceV2';
@@ -47,7 +48,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
     commandPalette: DesktopAuthenticatedShellOptionalOutletV2<
       ComponentProps<typeof CommandPalette>
     >;
-    keyboardShortcuts: ComponentProps<typeof KeyboardShortcutsDialog>;
+    keyboardShortcuts: DesktopKeyboardShortcutsInputV2;
     newTask: ComponentProps<typeof NewTaskFlow>;
     rightSidebar: DesktopAuthenticatedShellOptionalOutletV2<
       ComponentProps<typeof DesktopRightSidebar>
@@ -127,7 +128,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
         {surfaces.commandPalette.kind === 'visible'
           ? createPortal(<CommandPalette {...surfaces.commandPalette.props} />, document.body)
           : null}
-        <KeyboardShortcutsDialog {...surfaces.keyboardShortcuts} />
+        <DesktopRendererKeyboardShortcutsV2 input={surfaces.keyboardShortcuts} />
         <NewTaskFlow {...surfaces.newTask} />
         <WorkspaceCreateDialog {...surfaces.workspaceCreate} />
         <WorkspaceSettingsDialog {...surfaces.workspaceSettings} />

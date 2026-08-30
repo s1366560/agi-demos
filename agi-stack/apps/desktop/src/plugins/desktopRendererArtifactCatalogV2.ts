@@ -114,6 +114,8 @@ export const DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2 =
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.authenticated-shell-surface.v2';
+export const DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.keyboard-shortcuts-surface.v1';
 export const DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.settings-window-surface.v1';
 export const DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2 =
@@ -327,6 +329,17 @@ const AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = 
     contract: 'ui-builtin:desktop-authenticated-shell-surface',
     moduleRef: 'builtin:desktop-authenticated-shell-surface',
     permission: 'ui.authenticated-shell',
+    sandbox: true,
+  }),
+]);
+const KEYBOARD_SHORTCUTS_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'keyboard_shortcuts_surface',
+    id: 'keyboard-shortcuts',
+    contract: 'ui-builtin:desktop-keyboard-shortcuts-surface',
+    moduleRef: 'builtin:desktop-keyboard-shortcuts-surface',
+    permission: 'ui.keyboard-shortcuts',
     sandbox: true,
   }),
 ]);
@@ -684,6 +697,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopUiSlotArtifactV2(
       DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2,
       SETTINGS_WINDOW_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_ARTIFACT_ID_V2,
+      KEYBOARD_SHORTCUTS_SURFACE_DEFINITIONS_V2,
     ),
   ],
   [

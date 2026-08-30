@@ -19,6 +19,7 @@ import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRe
 import { DesktopActivityInboxSurfaceV2 } from './DesktopActivityInboxSurfaceV2';
 import { DesktopAuthenticatedShellSurfaceV2 } from './DesktopAuthenticatedShellSurfaceV2';
 import { DesktopConversationSurfaceV2 } from './DesktopConversationSurfaceV2';
+import { DesktopKeyboardShortcutsSurfaceV2 } from './DesktopKeyboardShortcutsSurfaceV2';
 import { DesktopMyWorkQueueSurfaceV2 } from './DesktopMyWorkQueueSurfaceV2';
 import { DesktopNewThreadComposerSurfaceV2 } from './DesktopNewThreadComposerSurfaceV2';
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
@@ -52,6 +53,7 @@ import {
   DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2,
+  DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_MODULE_REF_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
   DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
@@ -110,6 +112,10 @@ export function createDesktopRendererAppCompositionPortV2(
       validAuthenticatedShellDefinitionV2(definition) ? DesktopAuthenticatedShellSurfaceV2 : null,
     resolveConversationSurface: (definition: UiSlotDefinition) =>
       validConversationDefinitionV2(definition) ? DesktopConversationSurfaceV2 : null,
+    resolveKeyboardShortcutsSurface: (definition: UiSlotDefinition) =>
+      validKeyboardShortcutsDefinitionV2(definition)
+        ? DesktopKeyboardShortcutsSurfaceV2
+        : null,
     resolveConversationRendererModule: (definition: AuthorizedUiSlotDefinitionV2) =>
       validConversationRendererDefinitionV2(definition)
         ? DESKTOP_CONVERSATION_RENDERER_MODULE_V2
@@ -213,6 +219,18 @@ function validMyWorkQueueDefinitionV2(definition: UiSlotDefinition): boolean {
     definition.contract === 'ui-builtin:desktop-my-work-queue-surface' &&
     definition.moduleRef === DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.my-work-queue' &&
+    definition.sandbox
+  );
+}
+
+function validKeyboardShortcutsDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'keyboard_shortcuts_surface' &&
+    definition.id === 'keyboard-shortcuts' &&
+    definition.contract === 'ui-builtin:desktop-keyboard-shortcuts-surface' &&
+    definition.moduleRef === DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.keyboard-shortcuts' &&
     definition.sandbox
   );
 }

@@ -671,7 +671,7 @@ test('authenticated shell contribution owns the complete signed-in app shell', (
     'DesktopRightSidebar',
     'DesktopStatusBar',
     'CommandPalette',
-    'KeyboardShortcutsDialog',
+    'DesktopRendererKeyboardShortcutsV2',
     'NewTaskFlow',
     'WorkspaceCreateDialog',
     'WorkspaceSettingsDialog',
