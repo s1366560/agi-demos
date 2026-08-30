@@ -51,6 +51,7 @@ from src.infrastructure.plugins.v2.workspace_core_runtime import (
     WorkspaceCoreRuntimeServiceV2,
 )
 from src.infrastructure.plugins.v2.workspace_core_shadow import (
+    WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2,
     WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2,
     compose_workspace_core_shadow_upgrade_v2,
     workspace_core_shadow_active_v2,
@@ -429,7 +430,11 @@ def test_workspace_core_shadow_upgrade_rejects_already_enabled_snapshot() -> Non
         snapshot,
         entries=tuple(
             replace(entry, enabled=True)
-            if entry.entry_id == WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2
+            if entry.entry_id
+            in {
+                WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2,
+                WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2,
+            }
             else entry
             for entry in snapshot.entries
         ),

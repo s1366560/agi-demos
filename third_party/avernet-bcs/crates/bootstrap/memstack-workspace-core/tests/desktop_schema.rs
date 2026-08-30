@@ -55,6 +55,7 @@ const REQUIRED_TABLES: &[&str] = &[
     "workspace_objective_task_projections",
     "workspace_autonomy_ticks",
     "project_principal_memberships",
+    "workspace_contract_actor_resolution_audits",
 ];
 
 #[tokio::test]
@@ -98,7 +99,7 @@ async fn desktop_workspace_schema_is_idempotent_and_checksum_guarded() -> Result
             "SELECT COUNT(*) AS count FROM workspace_sqlite_schema_migrations",
         ))
         .await?;
-    assert_eq!(db_get_column::<i64>(&rows[0], "count")?, 7);
+    assert_eq!(db_get_column::<i64>(&rows[0], "count")?, 8);
 
     db.execute(DbStatement::new(
         "UPDATE workspace_sqlite_schema_migrations SET checksum = 'tampered' WHERE version = 1",
@@ -115,7 +116,7 @@ async fn desktop_workspace_schema_is_idempotent_and_checksum_guarded() -> Result
 #[tokio::test]
 async fn desktop_workspace_schema_rejects_unknown_or_future_ledger_versions()
 -> Result<(), Box<dyn Error>> {
-    for version in [0_i64, 8_i64] {
+    for version in [0_i64, 9_i64] {
         let db = LocalSqliteDbPlugin::new()?;
         db.execute(DbStatement::new(
             "CREATE TABLE workspace_sqlite_schema_migrations (version INTEGER PRIMARY KEY, \
@@ -142,6 +143,39 @@ async fn desktop_workspace_schema_rejects_unknown_or_future_ledger_versions()
         };
         assert!(error.to_string().contains("not supported by this binary"));
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn contract_actor_resolution_audit_is_append_only() -> Result<(), Box<dyn Error>> {
+    let db = LocalSqliteDbPlugin::new()?;
+    bcs::migrations::run_sqlite_migrations(&db).await?;
+    run_desktop_workspace_schema_migrations(&db).await?;
+    db.execute(DbStatement::new(
+        "INSERT INTO workspace_contract_actor_resolution_audits (audit_id, \
+         service_principal_id, operation_id, tenant_id, project_id, workspace_id, purpose, \
+         request_hash, outcome, reason, resolved_actor_user_id, resolved_participant_actor_id, \
+         authority_revision, policy_version) VALUES ('audit-1', 'principal-1', 'operation-1', \
+         'tenant-1', 'project-1', 'workspace-1', 'planner_turn', \
+         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'resolved', \
+         'resolved', 'owner-1', 'human:owner-1', 4, 'workspace-contract-actor-owner.v1')",
+    ))
+    .await?;
+
+    let update = db
+        .execute(DbStatement::new(
+            "UPDATE workspace_contract_actor_resolution_audits SET reason = 'owner_unavailable' \
+             WHERE audit_id = 'audit-1'",
+        ))
+        .await;
+    assert!(update.is_err(), "authority audit updates must fail closed");
+
+    let delete = db
+        .execute(DbStatement::new(
+            "DELETE FROM workspace_contract_actor_resolution_audits WHERE audit_id = 'audit-1'",
+        ))
+        .await;
+    assert!(delete.is_err(), "authority audit deletes must fail closed");
     Ok(())
 }
 

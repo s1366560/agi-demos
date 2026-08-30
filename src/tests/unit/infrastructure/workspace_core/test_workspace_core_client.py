@@ -14,6 +14,7 @@ from src.infrastructure.workspace_core.client import (
     WorkspaceAuthorityActor,
     WorkspaceAuthorityQueryRequest,
     WorkspaceAuthorityTaskRef,
+    WorkspaceContractActorResolveRequest,
     WorkspaceCoreClient,
     WorkspaceCoreClientError,
     WorkspaceCoreNotFoundError,
@@ -121,6 +122,49 @@ async def test_workspace_authority_query_uses_one_service_authenticated_batch() 
 
     assert result.profiles[0].member_role == "editor"
     assert result.task_links[0].linked is True
+
+
+@pytest.mark.unit
+async def test_contract_actor_resolution_uses_strict_v2_service_contract() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/internal/v2/workspace-authority/contract-actor:resolve"
+        assert request.headers["authorization"] == "Bearer internal-test-token"
+        assert request.headers.get("x-memstack-user-id") is None
+        assert request.read() == (
+            b'{"tenant_id":"tenant-1","project_id":"project-1",'
+            b'"workspace_id":"workspace-1","purpose":"planner_turn",'
+            b'"operation_id":"planner:workspace-1:turn-1"}'
+        )
+        return httpx.Response(
+            200,
+            json={
+                "contract_version": "2.0.0",
+                "actor_user_id": "owner-1",
+                "participant_actor_id": "human:owner-1",
+                "authority_revision": 7,
+                "policy_version": "workspace-contract-actor-owner.v1",
+                "duplicate": False,
+            },
+        )
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+
+    response = await client.resolve_contract_actor(
+        WorkspaceContractActorResolveRequest(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            workspace_id="workspace-1",
+            purpose="planner_turn",
+            operation_id="planner:workspace-1:turn-1",
+        )
+    )
+
+    assert response.contract_version == "2.0.0"
+    assert response.actor_user_id == "owner-1"
+    assert response.participant_actor_id == "human:owner-1"
+    assert response.authority_revision == 7
+    assert response.duplicate is False
 
 
 @pytest.mark.unit

@@ -214,6 +214,40 @@ class WorkspaceAuthorityQueryResponse(BaseModel):
     task_links: list[WorkspaceAuthorityTaskLink]
 
 
+type WorkspaceContractActorPurpose = Literal[
+    "planner_turn",
+    "supervisor_turn",
+    "verifier_turn",
+    "worktree_turn",
+    "iteration_review_turn",
+]
+
+
+class WorkspaceContractActorResolveRequest(BaseModel):
+    """Strict caller-safe scope for server-owned Workspace actor resolution."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    tenant_id: str = Field(min_length=1, max_length=128)
+    project_id: str = Field(min_length=1, max_length=128)
+    workspace_id: str = Field(min_length=1, max_length=128)
+    purpose: WorkspaceContractActorPurpose
+    operation_id: str = Field(min_length=1, max_length=256)
+
+
+class WorkspaceContractActorResolveResponse(BaseModel):
+    """Immutable audited actor identity selected by Workspace Core authority."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["2.0.0"]
+    actor_user_id: str = Field(min_length=1)
+    participant_actor_id: str = Field(min_length=1)
+    authority_revision: NonNegativeInt
+    policy_version: Literal["workspace-contract-actor-owner.v1"]
+    duplicate: StrictBool
+
+
 class WorkspaceCoreTaskSessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -550,9 +584,7 @@ class WorkspaceCoreClient:
         user_id: str,
         is_superuser: bool = False,
     ) -> WorkspaceCoreTask:
-        path = (
-            f"/api/v1/workspaces/{_path_segment(workspace_id)}/tasks/{_path_segment(task_id)}"
-        )
+        path = f"/api/v1/workspaces/{_path_segment(workspace_id)}/tasks/{_path_segment(task_id)}"
         payload = await self._get(
             path,
             headers=_caller_headers(user_id=user_id, is_superuser=is_superuser),
@@ -572,6 +604,24 @@ class WorkspaceCoreClient:
         )
         return self._validate(
             WorkspaceAuthorityQueryResponse,
+            payload,
+            path=path,
+            method="POST",
+        )
+
+    async def resolve_contract_actor(
+        self,
+        request: WorkspaceContractActorResolveRequest,
+    ) -> WorkspaceContractActorResolveResponse:
+        """Resolve one audited Workspace actor without accepting caller identity hints."""
+        path = "/internal/v2/workspace-authority/contract-actor:resolve"
+        payload = await self._post(
+            path,
+            headers={},
+            json_body=request.model_dump(mode="json"),
+        )
+        return self._validate(
+            WorkspaceContractActorResolveResponse,
             payload,
             path=path,
             method="POST",
@@ -862,6 +912,9 @@ __all__ = [
     "WorkspaceAuthorityQueryRequest",
     "WorkspaceAuthorityQueryResponse",
     "WorkspaceAuthorityTaskRef",
+    "WorkspaceContractActorPurpose",
+    "WorkspaceContractActorResolveRequest",
+    "WorkspaceContractActorResolveResponse",
     "WorkspaceCoreClient",
     "WorkspaceCoreClientError",
     "WorkspaceCoreCompatibilityError",

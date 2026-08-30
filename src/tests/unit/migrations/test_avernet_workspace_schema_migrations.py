@@ -35,6 +35,7 @@ _TASK_SESSION_SAGA_REVISION = "f0a1b2c3d4e6"
 _AUTONOMY_PROGRESSION_REVISION = "f184bcdba7ea"
 _AUTONOMY_INTEGRITY_REVISION = "a72d9c31e5bf"
 _AUTONOMY_BOOTSTRAP_BACKFILL_REVISION = "b84e2f6a9c31"
+_CONTRACT_ACTOR_AUTHORITY_REVISION = "a47a93b38981"
 
 _DOMAIN_TABLES = {
     "workspace_profiles",
@@ -148,6 +149,13 @@ def _contract_migration() -> ModuleType:
     return _load_migration(
         _CONTRACT_REVISION,
         "1c75e9f4a286_create_avernet_workspace_contract_gaps.py",
+    )
+
+
+def _contract_actor_authority_migration() -> ModuleType:
+    return _load_migration(
+        _CONTRACT_ACTOR_AUTHORITY_REVISION,
+        "a47a93b38981_add_workspace_contract_actor_authority_.py",
     )
 
 
@@ -837,6 +845,43 @@ def test_contract_gap_tables_are_normalized_scoped_and_queryable() -> None:
     combined_ddl = "\n".join(tables.values()).lower()
     assert " extensions " not in combined_ddl
     assert "extension_json" not in combined_ddl
+
+
+def test_contract_actor_authority_audit_is_scoped_idempotent_and_append_only() -> None:
+    migration = _contract_actor_authority_migration()
+    combined = "\n".join(migration._UPGRADE_DDL)
+
+    for field in (
+        "service_principal_id",
+        "operation_id",
+        "tenant_id",
+        "project_id",
+        "workspace_id",
+        "purpose",
+        "request_hash",
+        "outcome",
+        "reason",
+        "resolved_actor_user_id",
+        "resolved_participant_actor_id",
+        "authority_revision",
+        "policy_version",
+    ):
+        assert field in combined
+    assert "UNIQUE (service_principal_id, operation_id)" in combined
+    assert "workspace_members" not in combined
+    assert "BEFORE UPDATE OR DELETE" in combined
+    assert "authority audit is append-only" in combined
+    assert "owner_ambiguous" in combined
+
+    upgrade_recorder = _Recorder()
+    migration.op = upgrade_recorder
+    migration.upgrade()
+    assert upgrade_recorder.statements == list(migration._UPGRADE_DDL)
+
+    downgrade_recorder = _Recorder()
+    migration.op = downgrade_recorder
+    migration.downgrade()
+    assert downgrade_recorder.statements == list(migration._DOWNGRADE_DDL)
 
 
 def test_principal_identity_mirror_is_scoped_and_keeps_email_explicit() -> None:

@@ -158,6 +158,9 @@ from .tunnel_services import tunnel_service_definitions_v2
 from .workflow_pattern_services import workflow_pattern_service_definitions_v2
 from .workflow_runtime import WorkflowRuntimeFactoryV2, workflow_service_definitions_v2
 from .workspace_context_services import workspace_context_service_definitions_v2
+from .workspace_contract_actor_services import (
+    workspace_contract_actor_resolver_definition_v2,
+)
 from .workspace_core_runtime import (
     WorkspaceCoreRuntimeFactoryV2,
     workspace_core_runtime_definition_v2,
@@ -343,6 +346,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         workspace_wtp_publisher_definition_v2(),
         telemetry_runtime_definition_v2(telemetry_runtime_manager),
         workspace_core_runtime_definition_v2(workspace_core_runtime_factory),
+        workspace_contract_actor_resolver_definition_v2(),
         graph_runtime_definition_v2(graph_runtime_factory),
         graph_application_service_definition_v2(),
         *sandbox_service_definitions_v2(

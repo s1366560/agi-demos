@@ -32,6 +32,7 @@ mod capabilities;
 mod collaboration_mutations;
 mod context;
 pub mod context_judge;
+mod contract_actor_authority;
 mod creation;
 pub mod desktop_legacy_import;
 pub mod desktop_schema;
@@ -138,6 +139,7 @@ pub struct WorkspaceCoreState {
     autonomy_judge: Arc<dyn PublicWorkspaceAutonomyJudgePort>,
     object_store: Arc<dyn ObjectStorePort>,
     authority: WorkspaceCoreAuthority,
+    contract_actor_resolver_principal_id: Option<String>,
 }
 
 impl WorkspaceCoreState {
@@ -276,6 +278,7 @@ impl WorkspaceCoreState {
             autonomy_judge,
             object_store: Arc::new(object_store::UnavailableObjectStorePort),
             authority: WorkspaceCoreAuthority::Cloud,
+            contract_actor_resolver_principal_id: None,
         })
     }
 
@@ -291,6 +294,24 @@ impl WorkspaceCoreState {
     pub fn with_authority(mut self, authority: WorkspaceCoreAuthority) -> Self {
         self.authority = authority;
         self
+    }
+
+    /// Bind the private service token to the principal allowed to resolve
+    /// Workspace contract actors.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the stable service-principal identifier is blank.
+    pub fn with_contract_actor_resolver_principal(
+        mut self,
+        principal_id: String,
+    ) -> Result<Self, &'static str> {
+        let principal_id = principal_id.trim();
+        if principal_id.is_empty() || principal_id.len() > 128 {
+            return Err("Workspace contract actor service principal is invalid");
+        }
+        self.contract_actor_resolver_principal_id = Some(principal_id.to_string());
+        Ok(self)
     }
 }
 
@@ -386,6 +407,10 @@ pub fn workspace_router(state: Arc<WorkspaceCoreState>) -> Router {
         .route(
             "/internal/v1/workspace-authority/query",
             post(authority_query::query_workspace_authority),
+        )
+        .route(
+            "/internal/v2/workspace-authority/contract-actor:resolve",
+            post(contract_actor_authority::resolve_contract_actor),
         )
         .merge(structured_tasks::router())
         .route(

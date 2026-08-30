@@ -52,6 +52,7 @@ use plan_dispatch_provider::HttpWorkspacePlanDispatchPort;
 
 const HEALTH_VERSION: &str = concat!("memstack-workspace-core/", env!("CARGO_PKG_VERSION"));
 const DESKTOP_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
+const CONTRACT_ACTOR_SERVICE_PRINCIPAL_ID: &str = "memstack-agent-runtime";
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 enum WorkspaceCoreMode {
@@ -318,6 +319,8 @@ async fn main() -> Result<()> {
             context_judge,
             autonomy_judge,
         )
+        .map_err(anyhow::Error::msg)?
+        .with_contract_actor_resolver_principal(CONTRACT_ACTOR_SERVICE_PRINCIPAL_ID.to_string())
         .map_err(anyhow::Error::msg)?
         .with_authority(match args.mode {
             WorkspaceCoreMode::Cloud => WorkspaceCoreAuthority::Cloud,

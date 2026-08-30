@@ -58,6 +58,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-workspace-core-contract-actor-resolver
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/workspace-core/contract-actor-resolver
+      enabled: false
+      config:
+        strategy: workspace-core-authority
+      inject:
+        runtime: service:workspace-core.runtime
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-graph-runtime
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel
