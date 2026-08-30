@@ -8,6 +8,7 @@ export type UiSlotKind =
   | 'nav_item'
   | 'settings_page'
   | 'conversation_renderer'
+  | 'conversation_surface'
   | 'tool_result_renderer'
   | 'composer_action'
   | 'mcp_canvas'

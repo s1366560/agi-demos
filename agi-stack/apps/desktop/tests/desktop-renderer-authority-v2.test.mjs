@@ -10,6 +10,7 @@ const {
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
+  DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2,
@@ -44,6 +45,9 @@ const {
 const {
   createDesktopRendererAppCompositionPortV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererAppCompositionV2.js");
+const {
+  DesktopConversationSurfaceV2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopConversationSurfaceV2.js");
 const {
   DesktopMyWorkQueueSurfaceV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopMyWorkQueueSurfaceV2.js");
@@ -122,6 +126,34 @@ const appComposition = createDesktopRendererAppCompositionPortV2({
   setSettingsWindowOpen: () => undefined,
   settingsRouteCloseNavigationRef: { current: null },
   commitRuntimeConfig: () => undefined,
+});
+
+test("conversation resolver requires the exact builtin V2 slot contract", () => {
+  const definition = Object.freeze({
+    pluginId: "builtin-shell",
+    slot: "conversation_surface",
+    id: "conversation",
+    contract: "ui-builtin:desktop-conversation-surface",
+    moduleRef: "builtin:desktop-conversation-surface",
+    permission: "ui.conversation",
+    sandbox: true,
+  });
+
+  assert.equal(
+    appComposition.resolveConversationSurface(definition),
+    DesktopConversationSurfaceV2,
+  );
+  for (const invalid of [
+    { ...definition, pluginId: "third-party-shell" },
+    { ...definition, slot: "conversation_renderer" },
+    { ...definition, id: "wrong-conversation" },
+    { ...definition, contract: "ui-builtin:wrong-conversation-surface" },
+    { ...definition, moduleRef: "builtin:wrong-conversation-surface" },
+    { ...definition, permission: "ui.wrong-conversation" },
+    { ...definition, sandbox: false },
+  ]) {
+    assert.equal(appComposition.resolveConversationSurface(invalid), null);
+  }
 });
 
 test("My Work queue resolver requires the exact builtin V2 slot contract", () => {
@@ -446,10 +478,16 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       305,
     ),
     contribution(
+      "desktop.conversation-surface",
+      "ui-slot",
+      [DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2],
+      306,
+    ),
+    contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
-      306,
+      307,
     ),
   ]);
 
@@ -487,6 +525,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
+      [DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
@@ -877,9 +916,20 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.equal(artifacts[31].slotDefinitions.length, 2);
+  assert.deepEqual(artifacts[31].slotDefinitions, [
+    {
+      pluginId: "builtin-shell",
+      slot: "conversation_surface",
+      id: "conversation",
+      contract: "ui-builtin:desktop-conversation-surface",
+      moduleRef: "builtin:desktop-conversation-surface",
+      permission: "ui.conversation",
+      sandbox: true,
+    },
+  ]);
+  assert.equal(artifacts[32].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[31].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[32].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

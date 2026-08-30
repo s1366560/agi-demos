@@ -635,21 +635,17 @@ test('production routing passes a typed model to the module-owned workbench with
   assert.doesNotMatch(routedWorkbench, /\bkey=/u);
   assert.doesNotMatch(routedWorkbench, /<iframe|<webview|window\.open|shell\.openExternal/iu);
   assert.doesNotMatch(rendererProductionRouterSource, /childrenAuthority|ReactNode/u);
-  for (const component of [
-    'ChatPanel',
-    'WorkspaceOverview',
-  ]) {
-    assert.match(workbenchSurfaceSource, new RegExp(`<${component}\\b`, 'u'));
-    assert.doesNotMatch(appSource, new RegExp(`<${component}\\b`, 'u'));
-  }
+  assert.match(workbenchSurfaceSource, /<WorkspaceOverview\b/u);
+  assert.doesNotMatch(appSource, /<WorkspaceOverview\b/u);
   assert.match(workbenchSurfaceSource, /<DesktopRendererActivityInboxV2/u);
+  assert.match(workbenchSurfaceSource, /<DesktopRendererConversationV2/u);
   assert.match(workbenchSurfaceSource, /<DesktopRendererMyWorkQueueV2/u);
   assert.match(workbenchSurfaceSource, /<DesktopRendererNewThreadComposerV2/u);
   assert.match(workbenchSurfaceSource, /<DesktopRendererSessionWorkspaceV2/u);
   assert.match(workbenchSurfaceSource, /<DesktopRendererWorkspaceCollaborationV2/u);
   assert.doesNotMatch(
     workbenchSurfaceSource,
-    /<ActivityInbox\b|view\.inbox|<MyWorkQueue\b|view\.queue|<NewThreadComposer\b|view\.composer|<SessionWorkspace\b|<WorkspaceCollaborationCanvas\b/u,
+    /<ActivityInbox\b|view\.inbox|<ChatPanel\b|<PlatformPluginConversationSlots\b|<MyWorkQueue\b|view\.queue|<NewThreadComposer\b|view\.composer|<SessionWorkspace\b|<WorkspaceCollaborationCanvas\b/u,
   );
   assert.match(rendererAppCompositionSource, /DesktopWorkbenchSurfaceV2/u);
   assert.match(workbenchSurfaceSource, /<section className="workbench-layout">/u);

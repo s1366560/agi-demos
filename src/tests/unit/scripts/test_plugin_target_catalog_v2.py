@@ -117,6 +117,11 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-activity-inbox-surface"
     )
+    conversation_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-conversation-surface"
+    )
     my_work_queue_index = next(
         index
         for index, entry in enumerate(entries)
@@ -127,7 +132,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 324
+    assert len(entries) == 325
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -147,6 +152,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         < new_thread_composer_index
         < my_work_queue_index
         < activity_inbox_index
+        < conversation_index
         < desktop_routes_index
     )
     assert entries[shell_index]["config"] == {
@@ -218,6 +224,15 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         "order": 95,
         "payload": {
             "artifact_refs": ["desktop.ui-slots.activity-inbox-surface.v1"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[conversation_index]["config"] == {
+        "id": "desktop.conversation-surface",
+        "kind": "ui-slot",
+        "order": 96,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.conversation-surface.v1"],
             "schema_version": 1,
         },
     }

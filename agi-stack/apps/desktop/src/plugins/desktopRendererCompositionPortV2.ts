@@ -4,6 +4,7 @@ import type { DesktopRouteModule } from '../features/navigation/desktopRouteModu
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import type { DesktopActivityInboxSurfacePropsV2 } from './DesktopActivityInboxSurfaceV2';
 import type { DesktopAuthenticatedShellViewModelV2 } from './DesktopAuthenticatedShellSurfaceV2';
+import type { DesktopConversationSurfacePropsV2 } from './DesktopConversationSurfaceV2';
 import type { DesktopMyWorkQueueSurfacePropsV2 } from './DesktopMyWorkQueueSurfaceV2';
 import type { DesktopNewThreadComposerSurfacePropsV2 } from './DesktopNewThreadComposerSurfaceV2';
 import type { DesktopSessionCanvasSurfacePropsV2 } from './DesktopSessionCanvasSurfaceV2';
@@ -15,6 +16,8 @@ import type { UiSlotDefinition } from './uiSlotRegistry';
 
 export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-authenticated-shell-surface' as const;
+export const DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2 =
+  'builtin:desktop-conversation-surface' as const;
 export const DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-session-canvas-surface' as const;
 export const DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2 =
@@ -31,6 +34,8 @@ export const DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2 =
 
 export type DesktopRendererActivityInboxSurfaceV2 =
   ComponentType<DesktopActivityInboxSurfacePropsV2>;
+export type DesktopRendererConversationSurfaceV2 =
+  ComponentType<DesktopConversationSurfacePropsV2>;
 export type DesktopRendererMyWorkQueueSurfaceV2 =
   ComponentType<DesktopMyWorkQueueSurfacePropsV2>;
 export type DesktopRendererNewThreadComposerSurfaceV2 =
@@ -66,6 +71,9 @@ export interface DesktopRendererCompositionPortV2 {
   readonly resolveAuthenticatedShellSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererAuthenticatedShellSurfaceV2 | null;
+  readonly resolveConversationSurface: (
+    definition: UiSlotDefinition,
+  ) => DesktopRendererConversationSurfaceV2 | null;
   readonly resolveMyWorkQueueSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererMyWorkQueueSurfaceV2 | null;
@@ -116,6 +124,22 @@ export type DesktopRendererWorkbenchCompositionV2 =
         | 'desktop_renderer_workbench_contribution_ambiguous'
         | 'desktop_renderer_workbench_contribution_missing'
         | 'desktop_renderer_workbench_module_unavailable';
+    }>;
+
+export type DesktopRendererConversationCompositionV2 =
+  | Readonly<{
+      status: 'ready';
+      Surface: DesktopRendererConversationSurfaceV2;
+    }>
+  | Readonly<{ status: 'loading' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode:
+        | 'desktop_renderer_conversation_contribution_ambiguous'
+        | 'desktop_renderer_conversation_contribution_missing'
+        | 'desktop_renderer_conversation_module_unavailable'
+        | 'desktop_renderer_generation_disabled'
+        | 'desktop_renderer_generation_unavailable';
     }>;
 
 export type DesktopRendererSessionCanvasCompositionV2 =
@@ -268,6 +292,33 @@ export function projectDesktopWorkbenchCompositionV2(
   const Surface = composition.resolveWorkbenchSurface(definitions[0]);
   if (Surface === null) {
     return unavailableWorkbenchV2('desktop_renderer_workbench_module_unavailable');
+  }
+  return Object.freeze({ status: 'ready', Surface });
+}
+
+export function projectDesktopConversationCompositionV2(
+  authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
+  composition: DesktopRendererCompositionPortV2,
+): DesktopRendererConversationCompositionV2 {
+  if (authority.status === 'loading') return Object.freeze({ status: 'loading' });
+  if (authority.status === 'disabled') {
+    return unavailableConversationV2('desktop_renderer_generation_disabled');
+  }
+  if (authority.status === 'unavailable') {
+    return unavailableConversationV2('desktop_renderer_generation_unavailable');
+  }
+  const definitions = authority.slotDefinitions.filter(
+    ({ slot }) => slot === 'conversation_surface',
+  );
+  if (definitions.length === 0) {
+    return unavailableConversationV2('desktop_renderer_conversation_contribution_missing');
+  }
+  if (definitions.length !== 1) {
+    return unavailableConversationV2('desktop_renderer_conversation_contribution_ambiguous');
+  }
+  const Surface = composition.resolveConversationSurface(definitions[0]);
+  if (Surface === null) {
+    return unavailableConversationV2('desktop_renderer_conversation_module_unavailable');
   }
   return Object.freeze({ status: 'ready', Surface });
 }
@@ -467,6 +518,15 @@ function unavailableWorkbenchV2(
     Readonly<{ status: 'unavailable' }>
   >['reasonCode'],
 ): DesktopRendererWorkbenchCompositionV2 {
+  return Object.freeze({ status: 'unavailable', reasonCode });
+}
+
+function unavailableConversationV2(
+  reasonCode: Extract<
+    DesktopRendererConversationCompositionV2,
+    Readonly<{ status: 'unavailable' }>
+  >['reasonCode'],
+): DesktopRendererConversationCompositionV2 {
   return Object.freeze({ status: 'unavailable', reasonCode });
 }
 

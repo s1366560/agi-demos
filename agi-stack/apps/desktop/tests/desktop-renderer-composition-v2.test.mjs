@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
+  DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
   DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
@@ -14,6 +15,7 @@ const {
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   projectDesktopActivityInboxCompositionV2,
   projectDesktopAuthenticatedShellCompositionV2,
+  projectDesktopConversationCompositionV2,
   projectDesktopMyWorkQueueCompositionV2,
   projectDesktopNewThreadComposerCompositionV2,
   projectDesktopSessionCanvasCompositionV2,
@@ -39,6 +41,15 @@ const authenticatedShellSlot = Object.freeze({
   contract: 'ui-builtin:desktop-authenticated-shell-surface',
   moduleRef: DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   permission: 'ui.authenticated-shell',
+  sandbox: true,
+});
+const conversationSlot = Object.freeze({
+  pluginId: 'builtin-shell',
+  slot: 'conversation_surface',
+  id: 'conversation',
+  contract: 'ui-builtin:desktop-conversation-surface',
+  moduleRef: DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2,
+  permission: 'ui.conversation',
   sandbox: true,
 });
 const myWorkQueueSlot = Object.freeze({
@@ -102,6 +113,7 @@ function authority(status = 'ready', slotDefinitions = [workbenchSlot]) {
 
 function composition({
   activityInbox = ActivityInboxSurface,
+  conversation = ConversationSurface,
   myWorkQueue = MyWorkQueueSurface,
   newThreadComposer = NewThreadComposerSurface,
   sessionCanvas = SessionCanvasSurface,
@@ -125,6 +137,11 @@ function composition({
     resolveAuthenticatedShellSurface(definition) {
       return definition.moduleRef === DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2
         ? shell
+        : null;
+    },
+    resolveConversationSurface(definition) {
+      return definition.moduleRef === DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2
+        ? conversation
         : null;
     },
     resolveMyWorkQueueSurface(definition) {
@@ -163,6 +180,10 @@ function AuthenticatedShellSurface() {
 }
 
 function ActivityInboxSurface() {
+  return null;
+}
+
+function ConversationSurface() {
   return null;
 }
 
@@ -224,6 +245,79 @@ test('workbench composition fails closed when the contribution is absent or ambi
     Object.freeze({
       status: 'unavailable',
       reasonCode: 'desktop_renderer_workbench_module_unavailable',
+    }),
+  );
+});
+
+test('conversation composition resolves one explicit active V2 surface contribution', () => {
+  assert.deepEqual(
+    projectDesktopConversationCompositionV2(
+      authority('ready', [conversationSlot]),
+      composition(),
+    ),
+    Object.freeze({ status: 'ready', Surface: ConversationSurface }),
+  );
+  assert.deepEqual(
+    projectDesktopConversationCompositionV2(authority('loading', []), composition()),
+    Object.freeze({ status: 'loading' }),
+  );
+});
+
+test('conversation composition fails closed for missing, ambiguous, and wrong modules', () => {
+  assert.deepEqual(
+    projectDesktopConversationCompositionV2(authority('ready', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_conversation_contribution_missing',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopConversationCompositionV2(
+      authority('ready', [conversationSlot, { ...conversationSlot, id: 'duplicate' }]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_conversation_contribution_ambiguous',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopConversationCompositionV2(
+      authority('ready', [
+        { ...conversationSlot, moduleRef: 'builtin:wrong-conversation' },
+      ]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_conversation_module_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopConversationCompositionV2(
+      authority('ready', [conversationSlot]),
+      composition({ conversation: null }),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_conversation_module_unavailable',
+    }),
+  );
+});
+
+test('conversation composition preserves generation failure without static fallback', () => {
+  assert.deepEqual(
+    projectDesktopConversationCompositionV2(authority('unavailable', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopConversationCompositionV2(authority('disabled', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_disabled',
     }),
   );
 });

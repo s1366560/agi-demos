@@ -127,6 +127,8 @@ export const DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.my-work-queue-surface.v1';
 export const DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.activity-inbox-surface.v1';
+export const DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.conversation-surface.v1';
 
 const TENANT_CREATION_ROUTE_IDS_V2 = Object.freeze([TENANT_CREATION_ROUTE_ID]);
 const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(
@@ -408,6 +410,17 @@ const ACTIVITY_INBOX_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Objec
     sandbox: true,
   }),
 ]);
+const CONVERSATION_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'conversation_surface',
+    id: 'conversation',
+    contract: 'ui-builtin:desktop-conversation-surface',
+    moduleRef: 'builtin:desktop-conversation-surface',
+    permission: 'ui.conversation',
+    sandbox: true,
+  }),
+]);
 
 interface DesktopRendererArtifactBaseV2 {
   readonly id: string;
@@ -683,6 +696,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopUiSlotArtifactV2(
       DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2,
       ACTIVITY_INBOX_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2,
+      CONVERSATION_SURFACE_DEFINITIONS_V2,
     ),
   ],
   [

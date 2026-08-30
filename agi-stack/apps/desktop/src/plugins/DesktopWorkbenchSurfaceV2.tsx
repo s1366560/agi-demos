@@ -1,15 +1,15 @@
 import type { ComponentProps } from 'react';
 
-import { ChatPanel } from '../features/chat/ChatPanel';
-import { PlatformPluginConversationSlots } from '../features/chat/PlatformPluginConversationSlots';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { useI18n } from '../i18n';
 import type { DesktopActivityInboxInputV2 } from './DesktopActivityInboxSurfaceV2';
+import type { DesktopConversationInputV2 } from './DesktopConversationSurfaceV2';
 import type { DesktopMyWorkQueueInputV2 } from './DesktopMyWorkQueueSurfaceV2';
 import type { DesktopNewThreadComposerInputV2 } from './DesktopNewThreadComposerSurfaceV2';
 import type { DesktopSessionWorkspaceInputV2 } from './DesktopSessionWorkspaceSurfaceV2';
 import type { DesktopWorkspaceCollaborationInputV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopRendererActivityInboxV2 } from './DesktopRendererActivityInboxV2';
+import { DesktopRendererConversationV2 } from './DesktopRendererConversationV2';
 import { DesktopRendererMyWorkQueueV2 } from './DesktopRendererMyWorkQueueV2';
 import { DesktopRendererNewThreadComposerV2 } from './DesktopRendererNewThreadComposerV2';
 import { DesktopRendererSessionWorkspaceV2 } from './DesktopRendererSessionWorkspaceV2';
@@ -23,7 +23,7 @@ type DesktopWorkbenchWorkspaceViewV2 = Readonly<{
 
 type DesktopWorkbenchChatViewV2 = Readonly<{
   kind: 'chat';
-  chatPanel: Readonly<ComponentProps<typeof ChatPanel>>;
+  chatPanel: DesktopConversationInputV2;
 }>;
 
 type DesktopWorkbenchBoardViewV2 = Readonly<{
@@ -105,12 +105,7 @@ function renderDesktopWorkbenchViewV2(view: DesktopWorkbenchViewV2) {
         </>
       );
     case 'chat':
-      return (
-        <>
-          <ChatPanel {...view.chatPanel} />
-          <PlatformPluginConversationSlots active />
-        </>
-      );
+      return <DesktopRendererConversationV2 input={view.chatPanel} />;
     case 'board':
       return <DesktopRendererMyWorkQueueV2 input={view.myWorkQueue} />;
     case 'activity':
