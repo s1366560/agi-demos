@@ -83,14 +83,13 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
         root_metadata: Mapping[str, Any],
         contract_only: bool = False,
     ) -> dict[str, Any] | None:
-        from src.configuration.factories import create_llm_client
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
         )
         from src.infrastructure.agent.workspace.contract_agent_runtime import (
-            create_workspace_contract_agent_service,
             recover_workspace_contract_payload,
             resolve_workspace_actor_user_id,
+            workspace_contract_agent_turn_authority_v2,
             workspace_contract_conversation_id,
         )
         from src.infrastructure.agent.workspace.runtime_role_contract import (
@@ -186,9 +185,20 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
             },
             "llm_overrides": {"max_tokens": self._max_tokens},
         }
-        async with async_session_factory() as db:
-            llm = await create_llm_client(self._tenant_id)
-            agent_service = await create_workspace_contract_agent_service(db=db, llm=llm)
+        async with (
+            async_session_factory() as db,
+            workspace_contract_agent_turn_authority_v2(
+                db=db,
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                user_id=resolved_actor_user_id,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+                agent_id=planner_agent.id,
+                contract_kind="planner",
+            ) as authority,
+        ):
+            agent_service = authority.service
             async for event in agent_service.stream_chat_v2(
                 conversation_id=conversation_id,
                 user_message=user_prompt,

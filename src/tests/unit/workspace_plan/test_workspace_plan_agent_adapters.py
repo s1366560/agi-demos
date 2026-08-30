@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from inspect import getsource
 from types import SimpleNamespace
 from typing import Any
 
@@ -25,7 +28,7 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
 )
 from src.infrastructure.agent.workspace.contract_agent_runtime import (
-    create_workspace_contract_agent_service,
+    workspace_contract_agent_turn_authority_v2,
 )
 from src.infrastructure.agent.workspace.planner_agent_decomposer import (
     RuntimeWorkspacePlannerAgentTurnRunner,
@@ -189,12 +192,6 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
         if cancel_calls is not None:
             cancel_calls.append(conversation_id)
 
-    async def fake_create_llm_client(tenant_id: str) -> str:
-        return f"llm:{tenant_id}"
-
-    def fake_current_agent_worker_redis_client_v2() -> str:
-        return "redis:test"
-
     class FakeSessionContext:
         async def __aenter__(self) -> object:
             return object()
@@ -218,27 +215,28 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
 
             return _events()
 
-    class FakeDIContainer:
-        def __init__(self, *, db: object, redis_client: object | None = None) -> None:
-            self.db = db
-            self.redis_client = redis_client
-
-        def agent_service(self, llm: str) -> FakeAgentService:
-            assert llm == "llm:tenant-1"
-            return FakeAgentService()
+    @asynccontextmanager
+    async def fake_workspace_contract_agent_turn_authority_v2(
+        **kwargs: object,
+    ) -> AsyncIterator[SimpleNamespace]:
+        assert kwargs["tenant_id"] == "tenant-1"
+        assert kwargs["project_id"] == "project-1"
+        assert isinstance(kwargs["user_id"], str)
+        assert kwargs["user_id"]
+        assert isinstance(kwargs["conversation_id"], str)
+        assert isinstance(kwargs["workspace_id"], str)
+        assert isinstance(kwargs["agent_id"], str)
+        assert isinstance(kwargs["contract_kind"], str)
+        yield SimpleNamespace(operation=object(), service=FakeAgentService())
 
     actor_user_id_override = actor_user_id
 
-    from src.configuration import di_container, factories
-    from src.infrastructure.adapters.primary.web.startup import container as startup_container
     from src.infrastructure.adapters.secondary.persistence import database
     from src.infrastructure.agent.workspace import (
         contract_agent_runtime,
         session_conversations,
     )
-    from src.infrastructure.plugins.v2 import agent_worker_runtime
 
-    monkeypatch.setattr(startup_container, "get_app_container", lambda: None)
     monkeypatch.setattr(
         contract_agent_runtime,
         "resolve_workspace_actor_user_id",
@@ -255,83 +253,43 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
         fake_cancel_workspace_contract_chat,
     )
     monkeypatch.setattr(
+        contract_agent_runtime,
+        "workspace_contract_agent_turn_authority_v2",
+        fake_workspace_contract_agent_turn_authority_v2,
+    )
+    monkeypatch.setattr(
         session_conversations,
         "ensure_workspace_llm_conversation",
         fake_ensure_workspace_llm_conversation,
     )
     monkeypatch.setattr(database, "async_session_factory", fake_async_session_factory)
-    monkeypatch.setattr(factories, "create_llm_client", fake_create_llm_client)
-    monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
-    monkeypatch.setattr(
-        agent_worker_runtime,
-        "current_agent_worker_redis_client_v2",
-        fake_current_agent_worker_redis_client_v2,
+
+
+def test_workspace_contract_agent_turns_have_no_static_composition() -> None:
+    authority_source = getsource(workspace_contract_agent_turn_authority_v2)
+    runner_sources = "\n".join(
+        getsource(method)
+        for method in (
+            RuntimeWorkspacePlannerAgentTurnRunner.run_planning_turn,
+            RuntimeWorkspaceSupervisorAgentTurnRunner.run_decision_turn,
+            RuntimeWorkspaceVerifierAgentTurnRunner.run_verification_turn,
+            RuntimeWorkspaceWorktreeAgentTurnRunner.run_preparation_turn,
+            RuntimeWorkspaceIterationReviewAgentTurnRunner.run_review_turn,
+        )
     )
 
-
-async def test_workspace_contract_agent_service_uses_app_container_scope(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    db = object()
-    agent_service = object()
-    with_db_calls: list[object] = []
-
-    class FakeScopedContainer:
-        def agent_service(self, llm: str) -> object:
-            assert llm == "llm:tenant-1"
-            return agent_service
-
-    class FakeAppContainer:
-        def with_db(self, scoped_db: object) -> FakeScopedContainer:
-            with_db_calls.append(scoped_db)
-            return FakeScopedContainer()
-
-    from src.configuration import di_container
-    from src.infrastructure.adapters.primary.web.startup import container as startup_container
-
-    class ForbiddenDIContainer:
-        def __init__(self, **kwargs: object) -> None:
-            raise AssertionError(f"unexpected fallback container: {kwargs}")
-
-    monkeypatch.setattr(startup_container, "get_app_container", lambda: FakeAppContainer())
-    monkeypatch.setattr(di_container, "DIContainer", ForbiddenDIContainer)
-
-    assert await create_workspace_contract_agent_service(db=db, llm="llm:tenant-1") is agent_service
-    assert with_db_calls == [db]
-
-
-async def test_workspace_contract_agent_service_fallback_injects_redis(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    db = object()
-    agent_service = object()
-    init_calls: list[dict[str, object | None]] = []
-
-    class FakeDIContainer:
-        def __init__(self, *, db: object, redis_client: object | None = None) -> None:
-            init_calls.append({"db": db, "redis_client": redis_client})
-
-        def agent_service(self, llm: str) -> object:
-            assert llm == "llm:tenant-1"
-            return agent_service
-
-    from src.configuration import di_container
-    from src.infrastructure.adapters.primary.web.startup import container as startup_container
-    from src.infrastructure.plugins.v2 import agent_worker_runtime
-
-    def fake_current_agent_worker_redis_client_v2() -> str:
-        return "redis:fallback"
-
-    monkeypatch.setattr(startup_container, "get_app_container", lambda: None)
-    monkeypatch.setattr(
-        agent_worker_runtime,
-        "current_agent_worker_redis_client_v2",
-        fake_current_agent_worker_redis_client_v2,
-    )
-    monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
-
-    assert await create_workspace_contract_agent_service(db=db, llm="llm:tenant-1") is agent_service
-    assert init_calls == [{"db": db, "redis_client": "redis:fallback"}]
+    assert "pin_agent_turn_operation_v2" in authority_source
+    assert "current_agent_turn_service_v2" in authority_source
+    assert "force_process_host_lease=True" in authority_source
+    assert "workspace_contract_agent_turn_authority_v2" in runner_sources
+    for retired_composition in (
+        "create_llm_client",
+        "get_app_container",
+        "DIContainer",
+        "create_workspace_contract_agent_service",
+    ):
+        assert retired_composition not in authority_source
+        assert retired_composition not in runner_sources
 
 
 async def test_workspace_verifier_agent_judge_uses_builtin_agent_turn_runner() -> None:

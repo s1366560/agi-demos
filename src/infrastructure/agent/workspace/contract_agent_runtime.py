@@ -6,18 +6,36 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Callable, Mapping
+import uuid
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
+from src.infrastructure.plugins.v2.agent_turn_services import AgentTurnStreamProtocolV2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_DB_SESSION_SERVICE_V2,
+    OPERATION_IDENTITY_SERVICE_V2,
+    OPERATION_METADATA_SERVICE_V2,
+    pin_agent_turn_operation_v2,
+)
+from src.infrastructure.plugins.v2.runtime import OperationContextV2
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.application.services.agent_service import AgentService
-    from src.domain.llm_providers.llm_types import LLMClient
-
 ContractEventExtractor = Callable[[Mapping[str, Any]], dict[str, Any] | None]
+
+
+@dataclass(frozen=True, kw_only=True)
+class WorkspaceContractAgentTurnAuthorityV2:
+    """Exact generation and service retained for one workspace contract turn."""
+
+    operation: OperationContextV2
+    service: AgentTurnStreamProtocolV2
 
 
 async def resolve_workspace_actor_user_id(
@@ -31,11 +49,7 @@ async def resolve_workspace_actor_user_id(
 
     from src.infrastructure.workspace_core.legacy_runtime import legacy_workspace_runtime_retired
 
-    workspace = legacy_workspace_runtime_retired("contract agent Workspace owner lookup")
-    if workspace is None:
-        return None
-    created_by = getattr(workspace, "created_by", None)
-    return created_by.strip() if isinstance(created_by, str) and created_by.strip() else None
+    return legacy_workspace_runtime_retired("contract agent Workspace owner lookup")
 
 
 def workspace_contract_conversation_id(
@@ -154,27 +168,45 @@ async def recover_workspace_contract_payload(
     return None
 
 
-async def create_workspace_contract_agent_service(
+@asynccontextmanager
+async def workspace_contract_agent_turn_authority_v2(
     *,
     db: AsyncSession,
-    llm: LLMClient,
-) -> AgentService:
-    """Create an AgentService while preserving app-level infra wiring."""
-    from src.infrastructure.adapters.primary.web.startup.container import (
-        get_app_container,
-    )
-
-    app_container = get_app_container()
-    if app_container is not None:
-        return app_container.with_db(db).agent_service(llm)
-
-    from src.configuration.di_container import DIContainer
-    from src.infrastructure.plugins.v2.agent_worker_runtime import (
-        current_agent_worker_redis_client_v2,
-    )
-
-    redis_client = current_agent_worker_redis_client_v2()
-    return DIContainer(db=db, redis_client=redis_client).agent_service(llm)
+    tenant_id: str,
+    project_id: str,
+    user_id: str,
+    conversation_id: str,
+    workspace_id: str,
+    agent_id: str,
+    contract_kind: str,
+) -> AsyncIterator[WorkspaceContractAgentTurnAuthorityV2]:
+    """Resolve a workspace contract turn solely from one leased V2 generation."""
+    async with pin_agent_turn_operation_v2(
+        operation_id=f"workspace-contract-turn:{contract_kind}:{uuid.uuid4()}",
+        tenant_id=tenant_id,
+        project_id=project_id,
+        session_id=conversation_id,
+        services={
+            OPERATION_DB_SESSION_SERVICE_V2: db,
+            OPERATION_IDENTITY_SERVICE_V2: {
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "project_id": project_id,
+            },
+            OPERATION_METADATA_SERVICE_V2: {
+                "kind": "workspace-contract-agent-turn",
+                "contract_kind": contract_kind,
+                "workspace_id": workspace_id,
+                "conversation_id": conversation_id,
+                "agent_id": agent_id,
+            },
+        },
+        force_process_host_lease=True,
+    ) as operation:
+        yield WorkspaceContractAgentTurnAuthorityV2(
+            operation=operation,
+            service=await current_agent_turn_service_v2(),
+        )
 
 
 async def cancel_workspace_contract_chat(conversation_id: str) -> None:
@@ -207,11 +239,12 @@ def _slug(value: str, *, limit: int = 48) -> str:
 
 
 __all__ = [
+    "WorkspaceContractAgentTurnAuthorityV2",
     "cancel_workspace_contract_chat",
     "contract_tool_payload_from_event",
-    "create_workspace_contract_agent_service",
     "recover_workspace_contract_payload",
     "resolve_workspace_actor_user_id",
+    "workspace_contract_agent_turn_authority_v2",
     "workspace_contract_conversation_id",
     "workspace_contract_input_fingerprint",
 ]
