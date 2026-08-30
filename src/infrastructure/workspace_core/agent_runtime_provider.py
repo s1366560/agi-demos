@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, aclosing
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,6 +17,7 @@ from src.domain.events.types import AgentEventType
 from src.domain.model.agent import AgentExecutionEvent
 from src.domain.model.agent.conversation.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -81,28 +82,6 @@ class _AgentExecutionEventRepository(Protocol):
     ) -> list[AgentExecutionEvent]: ...
 
 
-class _AgentService(Protocol):
-    def stream_chat_v2(  # noqa: PLR0913
-        self,
-        conversation_id: str,
-        user_message: str,
-        project_id: str,
-        user_id: str,
-        tenant_id: str,
-        preferred_language: str | None = None,
-        attachment_ids: list[str] | None = None,
-        file_metadata: list[dict[str, Any]] | None = None,
-        forced_skill_name: str | None = None,
-        app_model_context: dict[str, Any] | None = None,
-        image_attachments: list[str] | None = None,
-        agent_id: str | None = None,
-        mentions: list[str] | None = None,
-        api_auth_token: str | None = None,
-        execution_message_id: str | None = None,
-        canonical_run_id: str | None = None,
-    ) -> AsyncIterator[dict[str, Any]]: ...
-
-
 class _WorkspaceCoreRuntimeClient(Protocol):
     async def record_runtime_correlation(
         self,
@@ -130,8 +109,6 @@ class _ScopedContainer(Protocol):
 
     def agent_execution_event_repository(self) -> _AgentExecutionEventRepository: ...
 
-    def agent_service(self, llm: object) -> _AgentService: ...
-
 
 class _ApplicationContainer(Protocol):
     def with_db(self, db: AsyncSession) -> _ScopedContainer: ...
@@ -139,7 +116,6 @@ class _ApplicationContainer(Protocol):
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 ContainerProvider = Callable[[], _ApplicationContainer | None]
-LlmFactory = Callable[[str], Awaitable[object]]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -198,7 +174,6 @@ class MemStackAgentRuntimeProvider:
         workspace_core_client: _WorkspaceCoreRuntimeClient,
         session_factory: SessionFactory | None = None,
         container_provider: ContainerProvider | None = None,
-        llm_factory: LlmFactory | None = None,
         terminal_persist_wait_seconds: float = _MAX_TERMINAL_PERSIST_WAIT_SECONDS,
     ) -> None:
         super().__init__()
@@ -207,7 +182,6 @@ class MemStackAgentRuntimeProvider:
         self._workspace_core_client = workspace_core_client
         self._session_factory = session_factory or _default_session_factory()
         self._container_provider = container_provider or _default_container_provider
-        self._llm_factory = llm_factory or _default_llm_factory
         self._terminal_persist_wait_seconds = terminal_persist_wait_seconds
 
     async def stream_send(
@@ -256,8 +230,6 @@ class MemStackAgentRuntimeProvider:
                     )
                     yield _replayed_terminal_event(terminal)
                 return
-            llm = await self._llm_factory(scope.tenant_id)
-            service = scoped.agent_service(llm)
             app_model_context = await _workspace_model_context(
                 event_repo,
                 request=request,
@@ -295,6 +267,7 @@ class MemStackAgentRuntimeProvider:
                         },
                     )
                 )
+                service = await current_agent_turn_service_v2()
                 agent_stream = cast(
                     AsyncGenerator[dict[str, Any], None],
                     service.stream_chat_v2(
@@ -1089,12 +1062,6 @@ def _default_container_provider() -> _ApplicationContainer | None:
     )
 
     return cast("_ApplicationContainer | None", get_app_container())
-
-
-async def _default_llm_factory(tenant_id: str) -> object:
-    from src.configuration.factories import create_llm_client
-
-    return await create_llm_client(tenant_id)
 
 
 __all__ = ["MemStackAgentRuntimeProvider", "ProviderWorkspaceScope"]

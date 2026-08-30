@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
+from inspect import getsource
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, cast
@@ -28,6 +30,7 @@ from src.infrastructure.plugins.v2.boundary import (
     pin_agent_turn_operation_v2 as real_pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.workspace_core.agent_runtime_provider import (
     MemStackAgentRuntimeProvider,
@@ -48,6 +51,7 @@ from src.infrastructure.workspace_core.provider import (
 
 pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[5]
+_TURN_SERVICE: ContextVar[Any | None] = ContextVar("workspace_provider_turn_service", default=None)
 
 
 @asynccontextmanager
@@ -72,10 +76,22 @@ async def _reserve_immediate_generation() -> _ImmediateGenerationReservation:
 def _isolate_legacy_provider_tests_from_generation_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    async def resolve_turn_service() -> Any:
+        service = _TURN_SERVICE.get()
+        if service is None:
+            raise AssertionError("workspace Provider test has no V2 turn service")
+        return service
+
     monkeypatch.setattr(
         agent_runtime_provider_module,
         "pin_agent_turn_operation_v2",
         _noop_agent_turn_operation,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "current_agent_turn_service_v2",
+        resolve_turn_service,
         raising=False,
     )
 
@@ -403,9 +419,6 @@ class FakeScopedContainer:
     def agent_execution_event_repository(self) -> FakeEventRepository:
         return self.event_repo
 
-    def agent_service(self, _llm: object) -> FakeAgentService:
-        return self.service
-
 
 class FakeContainer:
     def __init__(self, scoped: FakeScopedContainer) -> None:
@@ -443,9 +456,7 @@ def _provider(
 ) -> MemStackAgentRuntimeProvider:
     active_db = db or FakeDb()
     active_core_client = core_client or FakeWorkspaceCoreClient()
-
-    async def llm_factory(_tenant_id: str) -> object:
-        return object()
+    _ = _TURN_SERVICE.set(scoped.service)
 
     def session_factory() -> AbstractAsyncContextManager[Any]:
         return FakeSessionContext(active_db)
@@ -454,9 +465,46 @@ def _provider(
         workspace_core_client=cast(Any, active_core_client),
         session_factory=cast(Any, session_factory),
         container_provider=cast(Any, lambda: FakeContainer(scoped)),
-        llm_factory=llm_factory,
         terminal_persist_wait_seconds=0.2,
     )
+
+
+def test_workspace_provider_send_has_no_static_agent_composition() -> None:
+    init_source = getsource(MemStackAgentRuntimeProvider.__init__)
+    send_source = getsource(MemStackAgentRuntimeProvider.stream_send)
+
+    assert "current_agent_turn_service_v2" in send_source
+    assert "_llm_factory" not in send_source
+    assert ".agent_service(" not in send_source
+    assert "llm_factory" not in init_source
+
+
+async def test_workspace_provider_turn_resolution_failure_is_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scoped = FakeScopedContainer()
+    resolve_calls = 0
+
+    async def reject_turn_service() -> Any:
+        nonlocal resolve_calls
+        resolve_calls += 1
+        raise RuntimeV2Error(
+            "service_not_found",
+            "service:agent.turn-service is not available",
+        )
+
+    monkeypatch.setattr(
+        agent_runtime_provider_module,
+        "current_agent_turn_service_v2",
+        reject_turn_service,
+    )
+
+    events = [event async for event in _provider(scoped).stream_send(_request())]
+
+    assert resolve_calls == 1
+    assert [event.state for event in events] == ["error"]
+    assert events[0].persisted is True
+    assert scoped.service.stream_kwargs is None
 
 
 async def test_send_uses_real_runtime_contract_and_marks_persisted_terminal() -> None:
