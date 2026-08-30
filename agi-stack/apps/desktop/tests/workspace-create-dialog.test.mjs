@@ -48,7 +48,10 @@ test('workspace creation is reachable from the workspace header and empty projec
 });
 
 test('App binds creation to the submitted scope and activates only the verified workspace', () => {
-  assert.match(shellSurfaceSource, /<WorkspaceCreateDialog \{\.\.\.surfaces\.workspaceCreate\} \/>/u);
+  assert.match(
+    shellSurfaceSource,
+    /<DesktopRendererWorkspaceCreateV2 input=\{surfaces\.workspaceCreate\} \/>/u,
+  );
   assert.match(appSource, /workspaceCreate:\s*\{/u);
   assert.match(appSource, /onCreate:\s*createWorkspaceFromDialog/u);
   assert.match(appSource, /createWorkspaceFromDialog/);

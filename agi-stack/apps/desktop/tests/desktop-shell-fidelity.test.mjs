@@ -332,10 +332,10 @@ test('workspace settings freeze and expose selection semantics while a switch is
 });
 
 test('workspace creation uses its dedicated surface while session creation stays in new task', () => {
-  assert.match(authenticatedShellSurfaceSource, /import \{ WorkspaceCreateDialog \}/);
+  assert.match(authenticatedShellSurfaceSource, /import \{ DesktopRendererWorkspaceCreateV2 \}/);
   assert.match(
     authenticatedShellSurfaceSource,
-    /<WorkspaceCreateDialog \{\.\.\.surfaces\.workspaceCreate\} \/>/u,
+    /<DesktopRendererWorkspaceCreateV2 input=\{surfaces\.workspaceCreate\} \/>/u,
   );
   assert.match(appSource, /workspaceCreate:\s*\{/u);
   assert.match(appSource, /const createWorkspaceFromDialog = async/);

@@ -673,7 +673,7 @@ test('authenticated shell contribution owns the complete signed-in app shell', (
     'DesktopRendererCommandPaletteV2',
     'DesktopRendererKeyboardShortcutsV2',
     'NewTaskFlow',
-    'WorkspaceCreateDialog',
+    'DesktopRendererWorkspaceCreateV2',
     'WorkspaceSettingsDialog',
     'DesktopRendererSettingsWindowV2',
   ]) {

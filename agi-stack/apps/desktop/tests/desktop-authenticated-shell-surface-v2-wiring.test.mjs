@@ -49,7 +49,7 @@ test('the V2 authenticated shell surface owns every production chrome outlet', (
     'DesktopRendererCommandPaletteV2',
     'DesktopRendererKeyboardShortcutsV2',
     'NewTaskFlow',
-    'WorkspaceCreateDialog',
+    'DesktopRendererWorkspaceCreateV2',
     'WorkspaceSettingsDialog',
     'DesktopRendererSettingsWindowV2',
   ]) {
@@ -58,7 +58,7 @@ test('the V2 authenticated shell surface owns every production chrome outlet', (
   }
   assert.doesNotMatch(
     shell,
-    /<DesktopStatusBar\b|features\/chrome\/DesktopStatusBar|<CommandPalette\b|features\/navigation\/CommandPalette|<KeyboardShortcutsDialog\b|features\/navigation\/KeyboardShortcutsDialog|<SettingsWindow\b|features\/settings\/SettingsWindow/u,
+    /<DesktopStatusBar\b|features\/chrome\/DesktopStatusBar|<CommandPalette\b|features\/navigation\/CommandPalette|<KeyboardShortcutsDialog\b|features\/navigation\/KeyboardShortcutsDialog|<WorkspaceCreateDialog\b|features\/workspace\/WorkspaceCreateDialog|<SettingsWindow\b|features\/settings\/SettingsWindow/u,
   );
   assert.match(shell, /kind:\s*'hidden'/u);
   assert.match(shell, /kind:\s*'visible'/u);

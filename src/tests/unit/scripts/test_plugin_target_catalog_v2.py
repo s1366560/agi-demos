@@ -130,6 +130,11 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-command-palette-surface"
     )
+    workspace_create_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-workspace-create-surface"
+    )
     activity_inbox_index = next(
         index
         for index, entry in enumerate(entries)
@@ -155,7 +160,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 331
+    assert len(entries) == 332
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -171,6 +176,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         < status_bar_index
         < command_palette_index
         < session_canvas_index
+        < workspace_create_index
         < workbench_index
         < session_workspace_index
         < workspace_collaboration_index
@@ -214,6 +220,15 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         "order": 84,
         "payload": {
             "artifact_refs": ["desktop.ui-slots.command-palette-surface.v1"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[workspace_create_index]["config"] == {
+        "id": "desktop.workspace-create-surface",
+        "kind": "ui-slot",
+        "order": 86,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.workspace-create-surface.v1"],
             "schema_version": 1,
         },
     }
