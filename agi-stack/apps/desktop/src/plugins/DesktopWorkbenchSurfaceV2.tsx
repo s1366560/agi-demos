@@ -2,16 +2,17 @@ import type { ComponentProps } from 'react';
 
 import { ChatPanel } from '../features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from '../features/chat/PlatformPluginConversationSlots';
-import { SessionWorkspace } from '../features/session/SessionWorkspace';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { useI18n } from '../i18n';
 import type { DesktopActivityInboxInputV2 } from './DesktopActivityInboxSurfaceV2';
 import type { DesktopMyWorkQueueInputV2 } from './DesktopMyWorkQueueSurfaceV2';
 import type { DesktopNewThreadComposerInputV2 } from './DesktopNewThreadComposerSurfaceV2';
+import type { DesktopSessionWorkspaceInputV2 } from './DesktopSessionWorkspaceSurfaceV2';
 import type { DesktopWorkspaceCollaborationInputV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopRendererActivityInboxV2 } from './DesktopRendererActivityInboxV2';
 import { DesktopRendererMyWorkQueueV2 } from './DesktopRendererMyWorkQueueV2';
 import { DesktopRendererNewThreadComposerV2 } from './DesktopRendererNewThreadComposerV2';
+import { DesktopRendererSessionWorkspaceV2 } from './DesktopRendererSessionWorkspaceV2';
 import { DesktopRendererWorkspaceCollaborationV2 } from './DesktopRendererWorkspaceCollaborationV2';
 
 type DesktopWorkbenchWorkspaceViewV2 = Readonly<{
@@ -47,9 +48,7 @@ export type DesktopWorkbenchViewV2 =
   | DesktopWorkbenchActivityViewV2
   | DesktopWorkbenchHomeViewV2;
 
-export type DesktopWorkbenchSessionFrameV2 = Readonly<
-  Omit<ComponentProps<typeof SessionWorkspace>, 'thread'>
->;
+export type DesktopWorkbenchSessionFrameV2 = DesktopSessionWorkspaceInputV2;
 
 export interface DesktopWorkbenchSurfaceViewModelV2 {
   readonly error: Readonly<{
@@ -81,8 +80,8 @@ export function DesktopWorkbenchSurfaceV2({ viewModel }: DesktopWorkbenchSurface
         </div>
       ) : null}
       {viewModel.session ? (
-        <SessionWorkspace
-          {...viewModel.session}
+        <DesktopRendererSessionWorkspaceV2
+          input={viewModel.session}
           thread={<section className={viewModel.paneStageClassName}>{view}</section>}
         />
       ) : (

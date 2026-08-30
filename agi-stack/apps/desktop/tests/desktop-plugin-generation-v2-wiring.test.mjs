@@ -166,7 +166,7 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   assert.match(composition, /DesktopWorkbenchSurfaceV2/u);
   assert.doesNotMatch(composition, /const DesktopWorkbenchSurfaceV2\b/u);
   assert.match(workbenchSurface, /type DesktopWorkbenchViewV2\s*=/u);
-  assert.match(workbenchSurface, /<SessionWorkspace/u);
+  assert.match(workbenchSurface, /<DesktopRendererSessionWorkspaceV2/u);
   assert.match(main, /activateDesktopPluginGenerationRootV2\(\)/u);
   assert.match(main, /root\.unmount\(\)/u);
   assert.match(main, /deactivateDesktopPluginGenerationRootV2\(\)/u);

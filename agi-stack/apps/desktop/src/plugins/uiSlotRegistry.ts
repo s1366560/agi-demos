@@ -11,6 +11,7 @@ export type UiSlotKind =
   | 'tool_result_renderer'
   | 'composer_action'
   | 'mcp_canvas'
+  | 'session_workspace_surface'
   | 'workspace_collaboration_surface'
   | 'new_thread_composer_surface'
   | 'my_work_queue_surface'

@@ -35,6 +35,7 @@ const {
   DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2,
+  DESKTOP_SESSION_WORKSPACE_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_WORKSPACE_COLLABORATION_SURFACE_ARTIFACT_ID_V2,
   defineDesktopUiSlotArtifactV2,
   resolveDesktopRendererArtifactsV2,
@@ -49,6 +50,9 @@ const {
 const {
   DesktopNewThreadComposerSurfaceV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopNewThreadComposerSurfaceV2.js");
+const {
+  DesktopSessionWorkspaceSurfaceV2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopSessionWorkspaceSurfaceV2.js");
 const {
   DesktopWorkspaceCollaborationSurfaceV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopWorkspaceCollaborationSurfaceV2.js");
@@ -173,6 +177,34 @@ test("new-thread composer resolver requires the exact builtin V2 slot contract",
     { ...definition, sandbox: false },
   ]) {
     assert.equal(appComposition.resolveNewThreadComposerSurface(invalid), null);
+  }
+});
+
+test("session workspace resolver requires the exact builtin V2 slot contract", () => {
+  const definition = Object.freeze({
+    pluginId: "builtin-shell",
+    slot: "session_workspace_surface",
+    id: "session-workspace",
+    contract: "ui-builtin:desktop-session-workspace-surface",
+    moduleRef: "builtin:desktop-session-workspace-surface",
+    permission: "ui.session-workspace",
+    sandbox: true,
+  });
+
+  assert.equal(
+    appComposition.resolveSessionWorkspaceSurface(definition),
+    DesktopSessionWorkspaceSurfaceV2,
+  );
+  for (const invalid of [
+    { ...definition, pluginId: "third-party-shell" },
+    { ...definition, slot: "workbench_surface" },
+    { ...definition, id: "wrong-session-workspace" },
+    { ...definition, contract: "ui-builtin:wrong-session-workspace-surface" },
+    { ...definition, moduleRef: "builtin:wrong-session-workspace-surface" },
+    { ...definition, permission: "ui.wrong-session-workspace" },
+    { ...definition, sandbox: false },
+  ]) {
+    assert.equal(appComposition.resolveSessionWorkspaceSurface(invalid), null);
   }
 });
 
@@ -384,34 +416,40 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       300,
     ),
     contribution(
+      "desktop.session-workspace-surface",
+      "ui-slot",
+      [DESKTOP_SESSION_WORKSPACE_SURFACE_ARTIFACT_ID_V2],
+      301,
+    ),
+    contribution(
       "desktop.workspace-collaboration-surface",
       "ui-slot",
       [DESKTOP_WORKSPACE_COLLABORATION_SURFACE_ARTIFACT_ID_V2],
-      301,
+      302,
     ),
     contribution(
       "desktop.new-thread-composer-surface",
       "ui-slot",
       [DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2],
-      302,
+      303,
     ),
     contribution(
       "desktop.my-work-queue-surface",
       "ui-slot",
       [DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2],
-      303,
+      304,
     ),
     contribution(
       "desktop.activity-inbox-surface",
       "ui-slot",
       [DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2],
-      304,
+      305,
     ),
     contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
-      305,
+      306,
     ),
   ]);
 
@@ -444,6 +482,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
+      [DESKTOP_SESSION_WORKSPACE_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_WORKSPACE_COLLABORATION_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
@@ -786,6 +825,17 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
   assert.deepEqual(artifacts[26].slotDefinitions, [
     {
       pluginId: "builtin-shell",
+      slot: "session_workspace_surface",
+      id: "session-workspace",
+      contract: "ui-builtin:desktop-session-workspace-surface",
+      moduleRef: "builtin:desktop-session-workspace-surface",
+      permission: "ui.session-workspace",
+      sandbox: true,
+    },
+  ]);
+  assert.deepEqual(artifacts[27].slotDefinitions, [
+    {
+      pluginId: "builtin-shell",
       slot: "workspace_collaboration_surface",
       id: "workspace-collaboration",
       contract: "ui-builtin:desktop-workspace-collaboration-surface",
@@ -794,7 +844,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.deepEqual(artifacts[27].slotDefinitions, [
+  assert.deepEqual(artifacts[28].slotDefinitions, [
     {
       pluginId: "builtin-shell",
       slot: "new_thread_composer_surface",
@@ -805,7 +855,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.deepEqual(artifacts[28].slotDefinitions, [
+  assert.deepEqual(artifacts[29].slotDefinitions, [
     {
       pluginId: "builtin-shell",
       slot: "my_work_queue_surface",
@@ -816,7 +866,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.deepEqual(artifacts[29].slotDefinitions, [
+  assert.deepEqual(artifacts[30].slotDefinitions, [
     {
       pluginId: "builtin-shell",
       slot: "activity_inbox_surface",
@@ -827,9 +877,9 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.equal(artifacts[30].slotDefinitions.length, 2);
+  assert.equal(artifacts[31].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[30].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[31].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

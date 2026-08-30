@@ -9,6 +9,7 @@ const {
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
   DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
+  DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   projectDesktopActivityInboxCompositionV2,
@@ -16,6 +17,7 @@ const {
   projectDesktopMyWorkQueueCompositionV2,
   projectDesktopNewThreadComposerCompositionV2,
   projectDesktopSessionCanvasCompositionV2,
+  projectDesktopSessionWorkspaceCompositionV2,
   projectDesktopWorkspaceCollaborationCompositionV2,
   projectDesktopWorkbenchCompositionV2,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererCompositionPortV2.js');
@@ -66,6 +68,15 @@ const workspaceCollaborationSlot = Object.freeze({
   permission: 'ui.workspace-collaboration',
   sandbox: true,
 });
+const sessionWorkspaceSlot = Object.freeze({
+  pluginId: 'builtin-shell',
+  slot: 'session_workspace_surface',
+  id: 'session-workspace',
+  contract: 'ui-builtin:desktop-session-workspace-surface',
+  moduleRef: DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2,
+  permission: 'ui.session-workspace',
+  sandbox: true,
+});
 const workbenchSlot = Object.freeze({
   pluginId: 'builtin-shell',
   slot: 'workbench_surface',
@@ -94,6 +105,7 @@ function composition({
   myWorkQueue = MyWorkQueueSurface,
   newThreadComposer = NewThreadComposerSurface,
   sessionCanvas = SessionCanvasSurface,
+  sessionWorkspace = SessionWorkspaceSurface,
   shell = AuthenticatedShellSurface,
   workspaceCollaboration = WorkspaceCollaborationSurface,
   workbench = WorkbenchSurface,
@@ -130,6 +142,11 @@ function composition({
         ? sessionCanvas
         : null;
     },
+    resolveSessionWorkspaceSurface(definition) {
+      return definition.moduleRef === DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2
+        ? sessionWorkspace
+        : null;
+    },
     resolveWorkspaceCollaborationSurface(definition) {
       return definition.moduleRef === DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2
         ? workspaceCollaboration
@@ -158,6 +175,10 @@ function NewThreadComposerSurface() {
 }
 
 function SessionCanvasSurface() {
+  return null;
+}
+
+function SessionWorkspaceSurface() {
   return null;
 }
 
@@ -567,6 +588,85 @@ test('new-thread composer composition preserves generation failure without stati
   );
   assert.deepEqual(
     projectDesktopNewThreadComposerCompositionV2(authority('disabled', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_disabled',
+    }),
+  );
+});
+
+test('session workspace composition resolves one explicit active V2 contribution', () => {
+  assert.deepEqual(
+    projectDesktopSessionWorkspaceCompositionV2(
+      authority('ready', [sessionWorkspaceSlot]),
+      composition(),
+    ),
+    Object.freeze({ status: 'ready', Surface: SessionWorkspaceSurface }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionWorkspaceCompositionV2(authority('loading', []), composition()),
+    Object.freeze({ status: 'loading' }),
+  );
+});
+
+test('session workspace composition fails closed for invalid contributions', () => {
+  assert.deepEqual(
+    projectDesktopSessionWorkspaceCompositionV2(authority('ready', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_session_workspace_contribution_missing',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionWorkspaceCompositionV2(
+      authority('ready', [
+        sessionWorkspaceSlot,
+        { ...sessionWorkspaceSlot, id: 'duplicate' },
+      ]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_session_workspace_contribution_ambiguous',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionWorkspaceCompositionV2(
+      authority('ready', [
+        {
+          ...sessionWorkspaceSlot,
+          moduleRef: 'builtin:wrong-session-workspace',
+        },
+      ]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_session_workspace_module_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionWorkspaceCompositionV2(
+      authority('ready', [sessionWorkspaceSlot]),
+      composition({ sessionWorkspace: null }),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_session_workspace_module_unavailable',
+    }),
+  );
+});
+
+test('session workspace preserves generation failure without static fallback', () => {
+  assert.deepEqual(
+    projectDesktopSessionWorkspaceCompositionV2(authority('unavailable', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopSessionWorkspaceCompositionV2(authority('disabled', []), composition()),
     Object.freeze({
       status: 'unavailable',
       reasonCode: 'desktop_renderer_generation_disabled',
