@@ -18,6 +18,7 @@ import type { DesktopRouteModule } from '../features/navigation/desktopRouteModu
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import { DesktopActivityInboxSurfaceV2 } from './DesktopActivityInboxSurfaceV2';
 import { DesktopAuthenticatedShellSurfaceV2 } from './DesktopAuthenticatedShellSurfaceV2';
+import { DesktopCommandPaletteSurfaceV2 } from './DesktopCommandPaletteSurfaceV2';
 import { DesktopConversationSurfaceV2 } from './DesktopConversationSurfaceV2';
 import { DesktopKeyboardShortcutsSurfaceV2 } from './DesktopKeyboardShortcutsSurfaceV2';
 import { DesktopMyWorkQueueSurfaceV2 } from './DesktopMyWorkQueueSurfaceV2';
@@ -53,6 +54,7 @@ import {
 import {
   DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
+  DESKTOP_COMMAND_PALETTE_SURFACE_MODULE_REF_V2,
   DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2,
   DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_MODULE_REF_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
@@ -112,6 +114,8 @@ export function createDesktopRendererAppCompositionPortV2(
       validActivityInboxDefinitionV2(definition) ? DesktopActivityInboxSurfaceV2 : null,
     resolveAuthenticatedShellSurface: (definition: UiSlotDefinition) =>
       validAuthenticatedShellDefinitionV2(definition) ? DesktopAuthenticatedShellSurfaceV2 : null,
+    resolveCommandPaletteSurface: (definition: UiSlotDefinition) =>
+      validCommandPaletteDefinitionV2(definition) ? DesktopCommandPaletteSurfaceV2 : null,
     resolveConversationSurface: (definition: UiSlotDefinition) =>
       validConversationDefinitionV2(definition) ? DesktopConversationSurfaceV2 : null,
     resolveKeyboardShortcutsSurface: (definition: UiSlotDefinition) =>
@@ -169,6 +173,18 @@ function validAuthenticatedShellDefinitionV2(definition: UiSlotDefinition): bool
     definition.contract === 'ui-builtin:desktop-authenticated-shell-surface' &&
     definition.moduleRef === DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.authenticated-shell' &&
+    definition.sandbox
+  );
+}
+
+function validCommandPaletteDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'command_palette_surface' &&
+    definition.id === 'command-palette' &&
+    definition.contract === 'ui-builtin:desktop-command-palette-surface' &&
+    definition.moduleRef === DESKTOP_COMMAND_PALETTE_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.command-palette' &&
     definition.sandbox
   );
 }

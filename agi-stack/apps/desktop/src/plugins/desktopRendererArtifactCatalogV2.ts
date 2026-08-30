@@ -118,6 +118,8 @@ export const DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.keyboard-shortcuts-surface.v1';
 export const DESKTOP_STATUS_BAR_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.status-bar-surface.v1';
+export const DESKTOP_COMMAND_PALETTE_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.command-palette-surface.v1';
 export const DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.settings-window-surface.v1';
 export const DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2 =
@@ -353,6 +355,17 @@ const STATUS_BAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.fr
     contract: 'ui-builtin:desktop-status-bar-surface',
     moduleRef: 'builtin:desktop-status-bar-surface',
     permission: 'ui.status-bar',
+    sandbox: true,
+  }),
+]);
+const COMMAND_PALETTE_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'command_palette_surface',
+    id: 'command-palette',
+    contract: 'ui-builtin:desktop-command-palette-surface',
+    moduleRef: 'builtin:desktop-command-palette-surface',
+    permission: 'ui.command-palette',
     sandbox: true,
   }),
 ]);
@@ -724,6 +737,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopUiSlotArtifactV2(
       DESKTOP_STATUS_BAR_SURFACE_ARTIFACT_ID_V2,
       STATUS_BAR_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_COMMAND_PALETTE_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_COMMAND_PALETTE_SURFACE_ARTIFACT_ID_V2,
+      COMMAND_PALETTE_SURFACE_DEFINITIONS_V2,
     ),
   ],
   [

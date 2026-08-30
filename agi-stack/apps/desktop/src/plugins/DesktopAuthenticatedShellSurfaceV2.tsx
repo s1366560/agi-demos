@@ -1,18 +1,18 @@
 import type { ComponentProps, CSSProperties, RefObject } from 'react';
-import { createPortal } from 'react-dom';
 import { Theme } from '@radix-ui/themes';
 
 import { ResizeHandle } from '../components/ResizeHandle';
 import { DesktopRightSidebar } from '../features/chrome/DesktopRightSidebar';
 import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
 import { WorkbenchTabBar } from '../features/chrome/WorkbenchTabBar';
-import { CommandPalette } from '../features/navigation/CommandPalette';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import { WorkspaceCreateDialog } from '../features/workspace/WorkspaceCreateDialog';
 import { WorkspaceSettingsDialog } from '../features/workspace/WorkspaceSettingsDialog';
 import type { ResolvedTheme } from '../theme';
+import type { DesktopCommandPaletteInputV2 } from './DesktopCommandPaletteSurfaceV2';
 import type { DesktopKeyboardShortcutsInputV2 } from './DesktopKeyboardShortcutsSurfaceV2';
+import { DesktopRendererCommandPaletteV2 } from './DesktopRendererCommandPaletteV2';
 import { DesktopRendererKeyboardShortcutsV2 } from './DesktopRendererKeyboardShortcutsV2';
 import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
 import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
@@ -46,9 +46,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
     windowMode: 'browser' | 'native';
   }>;
   readonly surfaces: Readonly<{
-    commandPalette: DesktopAuthenticatedShellOptionalOutletV2<
-      ComponentProps<typeof CommandPalette>
-    >;
+    commandPalette: DesktopCommandPaletteInputV2;
     keyboardShortcuts: DesktopKeyboardShortcutsInputV2;
     newTask: ComponentProps<typeof NewTaskFlow>;
     rightSidebar: DesktopAuthenticatedShellOptionalOutletV2<
@@ -126,9 +124,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
 
         <DesktopRendererStatusBarV2 input={surfaces.statusBar} />
 
-        {surfaces.commandPalette.kind === 'visible'
-          ? createPortal(<CommandPalette {...surfaces.commandPalette.props} />, document.body)
-          : null}
+        <DesktopRendererCommandPaletteV2 input={surfaces.commandPalette} />
         <DesktopRendererKeyboardShortcutsV2 input={surfaces.keyboardShortcuts} />
         <NewTaskFlow {...surfaces.newTask} />
         <WorkspaceCreateDialog {...surfaces.workspaceCreate} />

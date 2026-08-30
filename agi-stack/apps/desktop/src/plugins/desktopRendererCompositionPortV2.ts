@@ -4,6 +4,7 @@ import type { DesktopRouteModule } from '../features/navigation/desktopRouteModu
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import type { DesktopActivityInboxSurfacePropsV2 } from './DesktopActivityInboxSurfaceV2';
 import type { DesktopAuthenticatedShellViewModelV2 } from './DesktopAuthenticatedShellSurfaceV2';
+import type { DesktopCommandPaletteSurfacePropsV2 } from './DesktopCommandPaletteSurfaceV2';
 import type { DesktopConversationSurfacePropsV2 } from './DesktopConversationSurfaceV2';
 import type { DesktopKeyboardShortcutsSurfacePropsV2 } from './DesktopKeyboardShortcutsSurfaceV2';
 import type { DesktopMyWorkQueueSurfacePropsV2 } from './DesktopMyWorkQueueSurfaceV2';
@@ -23,6 +24,8 @@ export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-authenticated-shell-surface' as const;
 export const DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-conversation-surface' as const;
+export const DESKTOP_COMMAND_PALETTE_SURFACE_MODULE_REF_V2 =
+  'builtin:desktop-command-palette-surface' as const;
 export const DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-keyboard-shortcuts-surface' as const;
 export const DESKTOP_STATUS_BAR_SURFACE_MODULE_REF_V2 =
@@ -47,6 +50,8 @@ export type DesktopRendererActivityInboxSurfaceV2 =
   ComponentType<DesktopActivityInboxSurfacePropsV2>;
 export type DesktopRendererConversationSurfaceV2 =
   ComponentType<DesktopConversationSurfacePropsV2>;
+export type DesktopRendererCommandPaletteSurfaceV2 =
+  ComponentType<DesktopCommandPaletteSurfacePropsV2>;
 export type DesktopRendererKeyboardShortcutsSurfaceV2 =
   ComponentType<DesktopKeyboardShortcutsSurfacePropsV2>;
 export type DesktopRendererStatusBarSurfaceV2 = ComponentType<DesktopStatusBarSurfacePropsV2>;
@@ -87,6 +92,9 @@ export interface DesktopRendererCompositionPortV2 {
   readonly resolveAuthenticatedShellSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererAuthenticatedShellSurfaceV2 | null;
+  readonly resolveCommandPaletteSurface: (
+    definition: UiSlotDefinition,
+  ) => DesktopRendererCommandPaletteSurfaceV2 | null;
   readonly resolveConversationSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererConversationSurfaceV2 | null;
@@ -137,6 +145,22 @@ export type DesktopRendererAuthenticatedShellCompositionV2 =
         | 'desktop_renderer_authenticated_shell_contribution_ambiguous'
         | 'desktop_renderer_authenticated_shell_contribution_missing'
         | 'desktop_renderer_authenticated_shell_module_unavailable'
+        | 'desktop_renderer_generation_disabled'
+        | 'desktop_renderer_generation_unavailable';
+    }>;
+
+export type DesktopRendererCommandPaletteCompositionV2 =
+  | Readonly<{
+      status: 'ready';
+      Surface: DesktopRendererCommandPaletteSurfaceV2;
+    }>
+  | Readonly<{ status: 'loading' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode:
+        | 'desktop_renderer_command_palette_contribution_ambiguous'
+        | 'desktop_renderer_command_palette_contribution_missing'
+        | 'desktop_renderer_command_palette_module_unavailable'
         | 'desktop_renderer_generation_disabled'
         | 'desktop_renderer_generation_unavailable';
     }>;
@@ -346,6 +370,37 @@ export function projectDesktopAuthenticatedShellCompositionV2(
     return unavailableAuthenticatedShellV2(
       'desktop_renderer_authenticated_shell_module_unavailable',
     );
+  }
+  return Object.freeze({ status: 'ready', Surface });
+}
+
+export function projectDesktopCommandPaletteCompositionV2(
+  authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
+  composition: DesktopRendererCompositionPortV2,
+): DesktopRendererCommandPaletteCompositionV2 {
+  if (authority.status === 'loading') return Object.freeze({ status: 'loading' });
+  if (authority.status === 'disabled') {
+    return unavailableCommandPaletteV2('desktop_renderer_generation_disabled');
+  }
+  if (authority.status === 'unavailable') {
+    return unavailableCommandPaletteV2('desktop_renderer_generation_unavailable');
+  }
+  const definitions = authority.slotDefinitions.filter(
+    ({ slot }) => slot === 'command_palette_surface',
+  );
+  if (definitions.length === 0) {
+    return unavailableCommandPaletteV2(
+      'desktop_renderer_command_palette_contribution_missing',
+    );
+  }
+  if (definitions.length !== 1) {
+    return unavailableCommandPaletteV2(
+      'desktop_renderer_command_palette_contribution_ambiguous',
+    );
+  }
+  const Surface = composition.resolveCommandPaletteSurface(definitions[0]);
+  if (Surface === null) {
+    return unavailableCommandPaletteV2('desktop_renderer_command_palette_module_unavailable');
   }
   return Object.freeze({ status: 'ready', Surface });
 }
@@ -686,6 +741,15 @@ function unavailableWorkbenchV2(
     Readonly<{ status: 'unavailable' }>
   >['reasonCode'],
 ): DesktopRendererWorkbenchCompositionV2 {
+  return Object.freeze({ status: 'unavailable', reasonCode });
+}
+
+function unavailableCommandPaletteV2(
+  reasonCode: Extract<
+    DesktopRendererCommandPaletteCompositionV2,
+    Readonly<{ status: 'unavailable' }>
+  >['reasonCode'],
+): DesktopRendererCommandPaletteCompositionV2 {
   return Object.freeze({ status: 'unavailable', reasonCode });
 }
 
