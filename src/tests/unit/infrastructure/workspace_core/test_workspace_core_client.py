@@ -14,9 +14,11 @@ from src.infrastructure.workspace_core.client import (
     WorkspaceAuthorityActor,
     WorkspaceAuthorityQueryRequest,
     WorkspaceAuthorityTaskRef,
+    WorkspaceContractActorResolutionError,
     WorkspaceContractActorResolveRequest,
     WorkspaceCoreClient,
     WorkspaceCoreClientError,
+    WorkspaceCoreConflictError,
     WorkspaceCoreNotFoundError,
     WorkspaceCorePublicApiCapabilities,
     WorkspaceCoreTaskSessionRequest,
@@ -165,6 +167,37 @@ async def test_contract_actor_resolution_uses_strict_v2_service_contract() -> No
     assert response.participant_actor_id == "human:owner-1"
     assert response.authority_revision == 7
     assert response.duplicate is False
+
+
+@pytest.mark.unit
+async def test_contract_actor_resolution_preserves_structured_conflict() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            409,
+            json={
+                "code": "workspace_contract_actor_idempotency_conflict",
+                "detail": "Workspace contract actor operation conflicts with its immutable audit",
+            },
+        )
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+
+    with pytest.raises(WorkspaceContractActorResolutionError) as error:
+        await client.resolve_contract_actor(
+            WorkspaceContractActorResolveRequest(
+                tenant_id="tenant-1",
+                project_id="project-1",
+                workspace_id="workspace-1",
+                purpose="planner_turn",
+                operation_id="planner:workspace-1:turn-1",
+            )
+        )
+
+    assert isinstance(error.value, WorkspaceCoreConflictError)
+    assert error.value.code == "workspace_contract_actor_idempotency_conflict"
+    assert error.value.detail == (
+        "Workspace contract actor operation conflicts with its immutable audit"
+    )
 
 
 @pytest.mark.unit

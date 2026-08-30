@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,16 +14,12 @@ import pytest
 from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.ports.repositories.agent_repository import ConversationRepository
 from src.infrastructure.agent.workspace import session_conversations as session_module
-from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
-    ASYNC_SESSION_FACTORY_SERVICE_V2,
-    AsyncSessionFactoryServiceV2,
-)
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
-    OPERATION_METADATA_SERVICE_V2,
     clear_process_generation_host_v2,
     install_process_generation_host_v2,
+    pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.conversation_access_services import (
@@ -54,17 +49,6 @@ class _TrackedDb:
         self.order.append("commit")
 
 
-class _SessionContext:
-    def __init__(self, db: object) -> None:
-        self.db = db
-
-    async def __aenter__(self) -> object:
-        return self.db
-
-    async def __aexit__(self, *_args: object) -> None:
-        return None
-
-
 class _TrackedCache:
     def __init__(self, order: list[str]) -> None:
         self.order = order
@@ -84,9 +68,23 @@ class _Resolver:
 
 
 class _Operation:
-    def __init__(self, services: Mapping[str, object]) -> None:
+    def __init__(
+        self,
+        services: Mapping[str, object],
+        *,
+        tenant_id: str = "tenant-a",
+        project_id: str = "project-a",
+        conversation_id: str = "conversation-a",
+    ) -> None:
         self.services = dict(services)
         self.provided: list[tuple[str, object, str | None]] = []
+        self.context = SimpleNamespace(
+            scope=SimpleNamespace(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                session_id=conversation_id,
+            )
+        )
 
     def require(self, service: str) -> object:
         try:
@@ -138,14 +136,36 @@ def _repositories(repository: ConversationRepository) -> ConversationCrudReposit
     )
 
 
-def _session_factory(db: object) -> AsyncSessionFactoryServiceV2:
-    def factory() -> _SessionContext:
-        return _SessionContext(db)
+def _operation(
+    *,
+    db: object,
+    resolver: object,
+    user_id: str = "user-a",
+    tenant_id: str = "tenant-a",
+    project_id: str = "project-a",
+    conversation_id: str = "conversation-a",
+) -> _Operation:
+    return _Operation(
+        {
+            OPERATION_DB_SESSION_SERVICE_V2: db,
+            OPERATION_IDENTITY_SERVICE_V2: {
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+                "user_id": user_id,
+            },
+            CONVERSATION_ACCESS_SERVICE_V2: resolver,
+        },
+        tenant_id=tenant_id,
+        project_id=project_id,
+        conversation_id=conversation_id,
+    )
 
-    return AsyncSessionFactoryServiceV2(factory=cast(Any, factory))
 
-
-def _call_kwargs(*, actor_user_id: str | None = "user-a") -> dict[str, Any]:
+def _call_kwargs(
+    operation: object,
+    *,
+    actor_user_id: str | None = "user-a",
+) -> dict[str, Any]:
     return {
         "conversation_id": "conversation-a",
         "tenant_id": "tenant-a",
@@ -155,42 +175,13 @@ def _call_kwargs(*, actor_user_id: str | None = "user-a") -> dict[str, Any]:
         "title": "Workspace planning",
         "stage": "planning",
         "actor_user_id": actor_user_id,
+        "operation": operation,
         "linked_workspace_task_id": "task-a",
         "metadata": {"input_fingerprint": "fingerprint-a"},
     }
 
 
-def _install_fake_operation(
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    sessions: object,
-    resolver: object,
-) -> tuple[_Operation, list[dict[str, object]]]:
-    operation = _Operation(
-        {
-            ASYNC_SESSION_FACTORY_SERVICE_V2: sessions,
-            CONVERSATION_ACCESS_SERVICE_V2: resolver,
-        }
-    )
-    calls: list[dict[str, object]] = []
-
-    @asynccontextmanager
-    async def pin_operation(**kwargs: object) -> AsyncIterator[_Operation]:
-        calls.append(dict(kwargs))
-        yield operation
-
-    monkeypatch.setattr(
-        session_module,
-        "pin_agent_turn_operation_v2",
-        pin_operation,
-        raising=False,
-    )
-    return operation, calls
-
-
-async def test_workspace_session_creates_exact_scoped_conversation_through_v2(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_workspace_session_creates_exact_scoped_conversation_through_v2() -> None:
     order: list[str] = []
     db = _TrackedDb(order)
     saved: list[Conversation] = []
@@ -211,42 +202,13 @@ async def test_workspace_session_creates_exact_scoped_conversation_through_v2(
     )
     resolver = _Resolver(service=service)
     assert isinstance(resolver, ConversationAccessResolverProtocolV2)
-    operation, pin_calls = _install_fake_operation(
-        monkeypatch,
-        sessions=_session_factory(db),
-        resolver=resolver,
-    )
+    operation = _operation(db=db, resolver=resolver)
 
     assert await session_module.ensure_workspace_llm_conversation(
-        **_call_kwargs(actor_user_id="  user-a  ")
+        **_call_kwargs(operation, actor_user_id="  user-a  ")
     )
 
-    assert len(pin_calls) == 1
-    assert pin_calls[0] == {
-        "operation_id": pin_calls[0]["operation_id"],
-        "tenant_id": "tenant-a",
-        "project_id": "project-a",
-        "session_id": "conversation-a",
-        "services": {
-            OPERATION_IDENTITY_SERVICE_V2: {
-                "tenant_id": "tenant-a",
-                "project_id": "project-a",
-                "user_id": "user-a",
-            },
-            OPERATION_METADATA_SERVICE_V2: {
-                "kind": "workspace-llm-session",
-                "conversation_id": "conversation-a",
-                "workspace_id": "workspace-a",
-                "agent_id": "planner-a",
-                "stage": "planning",
-            },
-        },
-        "force_process_host_lease": True,
-    }
-    assert str(pin_calls[0]["operation_id"]).startswith("workspace-llm-session:")
-    assert operation.provided == [
-        (OPERATION_DB_SESSION_SERVICE_V2, db, "workspace-llm-session-db"),
-    ]
+    assert operation.provided == []
     assert len(saved) == 1
     conversation = saved[0]
     assert conversation.id == "conversation-a"
@@ -263,9 +225,7 @@ async def test_workspace_session_creates_exact_scoped_conversation_through_v2(
     assert cache.projects == ["project-a"]
 
 
-async def test_workspace_session_updates_existing_conversation_without_scope_drift(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_workspace_session_updates_existing_conversation_without_scope_drift() -> None:
     order: list[str] = []
     db = _TrackedDb(order)
     existing = Conversation(
@@ -290,13 +250,9 @@ async def test_workspace_session_updates_existing_conversation_without_scope_dri
         repositories=_repositories(repository),
         cache=_TrackedCache(order),
     )
-    _install_fake_operation(
-        monkeypatch,
-        sessions=_session_factory(db),
-        resolver=_Resolver(service=service),
-    )
+    operation = _operation(db=db, resolver=_Resolver(service=service))
 
-    assert await session_module.ensure_workspace_llm_conversation(**_call_kwargs())
+    assert await session_module.ensure_workspace_llm_conversation(**_call_kwargs(operation))
 
     assert existing.workspace_id == "workspace-a"
     assert existing.linked_workspace_task_id == "task-a"
@@ -313,7 +269,6 @@ async def test_workspace_session_updates_existing_conversation_without_scope_dri
     (("tenant_id", "tenant-b"), ("project_id", "project-b"), ("user_id", "user-b")),
 )
 async def test_workspace_session_rejects_existing_scope_mismatch_before_mutation(
-    monkeypatch: pytest.MonkeyPatch,
     field: str,
     value: str,
 ) -> None:
@@ -340,13 +295,9 @@ async def test_workspace_session_rejects_existing_scope_mismatch_before_mutation
         repositories=_repositories(repository),
         cache=cache,
     )
-    _install_fake_operation(
-        monkeypatch,
-        sessions=_session_factory(db),
-        resolver=_Resolver(service=service),
-    )
+    operation = _operation(db=db, resolver=_Resolver(service=service))
 
-    assert not await session_module.ensure_workspace_llm_conversation(**_call_kwargs())
+    assert not await session_module.ensure_workspace_llm_conversation(**_call_kwargs(operation))
 
     assert existing.workspace_id == "workspace-old"
     cast(Any, repository).save.assert_not_awaited()
@@ -354,44 +305,15 @@ async def test_workspace_session_rejects_existing_scope_mismatch_before_mutation
     assert cache.projects == []
 
 
-async def test_workspace_session_requires_explicit_actor_before_provider_activation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    pin_calls = 0
-
-    @asynccontextmanager
-    async def reject_pin(**_kwargs: object) -> AsyncIterator[object]:
-        nonlocal pin_calls
-        pin_calls += 1
-        raise AssertionError("missing actor must not activate a V2 Provider")
-        yield object()
-
-    monkeypatch.setattr(
-        session_module,
-        "pin_agent_turn_operation_v2",
-        reject_pin,
-        raising=False,
-    )
+async def test_workspace_session_requires_explicit_actor_before_provider_activation() -> None:
+    operation = _Operation({})
 
     assert not await session_module.ensure_workspace_llm_conversation(
-        **_call_kwargs(actor_user_id="  ")
+        **_call_kwargs(operation, actor_user_id="  ")
     )
-    assert pin_calls == 0
 
 
-@pytest.mark.parametrize(
-    ("sessions", "resolver", "code"),
-    (
-        (object(), _Resolver, "invalid_workspace_session_factory"),
-        (None, object(), "invalid_workspace_conversation_access"),
-    ),
-)
-async def test_workspace_session_rejects_invalid_v2_services_without_static_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-    sessions: object | None,
-    resolver: object,
-    code: str,
-) -> None:
+async def test_workspace_session_rejects_invalid_v2_services_without_static_fallback() -> None:
     db = _TrackedDb([])
     valid_service = ConversationAccessServiceV2(
         repositories=_repositories(
@@ -402,47 +324,76 @@ async def test_workspace_session_rejects_invalid_v2_services_without_static_fall
         ),
         cache=_TrackedCache([]),
     )
-    resolved_sessions = _session_factory(db) if sessions is None else sessions
-    resolved_resolver = _Resolver(service=valid_service) if resolver is _Resolver else resolver
-    _install_fake_operation(
-        monkeypatch,
-        sessions=resolved_sessions,
-        resolver=resolved_resolver,
+    invalid_db_operation = _operation(
+        db=object(),
+        resolver=_Resolver(service=valid_service),
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await session_module.ensure_workspace_llm_conversation(**_call_kwargs())
+        await session_module.ensure_workspace_llm_conversation(**_call_kwargs(invalid_db_operation))
 
-    assert error.value.code == code
+    assert error.value.code == "invalid_workspace_session_db"
+
+    invalid_resolver_operation = _operation(db=db, resolver=object())
+    with pytest.raises(RuntimeV2Error) as error:
+        await session_module.ensure_workspace_llm_conversation(
+            **_call_kwargs(invalid_resolver_operation)
+        )
+
+    assert error.value.code == "invalid_workspace_conversation_access"
 
 
-async def test_workspace_session_propagates_missing_v2_service(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    operation = _Operation({})
-
-    @asynccontextmanager
-    async def pin_operation(**_kwargs: object) -> AsyncIterator[_Operation]:
-        yield operation
-
-    monkeypatch.setattr(
-        session_module,
-        "pin_agent_turn_operation_v2",
-        pin_operation,
-        raising=False,
+async def test_workspace_session_propagates_missing_v2_service() -> None:
+    operation = _Operation(
+        {
+            OPERATION_IDENTITY_SERVICE_V2: {
+                "tenant_id": "tenant-a",
+                "project_id": "project-a",
+                "user_id": "user-a",
+            }
+        }
     )
 
     with pytest.raises(RuntimeV2Error) as error:
-        await session_module.ensure_workspace_llm_conversation(**_call_kwargs())
+        await session_module.ensure_workspace_llm_conversation(**_call_kwargs(operation))
 
     assert error.value.code == "service_not_found"
+
+
+@pytest.mark.parametrize(
+    ("scope_field", "value"),
+    (("tenant_id", "tenant-b"), ("project_id", "project-b"), ("conversation_id", "other")),
+)
+async def test_workspace_session_rejects_operation_scope_drift(
+    scope_field: str,
+    value: str,
+) -> None:
+    scope = {
+        "tenant_id": "tenant-a",
+        "project_id": "project-a",
+        "conversation_id": "conversation-a",
+    }
+    scope[scope_field] = value
+    operation = _operation(db=_TrackedDb([]), resolver=object(), **scope)
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await session_module.ensure_workspace_llm_conversation(**_call_kwargs(operation))
+
+    assert error.value.code == "workspace_session_operation_scope_mismatch"
+
+
+async def test_workspace_session_rejects_operation_actor_drift() -> None:
+    operation = _operation(db=_TrackedDb([]), resolver=object(), user_id="user-b")
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await session_module.ensure_workspace_llm_conversation(**_call_kwargs(operation))
+
+    assert error.value.code == "workspace_session_operation_identity_mismatch"
 
 
 async def test_workspace_session_keeps_exact_generation_until_cache_invalidation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.infrastructure.plugins.v2 import artifact_content_gc_runtime as persistence_runtime
-
     first_client = _TrackedRedisClient("first")
     second_client = _TrackedRedisClient("second")
     clients = iter((first_client, second_client))
@@ -456,9 +407,6 @@ async def test_workspace_session_keeps_exact_generation_until_cache_invalidation
     async def redis_factory() -> _TrackedRedisClient:
         return next(clients)
 
-    def session_factory() -> _SessionContext:
-        return _SessionContext(db)
-
     def build_crud(
         _factory: SqlConversationCrudRepositoryFactoryV2,
         operation: object,
@@ -466,7 +414,6 @@ async def test_workspace_session_keeps_exact_generation_until_cache_invalidation
         assert cast(Any, operation).require(OPERATION_DB_SESSION_SERVICE_V2) is db
         return _repositories(repository)
 
-    monkeypatch.setattr(persistence_runtime, "async_session_factory", session_factory)
     monkeypatch.setattr(SqlConversationCrudRepositoryFactoryV2, "build_crud", build_crud)
 
     host = PlatformPluginRuntimeHostV2(
@@ -494,14 +441,30 @@ async def test_workspace_session_keeps_exact_generation_until_cache_invalidation
     first_client.on_first_scan = reload_generation
 
     try:
-        assert await session_module.ensure_workspace_llm_conversation(**_call_kwargs())
-        assert first_client.patterns == [
-            "conv_list:project-a:*",
-            "conv_count:project-a:*",
-        ]
-        assert second_client.patterns == []
+        async with pin_agent_turn_operation_v2(
+            operation_id="workspace-contract-turn:planner_turn:stable",
+            tenant_id="tenant-a",
+            project_id="project-a",
+            session_id="conversation-a",
+            services={
+                OPERATION_DB_SESSION_SERVICE_V2: db,
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": "tenant-a",
+                    "project_id": "project-a",
+                    "user_id": "user-a",
+                },
+            },
+            force_process_host_lease=True,
+        ) as operation:
+            assert await session_module.ensure_workspace_llm_conversation(**_call_kwargs(operation))
+            assert first_client.patterns == [
+                "conv_list:project-a:*",
+                "conv_count:project-a:*",
+            ]
+            assert second_client.patterns == []
+            assert first_client.close_calls == 0
+            assert second_client.close_calls == 0
         assert first_client.close_calls == 1
-        assert second_client.close_calls == 0
     finally:
         clear_process_generation_host_v2(host)
         await host.close()
@@ -515,18 +478,21 @@ def test_workspace_session_has_no_static_persistence_or_redis_authority() -> Non
     )
 
     for retired_reference in (
+        "ASYNC_SESSION_FACTORY_SERVICE_V2",
         "async_session_factory",
         "SqlConversationRepository",
         "legacy_workspace_runtime_retired",
         "current_agent_worker_redis_client_v2",
+        "pin_agent_turn_operation_v2",
+        "force_process_host_lease=True",
         ".keys(",
         "_invalidate_conversation_list_cache",
     ):
         assert retired_reference not in source
     for required_reference in (
-        "ASYNC_SESSION_FACTORY_SERVICE_V2",
+        "OPERATION_DB_SESSION_SERVICE_V2",
+        "OPERATION_IDENTITY_SERVICE_V2",
         "CONVERSATION_ACCESS_SERVICE_V2",
-        "pin_agent_turn_operation_v2",
-        "force_process_host_lease=True",
+        "operation: OperationContextV2",
     ):
         assert required_reference in source

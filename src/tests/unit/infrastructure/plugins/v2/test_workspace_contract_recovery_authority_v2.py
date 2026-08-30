@@ -38,6 +38,7 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_METADATA_SERVICE_V2,
     clear_process_generation_host_v2,
     install_process_generation_host_v2,
+    pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
@@ -88,13 +89,17 @@ async def test_contract_recovery_resolves_session_and_event_query_from_one_gener
             SimpleNamespace(event_type="observe", event_data={"payload": {"value": "new"}}),
         ]
     )
-    observed: dict[str, object] = {}
+    observed: list[dict[str, object]] = []
 
     def resolve_event_query(_self: object, operation: Any) -> _EventQueryService:
-        observed["generation"] = operation.descriptor.generation
-        observed["db"] = operation.require(OPERATION_DB_SESSION_SERVICE_V2)
-        observed["identity"] = operation.require(OPERATION_IDENTITY_SERVICE_V2)
-        observed["metadata"] = operation.require(OPERATION_METADATA_SERVICE_V2)
+        observed.append(
+            {
+                "generation": operation.descriptor.generation,
+                "db": operation.require(OPERATION_DB_SESSION_SERVICE_V2),
+                "identity": operation.require(OPERATION_IDENTITY_SERVICE_V2),
+                "metadata": operation.require(OPERATION_METADATA_SERVICE_V2),
+            }
+        )
         return service
 
     monkeypatch.setattr(
@@ -120,11 +125,39 @@ async def test_contract_recovery_resolves_session_and_event_query_from_one_gener
             extract_payload=lambda event: event["data"].get("payload"),
             limit=17,
         )
+        existing_db = AsyncSession()
+        try:
+            async with pin_agent_turn_operation_v2(
+                operation_id="workspace-contract-turn:planner_turn:stable",
+                tenant_id="tenant-1",
+                project_id="project-1",
+                session_id="conversation-1",
+                services={
+                    OPERATION_DB_SESSION_SERVICE_V2: existing_db,
+                    OPERATION_IDENTITY_SERVICE_V2: {
+                        "tenant_id": "tenant-1",
+                        "project_id": "project-1",
+                        "user_id": "owner-1",
+                    },
+                },
+                force_process_host_lease=True,
+            ) as operation:
+                same_operation_payload = await recover_workspace_contract_payload(
+                    conversation_id="conversation-1",
+                    tenant_id="tenant-1",
+                    project_id="project-1",
+                    extract_payload=lambda event: event["data"].get("payload"),
+                    limit=17,
+                    operation=operation,
+                )
+        finally:
+            await existing_db.close()
     finally:
         clear_process_generation_host_v2(host)
         await host.close()
 
     assert payload == {"value": "new"}
+    assert same_operation_payload == {"value": "new"}
     assert session_calls == 1
     assert service.calls == [
         {
@@ -132,27 +165,48 @@ async def test_contract_recovery_resolves_session_and_event_query_from_one_gener
             "from_time_us": 0,
             "from_counter": 0,
             "limit": 17,
-        }
-    ]
-    assert observed == {
-        "generation": 731,
-        "db": db,
-        "identity": {"tenant_id": "tenant-1", "project_id": "project-1"},
-        "metadata": {
-            "kind": "workspace-contract-event-recovery",
-            "conversation_id": "conversation-1",
         },
-    }
+        {
+            "conversation_id": "conversation-1",
+            "from_time_us": 0,
+            "from_counter": 0,
+            "limit": 17,
+        },
+    ]
+    assert observed == [
+        {
+            "generation": 731,
+            "db": db,
+            "identity": {"tenant_id": "tenant-1", "project_id": "project-1"},
+            "metadata": {
+                "kind": "workspace-contract-event-recovery",
+                "conversation_id": "conversation-1",
+            },
+        },
+        {
+            "generation": 731,
+            "db": existing_db,
+            "identity": {
+                "tenant_id": "tenant-1",
+                "project_id": "project-1",
+                "user_id": "owner-1",
+            },
+            "metadata": {"kind": "agent-turn", "conversation_id": "conversation-1"},
+        },
+    ]
 
 
 def test_contract_recovery_has_no_static_persistence_composition() -> None:
-    source = inspect.getsource(recover_workspace_contract_payload)
+    source = (_ROOT / "src/infrastructure/agent/workspace/contract_agent_runtime.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "ASYNC_SESSION_FACTORY_SERVICE_V2" in source
     assert "AGENT_EVENT_QUERY_SERVICE_V2" in source
     assert "force_process_host_lease=True" in source
     assert "async_session_factory" not in source
     assert "SqlAgentExecutionEventRepository" not in source
+    assert "uuid.uuid4" not in source
 
 
 def test_workspace_contract_runners_scope_every_recovery_query() -> None:
@@ -174,6 +228,11 @@ def test_workspace_contract_runners_scope_every_recovery_query() -> None:
             and node.func.id == "recover_workspace_contract_payload"
         ]
         assert len(recovery_calls) == 2
+        recovery_calls.sort(key=lambda call: call.lineno)
         for call in recovery_calls:
             keyword_names = {keyword.arg for keyword in call.keywords}
             assert {"tenant_id", "project_id"} <= keyword_names
+        first_keywords = {keyword.arg for keyword in recovery_calls[0].keywords}
+        final_keywords = {keyword.arg for keyword in recovery_calls[1].keywords}
+        assert "operation" not in first_keywords
+        assert "operation" in final_keywords

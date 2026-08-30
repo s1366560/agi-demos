@@ -83,12 +83,8 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
         root_metadata: Mapping[str, Any],
         contract_only: bool = False,
     ) -> dict[str, Any] | None:
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
         from src.infrastructure.agent.workspace.contract_agent_runtime import (
             recover_workspace_contract_payload,
-            resolve_workspace_actor_user_id,
             workspace_contract_agent_turn_authority_v2,
             workspace_contract_conversation_id,
         )
@@ -141,35 +137,6 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
             self._last_diagnostics = diagnostics
             return recovered_payload
 
-        resolved_actor_user_id = await resolve_workspace_actor_user_id(
-            workspace_id=workspace_id,
-            actor_user_id=actor_user_id,
-        )
-        diagnostics["actor_user_resolved"] = bool(resolved_actor_user_id)
-        if not resolved_actor_user_id:
-            self._last_diagnostics = diagnostics
-            return None
-
-        diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
-            conversation_id=conversation_id,
-            tenant_id=self._tenant_id,
-            project_id=self._project_id,
-            workspace_id=workspace_id,
-            agent_id=planner_agent.id,
-            title="Workspace Planner",
-            stage="planner",
-            actor_user_id=resolved_actor_user_id,
-            linked_workspace_task_id=root_task_id,
-            metadata={
-                "root_goal_task_id": root_task_id or "",
-                "contract_only": contract_only,
-                "conversation_scope": f"planning:{root_task_id or 'root'}:{turn_mode}",
-            },
-        )
-        if not diagnostics["session_persisted"]:
-            self._last_diagnostics = diagnostics
-            return None
-
         app_model_context = {
             "context_type": "workspace_worker_runtime",
             WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
@@ -187,19 +154,42 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
             },
             "llm_overrides": {"max_tokens": self._max_tokens},
         }
-        async with (
-            async_session_factory() as db,
-            workspace_contract_agent_turn_authority_v2(
-                db=db,
+        async with workspace_contract_agent_turn_authority_v2(
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+            agent_id=planner_agent.id,
+            contract_kind="planner",
+            actor_purpose="planner_turn",
+        ) as authority:
+            resolved_actor_user_id = authority.actor.actor_user_id
+            diagnostics["actor_user_resolved"] = True
+            diagnostics["actor_authority_revision"] = authority.actor.authority_revision
+            diagnostics["operation_id"] = authority.operation.operation_id
+            diagnostics["plugin_generation"] = authority.operation.descriptor.to_payload()
+            diagnostics["caller_actor_ignored"] = bool(actor_user_id)
+            diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
+                conversation_id=conversation_id,
                 tenant_id=self._tenant_id,
                 project_id=self._project_id,
-                user_id=resolved_actor_user_id,
-                conversation_id=conversation_id,
                 workspace_id=workspace_id,
                 agent_id=planner_agent.id,
-                contract_kind="planner",
-            ) as authority,
-        ):
+                title="Workspace Planner",
+                stage="planner",
+                actor_user_id=resolved_actor_user_id,
+                operation=authority.operation,
+                linked_workspace_task_id=root_task_id,
+                metadata={
+                    "root_goal_task_id": root_task_id or "",
+                    "contract_only": contract_only,
+                    "conversation_scope": f"planning:{root_task_id or 'root'}:{turn_mode}",
+                },
+            )
+            if not diagnostics["session_persisted"]:
+                self._last_diagnostics = diagnostics
+                return None
+
             agent_service = authority.service
             async for event in agent_service.stream_chat_v2(
                 conversation_id=conversation_id,
@@ -224,17 +214,18 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
                     diagnostics["contract_submitted"] = True
                     self._last_diagnostics = diagnostics
                     return payload
-        recovered_payload = await recover_workspace_contract_payload(
-            conversation_id=conversation_id,
-            tenant_id=self._tenant_id,
-            project_id=self._project_id,
-            extract_payload=_planning_contract_from_event,
-        )
-        if recovered_payload is not None:
-            diagnostics["recovered_from_events"] = True
-            diagnostics["contract_submitted"] = True
-            self._last_diagnostics = diagnostics
-            return recovered_payload
+            recovered_payload = await recover_workspace_contract_payload(
+                conversation_id=conversation_id,
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                extract_payload=_planning_contract_from_event,
+                operation=authority.operation,
+            )
+            if recovered_payload is not None:
+                diagnostics["recovered_from_events"] = True
+                diagnostics["contract_submitted"] = True
+                self._last_diagnostics = diagnostics
+                return recovered_payload
         self._last_diagnostics = diagnostics
         return None
 

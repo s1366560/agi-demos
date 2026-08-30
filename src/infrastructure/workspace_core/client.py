@@ -32,6 +32,15 @@ class WorkspaceCoreConflictError(WorkspaceCoreClientError):
     """Workspace Core rejected an idempotency or revision precondition."""
 
 
+class WorkspaceContractActorResolutionError(WorkspaceCoreConflictError):
+    """Workspace Core rejected an audited contract-actor resolution."""
+
+    def __init__(self, *, code: str, detail: str) -> None:
+        super().__init__(f"{code}: {detail}")
+        self.code = code
+        self.detail = detail
+
+
 class WorkspaceCoreCompatibilityError(WorkspaceCoreClientError):
     """Workspace Core cannot serve the gateway's frozen public API contract."""
 
@@ -615,11 +624,32 @@ class WorkspaceCoreClient:
     ) -> WorkspaceContractActorResolveResponse:
         """Resolve one audited Workspace actor without accepting caller identity hints."""
         path = "/internal/v2/workspace-authority/contract-actor:resolve"
-        payload = await self._post(
-            path,
-            headers={},
-            json_body=request.model_dump(mode="json"),
-        )
+        try:
+            payload = await self._post(
+                path,
+                headers={},
+                json_body=request.model_dump(mode="json"),
+            )
+        except WorkspaceCoreConflictError as exc:
+            cause = exc.__cause__
+            if not isinstance(cause, httpx.HTTPStatusError):
+                raise
+            try:
+                error_payload = cause.response.json()
+            except ValueError:
+                raise
+            if not isinstance(error_payload, Mapping):
+                raise
+            code = error_payload.get("code")
+            detail = error_payload.get("detail")
+            if not isinstance(code, str) or not code.strip():
+                raise
+            if not isinstance(detail, str) or not detail.strip():
+                raise
+            raise WorkspaceContractActorResolutionError(
+                code=code.strip(),
+                detail=detail.strip(),
+            ) from exc
         return self._validate(
             WorkspaceContractActorResolveResponse,
             payload,
@@ -913,6 +943,7 @@ __all__ = [
     "WorkspaceAuthorityQueryResponse",
     "WorkspaceAuthorityTaskRef",
     "WorkspaceContractActorPurpose",
+    "WorkspaceContractActorResolutionError",
     "WorkspaceContractActorResolveRequest",
     "WorkspaceContractActorResolveResponse",
     "WorkspaceCoreClient",

@@ -104,12 +104,8 @@ class RuntimeWorkspaceWorktreeAgentTurnRunner:
         task_id: str,
         attempt_id: str | None,
     ) -> dict[str, Any] | None:
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
         from src.infrastructure.agent.workspace.contract_agent_runtime import (
             recover_workspace_contract_payload,
-            resolve_workspace_actor_user_id,
             workspace_contract_agent_turn_authority_v2,
             workspace_contract_conversation_id,
         )
@@ -158,32 +154,6 @@ class RuntimeWorkspaceWorktreeAgentTurnRunner:
             self._last_diagnostics = diagnostics
             return recovered_payload
 
-        resolved_actor_user_id = await resolve_workspace_actor_user_id(workspace_id=workspace_id)
-        diagnostics["actor_user_resolved"] = bool(resolved_actor_user_id)
-        if not resolved_actor_user_id:
-            self._last_diagnostics = diagnostics
-            return None
-
-        diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
-            conversation_id=conversation_id,
-            tenant_id=self._tenant_id,
-            project_id=self._project_id,
-            workspace_id=workspace_id,
-            linked_workspace_task_id=task_id,
-            agent_id=worktree_agent.id,
-            actor_user_id=resolved_actor_user_id,
-            title=f"Workspace Worktree Manager - {task_id}",
-            stage="worktree_manager",
-            metadata={
-                "linked_workspace_task_id": task_id,
-                "current_attempt_id": attempt_id or "",
-                "conversation_scope": f"worktree:{task_id}:{attempt_id or 'none'}",
-            },
-        )
-        if not diagnostics["session_persisted"]:
-            self._last_diagnostics = diagnostics
-            return None
-
         app_model_context = {
             "context_type": "workspace_worker_runtime",
             WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
@@ -201,19 +171,41 @@ class RuntimeWorkspaceWorktreeAgentTurnRunner:
             },
             "llm_overrides": {"max_tokens": self._max_tokens},
         }
-        async with (
-            async_session_factory() as db,
-            workspace_contract_agent_turn_authority_v2(
-                db=db,
+        async with workspace_contract_agent_turn_authority_v2(
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+            agent_id=worktree_agent.id,
+            contract_kind="worktree-manager",
+            actor_purpose="worktree_turn",
+        ) as authority:
+            resolved_actor_user_id = authority.actor.actor_user_id
+            diagnostics["actor_user_resolved"] = True
+            diagnostics["actor_authority_revision"] = authority.actor.authority_revision
+            diagnostics["operation_id"] = authority.operation.operation_id
+            diagnostics["plugin_generation"] = authority.operation.descriptor.to_payload()
+            diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
+                conversation_id=conversation_id,
                 tenant_id=self._tenant_id,
                 project_id=self._project_id,
-                user_id=resolved_actor_user_id,
-                conversation_id=conversation_id,
                 workspace_id=workspace_id,
+                linked_workspace_task_id=task_id,
                 agent_id=worktree_agent.id,
-                contract_kind="worktree-manager",
-            ) as authority,
-        ):
+                actor_user_id=resolved_actor_user_id,
+                operation=authority.operation,
+                title=f"Workspace Worktree Manager - {task_id}",
+                stage="worktree_manager",
+                metadata={
+                    "linked_workspace_task_id": task_id,
+                    "current_attempt_id": attempt_id or "",
+                    "conversation_scope": f"worktree:{task_id}:{attempt_id or 'none'}",
+                },
+            )
+            if not diagnostics["session_persisted"]:
+                self._last_diagnostics = diagnostics
+                return None
+
             payload = await self._stream_preparation_payload(
                 agent_service=authority.service,
                 conversation_id=conversation_id,
@@ -228,17 +220,18 @@ class RuntimeWorkspaceWorktreeAgentTurnRunner:
             )
             if payload is not None:
                 return payload
-        recovered_payload = await recover_workspace_contract_payload(
-            conversation_id=conversation_id,
-            tenant_id=self._tenant_id,
-            project_id=self._project_id,
-            extract_payload=_worktree_preparation_from_event,
-        )
-        if recovered_payload is not None:
-            diagnostics["recovered_from_events"] = True
-            diagnostics["preparation_submitted"] = True
-            self._last_diagnostics = diagnostics
-            return recovered_payload
+            recovered_payload = await recover_workspace_contract_payload(
+                conversation_id=conversation_id,
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                extract_payload=_worktree_preparation_from_event,
+                operation=authority.operation,
+            )
+            if recovered_payload is not None:
+                diagnostics["recovered_from_events"] = True
+                diagnostics["preparation_submitted"] = True
+                self._last_diagnostics = diagnostics
+                return recovered_payload
         self._last_diagnostics = diagnostics
         return None
 

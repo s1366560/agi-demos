@@ -162,7 +162,7 @@ class _WorktreePreparationRunner:
         return self.payload
 
 
-def _patch_contract_agent_stream_runtime(  # noqa: C901
+def _patch_contract_agent_stream_runtime(
     monkeypatch: pytest.MonkeyPatch,
     *,
     events: list[dict[str, Any]],
@@ -172,14 +172,6 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     cancel_calls: list[str] | None = None,
     stream_factory: Any | None = None,
 ) -> None:
-    async def fake_resolve_workspace_actor_user_id(
-        *,
-        workspace_id: str,
-        actor_user_id: str | None = None,
-    ) -> str | None:
-        _ = workspace_id
-        return actor_user_id or actor_user_id_override
-
     async def fake_ensure_workspace_llm_conversation(**kwargs: Any) -> bool:
         persist_calls.append(kwargs)
         return True
@@ -191,17 +183,6 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     async def fake_cancel_workspace_contract_chat(conversation_id: str) -> None:
         if cancel_calls is not None:
             cancel_calls.append(conversation_id)
-
-    class FakeSessionContext:
-        async def __aenter__(self) -> object:
-            return object()
-
-        async def __aexit__(self, *args: Any) -> None:
-            _ = args
-            return None
-
-    def fake_async_session_factory() -> FakeSessionContext:
-        return FakeSessionContext()
 
     class FakeAgentService:
         def stream_chat_v2(self, **kwargs: Any) -> Any:
@@ -221,27 +202,39 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     ) -> AsyncIterator[SimpleNamespace]:
         assert kwargs["tenant_id"] == "tenant-1"
         assert kwargs["project_id"] == "project-1"
-        assert isinstance(kwargs["user_id"], str)
-        assert kwargs["user_id"]
+        assert "user_id" not in kwargs
         assert isinstance(kwargs["conversation_id"], str)
         assert isinstance(kwargs["workspace_id"], str)
         assert isinstance(kwargs["agent_id"], str)
         assert isinstance(kwargs["contract_kind"], str)
-        yield SimpleNamespace(operation=object(), service=FakeAgentService())
+        expected_purpose = {
+            "planner": "planner_turn",
+            "supervisor-decision": "supervisor_turn",
+            "verifier": "verifier_turn",
+            "worktree-manager": "worktree_turn",
+            "iteration-review": "iteration_review_turn",
+        }[str(kwargs["contract_kind"])]
+        assert kwargs["actor_purpose"] == expected_purpose
+        operation = SimpleNamespace(
+            operation_id=f"workspace-contract-turn:{expected_purpose}:stable",
+            descriptor=SimpleNamespace(to_payload=lambda: {"generation": 1}),
+        )
+        yield SimpleNamespace(
+            operation=operation,
+            actor=SimpleNamespace(
+                actor_user_id=actor_user_id_override,
+                authority_revision=1,
+            ),
+            service=FakeAgentService(),
+        )
 
     actor_user_id_override = actor_user_id
 
-    from src.infrastructure.adapters.secondary.persistence import database
     from src.infrastructure.agent.workspace import (
         contract_agent_runtime,
         session_conversations,
     )
 
-    monkeypatch.setattr(
-        contract_agent_runtime,
-        "resolve_workspace_actor_user_id",
-        fake_resolve_workspace_actor_user_id,
-    )
     monkeypatch.setattr(
         contract_agent_runtime,
         "recover_workspace_contract_payload",
@@ -262,7 +255,6 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
         "ensure_workspace_llm_conversation",
         fake_ensure_workspace_llm_conversation,
     )
-    monkeypatch.setattr(database, "async_session_factory", fake_async_session_factory)
 
 
 def test_workspace_contract_agent_turns_have_no_static_composition() -> None:
@@ -283,10 +275,12 @@ def test_workspace_contract_agent_turns_have_no_static_composition() -> None:
     assert "force_process_host_lease=True" in authority_source
     assert "workspace_contract_agent_turn_authority_v2" in runner_sources
     for retired_composition in (
+        "async_session_factory",
         "create_llm_client",
         "get_app_container",
         "DIContainer",
         "create_workspace_contract_agent_service",
+        "resolve_workspace_actor_user_id",
     ):
         assert retired_composition not in authority_source
         assert retired_composition not in runner_sources
@@ -640,14 +634,14 @@ async def test_runtime_workspace_planner_uses_stream_chat_v2_with_actor_user(
     )
 
     assert result == planning_contract
-    assert persist_calls[0]["actor_user_id"] == "user-2"
+    assert persist_calls[0]["actor_user_id"] == "workspace-created-user"
     assert persist_calls[0]["agent_id"] == BUILTIN_WORKSPACE_PLANNER_ID
     assert persist_calls[0]["metadata"]["contract_only"] is True
     assert stream_calls[0]["conversation_id"].startswith(
         "workspace-contract:planner:tenant-1:project-1:ws-1:root-task-1:"
     )
     assert stream_calls[0]["user_message"] == "plan"
-    assert stream_calls[0]["user_id"] == "user-2"
+    assert stream_calls[0]["user_id"] == "workspace-created-user"
     assert stream_calls[0]["tenant_id"] == "tenant-1"
     assert stream_calls[0]["project_id"] == "project-1"
     assert stream_calls[0]["agent_id"] == BUILTIN_WORKSPACE_PLANNER_ID
@@ -679,20 +673,12 @@ async def test_runtime_workspace_planner_recovers_persisted_contract_without_str
         assert kwargs["extract_payload"] is _planning_contract_from_event
         return planning_contract
 
-    async def forbidden_resolve_workspace_actor_user_id(**kwargs: Any) -> str:
-        raise AssertionError(f"unexpected actor resolution after recovery: {kwargs}")
-
     from src.infrastructure.agent.workspace import contract_agent_runtime
 
     monkeypatch.setattr(
         contract_agent_runtime,
         "recover_workspace_contract_payload",
         fake_recover_workspace_contract_payload,
-    )
-    monkeypatch.setattr(
-        contract_agent_runtime,
-        "resolve_workspace_actor_user_id",
-        forbidden_resolve_workspace_actor_user_id,
     )
 
     runner = RuntimeWorkspacePlannerAgentTurnRunner(tenant_id="tenant-1", project_id="project-1")
@@ -808,63 +794,26 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
 async def test_runtime_workspace_verifier_ignores_unpersisted_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    stream_called = False
+    persist_calls: list[dict[str, Any]] = []
+    stream_calls: list[dict[str, Any]] = []
+    _patch_contract_agent_stream_runtime(
+        monkeypatch,
+        events=[],
+        persist_calls=persist_calls,
+        stream_calls=stream_calls,
+    )
 
     async def fake_ensure_workspace_llm_conversation(**kwargs: Any) -> bool:
-        _ = kwargs
+        persist_calls.append(kwargs)
         return False
 
-    class FakeAgentService:
-        def stream_chat_v2(self, **kwargs: Any) -> Any:
-            nonlocal stream_called
-            stream_called = True
-
-            async def _events() -> Any:
-                if False:
-                    yield {}
-
-            return _events()
-
-    class FakeDIContainer:
-        def __init__(self, *, db: object, redis_client: object | None = None) -> None:
-            self.db = db
-            self.redis_client = redis_client
-
-        def agent_service(self, llm: object) -> FakeAgentService:
-            _ = llm
-            return FakeAgentService()
-
-    from src.configuration import di_container
-    from src.infrastructure.agent.workspace import contract_agent_runtime, session_conversations
-
-    async def fake_resolve_workspace_actor_user_id(
-        *,
-        workspace_id: str,
-        actor_user_id: str | None = None,
-    ) -> str | None:
-        _ = (workspace_id, actor_user_id)
-        return "user-1"
-
-    async def fake_recover_workspace_contract_payload(**kwargs: Any) -> dict[str, Any] | None:
-        _ = kwargs
-        return None
+    from src.infrastructure.agent.workspace import session_conversations
 
     monkeypatch.setattr(
         session_conversations,
         "ensure_workspace_llm_conversation",
         fake_ensure_workspace_llm_conversation,
     )
-    monkeypatch.setattr(
-        contract_agent_runtime,
-        "resolve_workspace_actor_user_id",
-        fake_resolve_workspace_actor_user_id,
-    )
-    monkeypatch.setattr(
-        contract_agent_runtime,
-        "recover_workspace_contract_payload",
-        fake_recover_workspace_contract_payload,
-    )
-    monkeypatch.setattr(di_container, "DIContainer", FakeDIContainer)
 
     runner = RuntimeWorkspaceVerifierAgentTurnRunner(tenant_id="tenant-1", project_id="project-1")
 
@@ -878,7 +827,8 @@ async def test_runtime_workspace_verifier_ignores_unpersisted_session(
     )
 
     assert result is None
-    assert stream_called is False
+    assert persist_calls
+    assert stream_calls == []
 
 
 async def test_runtime_workspace_verifier_keeps_diagnostics_when_judgment_missing(
