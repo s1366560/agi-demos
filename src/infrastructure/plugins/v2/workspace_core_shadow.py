@@ -19,11 +19,13 @@ from .workspace_contract_actor_services import (
     WORKSPACE_CONTRACT_ACTOR_RESOLVER_MODULE_V2,
 )
 from .workspace_core_runtime import WORKSPACE_CORE_RUNTIME_MODULE_V2
+from .workspace_prompt_context_services import WORKSPACE_PROMPT_CONTEXT_MODULE_V2
 
 WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2 = "builtin-workspace-core-runtime"
 WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2 = (
     "builtin-workspace-core-contract-actor-resolver"
 )
+WORKSPACE_PROMPT_CONTEXT_ENTRY_ID_V2 = "builtin-workspace-core-prompt-context"
 _WORKSPACE_CORE_PLUGIN_ID_V2 = "memstack-runtime-kernel"
 _ROOT = Path(__file__).resolve().parents[4]
 _DEFAULT_PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -34,9 +36,10 @@ def activate_workspace_core_shadow_v2(document: ProfileDocumentV2) -> ProfileDoc
     """Explicitly enable the complete Workspace Core capability in one candidate."""
     runtime = _workspace_core_entry_v2(document.entries)
     resolver = _workspace_contract_actor_resolver_entry_v2(document.entries)
-    if runtime.enabled and resolver.enabled:
+    prompt_context = _workspace_prompt_context_entry_v2(document.entries)
+    if runtime.enabled and resolver.enabled and prompt_context.enabled:
         return document
-    entry_ids = {runtime.entry_id, resolver.entry_id}
+    entry_ids = {runtime.entry_id, resolver.entry_id, prompt_context.entry_id}
     return replace(
         document,
         entries=tuple(
@@ -47,7 +50,7 @@ def activate_workspace_core_shadow_v2(document: ProfileDocumentV2) -> ProfileDoc
 
 
 def workspace_core_shadow_active_v2(snapshot: ProfileSnapshotV2) -> bool:
-    """Return whether the exact runtime and actor authority seam are both enabled."""
+    """Return whether the complete Workspace Core V2 capability is enabled."""
     entries = {entry.entry_id: entry for entry in snapshot.entries}
     expected = (
         (WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2, WORKSPACE_CORE_RUNTIME_MODULE_V2),
@@ -55,6 +58,7 @@ def workspace_core_shadow_active_v2(snapshot: ProfileSnapshotV2) -> bool:
             WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2,
             WORKSPACE_CONTRACT_ACTOR_RESOLVER_MODULE_V2,
         ),
+        (WORKSPACE_PROMPT_CONTEXT_ENTRY_ID_V2, WORKSPACE_PROMPT_CONTEXT_MODULE_V2),
     )
     return all(
         (entry := entries.get(entry_id)) is not None
@@ -87,13 +91,27 @@ def compose_workspace_core_shadow_upgrade_v2(
     )
     if existing_resolver is not None:
         _ = _workspace_contract_actor_resolver_entry_v2(snapshot.entries)
+    existing_prompt_context = next(
+        (
+            item
+            for item in snapshot.entries
+            if item.entry_id == WORKSPACE_PROMPT_CONTEXT_ENTRY_ID_V2
+        ),
+        None,
+    )
+    if existing_prompt_context is not None:
+        _ = _workspace_prompt_context_entry_v2(snapshot.entries)
 
     canonical = load_profile_document_v2(_DEFAULT_PROFILE_PATH)
     canonical_resolver = _workspace_contract_actor_resolver_entry_v2(canonical.entries)
+    canonical_prompt_context = _workspace_prompt_context_entry_v2(canonical.entries)
     entries = _upsert_workspace_core_entries_v2(
         snapshot.entries,
-        replace(runtime, enabled=True),
-        replace(canonical_resolver, enabled=True),
+        (
+            replace(runtime, enabled=True),
+            replace(canonical_resolver, enabled=True),
+            replace(canonical_prompt_context, enabled=True),
+        ),
     )
     manifests = _replace_kernel_manifest_v2(snapshot.manifests)
     return compose_profile_v2(
@@ -151,19 +169,43 @@ def _workspace_contract_actor_resolver_entry_v2(
     return entry
 
 
+def _workspace_prompt_context_entry_v2(
+    entries: tuple[ProfileEntryV2, ...],
+) -> ProfileEntryV2:
+    entry = next(
+        (item for item in entries if item.entry_id == WORKSPACE_PROMPT_CONTEXT_ENTRY_ID_V2),
+        None,
+    )
+    if entry is None:
+        raise RuntimeV2Error(
+            "workspace_prompt_context_entry_missing",
+            "Workspace Core shadow activation requires the prompt-context entry",
+        )
+    if (
+        entry.plugin_ref != _WORKSPACE_CORE_PLUGIN_ID_V2
+        or entry.module_ref != WORKSPACE_PROMPT_CONTEXT_MODULE_V2
+    ):
+        raise RuntimeV2Error(
+            "workspace_prompt_context_entry_mismatch",
+            "Workspace Core prompt-context entry is not canonical",
+        )
+    return entry
+
+
 def _upsert_workspace_core_entries_v2(
     existing: tuple[ProfileEntryV2, ...],
-    runtime: ProfileEntryV2,
-    resolver: ProfileEntryV2,
+    desired: tuple[ProfileEntryV2, ...],
 ) -> tuple[ProfileEntryV2, ...]:
-    replacements = {runtime.entry_id: runtime, resolver.entry_id: resolver}
-    merged = [replacements.pop(entry.entry_id, entry) for entry in existing]
-    missing = [entry for entry in (runtime, resolver) if entry.entry_id in replacements]
-    insertion = next(
-        (index + 1 for index, entry in enumerate(merged) if entry.entry_id == runtime.entry_id),
-        len(merged),
+    desired_ids = {entry.entry_id for entry in desired}
+    first_existing_index = next(
+        (index for index, entry in enumerate(existing) if entry.entry_id in desired_ids),
+        len(existing),
     )
-    merged[insertion:insertion] = missing
+    insertion = sum(
+        1 for entry in existing[:first_existing_index] if entry.entry_id not in desired_ids
+    )
+    merged = [entry for entry in existing if entry.entry_id not in desired_ids]
+    merged[insertion:insertion] = desired
     return tuple(merged)
 
 
@@ -194,6 +236,7 @@ def _replace_kernel_manifest_v2(
 __all__ = [
     "WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2",
     "WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2",
+    "WORKSPACE_PROMPT_CONTEXT_ENTRY_ID_V2",
     "activate_workspace_core_shadow_v2",
     "compose_workspace_core_shadow_upgrade_v2",
     "workspace_core_shadow_active_v2",

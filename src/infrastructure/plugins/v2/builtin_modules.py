@@ -166,6 +166,7 @@ from .workspace_core_runtime import (
     workspace_core_runtime_definition_v2,
 )
 from .workspace_pipeline import builtin_workspace_drone_pipeline_provider_definition_v2
+from .workspace_prompt_context_services import workspace_prompt_context_definition_v2
 from .workspace_runtime import workspace_runtime_definitions_v2
 from .workspace_wtp_publisher import workspace_wtp_publisher_definition_v2
 
@@ -347,6 +348,7 @@ def builtin_runtime_definitions_v2(  # noqa: PLR0913
         telemetry_runtime_definition_v2(telemetry_runtime_manager),
         workspace_core_runtime_definition_v2(workspace_core_runtime_factory),
         workspace_contract_actor_resolver_definition_v2(),
+        workspace_prompt_context_definition_v2(),
         graph_runtime_definition_v2(graph_runtime_factory),
         graph_application_service_definition_v2(),
         *sandbox_service_definitions_v2(

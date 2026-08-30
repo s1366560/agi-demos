@@ -56,6 +56,7 @@ async def _run(request_file: Path) -> int:
         agent_worker_graph_runtime_factory_v2,
         agent_worker_redis_runtime_factory_v2,
         agent_worker_sandbox_runtime_factory_v2,
+        agent_worker_workspace_core_runtime_factory_v2,
     )
     from src.infrastructure.plugins.v2.boundary import (
         OPERATION_IDENTITY_SERVICE_V2,
@@ -85,6 +86,7 @@ async def _run(request_file: Path) -> int:
                 graph_runtime_factory=agent_worker_graph_runtime_factory_v2(config.tenant_id),
                 redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
                 sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
+                workspace_core_runtime_factory=agent_worker_workspace_core_runtime_factory_v2,
             )
         )
         try:
@@ -101,6 +103,7 @@ async def _run(request_file: Path) -> int:
                 services={
                     OPERATION_IDENTITY_SERVICE_V2: {
                         "tenant_id": config.tenant_id,
+                        "project_id": config.project_id,
                         "user_id": request.user_id,
                     },
                     OPERATION_METADATA_SERVICE_V2: {

@@ -33,9 +33,13 @@ from src.infrastructure.plugins.v2.workspace_core_runtime import (
 )
 from src.infrastructure.plugins.v2.workspace_core_shadow import (
     WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2,
+    WORKSPACE_PROMPT_CONTEXT_ENTRY_ID_V2,
     activate_workspace_core_shadow_v2,
     compose_workspace_core_shadow_upgrade_v2,
     workspace_core_shadow_active_v2,
+)
+from src.infrastructure.plugins.v2.workspace_prompt_context_services import (
+    WORKSPACE_PROMPT_CONTEXT_MODULE_V2,
 )
 from src.infrastructure.workspace_core.client import (
     WorkspaceContractActorResolveRequest,
@@ -252,7 +256,7 @@ async def test_contract_actor_resolver_keeps_the_exact_pinned_generation_during_
     assert adapters[1].wait_calls == 1
 
 
-def test_shadow_upgrade_adds_resolver_to_an_old_active_runtime_snapshot() -> None:
+def test_shadow_upgrade_adds_complete_capability_to_an_old_active_runtime_snapshot() -> None:
     manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
     snapshot = compose_profile_v2(
         activate_workspace_core_shadow_v2(load_profile_document_v2(_PROFILE_PATH)),
@@ -264,7 +268,11 @@ def test_shadow_upgrade_adds_resolver_to_an_old_active_runtime_snapshot() -> Non
         entries=tuple(
             entry
             for entry in snapshot.entries
-            if entry.entry_id != WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2
+            if entry.entry_id
+            not in {
+                WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2,
+                WORKSPACE_PROMPT_CONTEXT_ENTRY_ID_V2,
+            }
         ),
         manifests=(
             replace(
@@ -272,7 +280,11 @@ def test_shadow_upgrade_adds_resolver_to_an_old_active_runtime_snapshot() -> Non
                 modules=tuple(
                     module
                     for module in manifest.modules
-                    if module.module_ref != WORKSPACE_CONTRACT_ACTOR_RESOLVER_MODULE_V2
+                    if module.module_ref
+                    not in {
+                        WORKSPACE_CONTRACT_ACTOR_RESOLVER_MODULE_V2,
+                        WORKSPACE_PROMPT_CONTEXT_MODULE_V2,
+                    }
                 ),
             ),
         ),
@@ -282,8 +294,8 @@ def test_shadow_upgrade_adds_resolver_to_an_old_active_runtime_snapshot() -> Non
 
     assert upgraded.generation == 806
     assert workspace_core_shadow_active_v2(upgraded) is True
-    assert any(
-        module.module_ref == WORKSPACE_CONTRACT_ACTOR_RESOLVER_MODULE_V2
-        for manifest in upgraded.manifests
-        for module in manifest.modules
-    )
+    module_refs = {
+        module.module_ref for manifest in upgraded.manifests for module in manifest.modules
+    }
+    assert WORKSPACE_CONTRACT_ACTOR_RESOLVER_MODULE_V2 in module_refs
+    assert WORKSPACE_PROMPT_CONTEXT_MODULE_V2 in module_refs

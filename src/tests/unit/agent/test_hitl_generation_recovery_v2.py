@@ -142,6 +142,7 @@ async def test_admission_uses_snapshot_scope_identity_and_metadata_and_closes(
     services = admission.admit_kwargs["services"]
     assert services[OPERATION_IDENTITY_SERVICE_V2] == {
         "tenant_id": "tenant-state",
+        "project_id": "project-state",
         "user_id": "user-state",
     }
     assert services[OPERATION_METADATA_SERVICE_V2] == {

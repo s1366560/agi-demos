@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 import redis.asyncio as redis
 
@@ -32,6 +32,9 @@ from .runtime import (
     generated_contract_digest_v2,
 )
 from .sandbox_runtime import SandboxRuntimeServiceV2
+
+if TYPE_CHECKING:
+    from .workspace_core_runtime import WorkspaceCoreRuntimeServiceV2
 
 AGENT_WORKER_RUNTIME_MODULE_V2 = "builtin://memstack/agent/worker-runtime"
 AGENT_WORKER_RUNTIME_SERVICE_V2 = "service:agent.worker-runtime"
@@ -237,11 +240,22 @@ def agent_worker_graph_runtime_factory_v2(
 async def agent_worker_redis_runtime_factory_v2() -> redis.Redis:
     """Create one Redis client owned by an Agent data-plane generation."""
     settings = get_settings()
-    return redis.Redis.from_url(
+    client: redis.Redis = redis.Redis.from_url(
         settings.redis_url,
         decode_responses=True,
         max_connections=50,
     )
+    return client
+
+
+async def agent_worker_workspace_core_runtime_factory_v2() -> WorkspaceCoreRuntimeServiceV2:
+    """Create and health-check Workspace Core resources for one worker generation."""
+    from src.configuration.workspace_core import get_workspace_core_settings
+    from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
+        create_workspace_core_runtime_service_v2,
+    )
+
+    return await create_workspace_core_runtime_service_v2(get_workspace_core_settings())
 
 
 def agent_worker_runtime_definition_v2(
@@ -320,6 +334,7 @@ __all__ = [
     "agent_worker_redis_runtime_factory_v2",
     "agent_worker_runtime_definition_v2",
     "agent_worker_sandbox_runtime_factory_v2",
+    "agent_worker_workspace_core_runtime_factory_v2",
     "bind_current_agent_orchestrator_v2",
     "current_agent_canvas_manager_v2",
     "current_agent_orchestrator_v2",

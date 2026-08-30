@@ -237,6 +237,145 @@ async def test_list_workspace_agents_uses_scoped_public_read_contract() -> None:
 
 
 @pytest.mark.unit
+async def test_prompt_context_collections_use_exact_scoped_public_read_contracts() -> None:
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert request.headers["authorization"] == "Bearer internal-test-token"
+        assert request.headers["x-memstack-user-id"] == "user-1"
+        path = request.url.path
+        if path.endswith("/messages"):
+            assert str(request.url.params) == "limit=20"
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "id": "message-1",
+                            "workspace_id": "workspace-1",
+                            "sender_id": "user-1",
+                            "sender_type": "human",
+                            "content": "Review release",
+                            "mentions": ["agent-1"],
+                            "parent_message_id": None,
+                            "metadata": {},
+                            "created_at": "2026-08-30T00:00:00Z",
+                        }
+                    ]
+                },
+            )
+        if path.endswith("/blackboard/posts"):
+            assert str(request.url.params) == "limit=5&offset=0"
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "id": "post-1",
+                            "workspace_id": "workspace-1",
+                            "author_id": "user-1",
+                            "title": "Release",
+                            "content": "Attach evidence",
+                            "status": "open",
+                            "is_pinned": True,
+                            "metadata": {},
+                            "created_at": "2026-08-30T00:00:00Z",
+                            "updated_at": None,
+                        }
+                    ]
+                },
+            )
+        if path == "/api/v1/workspaces/workspace-1/tasks":
+            assert str(request.url.params) == "limit=20&offset=0"
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "task-1",
+                        "workspace_id": "workspace-1",
+                        "title": "Verify",
+                        "description": "Run gates",
+                        "created_by": "user-1",
+                        "assignee_user_id": None,
+                        "assignee_agent_id": "agent-1",
+                        "workspace_agent_id": "binding-1",
+                        "current_attempt_id": None,
+                        "current_attempt_number": None,
+                        "current_attempt_conversation_id": None,
+                        "current_attempt_worker_binding_id": None,
+                        "current_attempt_worker_agent_id": None,
+                        "last_attempt_status": None,
+                        "pending_leader_adjudication": False,
+                        "last_worker_report_type": None,
+                        "last_worker_report_summary": None,
+                        "last_worker_report_artifacts": [],
+                        "last_worker_report_verifications": [],
+                        "status": "todo",
+                        "metadata": {"task_role": "goal_root"},
+                        "created_at": "2026-08-30T00:00:00Z",
+                        "updated_at": None,
+                        "priority": "P1",
+                        "estimated_effort": None,
+                        "blocker_reason": None,
+                        "completed_at": None,
+                        "archived_at": None,
+                    }
+                ],
+            )
+        assert path.endswith("/objectives")
+        assert str(request.url.params) == "limit=10&offset=0"
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "id": "objective-1",
+                        "workspace_id": "workspace-1",
+                        "title": "Ship",
+                        "description": None,
+                        "obj_type": "objective",
+                        "parent_id": None,
+                        "progress": 0.5,
+                        "created_by": "user-1",
+                        "created_at": "2026-08-30T00:00:00Z",
+                        "updated_at": None,
+                    }
+                ],
+                "total": 1,
+            },
+        )
+
+    client = WorkspaceCoreClient(_settings(), transport=httpx.MockTransport(handler))
+    common = {
+        "tenant_id": "tenant-1",
+        "project_id": "project-1",
+        "workspace_id": "workspace-1",
+        "user_id": "user-1",
+    }
+
+    messages = await client.list_workspace_messages(**common, limit=20)
+    posts = await client.list_workspace_blackboard_posts(**common, limit=5)
+    tasks = await client.list_workspace_tasks(
+        workspace_id="workspace-1",
+        user_id="user-1",
+        limit=20,
+    )
+    objectives = await client.list_workspace_objectives(**common, limit=10)
+
+    assert messages[0].content == "Review release"
+    assert posts[0].is_pinned is True
+    assert tasks[0].workspace_agent_id == "binding-1"
+    assert objectives[0].progress == 0.5
+    assert [request.url.path for request in requests] == [
+        "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/messages",
+        ("/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/blackboard/posts"),
+        "/api/v1/workspaces/workspace-1/tasks",
+        "/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/objectives",
+    ]
+
+
+@pytest.mark.unit
 async def test_public_api_capabilities_use_private_service_token() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/internal/v1/capabilities/workspace-public-api"

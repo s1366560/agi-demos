@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -53,6 +54,17 @@ class _TrackedRedisClient:
     async def exists(self, key: str) -> bool:
         self.exists_calls.append(key)
         return key.startswith("agent:running:")
+
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str]:
+        _ = (match, count)
+        if False:
+            yield "unused"
+
+    async def delete(self, *_keys: str) -> int:
+        return 0
+
+    async def xadd(self, *_args: object, **_kwargs: object) -> str:
+        return "stream-entry-1"
 
     async def aclose(self) -> None:
         self.close_calls += 1

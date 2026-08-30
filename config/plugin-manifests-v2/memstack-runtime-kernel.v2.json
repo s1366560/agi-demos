@@ -251,7 +251,7 @@
       },
       "contract_digest": "sha256:4eeec0096fe9cabba45fc51fac2c7e4f0448dfe4592026a65015fe4e3aea9090",
       "artifact": {
-        "digest": "sha256:88bc4ad29f0290fd2b90cadc6f971d889bc5e840ed932e98230a839e3d54bfe0",
+        "digest": "sha256:19a6048ae1db34be3f16e324701660d658e4743f11123ed5dd178e08038e4d10",
         "source": "repo+python://src/infrastructure/plugins/v2/builtin_modules.py"
       }
     },
@@ -383,6 +383,48 @@
       "artifact": {
         "digest": "sha256:5f86926d0109e5f4d1ec1e0d288a9b86cdc7e5e92507287d7d799e2339a21edb",
         "source": "repo+python://src/infrastructure/plugins/v2/workspace_contract_actor_services.py"
+      }
+    },
+    {
+      "module_ref": "builtin://memstack/workspace-core/prompt-context",
+      "entrypoint": "src.infrastructure.plugins.v2.workspace_prompt_context_services:workspace_prompt_context_definition_v2",
+      "targets": ["python"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:agent.workspace-prompt-context",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "runtime",
+              "service": "service:workspace-core.runtime",
+              "version": "1.0.0"
+            },
+            {
+              "alias": "conversations",
+              "service": "service:application.conversation-access",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "workspace-core-read-model", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:2a69aab4648f41695de8dc591c8d7d1f67e3b7b7ea43f28160d6e0276268e4f2",
+      "artifact": {
+        "digest": "sha256:f46e82b0ebce68031c08b97acaf3f329455423e2a9c4bd47a2211027fb271c55",
+        "source": "repo+python://src/infrastructure/plugins/v2/workspace_prompt_context_services.py"
       }
     },
     {
@@ -607,7 +649,7 @@
       },
       "contract_digest": "sha256:4661b355f90a336a8c26ea3f9cbf11c84fb7aee80847e109245a0bbb150d739c",
       "artifact": {
-        "digest": "sha256:6d596898b49290617862f4b6172344b0bcafc472a7bb9ac685a7946ee607523c",
+        "digest": "sha256:d47e4ab9b6db2ded371cdf2bd7ab05f530beda2422ae0c20578102b366df04a6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_worker_runtime.py"
       }
     },

@@ -33,6 +33,7 @@ from src.infrastructure.plugins.v2.agent_worker_runtime import (
     agent_worker_graph_runtime_factory_v2,
     agent_worker_redis_runtime_factory_v2,
     agent_worker_sandbox_runtime_factory_v2,
+    agent_worker_workspace_core_runtime_factory_v2,
 )
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_IDENTITY_SERVICE_V2,
@@ -74,6 +75,7 @@ class ProjectAgentActor:
                 graph_runtime_factory=self._create_graph_runtime_v2,
                 redis_runtime_factory=agent_worker_redis_runtime_factory_v2,
                 sandbox_runtime_factory=agent_worker_sandbox_runtime_factory_v2,
+                workspace_core_runtime_factory=agent_worker_workspace_core_runtime_factory_v2,
             )
         )
         self._agent_generation_descriptor_v2: PluginGenerationDescriptorV2 | None = None
@@ -256,7 +258,7 @@ class ProjectAgentActor:
         current_generation = getattr(manager, "current", None)
         published_descriptor = getattr(current_generation, "descriptor", None)
         if published_descriptor is not None:
-            return descriptor == published_descriptor
+            return bool(descriptor == published_descriptor)
 
         current = self._agent_generation_descriptor_v2
         return (
@@ -493,6 +495,7 @@ class ProjectAgentActor:
         services = {
             OPERATION_IDENTITY_SERVICE_V2: {
                 "tenant_id": self._config.tenant_id,
+                "project_id": self._config.project_id,
                 "user_id": request.user_id,
             },
             OPERATION_METADATA_SERVICE_V2: {
@@ -686,6 +689,7 @@ class ProjectAgentActor:
                     services={
                         OPERATION_IDENTITY_SERVICE_V2: {
                             "tenant_id": state.tenant_id,
+                            "project_id": state.project_id,
                             "user_id": state.user_id,
                         },
                         OPERATION_METADATA_SERVICE_V2: {

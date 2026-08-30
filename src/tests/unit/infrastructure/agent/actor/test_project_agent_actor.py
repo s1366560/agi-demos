@@ -1,6 +1,7 @@
 """Unit tests for ProjectAgentActor scheduling behavior."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -19,7 +20,10 @@ from src.infrastructure.agent.orchestration.orchestrator import (
     SessionTurnExecutionRequest,
     SpawnExecutionRequest,
 )
-from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+from src.infrastructure.plugins.v2.boundary import (
+    OPERATION_IDENTITY_SERVICE_V2,
+    current_operation_context_v2,
+)
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import (
@@ -36,6 +40,17 @@ class _TestGraphService:
 
 
 class _TestRedisClient:
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str]:
+        _ = (match, count)
+        if False:
+            yield "unused"
+
+    async def delete(self, *_keys: str) -> int:
+        return 0
+
+    async def xadd(self, *_args: object, **_kwargs: object) -> str:
+        return "stream-entry-1"
+
     async def aclose(self) -> None:
         return None
 
@@ -96,6 +111,11 @@ async def test_actor_admits_complete_distribution_and_pins_turn_generation() -> 
     async with actor._admit_plugin_turn(request):
         operation = current_operation_context_v2()
         assert operation.descriptor == first.descriptor
+        assert operation.require(OPERATION_IDENTITY_SERVICE_V2) == {
+            "tenant_id": "tenant-a",
+            "project_id": "project-a",
+            "user_id": "user-a",
+        }
         publication = await actor._plugin_admission_v2.host.apply_distribution(second.to_payload())
         assert publication.accepted
         assert operation.descriptor == first.descriptor

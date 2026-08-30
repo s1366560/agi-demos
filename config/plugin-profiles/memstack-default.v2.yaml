@@ -73,6 +73,22 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-workspace-core-prompt-context
+      parent_entry_id: runtime-generation-boundary
+      plugin_ref: memstack-runtime-kernel
+      module_ref: builtin://memstack/workspace-core/prompt-context
+      enabled: false
+      config:
+        strategy: workspace-core-read-model
+      inject:
+        runtime: service:workspace-core.runtime
+        conversations: service:application.conversation-access
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-graph-runtime
       parent_entry_id: runtime-generation-boundary
       plugin_ref: memstack-runtime-kernel

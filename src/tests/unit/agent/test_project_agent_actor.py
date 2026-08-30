@@ -233,6 +233,11 @@ class TestProjectAgentActor:
         assert admit.call_args.kwargs["descriptor_payload"] == generation
         assert admit.call_args.kwargs["distribution_payload"] == distribution
         assert admit.call_args.kwargs["operation_id"] == "hitl-resume:req-1"
+        assert admit.call_args.kwargs["services"]["service:operation.identity"] == {
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+            "user_id": "user-1",
+        }
         continue_mock.assert_awaited_once()
         assert lease_active is False
 
