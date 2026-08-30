@@ -160,6 +160,8 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
         }
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
             extract_payload=_supervisor_decision_from_event,
         )
         if recovered_payload is not None:
@@ -246,6 +248,8 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
                 return payload
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
             extract_payload=_supervisor_decision_from_event,
         )
         if recovered_payload is not None:

@@ -138,6 +138,8 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
         }
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
             extract_payload=_verification_judgment_from_event,
         )
         if recovered_payload is not None:
@@ -234,6 +236,8 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
                 raise
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
             extract_payload=_verification_judgment_from_event,
         )
         if recovered_payload is not None:

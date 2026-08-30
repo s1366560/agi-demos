@@ -8,19 +8,26 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from src.infrastructure.plugins.v2.agent_event_query_services import (
+    AGENT_EVENT_QUERY_SERVICE_V2,
+    AgentEventQueryResolverProtocolV2,
+)
 from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.agent_turn_services import AgentTurnStreamProtocolV2
+from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
+    ASYNC_SESSION_FACTORY_SERVICE_V2,
+)
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
     pin_agent_turn_operation_v2,
 )
-from src.infrastructure.plugins.v2.runtime import OperationContextV2
+from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +35,15 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 ContractEventExtractor = Callable[[Mapping[str, Any]], dict[str, Any] | None]
+type WorkspaceContractSessionFactoryV2 = Callable[[], AbstractAsyncContextManager["AsyncSession"]]
+
+
+@runtime_checkable
+class WorkspaceContractSessionFactoryProviderProtocolV2(Protocol):
+    """Structural contract for the generation-selected persistence session factory."""
+
+    @property
+    def factory(self) -> WorkspaceContractSessionFactoryV2: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -135,23 +151,56 @@ def _contract_payload_from_value(
 async def recover_workspace_contract_payload(
     *,
     conversation_id: str,
+    tenant_id: str,
+    project_id: str,
     extract_payload: ContractEventExtractor,
     limit: int = 1000,
 ) -> dict[str, Any] | None:
-    """Recover a submitted contract payload from persisted agent execution events."""
+    """Recover a submitted contract payload through one leased V2 query authority."""
     try:
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
-            SqlAgentExecutionEventRepository,
-        )
-
-        async with async_session_factory() as db:
-            events = await SqlAgentExecutionEventRepository(db).list_by_conversation(
-                conversation_id=conversation_id,
-                limit=limit,
-            )
+        async with pin_agent_turn_operation_v2(
+            operation_id=f"workspace-contract-recovery:{uuid.uuid4()}",
+            tenant_id=tenant_id,
+            project_id=project_id,
+            session_id=conversation_id,
+            services={
+                OPERATION_IDENTITY_SERVICE_V2: {
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                },
+                OPERATION_METADATA_SERVICE_V2: {
+                    "kind": "workspace-contract-event-recovery",
+                    "conversation_id": conversation_id,
+                },
+            },
+            force_process_host_lease=True,
+        ) as operation:
+            sessions = operation.require(ASYNC_SESSION_FACTORY_SERVICE_V2)
+            if not isinstance(sessions, WorkspaceContractSessionFactoryProviderProtocolV2):
+                raise RuntimeV2Error(
+                    "invalid_workspace_contract_session_factory",
+                    "Workspace contract recovery session Provider is invalid",
+                )
+            resolver = operation.require(AGENT_EVENT_QUERY_SERVICE_V2)
+            if not isinstance(resolver, AgentEventQueryResolverProtocolV2):
+                raise RuntimeV2Error(
+                    "invalid_workspace_contract_event_query",
+                    "Workspace contract recovery event query Provider is invalid",
+                )
+            async with sessions.factory() as db:
+                _ = operation.provide(
+                    OPERATION_DB_SESSION_SERVICE_V2,
+                    db,
+                    label="workspace-contract-recovery-db-session",
+                )
+                events = await resolver.resolve(operation).get_events(
+                    conversation_id=conversation_id,
+                    from_time_us=0,
+                    from_counter=0,
+                    limit=limit,
+                )
+    except RuntimeV2Error:
+        raise
     except Exception:
         logger.warning(
             "workspace_contract_runtime.recover_payload_failed",
