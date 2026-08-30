@@ -18,6 +18,7 @@ export type UiSlotKind =
   | 'activity_inbox_surface'
   | 'authenticated_shell_surface'
   | 'keyboard_shortcuts_surface'
+  | 'status_bar_surface'
   | 'settings_window_surface'
   | 'session_canvas_surface'
   | 'workbench_surface';

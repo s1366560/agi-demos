@@ -4,7 +4,6 @@ import { Theme } from '@radix-ui/themes';
 
 import { ResizeHandle } from '../components/ResizeHandle';
 import { DesktopRightSidebar } from '../features/chrome/DesktopRightSidebar';
-import { DesktopStatusBar } from '../features/chrome/DesktopStatusBar';
 import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
 import { WorkbenchTabBar } from '../features/chrome/WorkbenchTabBar';
 import { CommandPalette } from '../features/navigation/CommandPalette';
@@ -17,7 +16,9 @@ import type { DesktopKeyboardShortcutsInputV2 } from './DesktopKeyboardShortcuts
 import { DesktopRendererKeyboardShortcutsV2 } from './DesktopRendererKeyboardShortcutsV2';
 import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
 import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
+import { DesktopRendererStatusBarV2 } from './DesktopRendererStatusBarV2';
 import type { DesktopSettingsWindowInputV2 } from './DesktopSettingsWindowSurfaceV2';
+import type { DesktopStatusBarInputV2 } from './DesktopStatusBarSurfaceV2';
 import type { DesktopRendererGenerationMetaV2 } from './desktopRendererGenerationContextV2';
 
 export type DesktopAuthenticatedShellOptionalOutletV2<Props> =
@@ -56,7 +57,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
     router: ComponentProps<typeof DesktopRendererProductionRouterV2>;
     settings: DesktopSettingsWindowInputV2;
     sidebar: DesktopAuthenticatedShellSidebarV2;
-    statusBar: ComponentProps<typeof DesktopStatusBar>;
+    statusBar: DesktopStatusBarInputV2;
     tabBar: ComponentProps<typeof WorkbenchTabBar>;
     titlebar: DesktopAuthenticatedShellOptionalOutletV2<
       ComponentProps<typeof DesktopTitlebar>
@@ -123,7 +124,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
           ) : null}
         </section>
 
-        <DesktopStatusBar {...surfaces.statusBar} />
+        <DesktopRendererStatusBarV2 input={surfaces.statusBar} />
 
         {surfaces.commandPalette.kind === 'visible'
           ? createPortal(<CommandPalette {...surfaces.commandPalette.props} />, document.body)

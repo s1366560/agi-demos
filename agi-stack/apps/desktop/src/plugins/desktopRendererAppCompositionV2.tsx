@@ -25,6 +25,7 @@ import { DesktopNewThreadComposerSurfaceV2 } from './DesktopNewThreadComposerSur
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopSessionWorkspaceSurfaceV2 } from './DesktopSessionWorkspaceSurfaceV2';
 import { DesktopSettingsWindowSurfaceV2 } from './DesktopSettingsWindowSurfaceV2';
+import { DesktopStatusBarSurfaceV2 } from './DesktopStatusBarSurfaceV2';
 import { DesktopWorkspaceCollaborationSurfaceV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
@@ -59,6 +60,7 @@ import {
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2,
   DESKTOP_SETTINGS_WINDOW_SURFACE_MODULE_REF_V2,
+  DESKTOP_STATUS_BAR_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   type DesktopRendererCompositionPortV2,
@@ -116,6 +118,8 @@ export function createDesktopRendererAppCompositionPortV2(
       validKeyboardShortcutsDefinitionV2(definition)
         ? DesktopKeyboardShortcutsSurfaceV2
         : null,
+    resolveStatusBarSurface: (definition: UiSlotDefinition) =>
+      validStatusBarDefinitionV2(definition) ? DesktopStatusBarSurfaceV2 : null,
     resolveConversationRendererModule: (definition: AuthorizedUiSlotDefinitionV2) =>
       validConversationRendererDefinitionV2(definition)
         ? DESKTOP_CONVERSATION_RENDERER_MODULE_V2
@@ -231,6 +235,18 @@ function validKeyboardShortcutsDefinitionV2(definition: UiSlotDefinition): boole
     definition.contract === 'ui-builtin:desktop-keyboard-shortcuts-surface' &&
     definition.moduleRef === DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.keyboard-shortcuts' &&
+    definition.sandbox
+  );
+}
+
+function validStatusBarDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'status_bar_surface' &&
+    definition.id === 'status-bar' &&
+    definition.contract === 'ui-builtin:desktop-status-bar-surface' &&
+    definition.moduleRef === DESKTOP_STATUS_BAR_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.status-bar' &&
     definition.sandbox
   );
 }

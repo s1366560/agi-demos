@@ -120,6 +120,11 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-session-canvas-surface"
     )
+    status_bar_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-status-bar-surface"
+    )
     activity_inbox_index = next(
         index
         for index, entry in enumerate(entries)
@@ -145,7 +150,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 329
+    assert len(entries) == 330
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -158,6 +163,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
     }
     assert (
         shell_index
+        < status_bar_index
         < session_canvas_index
         < workbench_index
         < session_workspace_index
@@ -184,6 +190,15 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         "order": 85,
         "payload": {
             "artifact_refs": ["desktop.ui-slots.session-canvas-surface.v1"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[status_bar_index]["config"] == {
+        "id": "desktop.status-bar-surface",
+        "kind": "ui-slot",
+        "order": 83,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.status-bar-surface.v1"],
             "schema_version": 1,
         },
     }

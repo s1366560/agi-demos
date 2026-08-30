@@ -83,7 +83,11 @@ const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'ut
 
 test('app shell mounts the desktop titlebar and status bar exactly once', () => {
   assert.equal((authenticatedShellSurfaceSource.match(/<DesktopTitlebar\b/g) ?? []).length, 1);
-  assert.equal((authenticatedShellSurfaceSource.match(/<DesktopStatusBar\b/g) ?? []).length, 1);
+  assert.equal(
+    (authenticatedShellSurfaceSource.match(/<DesktopRendererStatusBarV2\b/g) ?? []).length,
+    1,
+  );
+  assert.doesNotMatch(authenticatedShellSurfaceSource, /<DesktopStatusBar\b/u);
   // The titlebar only renders inside the native desktop window shell.
   assert.match(appSource, /titlebar:\s*runsInNativeDesktop\s*\?[\s\S]*kind:\s*'visible'/u);
   assert.match(
