@@ -640,13 +640,14 @@ test('production routing passes a typed model to the module-owned workbench with
     'WorkspaceOverview',
     'WorkspaceCollaborationCanvas',
     'MyWorkQueue',
-    'ActivityInbox',
     'NewThreadComposer',
     'SessionWorkspace',
   ]) {
     assert.match(workbenchSurfaceSource, new RegExp(`<${component}\\b`, 'u'));
     assert.doesNotMatch(appSource, new RegExp(`<${component}\\b`, 'u'));
   }
+  assert.match(workbenchSurfaceSource, /<DesktopRendererActivityInboxV2/u);
+  assert.doesNotMatch(workbenchSurfaceSource, /<ActivityInbox\b|view\.inbox/u);
   assert.match(rendererAppCompositionSource, /DesktopWorkbenchSurfaceV2/u);
   assert.match(workbenchSurfaceSource, /<section className="workbench-layout">/u);
   assert.match(appSource, /const socket = useAgentSocket\(/u);

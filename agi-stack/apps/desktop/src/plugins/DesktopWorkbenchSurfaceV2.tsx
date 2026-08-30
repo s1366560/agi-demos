@@ -1,6 +1,5 @@
 import type { ComponentProps } from 'react';
 
-import { ActivityInbox } from '../features/activity/ActivityInbox';
 import { ChatPanel } from '../features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from '../features/chat/PlatformPluginConversationSlots';
 import { MyWorkQueue } from '../features/my-work/MyWorkQueue';
@@ -9,6 +8,8 @@ import { NewThreadComposer } from '../features/task/NewThreadComposer';
 import { WorkspaceCollaborationCanvas } from '../features/workspace/WorkspaceCollaborationCanvas';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { useI18n } from '../i18n';
+import type { DesktopActivityInboxInputV2 } from './DesktopActivityInboxSurfaceV2';
+import { DesktopRendererActivityInboxV2 } from './DesktopRendererActivityInboxV2';
 
 type DesktopWorkbenchWorkspaceViewV2 = Readonly<{
   kind: 'workspace';
@@ -28,7 +29,7 @@ type DesktopWorkbenchBoardViewV2 = Readonly<{
 
 type DesktopWorkbenchActivityViewV2 = Readonly<{
   kind: 'activity';
-  inbox: Readonly<ComponentProps<typeof ActivityInbox>>;
+  activityInbox: DesktopActivityInboxInputV2;
 }>;
 
 type DesktopWorkbenchHomeViewV2 = Readonly<{
@@ -110,7 +111,7 @@ function renderDesktopWorkbenchViewV2(view: DesktopWorkbenchViewV2) {
     case 'board':
       return <MyWorkQueue {...view.queue} />;
     case 'activity':
-      return <ActivityInbox {...view.inbox} />;
+      return <DesktopRendererActivityInboxV2 input={view.activityInbox} />;
     case 'home':
       return <NewThreadComposer key={view.composerScopeKey} {...view.composer} />;
   }

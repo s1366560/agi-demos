@@ -6277,7 +6277,7 @@ export function App() {
 
   const createActivityWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
     kind: 'activity',
-    inbox: {
+    activityInbox: {
       groups: activityInbox.groups,
       isEntryRead: activityInbox.isEntryRead,
       unreadCount: activityInbox.unreadCount,

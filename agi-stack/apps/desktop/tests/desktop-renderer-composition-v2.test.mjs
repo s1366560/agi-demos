@@ -4,13 +4,25 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const {
+  DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
+  projectDesktopActivityInboxCompositionV2,
   projectDesktopAuthenticatedShellCompositionV2,
   projectDesktopSessionCanvasCompositionV2,
   projectDesktopWorkbenchCompositionV2,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererCompositionPortV2.js');
+
+const activityInboxSlot = Object.freeze({
+  pluginId: 'builtin-shell',
+  slot: 'activity_inbox_surface',
+  id: 'activity-inbox',
+  contract: 'ui-builtin:desktop-activity-inbox-surface',
+  moduleRef: DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
+  permission: 'ui.activity-inbox',
+  sandbox: true,
+});
 
 const authenticatedShellSlot = Object.freeze({
   pluginId: 'builtin-shell',
@@ -45,6 +57,7 @@ function authority(status = 'ready', slotDefinitions = [workbenchSlot]) {
 }
 
 function composition({
+  activityInbox = ActivityInboxSurface,
   sessionCanvas = SessionCanvasSurface,
   shell = AuthenticatedShellSurface,
   workbench = WorkbenchSurface,
@@ -55,6 +68,11 @@ function composition({
     },
     createRouteRegistry() {
       throw new Error('not used');
+    },
+    resolveActivityInboxSurface(definition) {
+      return definition.moduleRef === DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2
+        ? activityInbox
+        : null;
     },
     resolveAuthenticatedShellSurface(definition) {
       return definition.moduleRef === DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2
@@ -73,6 +91,10 @@ function composition({
 }
 
 function AuthenticatedShellSurface() {
+  return null;
+}
+
+function ActivityInboxSurface() {
   return null;
 }
 
@@ -262,6 +284,77 @@ test('session canvas composition preserves generation failure without static fal
   );
   assert.deepEqual(
     projectDesktopSessionCanvasCompositionV2(authority('disabled', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_disabled',
+    }),
+  );
+});
+
+test('activity inbox composition resolves one explicit active V2 surface contribution', () => {
+  assert.deepEqual(
+    projectDesktopActivityInboxCompositionV2(
+      authority('ready', [activityInboxSlot]),
+      composition(),
+    ),
+    Object.freeze({ status: 'ready', Surface: ActivityInboxSurface }),
+  );
+  assert.deepEqual(
+    projectDesktopActivityInboxCompositionV2(authority('loading', []), composition()),
+    Object.freeze({ status: 'loading' }),
+  );
+});
+
+test('activity inbox composition fails closed for missing, ambiguous, and wrong modules', () => {
+  assert.deepEqual(
+    projectDesktopActivityInboxCompositionV2(authority('ready', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_activity_inbox_contribution_missing',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopActivityInboxCompositionV2(
+      authority('ready', [activityInboxSlot, { ...activityInboxSlot, id: 'duplicate' }]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_activity_inbox_contribution_ambiguous',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopActivityInboxCompositionV2(
+      authority('ready', [{ ...activityInboxSlot, moduleRef: 'builtin:wrong-activity-inbox' }]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_activity_inbox_module_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopActivityInboxCompositionV2(
+      authority('ready', [activityInboxSlot]),
+      composition({ activityInbox: null }),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_activity_inbox_module_unavailable',
+    }),
+  );
+});
+
+test('activity inbox composition preserves generation failure without static fallback', () => {
+  assert.deepEqual(
+    projectDesktopActivityInboxCompositionV2(authority('unavailable', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopActivityInboxCompositionV2(authority('disabled', []), composition()),
     Object.freeze({
       status: 'unavailable',
       reasonCode: 'desktop_renderer_generation_disabled',

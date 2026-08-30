@@ -97,7 +97,17 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-session-canvas-surface"
     )
-    assert len(entries) == 319
+    activity_inbox_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-activity-inbox-surface"
+    )
+    desktop_routes_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
+    )
+    assert len(entries) == 320
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -108,7 +118,13 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
             "schema_version": 1,
         },
     }
-    assert shell_index < session_canvas_index < workbench_index
+    assert (
+        shell_index
+        < session_canvas_index
+        < workbench_index
+        < activity_inbox_index
+        < desktop_routes_index
+    )
     assert entries[shell_index]["config"] == {
         "id": "desktop.authenticated-shell-surface",
         "kind": "ui-slot",
@@ -133,6 +149,15 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         "order": 90,
         "payload": {
             "artifact_refs": ["desktop.ui-slots.workbench-surface.v2"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[activity_inbox_index]["config"] == {
+        "id": "desktop.activity-inbox-surface",
+        "kind": "ui-slot",
+        "order": 95,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.activity-inbox-surface.v1"],
             "schema_version": 1,
         },
     }

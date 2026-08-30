@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
+import type { DesktopActivityInboxSurfacePropsV2 } from './DesktopActivityInboxSurfaceV2';
 import type { DesktopAuthenticatedShellViewModelV2 } from './DesktopAuthenticatedShellSurfaceV2';
 import type { DesktopSessionCanvasSurfacePropsV2 } from './DesktopSessionCanvasSurfaceV2';
 import type { DesktopWorkbenchSurfaceViewModelV2 } from './DesktopWorkbenchSurfaceV2';
@@ -13,6 +14,11 @@ export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 =
 export const DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-session-canvas-surface' as const;
 export const DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2 = 'builtin:desktop-workbench-surface' as const;
+export const DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2 =
+  'builtin:desktop-activity-inbox-surface' as const;
+
+export type DesktopRendererActivityInboxSurfaceV2 =
+  ComponentType<DesktopActivityInboxSurfacePropsV2>;
 
 export interface DesktopRendererAuthenticatedShellSurfacePropsV2 {
   readonly viewModel: DesktopAuthenticatedShellViewModelV2;
@@ -34,6 +40,9 @@ export type DesktopRendererWorkbenchSurfaceV2 =
 export interface DesktopRendererCompositionPortV2 {
   readonly createAuthenticationRouteRegistry: () => DesktopRouteRegistry<DesktopRouteModule>;
   readonly createRouteRegistry: (artifactId: string) => DesktopRouteRegistry<DesktopRouteModule>;
+  readonly resolveActivityInboxSurface: (
+    definition: UiSlotDefinition,
+  ) => DesktopRendererActivityInboxSurfaceV2 | null;
   readonly resolveAuthenticatedShellSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererAuthenticatedShellSurfaceV2 | null;
@@ -91,6 +100,22 @@ export type DesktopRendererSessionCanvasCompositionV2 =
         | 'desktop_renderer_session_canvas_contribution_ambiguous'
         | 'desktop_renderer_session_canvas_contribution_missing'
         | 'desktop_renderer_session_canvas_module_unavailable';
+    }>;
+
+export type DesktopRendererActivityInboxCompositionV2 =
+  | Readonly<{
+      status: 'ready';
+      Surface: DesktopRendererActivityInboxSurfaceV2;
+    }>
+  | Readonly<{ status: 'loading' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode:
+        | 'desktop_renderer_activity_inbox_contribution_ambiguous'
+        | 'desktop_renderer_activity_inbox_contribution_missing'
+        | 'desktop_renderer_activity_inbox_module_unavailable'
+        | 'desktop_renderer_generation_disabled'
+        | 'desktop_renderer_generation_unavailable';
     }>;
 
 export function projectDesktopAuthenticatedShellCompositionV2(
@@ -178,6 +203,33 @@ export function projectDesktopSessionCanvasCompositionV2(
   return Object.freeze({ status: 'ready', Surface });
 }
 
+export function projectDesktopActivityInboxCompositionV2(
+  authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
+  composition: DesktopRendererCompositionPortV2,
+): DesktopRendererActivityInboxCompositionV2 {
+  if (authority.status === 'loading') return Object.freeze({ status: 'loading' });
+  if (authority.status === 'disabled') {
+    return unavailableActivityInboxV2('desktop_renderer_generation_disabled');
+  }
+  if (authority.status === 'unavailable') {
+    return unavailableActivityInboxV2('desktop_renderer_generation_unavailable');
+  }
+  const definitions = authority.slotDefinitions.filter(
+    ({ slot }) => slot === 'activity_inbox_surface',
+  );
+  if (definitions.length === 0) {
+    return unavailableActivityInboxV2('desktop_renderer_activity_inbox_contribution_missing');
+  }
+  if (definitions.length !== 1) {
+    return unavailableActivityInboxV2('desktop_renderer_activity_inbox_contribution_ambiguous');
+  }
+  const Surface = composition.resolveActivityInboxSurface(definitions[0]);
+  if (Surface === null) {
+    return unavailableActivityInboxV2('desktop_renderer_activity_inbox_module_unavailable');
+  }
+  return Object.freeze({ status: 'ready', Surface });
+}
+
 function unavailableAuthenticatedShellV2(
   reasonCode: Extract<
     DesktopRendererAuthenticatedShellCompositionV2,
@@ -202,5 +254,14 @@ function unavailableSessionCanvasV2(
     Readonly<{ status: 'unavailable' }>
   >['reasonCode'],
 ): DesktopRendererSessionCanvasCompositionV2 {
+  return Object.freeze({ status: 'unavailable', reasonCode });
+}
+
+function unavailableActivityInboxV2(
+  reasonCode: Extract<
+    DesktopRendererActivityInboxCompositionV2,
+    Readonly<{ status: 'unavailable' }>
+  >['reasonCode'],
+): DesktopRendererActivityInboxCompositionV2 {
   return Object.freeze({ status: 'unavailable', reasonCode });
 }

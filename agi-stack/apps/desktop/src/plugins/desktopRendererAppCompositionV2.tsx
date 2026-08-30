@@ -16,6 +16,7 @@ import {
 } from '../features/navigation/appRouteRegistry';
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
+import { DesktopActivityInboxSurfaceV2 } from './DesktopActivityInboxSurfaceV2';
 import { DesktopAuthenticatedShellSurfaceV2 } from './DesktopAuthenticatedShellSurfaceV2';
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
@@ -34,6 +35,7 @@ import {
   DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
 } from './desktopRendererArtifactCatalogV2';
 import {
+  DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
@@ -82,6 +84,8 @@ export function createDesktopRendererAppCompositionPortV2(
       }
       return factory(refs);
     },
+    resolveActivityInboxSurface: (definition: UiSlotDefinition) =>
+      validActivityInboxDefinitionV2(definition) ? DesktopActivityInboxSurfaceV2 : null,
     resolveAuthenticatedShellSurface: (definition: UiSlotDefinition) =>
       validAuthenticatedShellDefinitionV2(definition) ? DesktopAuthenticatedShellSurfaceV2 : null,
     resolveSessionCanvasSurface: (definition: UiSlotDefinition) =>
@@ -89,6 +93,18 @@ export function createDesktopRendererAppCompositionPortV2(
     resolveWorkbenchSurface: (definition: UiSlotDefinition) =>
       validWorkbenchDefinitionV2(definition) ? DesktopWorkbenchSurfaceV2 : null,
   });
+}
+
+function validActivityInboxDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'activity_inbox_surface' &&
+    definition.id === 'activity-inbox' &&
+    definition.contract === 'ui-builtin:desktop-activity-inbox-surface' &&
+    definition.moduleRef === DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.activity-inbox' &&
+    definition.sandbox
+  );
 }
 
 function validAuthenticatedShellDefinitionV2(definition: UiSlotDefinition): boolean {

@@ -47,7 +47,7 @@ test('authentication keeps its React child seam outside the business workbench r
   assert.doesNotMatch(app, /childrenAuthority/u);
 });
 
-test('the V2 module owns every workbench business surface and App passes data only', () => {
+test('the V2 modules own every workbench business surface and App passes data only', () => {
   assert.match(composition, /import \{ DesktopWorkbenchSurfaceV2 \}/u);
   assert.match(
     composition,
@@ -58,7 +58,6 @@ test('the V2 module owns every workbench business surface and App passes data on
     'WorkspaceOverview',
     'WorkspaceCollaborationCanvas',
     'MyWorkQueue',
-    'ActivityInbox',
     'NewThreadComposer',
     'SessionWorkspace',
   ]) {
@@ -71,6 +70,11 @@ test('the V2 module owns every workbench business surface and App passes data on
   assert.match(surface, /kind:\s*'board'/u);
   assert.match(surface, /kind:\s*'activity'/u);
   assert.match(surface, /kind:\s*'home'/u);
+  assert.match(surface, /<DesktopRendererActivityInboxV2/u);
+  assert.doesNotMatch(
+    surface,
+    /<ActivityInbox\b|ComponentProps<typeof ActivityInbox>|view\.inbox/u,
+  );
   assert.doesNotMatch(surface, /viewModel[^;{]*ReactNode|render[A-Z][A-Za-z]+\??:/u);
   assert.match(app, /router:\s*\{[\s\S]*viewModel:\s*desktopWorkbenchSurfaceViewModelV2/u);
   assert.match(shellSurface, /<DesktopRendererProductionRouterV2 \{\.\.\.surfaces\.router\} \/>/u);

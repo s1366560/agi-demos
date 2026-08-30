@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 require.extensions[".css"] = () => {};
 
 const {
+  DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_AUXILIARY_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
@@ -31,6 +32,7 @@ const {
   DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_TENANT_GOVERNANCE_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_TENANT_CREATION_ROUTE_ARTIFACT_ID_V2,
+  DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2,
   defineDesktopUiSlotArtifactV2,
   resolveDesktopRendererArtifactsV2,
   DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2,
@@ -268,16 +270,28 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       298,
     ),
     contribution(
+      "desktop.session-canvas-surface",
+      "ui-slot",
+      [DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2],
+      299,
+    ),
+    contribution(
       "desktop.workbench-surface",
       "ui-slot",
       [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2],
-      299,
+      300,
+    ),
+    contribution(
+      "desktop.activity-inbox-surface",
+      "ui-slot",
+      [DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2],
+      301,
     ),
     contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
-      300,
+      302,
     ),
   ]);
 
@@ -308,7 +322,9 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_TENANT_EXTENSIONS_INTEGRATIONS_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2, "navigation"],
       [DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
+      [DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
+      [DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
     ],
   );
@@ -625,6 +641,17 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
   assert.deepEqual(artifacts[24].slotDefinitions, [
     {
       pluginId: "builtin-shell",
+      slot: "session_canvas_surface",
+      id: "session-canvas",
+      contract: "ui-builtin:desktop-session-canvas-surface",
+      moduleRef: "builtin:desktop-session-canvas-surface",
+      permission: "ui.session-canvas",
+      sandbox: true,
+    },
+  ]);
+  assert.deepEqual(artifacts[25].slotDefinitions, [
+    {
+      pluginId: "builtin-shell",
       slot: "workbench_surface",
       id: "workbench",
       contract: "ui-builtin:desktop-workbench-surface",
@@ -633,9 +660,20 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.equal(artifacts[25].slotDefinitions.length, 2);
+  assert.deepEqual(artifacts[26].slotDefinitions, [
+    {
+      pluginId: "builtin-shell",
+      slot: "activity_inbox_surface",
+      id: "activity-inbox",
+      contract: "ui-builtin:desktop-activity-inbox-surface",
+      moduleRef: "builtin:desktop-activity-inbox-surface",
+      permission: "ui.activity-inbox",
+      sandbox: true,
+    },
+  ]);
+  assert.equal(artifacts[27].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[25].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[27].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );
