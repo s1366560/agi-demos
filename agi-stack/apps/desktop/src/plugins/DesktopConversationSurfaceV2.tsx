@@ -13,7 +13,15 @@ export function DesktopConversationSurfaceV2({ input }: DesktopConversationSurfa
   return (
     <>
       <ChatPanel {...input} />
-      <PlatformPluginConversationSlots active />
+      <PlatformPluginConversationSlots
+        active
+        conversationId={input.selectedConversationId}
+        disabled={Boolean(input.disabledReason)}
+        messageCount={input.messages.length}
+        onOpenCommands={input.onOpenCommands}
+        sending={input.sending}
+        workflowTarget={input.activeWorkflowTarget}
+      />
     </>
   );
 }

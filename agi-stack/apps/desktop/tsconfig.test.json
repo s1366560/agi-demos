@@ -6,7 +6,7 @@
     "moduleResolution": "Node",
     "noEmit": false,
     "outDir": "/tmp/agistack-desktop-test-dist",
-    "rootDir": ".",
+    "rootDir": "../..",
     "types": ["node"]
   },
   "include": [
@@ -46,6 +46,7 @@
     "src/plugins/DesktopRendererProductionRouterV2.tsx",
     "src/plugins/DesktopWorkbenchSurfaceV2.tsx",
     "src/plugins/desktopRendererAppCompositionV2.tsx",
+    "src/plugins/desktopConversationRendererModuleV2.ts",
     "src/plugins/uiSlotRegistry.ts",
     "src/plugins/desktopRendererArtifactCatalogV2.ts",
     "src/plugins/desktopRendererAuthorityStateV2.ts",
@@ -87,6 +88,7 @@
     "src/features/agent-authority/localActivityAuthorityClient.ts",
     "src/features/agent-authority/agentAuthorityProjection.ts",
     "src/features/chat/a2uiAction.ts",
+    "src/features/chat/desktopConversationRendererBridgeV2.ts",
     "src/features/chat/a2uiSurfaceModel.ts",
     "src/features/chat/a2uiSurfaceAuthorityModel.ts",
     "src/features/chat/ArtifactPreviewSurface.tsx",

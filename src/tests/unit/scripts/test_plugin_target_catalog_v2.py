@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
-from src.infrastructure.plugins.v2.protocol import parse_profile_snapshot_v2
+from src.infrastructure.plugins.v2.composer import compose_profile_v2, parse_profile_document_v2
+from src.infrastructure.plugins.v2.protocol import (
+    parse_plugin_manifest_v2,
+    parse_profile_snapshot_v2,
+)
 
 _ROOT = Path(__file__).resolve().parents[4]
 _CATALOG = _ROOT / "shared/catalogs/plugin-module-catalog.v2.json"
 _BOOTSTRAP = _ROOT / "shared/profiles/memstack-default-bootstrap.v2.json"
+_MANIFESTS = _ROOT / "config/plugin-manifests-v2"
+_PRODUCTION_PROFILE = _ROOT / "config/plugin-profiles/memstack-production-target-hosts.v2.yaml"
 
 _EXPECTED_TARGET_MODULES = {
     "rust-server": frozenset(
@@ -122,6 +130,11 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-conversation-surface"
     )
+    conversation_renderer_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-conversation-renderer"
+    )
     my_work_queue_index = next(
         index
         for index, entry in enumerate(entries)
@@ -132,7 +145,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 325
+    assert len(entries) == 326
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -153,6 +166,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         < my_work_queue_index
         < activity_inbox_index
         < conversation_index
+        < conversation_renderer_index
         < desktop_routes_index
     )
     assert entries[shell_index]["config"] == {
@@ -236,3 +250,58 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
             "schema_version": 1,
         },
     }
+    assert entries[conversation_renderer_index]["config"] == {
+        "id": "desktop.conversation-renderer",
+        "kind": "ui-slot",
+        "order": 97,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.conversation-renderer.v1"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[conversation_renderer_index]["permissions"] == ["ui.conversation.renderer"]
+
+
+@pytest.mark.unit
+def test_conversation_renderer_supports_explicit_profile_replace_and_disable() -> None:
+    payload = yaml.safe_load(_PRODUCTION_PROFILE.read_text(encoding="utf-8"))
+    renderer = next(
+        entry
+        for entry in payload["profile"]["entries"]
+        if entry["entry_id"] == "builtin-desktop-conversation-renderer"
+    )
+    manifests = {}
+    for path in sorted(_MANIFESTS.glob("*.v2.json")):
+        manifest = parse_plugin_manifest_v2(json.loads(path.read_text(encoding="utf-8")))
+        manifests[manifest.plugin_id] = manifest
+
+    replacement = deepcopy(renderer)
+    replacement["config"]["order"] = 98
+    replaced_payload = deepcopy(payload)
+    replaced_payload["patches"] = [{"target": renderer["entry_id"], "replacement": replacement}]
+    replaced = compose_profile_v2(
+        parse_profile_document_v2(replaced_payload),
+        manifests,
+        generation=901,
+    )
+    replaced_entry = next(
+        entry for entry in replaced.entries if entry.entry_id == renderer["entry_id"]
+    )
+    assert replaced_entry.enabled is True
+    assert replaced_entry.config["order"] == 98
+
+    disabled_replacement = deepcopy(renderer)
+    disabled_replacement["enabled"] = False
+    disabled_payload = deepcopy(payload)
+    disabled_payload["patches"] = [
+        {"target": renderer["entry_id"], "replacement": disabled_replacement}
+    ]
+    disabled = compose_profile_v2(
+        parse_profile_document_v2(disabled_payload),
+        manifests,
+        generation=902,
+    )
+    disabled_entry = next(
+        entry for entry in disabled.entries if entry.entry_id == renderer["entry_id"]
+    )
+    assert disabled_entry.enabled is False

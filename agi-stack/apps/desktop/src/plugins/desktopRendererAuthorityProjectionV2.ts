@@ -1,22 +1,21 @@
 import {
   DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
+  type RegisteredRendererContributionV2,
   type RendererContributionRegistryV2,
   type RuntimeGenerationV2,
 } from '@agistack/plugin-runtime';
 
 import {
   resolveDesktopRendererArtifactsV2,
-  type DesktopNavigationArtifactV2,
   type DesktopRouteArtifactV2,
-  type DesktopUiSlotArtifactV2,
 } from './desktopRendererArtifactCatalogV2';
 
 import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
-import type { UiSlotDefinition } from './uiSlotRegistry';
+import type { AuthorizedUiSlotDefinitionV2 } from './uiSlotRegistry';
 
 const EMPTY_IDS_V2: readonly string[] = Object.freeze([]);
 const EMPTY_ROUTE_ARTIFACTS_V2: readonly DesktopRouteArtifactV2[] = Object.freeze([]);
-const EMPTY_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([]);
+const EMPTY_UI_SLOT_DEFINITIONS_V2: readonly AuthorizedUiSlotDefinitionV2[] = Object.freeze([]);
 const DISABLED_STATE_V2: DesktopRendererAuthorityStateV2 = Object.freeze({
   navigationArtifactIds: EMPTY_IDS_V2,
   navigationDiscoveryRouteIds: EMPTY_IDS_V2,
@@ -47,15 +46,26 @@ export function projectDesktopRendererAuthorityV2(
     DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
     { kind: 'root' },
   );
-  const artifacts = resolveDesktopRendererArtifactsV2(registry.list());
-  const routeArtifacts = artifacts.filter(
-    (artifact): artifact is DesktopRouteArtifactV2 => artifact.kind === 'route',
+  const contributions = registry.list();
+  const artifacts = resolveDesktopRendererArtifactsV2(contributions);
+  const sourceEntryIds = sourceEntryIdsForArtifactsV2(contributions);
+  if (sourceEntryIds.length !== artifacts.length) {
+    throw new Error('desktop_renderer_artifact_source_projection_mismatch');
+  }
+  const resolvedArtifacts = artifacts.map((artifact, index) =>
+    Object.freeze({ artifact, sourceEntryId: sourceEntryIds[index] }),
   );
-  const navigationArtifacts = artifacts.filter(
-    (artifact): artifact is DesktopNavigationArtifactV2 => artifact.kind === 'navigation',
+  const routeArtifacts = resolvedArtifacts.flatMap(({ artifact }) =>
+    artifact.kind === 'route' ? [artifact] : [],
   );
-  const uiSlotArtifacts = artifacts.filter(
-    (artifact): artifact is DesktopUiSlotArtifactV2 => artifact.kind === 'ui-slot',
+  const navigationArtifacts = resolvedArtifacts.flatMap(({ artifact }) =>
+    artifact.kind === 'navigation' ? [artifact] : [],
+  );
+  const uiSlotArtifacts = resolvedArtifacts.flatMap(({ artifact, sourceEntryId }) =>
+    artifact.kind === 'ui-slot' ? [{ artifact, sourceEntryId }] : [],
+  );
+  const permissionsByEntryId = new Map(
+    generation.snapshot.entries.map((entry) => [entry.entry_id, entry.permissions] as const),
   );
   return Object.freeze({
     navigationArtifactIds: freezeStringsV2(navigationArtifacts.map(({ id }) => id)),
@@ -67,10 +77,22 @@ export function projectDesktopRendererAuthorityV2(
     routeArtifacts: Object.freeze(routeArtifacts),
     routeIds: freezeStringsV2(routeArtifacts.flatMap(({ routeIds }) => routeIds)),
     slotDefinitions: Object.freeze(
-      uiSlotArtifacts.flatMap(({ slotDefinitions }) => slotDefinitions),
+      uiSlotArtifacts.flatMap(({ artifact, sourceEntryId }) => {
+        const grantedPermissions = permissionsByEntryId.get(sourceEntryId);
+        if (grantedPermissions === undefined) {
+          throw new Error(`desktop_renderer_source_entry_missing:${sourceEntryId}`);
+        }
+        return artifact.slotDefinitions.map((definition) =>
+          Object.freeze({
+            ...definition,
+            grantedPermissions: Object.freeze([...grantedPermissions]),
+            sourceEntryId,
+          }),
+        );
+      }),
     ),
     status: 'ready',
-    uiSlotArtifactIds: freezeStringsV2(uiSlotArtifacts.map(({ id }) => id)),
+    uiSlotArtifactIds: freezeStringsV2(uiSlotArtifacts.map(({ artifact }) => artifact.id)),
   });
 }
 
@@ -100,4 +122,16 @@ export function resolveDesktopRendererAuthorityStateV2(
 
 function freezeStringsV2(values: readonly string[]): readonly string[] {
   return Object.freeze([...values]);
+}
+
+function sourceEntryIdsForArtifactsV2(
+  contributions: readonly RegisteredRendererContributionV2[],
+): readonly string[] {
+  return Object.freeze(
+    contributions.flatMap((contribution) =>
+      (contribution.payload.artifact_refs as readonly string[]).map(
+        () => contribution.sourceEntryId,
+      ),
+    ),
+  );
 }

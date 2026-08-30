@@ -11,8 +11,9 @@ import type { DesktopSessionCanvasSurfacePropsV2 } from './DesktopSessionCanvasS
 import type { DesktopSessionWorkspaceSurfacePropsV2 } from './DesktopSessionWorkspaceSurfaceV2';
 import type { DesktopWorkspaceCollaborationSurfacePropsV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import type { DesktopWorkbenchSurfaceViewModelV2 } from './DesktopWorkbenchSurfaceV2';
+import type { DesktopConversationRendererModuleV2 } from './desktopConversationRendererModuleV2';
 import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
-import type { UiSlotDefinition } from './uiSlotRegistry';
+import type { AuthorizedUiSlotDefinitionV2, UiSlotDefinition } from './uiSlotRegistry';
 
 export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-authenticated-shell-surface' as const;
@@ -74,6 +75,9 @@ export interface DesktopRendererCompositionPortV2 {
   readonly resolveConversationSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererConversationSurfaceV2 | null;
+  readonly resolveConversationRendererModule: (
+    definition: AuthorizedUiSlotDefinitionV2,
+  ) => DesktopConversationRendererModuleV2 | null;
   readonly resolveMyWorkQueueSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererMyWorkQueueSurfaceV2 | null;

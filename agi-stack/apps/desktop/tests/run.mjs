@@ -1,6 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, rmSync, statSync, symlinkSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import {
+  cpSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -30,6 +38,30 @@ const compile = spawnSync(
   },
 );
 if (compile.status !== 0) process.exit(compile.status ?? 1);
+
+const compiledDesktopRoot = join(compiledRoot, 'apps', 'desktop');
+for (const entry of readdirSync(compiledDesktopRoot)) {
+  cpSync(join(compiledDesktopRoot, entry), join(compiledRoot, entry), {
+    recursive: true,
+  });
+}
+
+const testNodeModules = join(compiledRoot, 'test-node-modules');
+const compiledPluginSlotsRoot = join(
+  testNodeModules,
+  '@agistack',
+  'plugin-slots',
+);
+mkdirSync(compiledPluginSlotsRoot, { recursive: true });
+cpSync(
+  join(compiledRoot, 'packages', 'plugin-slots', 'src'),
+  compiledPluginSlotsRoot,
+  { recursive: true },
+);
+writeFileSync(
+  join(compiledPluginSlotsRoot, 'package.json'),
+  JSON.stringify({ main: 'index.js', type: 'commonjs' }),
+);
 
 for (const project of ['project-agent', 'project-administration', 'project-knowledge']) {
   const projectDistRoot = `/tmp/agistack-${project}-test-dist`;
@@ -63,7 +95,7 @@ const run = spawnSync(process.execPath, ['--test', ...testFiles], {
     // I18nProvider falls back to it when no stored locale exists.
     LANG: 'en_US.UTF-8',
     LC_ALL: 'en_US.UTF-8',
-    NODE_PATH: join(desktopRoot, 'node_modules'),
+    NODE_PATH: [testNodeModules, join(desktopRoot, 'node_modules')].join(delimiter),
   },
   stdio: 'inherit',
 });

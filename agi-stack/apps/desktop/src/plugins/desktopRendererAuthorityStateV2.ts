@@ -12,7 +12,10 @@ import {
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteArtifactV2 } from './desktopRendererArtifactCatalogV2';
 import type { DesktopRendererCompositionPortV2 } from './desktopRendererCompositionPortV2';
-import type { UiSlotDefinition, UiSlotKind } from './uiSlotRegistry';
+import type {
+  AuthorizedUiSlotDefinitionV2,
+  UiSlotKind,
+} from './uiSlotRegistry';
 
 export type DesktopRendererAuthorityStatusV2 = 'disabled' | 'loading' | 'ready' | 'unavailable';
 
@@ -24,7 +27,7 @@ export interface DesktopRendererAuthorityStateV2 {
   readonly routeArtifactIds: readonly string[];
   readonly routeArtifacts: readonly DesktopRouteArtifactV2[];
   readonly routeIds: readonly string[];
-  readonly slotDefinitions: readonly UiSlotDefinition[];
+  readonly slotDefinitions: readonly AuthorizedUiSlotDefinitionV2[];
   readonly status: DesktopRendererAuthorityStatusV2;
   readonly uiSlotArtifactIds: readonly string[];
 }
@@ -35,7 +38,7 @@ const AUTHENTICATION_KERNEL_ROUTE_IDS_V2 = Object.freeze([
 ]);
 const EMPTY_IDS_V2: readonly string[] = Object.freeze([]);
 const EMPTY_ROUTE_ARTIFACTS_V2: readonly DesktopRouteArtifactV2[] = Object.freeze([]);
-const EMPTY_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([]);
+const EMPTY_UI_SLOT_DEFINITIONS_V2: readonly AuthorizedUiSlotDefinitionV2[] = Object.freeze([]);
 const DISABLED_STATE_V2: DesktopRendererAuthorityStateV2 = Object.freeze({
   navigationArtifactIds: EMPTY_IDS_V2,
   navigationDiscoveryRouteIds: EMPTY_IDS_V2,
@@ -133,13 +136,13 @@ export function isDesktopNavigationRouteEnabledV2(
 export function selectDesktopUiSlotsV2(
   state: DesktopRendererAuthorityStateV2,
   kind?: UiSlotKind,
-): readonly UiSlotDefinition[] {
+): readonly AuthorizedUiSlotDefinitionV2[] {
   if (state.status !== 'ready') return EMPTY_UI_SLOT_DEFINITIONS_V2;
   if (kind === undefined) return state.slotDefinitions;
   return state.slotDefinitions.filter((slot) => slot.slot === kind);
 }
 
-export function useDesktopUiSlotsV2(kind?: UiSlotKind): readonly UiSlotDefinition[] {
+export function useDesktopUiSlotsV2(kind?: UiSlotKind): readonly AuthorizedUiSlotDefinitionV2[] {
   const state = useDesktopRendererAuthorityV2();
   return useMemo(() => selectDesktopUiSlotsV2(state, kind), [kind, state]);
 }

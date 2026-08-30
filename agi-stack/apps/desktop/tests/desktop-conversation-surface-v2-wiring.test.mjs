@@ -47,7 +47,11 @@ test('conversation canvas is selected from one typed pinned-generation V2 surfac
   assert.match(surface, /export type DesktopConversationInputV2/u);
   assert.match(surface, /export interface DesktopConversationSurfacePropsV2/u);
   assert.match(surface, /<ChatPanel \{\.\.\.input\} \/>/u);
-  assert.match(surface, /<PlatformPluginConversationSlots active\s*\/>/u);
+  assert.match(surface, /<PlatformPluginConversationSlots\s+active/u);
+  assert.match(surface, /conversationId=\{input\.selectedConversationId\}/u);
+  assert.match(surface, /messageCount=\{input\.messages\.length\}/u);
+  assert.match(surface, /workflowTarget=\{input\.activeWorkflowTarget\}/u);
+  assert.match(surface, /onOpenCommands=\{input\.onOpenCommands\}/u);
   assert.doesNotMatch(
     surface,
     /useAgentSocket|acquireOperationLease|meta\.digest|generation(?:Digest|Version)|\bkey=|use(?:Layout)?Effect|useState|useReducer/u,

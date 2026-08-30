@@ -60,6 +60,10 @@ export default defineConfig(({ command }) => ({
           desktopRoot,
           '../../packages/plugin-runtime/src/index.ts',
         ),
+        '@agistack/plugin-slots': resolve(
+          desktopRoot,
+          '../../packages/plugin-slots/src/index.ts',
+        ),
       },
     },
     server: {

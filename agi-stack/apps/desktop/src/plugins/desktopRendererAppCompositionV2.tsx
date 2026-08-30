@@ -26,6 +26,10 @@ import { DesktopSessionWorkspaceSurfaceV2 } from './DesktopSessionWorkspaceSurfa
 import { DesktopWorkspaceCollaborationSurfaceV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
+  DESKTOP_CONVERSATION_RENDERER_MODULE_REF_V2,
+  DESKTOP_CONVERSATION_RENDERER_MODULE_V2,
+} from './desktopConversationRendererModuleV2';
+import {
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2,
@@ -52,7 +56,7 @@ import {
   type DesktopRendererCompositionPortV2,
   type DesktopRendererWorkbenchSurfaceV2,
 } from './desktopRendererCompositionPortV2';
-import type { UiSlotDefinition } from './uiSlotRegistry';
+import type { AuthorizedUiSlotDefinitionV2, UiSlotDefinition } from './uiSlotRegistry';
 
 type AppRouteRegistryFactoryV2 = (
   refs: AppRouteRegistryRefs,
@@ -100,6 +104,10 @@ export function createDesktopRendererAppCompositionPortV2(
       validAuthenticatedShellDefinitionV2(definition) ? DesktopAuthenticatedShellSurfaceV2 : null,
     resolveConversationSurface: (definition: UiSlotDefinition) =>
       validConversationDefinitionV2(definition) ? DesktopConversationSurfaceV2 : null,
+    resolveConversationRendererModule: (definition: AuthorizedUiSlotDefinitionV2) =>
+      validConversationRendererDefinitionV2(definition)
+        ? DESKTOP_CONVERSATION_RENDERER_MODULE_V2
+        : null,
     resolveMyWorkQueueSurface: (definition: UiSlotDefinition) =>
       validMyWorkQueueDefinitionV2(definition) ? DesktopMyWorkQueueSurfaceV2 : null,
     resolveNewThreadComposerSurface: (definition: UiSlotDefinition) =>
@@ -152,6 +160,21 @@ function validConversationDefinitionV2(definition: UiSlotDefinition): boolean {
     definition.moduleRef === DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.conversation' &&
     definition.sandbox
+  );
+}
+
+function validConversationRendererDefinitionV2(
+  definition: AuthorizedUiSlotDefinitionV2,
+): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'conversation_renderer' &&
+    definition.id === 'conversation-renderer' &&
+    definition.contract === 'ui-builtin:desktop-conversation-renderer' &&
+    definition.moduleRef === DESKTOP_CONVERSATION_RENDERER_MODULE_REF_V2 &&
+    definition.permission === 'ui.conversation.renderer' &&
+    definition.sandbox &&
+    definition.grantedPermissions.includes(definition.permission)
   );
 }
 

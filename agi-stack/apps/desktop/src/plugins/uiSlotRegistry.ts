@@ -36,6 +36,11 @@ export interface UiSlotDefinition {
   readonly sandbox: boolean;
 }
 
+export interface AuthorizedUiSlotDefinitionV2 extends UiSlotDefinition {
+  readonly grantedPermissions: readonly string[];
+  readonly sourceEntryId: string;
+}
+
 export type RegisteredUiSlot = UiSlotDefinition & {
   readonly trust: PluginTrust;
   readonly runtime: PluginRuntime;
