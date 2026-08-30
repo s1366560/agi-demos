@@ -75,3 +75,8 @@ export function useDesktopRendererGenerationV2(): DesktopRendererGenerationConte
   }
   return value;
 }
+
+export function useOptionalDesktopRendererGenerationV2():
+  DesktopRendererGenerationContextValueV2 | null {
+  return use(DesktopRendererGenerationContextV2);
+}

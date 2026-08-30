@@ -30,6 +30,10 @@ import {
   DESKTOP_CONVERSATION_RENDERER_MODULE_V2,
 } from './desktopConversationRendererModuleV2';
 import {
+  DESKTOP_TOOL_RESULT_RENDERER_MODULE_REF_V2,
+  DESKTOP_TOOL_RESULT_RENDERER_MODULE_V2,
+} from './desktopToolResultRendererModuleV2';
+import {
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2,
@@ -108,6 +112,10 @@ export function createDesktopRendererAppCompositionPortV2(
       validConversationRendererDefinitionV2(definition)
         ? DESKTOP_CONVERSATION_RENDERER_MODULE_V2
         : null,
+    resolveToolResultRendererModule: (definition: AuthorizedUiSlotDefinitionV2) =>
+      validToolResultRendererDefinitionV2(definition)
+        ? DESKTOP_TOOL_RESULT_RENDERER_MODULE_V2
+        : null,
     resolveMyWorkQueueSurface: (definition: UiSlotDefinition) =>
       validMyWorkQueueDefinitionV2(definition) ? DesktopMyWorkQueueSurfaceV2 : null,
     resolveNewThreadComposerSurface: (definition: UiSlotDefinition) =>
@@ -173,6 +181,21 @@ function validConversationRendererDefinitionV2(
     definition.contract === 'ui-builtin:desktop-conversation-renderer' &&
     definition.moduleRef === DESKTOP_CONVERSATION_RENDERER_MODULE_REF_V2 &&
     definition.permission === 'ui.conversation.renderer' &&
+    definition.sandbox &&
+    definition.grantedPermissions.includes(definition.permission)
+  );
+}
+
+function validToolResultRendererDefinitionV2(
+  definition: AuthorizedUiSlotDefinitionV2,
+): boolean {
+  return (
+    definition.pluginId === 'builtin-ui' &&
+    definition.slot === 'tool_result_renderer' &&
+    definition.id === 'structured-tool-result' &&
+    definition.contract === 'ui-builtin:structured-tool-result' &&
+    definition.moduleRef === DESKTOP_TOOL_RESULT_RENDERER_MODULE_REF_V2 &&
+    definition.permission === 'ui.render' &&
     definition.sandbox &&
     definition.grantedPermissions.includes(definition.permission)
   );

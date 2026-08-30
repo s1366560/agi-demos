@@ -88,6 +88,7 @@ import { ArtifactTimelineCard } from './ArtifactTimelineCard';
 import { CodeBlockFrame } from './HighlightedCode';
 import { HitlResponseCard } from './HitlResponseCard';
 import { MCPAppTimelineCard } from './MCPAppTimelineCard';
+import { PlatformPluginToolResultSlots } from './PlatformPluginToolResultSlots';
 import { MarkdownArtifactImageProvider } from './MarkdownArtifactImage';
 import { MemoryTimelineEvent } from './MemoryTimelineCards';
 import { MessageForcedSkillBadge } from './MessageForcedSkillBadge';
@@ -934,6 +935,7 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
     timelineFileMetadata(pair.call);
   const input = pair.call.toolInput;
   const output = pair.result?.toolOutput ?? pair.result?.payload;
+  const resultItem = pair.result ?? (pair.call.type === 'observe' ? pair.call : null);
   return (
     <div className="timeline-details">
       {display?.summary ? (
@@ -950,6 +952,14 @@ function ToolCallPairBody({ pair }: { pair: ToolCallPair }) {
       ) : null}
       {input !== undefined ? (
         <TimelinePayloadBlock label={t('chat.input')} value={input} />
+      ) : null}
+      {resultItem ? (
+        <PlatformPluginToolResultSlots
+          resultId={resultItem.id}
+          toolName={resultItem.toolName ?? pair.call.toolName ?? ''}
+          status={resultItem.isError || resultItem.error ? 'failed' : 'complete'}
+          kind={toolCallPresentationKind(pair)}
+        />
       ) : null}
       {output !== undefined ? (
         <TimelinePayloadBlock label={t('chat.output')} value={output} />
@@ -1249,6 +1259,14 @@ function TimelineItemBody({
           <TimelinePayloadBlock
             label={t('chat.input')}
             value={item.toolInput}
+          />
+        ) : null}
+        {item.type === 'observe' ? (
+          <PlatformPluginToolResultSlots
+            resultId={item.id}
+            toolName={item.toolName ?? ''}
+            status={item.isError || item.error ? 'failed' : 'complete'}
+            kind={toolCallPresentationKind({ call: item, result: null })}
           />
         ) : null}
         {item.toolOutput !== undefined ? (

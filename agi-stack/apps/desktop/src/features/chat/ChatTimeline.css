@@ -457,6 +457,17 @@
   line-height: 15px;
 }
 
+.platform-plugin-tool-result-slots {
+  display: grid;
+  min-width: 0;
+}
+
+.platform-plugin-tool-result-frame {
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+
 .timeline-hitl-response {
   display: grid;
   gap: 3px;

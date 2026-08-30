@@ -160,6 +160,6 @@
       "contract_digest": "sha256:ee51655e1a4136786327a1a62480ce42455c37250a23e89c4c744ec07229724e"
     }
   ],
-  "permissions": ["ui.conversation.renderer"],
+  "permissions": ["ui.conversation.renderer", "ui.render"],
   "quotas": {}
 }

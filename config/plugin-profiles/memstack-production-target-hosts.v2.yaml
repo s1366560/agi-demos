@@ -412,6 +412,28 @@ profile:
         - ui.conversation.renderer
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-tool-result-renderer
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution
+      enabled: true
+      config:
+        id: desktop.tool-result-renderer
+        kind: ui-slot
+        order: 98
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - desktop.ui-slots.tool-result-renderer.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions:
+        - ui.render
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-tenant-creation-routes
       parent_entry_id: builtin-desktop-renderer-contribution-registry
       plugin_ref: memstack-renderer-contributions

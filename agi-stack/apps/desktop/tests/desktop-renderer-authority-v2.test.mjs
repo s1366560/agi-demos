@@ -927,7 +927,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.equal(artifacts[32].slotDefinitions.length, 2);
+  assert.equal(artifacts[32].slotDefinitions.length, 1);
   assert.ok(
     artifacts[32].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),

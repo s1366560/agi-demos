@@ -131,6 +131,8 @@ export const DESKTOP_CONVERSATION_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.conversation-surface.v1';
 export const DESKTOP_CONVERSATION_RENDERER_ARTIFACT_ID_V2 =
   'desktop.ui-slots.conversation-renderer.v1';
+export const DESKTOP_TOOL_RESULT_RENDERER_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.tool-result-renderer.v1';
 
 const TENANT_CREATION_ROUTE_IDS_V2 = Object.freeze([TENANT_CREATION_ROUTE_ID]);
 const AUXILIARY_ROUTE_ID_SET_V2 = new Set<string>(
@@ -314,15 +316,6 @@ const DEFAULT_UI_SLOT_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freez
     permission: 'ui.settings.plugins',
     sandbox: true,
   }),
-  Object.freeze({
-    pluginId: 'builtin-ui',
-    slot: 'tool_result_renderer',
-    id: 'structured-tool-result',
-    contract: 'ui-builtin:structured-tool-result',
-    moduleRef: 'builtin:structured-tool-result',
-    permission: 'ui.render',
-    sandbox: true,
-  }),
 ]);
 const AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
   Object.freeze({
@@ -431,6 +424,17 @@ const CONVERSATION_RENDERER_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object
     contract: 'ui-builtin:desktop-conversation-renderer',
     moduleRef: 'builtin:desktop-conversation-renderer',
     permission: 'ui.conversation.renderer',
+    sandbox: true,
+  }),
+]);
+const TOOL_RESULT_RENDERER_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-ui',
+    slot: 'tool_result_renderer',
+    id: 'structured-tool-result',
+    contract: 'ui-builtin:structured-tool-result',
+    moduleRef: 'builtin:structured-tool-result',
+    permission: 'ui.render',
     sandbox: true,
   }),
 ]);
@@ -723,6 +727,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopUiSlotArtifactV2(
       DESKTOP_CONVERSATION_RENDERER_ARTIFACT_ID_V2,
       CONVERSATION_RENDERER_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_TOOL_RESULT_RENDERER_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_TOOL_RESULT_RENDERER_ARTIFACT_ID_V2,
+      TOOL_RESULT_RENDERER_DEFINITIONS_V2,
     ),
   ],
   [

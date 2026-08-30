@@ -13,6 +13,7 @@ import type { DesktopWorkspaceCollaborationSurfacePropsV2 } from './DesktopWorks
 import type { DesktopWorkbenchSurfaceViewModelV2 } from './DesktopWorkbenchSurfaceV2';
 import type { DesktopConversationRendererModuleV2 } from './desktopConversationRendererModuleV2';
 import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
+import type { DesktopToolResultRendererModuleV2 } from './desktopToolResultRendererModuleV2';
 import type { AuthorizedUiSlotDefinitionV2, UiSlotDefinition } from './uiSlotRegistry';
 
 export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 =
@@ -78,6 +79,9 @@ export interface DesktopRendererCompositionPortV2 {
   readonly resolveConversationRendererModule: (
     definition: AuthorizedUiSlotDefinitionV2,
   ) => DesktopConversationRendererModuleV2 | null;
+  readonly resolveToolResultRendererModule: (
+    definition: AuthorizedUiSlotDefinitionV2,
+  ) => DesktopToolResultRendererModuleV2 | null;
   readonly resolveMyWorkQueueSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererMyWorkQueueSurfaceV2 | null;

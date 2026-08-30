@@ -126,7 +126,7 @@ test('conversation renderer is an independent ordered contribution with an expli
     rendererEntry,
     /permissions:\s*\n\s*- ui\.conversation\.renderer/u,
   );
-  assert.deepEqual(rendererManifest.permissions, ['ui.conversation.renderer']);
+  assert.deepEqual(rendererManifest.permissions, ['ui.conversation.renderer', 'ui.render']);
 
   const rendererBootstrap = bootstrap.entries.find(
     ({ entry_id: entryId }) =>
