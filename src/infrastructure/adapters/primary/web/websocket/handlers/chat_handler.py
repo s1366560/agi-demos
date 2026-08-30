@@ -26,6 +26,9 @@ from src.domain.model.agent import (
     AgentClientTurnStatus,
 )
 from src.domain.model.agent.execution_backend import execution_backend_from_metadata
+from src.infrastructure.adapters.primary.web.conversation_access_application_authority_v2 import (
+    conversation_access_application_authority_v2,
+)
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
@@ -288,81 +291,81 @@ class SendMessageHandler(WebSocketMessageHandler):
         }
 
         try:
-            container = context.get_scoped_container()
-
-            # Verify conversation ownership
-            conversation_repo = container.conversation_repository()
-            conversation = await conversation_repo.find_by_id(conversation_id)
-
-            if not conversation:
-                await context.send_error(
-                    "Conversation not found",
-                    code="CONVERSATION_NOT_FOUND",
-                    conversation_id=conversation_id,
-                    extra=_client_message_id_extra(client_message_id),
-                )
-                return
-
-            if not await _conversation_scope_is_active(
-                context,
-                conversation=conversation,
-                project_id=project_id,
-            ):
-                await context.send_error(
-                    "You do not have permission to access this conversation",
-                    code="CONVERSATION_ACCESS_DENIED",
-                    conversation_id=conversation_id,
-                    extra=_client_message_id_extra(client_message_id),
-                )
-                return
-
-            admission = await _admit_client_turn(
+            async with conversation_access_application_authority_v2(
                 context,
                 conversation_id=conversation_id,
-                project_id=project_id,
-                message_id=client_message_id,
-                execution_payload=client_execution_payload,
-            )
-            if admission is None:
-                return
+            ) as authority:
+                conversation = await authority.service.find_by_id(conversation_id)
 
-            execution_message_id = (
-                admission.turn.execution_message_id
-                if admission.turn is not None
-                else str(uuid.uuid4())
-            )
-            run = await ensure_chat_run_authority(
-                context.db,
-                conversation=cast(Any, conversation),
-                run_id=execution_message_id,
-                request_message=user_message,
-                client_message_id=client_message_id,
-                app_model_context=app_model_context,
-                permission_mode=permission_mode,
-            )
+                if not conversation:
+                    await context.send_error(
+                        "Conversation not found",
+                        code="CONVERSATION_NOT_FOUND",
+                        conversation_id=conversation_id,
+                        extra=_client_message_id_extra(client_message_id),
+                    )
+                    return
 
-            # Auto-subscribe this session to this conversation
-            await context.connection_manager.subscribe(context.session_id, conversation_id)
+                if not await _conversation_scope_is_active(
+                    context,
+                    conversation=conversation,
+                    project_id=project_id,
+                ):
+                    await context.send_error(
+                        "You do not have permission to access this conversation",
+                        code="CONVERSATION_ACCESS_DENIED",
+                        conversation_id=conversation_id,
+                        extra=_client_message_id_extra(client_message_id),
+                    )
+                    return
 
-            # Send acknowledgment
-            ack_fields: dict[str, Any] = {
-                "conversation_id": conversation_id,
-                "execution_message_id": execution_message_id,
-                "run_id": run.id,
-                "run_revision": run.revision,
-            }
-            if client_message_id is not None:
-                ack_fields["message_id"] = client_message_id
-                assert admission.turn is not None
-                ack_fields.update(
-                    {
-                        "outcome": "accepted",
-                        "replayed": not admission.created,
-                        "turn_status": admission.turn.status.value,
-                        "execution_message_id": admission.turn.execution_message_id,
-                    }
+                admission = await _admit_client_turn(
+                    context,
+                    conversation_id=conversation_id,
+                    project_id=project_id,
+                    message_id=client_message_id,
+                    execution_payload=client_execution_payload,
                 )
-            await context.send_ack("send_message", **ack_fields)
+                if admission is None:
+                    return
+
+                execution_message_id = (
+                    admission.turn.execution_message_id
+                    if admission.turn is not None
+                    else str(uuid.uuid4())
+                )
+                run = await ensure_chat_run_authority(
+                    context.db,
+                    conversation=cast(Any, conversation),
+                    run_id=execution_message_id,
+                    request_message=user_message,
+                    client_message_id=client_message_id,
+                    app_model_context=app_model_context,
+                    permission_mode=permission_mode,
+                )
+
+                # Auto-subscribe this session to this conversation
+                await context.connection_manager.subscribe(context.session_id, conversation_id)
+
+                # Send acknowledgment
+                ack_fields: dict[str, Any] = {
+                    "conversation_id": conversation_id,
+                    "execution_message_id": execution_message_id,
+                    "run_id": run.id,
+                    "run_revision": run.revision,
+                }
+                if client_message_id is not None:
+                    ack_fields["message_id"] = client_message_id
+                    assert admission.turn is not None
+                    ack_fields.update(
+                        {
+                            "outcome": "accepted",
+                            "replayed": not admission.created,
+                            "turn_status": admission.turn.status.value,
+                            "execution_message_id": admission.turn.execution_message_id,
+                        }
+                    )
+                await context.send_ack("send_message", **ack_fields)
 
             if admission.should_start:
                 task = asyncio.create_task(
@@ -394,6 +397,7 @@ class SendMessageHandler(WebSocketMessageHandler):
             logger.error(f"[WS] Error handling send_message: {e}", exc_info=True)
             await context.send_error(
                 str(e),
+                code=e.code if isinstance(e, RuntimeV2Error) else None,
                 conversation_id=conversation_id,
                 extra=_client_message_id_extra(client_message_id),
             )
@@ -417,61 +421,71 @@ class StopSessionHandler(WebSocketMessageHandler):
             return
 
         try:
-            manager = context.connection_manager
-            cancelled = False
+            async with conversation_access_application_authority_v2(
+                context,
+                conversation_id=conversation_id,
+            ) as authority:
+                conversation = await authority.service.find_by_id(conversation_id)
+                if not conversation:
+                    await context.send_error(
+                        "Conversation not found",
+                        conversation_id=conversation_id,
+                    )
+                    return
+                if (
+                    conversation.tenant_id != context.tenant_id
+                    or conversation.user_id != context.user_id
+                ):
+                    await context.send_error("Access denied", conversation_id=conversation_id)
+                    return
 
-            # Cancel the bridge task if exists for this session
-            if (
-                context.session_id in manager.bridge_tasks
-                and conversation_id in manager.bridge_tasks[context.session_id]
-            ):
-                task = manager.bridge_tasks[context.session_id][conversation_id]
-                task.cancel()
-                del manager.bridge_tasks[context.session_id][conversation_id]
-                cancelled = True
-                logger.info(f"[WS] Cancelled stream task for conversation {conversation_id}")
+                manager = context.connection_manager
+                cancelled = False
 
-            from src.application.services.agent.runtime_cancellation import (
-                cancel_conversation_runtime,
-            )
-            from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-                SqlConversationRepository,
-            )
+                # Cancel the bridge task if exists for this session
+                if (
+                    context.session_id in manager.bridge_tasks
+                    and conversation_id in manager.bridge_tasks[context.session_id]
+                ):
+                    task = manager.bridge_tasks[context.session_id][conversation_id]
+                    task.cancel()
+                    del manager.bridge_tasks[context.session_id][conversation_id]
+                    cancelled = True
+                    logger.info(f"[WS] Cancelled stream task for conversation {conversation_id}")
 
-            conv_repo = SqlConversationRepository(context.db)
-            conversation = await conv_repo.find_by_id(conversation_id)
-            if not conversation:
-                await context.send_error("Conversation not found", conversation_id=conversation_id)
-                return
-            if conversation.tenant_id != context.tenant_id:
-                await context.send_error("Access denied", conversation_id=conversation_id)
-                return
-
-            runtime_cancellation = await cancel_conversation_runtime(conversation)
-            cancelled = cancelled or runtime_cancellation.cancelled
-
-            if runtime_cancellation.ray_error is not None and not cancelled:
-                await context.send_error(
-                    "Failed to stop session",
-                    code="STOP_SESSION_FAILED",
-                    conversation_id=conversation_id,
+                from src.application.services.agent.runtime_cancellation import (
+                    cancel_conversation_runtime,
                 )
-                return
 
-            if not cancelled:
-                await context.send_error(
-                    "No running session found to stop",
-                    code="SESSION_NOT_RUNNING",
-                    conversation_id=conversation_id,
-                )
-                return
+                runtime_cancellation = await cancel_conversation_runtime(conversation)
+                cancelled = cancelled or runtime_cancellation.cancelled
 
-            # Send acknowledgment
-            await context.send_ack("stop_session", conversation_id=conversation_id)
+                if runtime_cancellation.ray_error is not None and not cancelled:
+                    await context.send_error(
+                        "Failed to stop session",
+                        code="STOP_SESSION_FAILED",
+                        conversation_id=conversation_id,
+                    )
+                    return
+
+                if not cancelled:
+                    await context.send_error(
+                        "No running session found to stop",
+                        code="SESSION_NOT_RUNNING",
+                        conversation_id=conversation_id,
+                    )
+                    return
+
+                # Send acknowledgment
+                await context.send_ack("stop_session", conversation_id=conversation_id)
 
         except Exception as e:
             logger.error(f"[WS] Error stopping session: {e}", exc_info=True)
-            await context.send_error(str(e), conversation_id=conversation_id)
+            await context.send_error(
+                str(e),
+                code=e.code if isinstance(e, RuntimeV2Error) else None,
+                conversation_id=conversation_id,
+            )
 
 
 # =============================================================================

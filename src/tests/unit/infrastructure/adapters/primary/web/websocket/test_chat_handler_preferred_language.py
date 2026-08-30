@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -22,6 +23,7 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler imp
     _text_from_external_acp_content,
     stream_agent_to_websocket,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit
 
@@ -268,6 +270,7 @@ class StopConnectionManager:
 class StopContext:
     session_id = "session-1"
     tenant_id = "tenant-1"
+    user_id = "user-1"
     db = object()
 
     def __init__(self, task: asyncio.Task[None]) -> None:
@@ -306,6 +309,7 @@ class FakeConversationRepository:
             id=conversation_id,
             tenant_id="tenant-1",
             project_id="project-1",
+            user_id="user-1",
         )
 
 
@@ -393,11 +397,25 @@ async def test_stop_session_cancels_local_worker_when_ray_actor_exists(monkeypat
         return True
 
     import src.application.services.agent.runtime_bootstrapper as runtime_bootstrapper
-    import src.infrastructure.adapters.secondary.persistence.sql_conversation_repository as conv_repo
     import src.infrastructure.adapters.secondary.ray.client as ray_client
     import src.infrastructure.agent.actor.actor_manager as actor_manager
 
-    monkeypatch.setattr(conv_repo, "SqlConversationRepository", FakeConversationRepository)
+    @asynccontextmanager
+    async def fake_conversation_access_authority(
+        _context: StopContext,
+        *,
+        conversation_id: str,
+    ) -> AsyncIterator[Any]:
+        yield SimpleNamespace(
+            operation=object(),
+            service=FakeConversationRepository(object()),
+        )
+
+    monkeypatch.setattr(
+        chat_handler_module,
+        "conversation_access_application_authority_v2",
+        fake_conversation_access_authority,
+    )
     monkeypatch.setattr(actor_manager, "get_actor_if_exists", fake_get_actor_if_exists)
     monkeypatch.setattr(ray_client, "await_ray", fake_await_ray)
     monkeypatch.setattr(
@@ -418,3 +436,117 @@ async def test_stop_session_cancels_local_worker_when_ray_actor_exists(monkeypat
     assert fake_cancel.conversation_ids == ["conv-1"]
     assert local_cancelled == ["conv-1"]
     assert context.sent == [{"type": "ack", "action": "stop_session", "conversation_id": "conv-1"}]
+
+
+@pytest.mark.parametrize(
+    ("conversation_tenant_id", "conversation_user_id"),
+    [
+        ("other-tenant", "user-1"),
+        ("tenant-1", "other-user"),
+    ],
+)
+async def test_stop_session_rejects_wrong_scope_before_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+    conversation_tenant_id: str,
+    conversation_user_id: str,
+) -> None:
+    async def bridge_task() -> None:
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(bridge_task())
+
+    service = SimpleNamespace(
+        find_by_id=AsyncMock(
+            return_value=SimpleNamespace(
+                id="conv-1",
+                tenant_id=conversation_tenant_id,
+                project_id="project-1",
+                user_id=conversation_user_id,
+            )
+        )
+    )
+
+    @asynccontextmanager
+    async def authority_with_wrong_scope(
+        _context: StopContext,
+        *,
+        conversation_id: str,
+    ) -> AsyncIterator[Any]:
+        assert conversation_id == "conv-1"
+        yield SimpleNamespace(operation=object(), service=service)
+
+    monkeypatch.setattr(
+        chat_handler_module,
+        "conversation_access_application_authority_v2",
+        authority_with_wrong_scope,
+    )
+    context = StopContext(task)
+
+    try:
+        await StopSessionHandler().handle(context, {"conversation_id": "conv-1"})  # type: ignore[arg-type]
+
+        assert not task.done()
+        assert context.connection_manager.bridge_tasks == {"session-1": {"conv-1": task}}
+        assert context.sent == [
+            {
+                "type": "error",
+                "data": {"message": "Access denied", "code": None},
+                "conversation_id": "conv-1",
+            }
+        ]
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_stop_session_reports_v2_authority_error_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def bridge_task() -> None:
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(bridge_task())
+
+    @asynccontextmanager
+    async def missing_conversation_access_authority(
+        *_args: object,
+        **_kwargs: object,
+    ) -> AsyncIterator[Any]:
+        if _kwargs.get("conversation_id") == "conv-1":
+            raise RuntimeV2Error(
+                "missing_service_provider",
+                "conversation access service is unavailable",
+            )
+        yield SimpleNamespace(operation=object(), service=object())
+
+    monkeypatch.setattr(
+        chat_handler_module,
+        "conversation_access_application_authority_v2",
+        missing_conversation_access_authority,
+    )
+    context = StopContext(task)
+
+    try:
+        await StopSessionHandler().handle(context, {"conversation_id": "conv-1"})  # type: ignore[arg-type]
+
+        assert not task.done()
+        assert context.sent == [
+            {
+                "type": "error",
+                "data": {
+                    "message": "conversation access service is unavailable",
+                    "code": "missing_service_provider",
+                },
+                "conversation_id": "conv-1",
+            }
+        ]
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+def test_stop_session_conversation_lookup_has_no_static_sql_fallback() -> None:
+    source = inspect.getsource(StopSessionHandler.handle)
+
+    assert "conversation_access_application_authority_v2" in source
+    assert "SqlConversationRepository" not in source

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -30,6 +33,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_client_turn_rep
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     ensure_chat_run_authority,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 
 pytestmark = pytest.mark.unit
 
@@ -128,7 +132,7 @@ class _MessageContext:
         self.sent: list[dict[str, Any]] = []
 
     def get_scoped_container(self) -> _Container:
-        return _Container(self.conversation)
+        raise AssertionError("send_message must not fall back to the scoped DI container")
 
     async def send_ack(self, action: str, **kwargs: Any) -> None:
         self.sent.append({"type": "ack", "action": action, **kwargs})
@@ -255,6 +259,26 @@ def successful_chat_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         chat_handler,
         "ensure_chat_run_authority",
         fake_ensure_chat_run_authority,
+    )
+
+    @asynccontextmanager
+    async def fake_conversation_access_authority(
+        context: _MessageContext,
+        *,
+        conversation_id: str,
+    ) -> AsyncIterator[Any]:
+        assert conversation_id == "conversation-1"
+        if isinstance(context, _ExplodingMessageContext):
+            raise RuntimeError("simulated permanent send failure")
+        yield SimpleNamespace(
+            operation=object(),
+            service=_ConversationRepository(context.conversation),
+        )
+
+    monkeypatch.setattr(
+        chat_handler,
+        "conversation_access_application_authority_v2",
+        fake_conversation_access_authority,
     )
 
 
@@ -696,6 +720,48 @@ async def test_unexpected_send_error_echoes_valid_message_id(
     _assert_error_message_id(context, "desktop-turn-error")
 
 
+async def test_send_message_reports_v2_authority_error_code(
+    successful_chat_dependencies: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    @asynccontextmanager
+    async def missing_conversation_access_authority(
+        *_args: object,
+        **_kwargs: object,
+    ) -> AsyncIterator[Any]:
+        if _kwargs.get("conversation_id") == "conversation-1":
+            raise RuntimeV2Error(
+                "missing_service_provider",
+                "conversation access service is unavailable",
+            )
+        yield SimpleNamespace(operation=object(), service=object())
+
+    monkeypatch.setattr(
+        chat_handler,
+        "conversation_access_application_authority_v2",
+        missing_conversation_access_authority,
+    )
+    context = _MessageContext()
+
+    await SendMessageHandler().handle(
+        context,
+        _message(message_id="desktop-turn-v2-missing"),
+    )  # type: ignore[arg-type]
+
+    assert context.connection_manager.subscriptions == []
+    assert context.connection_manager.tasks == []
+    _assert_error_message_id(context, "desktop-turn-v2-missing")
+    _assert_error_code(context, "missing_service_provider")
+
+
+def test_send_message_conversation_lookup_has_no_static_di_fallback() -> None:
+    source = inspect.getsource(SendMessageHandler.handle)
+
+    assert "conversation_access_application_authority_v2" in source
+    assert "get_scoped_container" not in source
+    assert "conversation_repository" not in source
+
+
 async def test_missing_required_field_error_echoes_valid_message_id(
     successful_chat_dependencies: None,
 ) -> None:
@@ -717,20 +783,22 @@ async def test_missing_required_field_error_echoes_valid_message_id(
 
 
 @pytest.mark.parametrize(
-    ("tenant_id", "project_id"),
+    ("user_id", "tenant_id", "project_id"),
     [
-        ("other-tenant", "project-1"),
-        ("tenant-1", "other-project"),
+        ("other-user", "tenant-1", "project-1"),
+        ("user-1", "other-tenant", "project-1"),
+        ("user-1", "tenant-1", "other-project"),
     ],
 )
 async def test_send_message_rejects_conversation_scope_mismatch_before_ack(
     successful_chat_dependencies: None,
+    user_id: str,
     tenant_id: str,
     project_id: str,
 ) -> None:
     context = _MessageContext(
         conversation=SimpleNamespace(
-            user_id="user-1",
+            user_id=user_id,
             tenant_id=tenant_id,
             project_id=project_id,
         )
