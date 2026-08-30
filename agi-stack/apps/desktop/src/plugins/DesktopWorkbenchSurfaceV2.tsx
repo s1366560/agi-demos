@@ -3,20 +3,21 @@ import type { ComponentProps } from 'react';
 import { ChatPanel } from '../features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from '../features/chat/PlatformPluginConversationSlots';
 import { SessionWorkspace } from '../features/session/SessionWorkspace';
-import { WorkspaceCollaborationCanvas } from '../features/workspace/WorkspaceCollaborationCanvas';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { useI18n } from '../i18n';
 import type { DesktopActivityInboxInputV2 } from './DesktopActivityInboxSurfaceV2';
 import type { DesktopMyWorkQueueInputV2 } from './DesktopMyWorkQueueSurfaceV2';
 import type { DesktopNewThreadComposerInputV2 } from './DesktopNewThreadComposerSurfaceV2';
+import type { DesktopWorkspaceCollaborationInputV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopRendererActivityInboxV2 } from './DesktopRendererActivityInboxV2';
 import { DesktopRendererMyWorkQueueV2 } from './DesktopRendererMyWorkQueueV2';
 import { DesktopRendererNewThreadComposerV2 } from './DesktopRendererNewThreadComposerV2';
+import { DesktopRendererWorkspaceCollaborationV2 } from './DesktopRendererWorkspaceCollaborationV2';
 
 type DesktopWorkbenchWorkspaceViewV2 = Readonly<{
   kind: 'workspace';
   overview: Readonly<ComponentProps<typeof WorkspaceOverview>>;
-  collaboration: Readonly<ComponentProps<typeof WorkspaceCollaborationCanvas>> | null;
+  collaboration: DesktopWorkspaceCollaborationInputV2 | null;
 }>;
 
 type DesktopWorkbenchChatViewV2 = Readonly<{
@@ -99,7 +100,9 @@ function renderDesktopWorkbenchViewV2(view: DesktopWorkbenchViewV2) {
       return (
         <>
           <WorkspaceOverview {...view.overview} />
-          {view.collaboration ? <WorkspaceCollaborationCanvas {...view.collaboration} /> : null}
+          {view.collaboration ? (
+            <DesktopRendererWorkspaceCollaborationV2 input={view.collaboration} />
+          ) : null}
         </>
       );
     case 'chat':

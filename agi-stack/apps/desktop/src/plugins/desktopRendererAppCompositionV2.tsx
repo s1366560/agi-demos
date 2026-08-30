@@ -21,6 +21,7 @@ import { DesktopAuthenticatedShellSurfaceV2 } from './DesktopAuthenticatedShellS
 import { DesktopMyWorkQueueSurfaceV2 } from './DesktopMyWorkQueueSurfaceV2';
 import { DesktopNewThreadComposerSurfaceV2 } from './DesktopNewThreadComposerSurfaceV2';
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
+import { DesktopWorkspaceCollaborationSurfaceV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
@@ -42,6 +43,7 @@ import {
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
   DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
+  DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   type DesktopRendererCompositionPortV2,
   type DesktopRendererWorkbenchSurfaceV2,
@@ -100,6 +102,10 @@ export function createDesktopRendererAppCompositionPortV2(
         : null,
     resolveSessionCanvasSurface: (definition: UiSlotDefinition) =>
       validSessionCanvasDefinitionV2(definition) ? DesktopSessionCanvasSurfaceV2 : null,
+    resolveWorkspaceCollaborationSurface: (definition: UiSlotDefinition) =>
+      validWorkspaceCollaborationDefinitionV2(definition)
+        ? DesktopWorkspaceCollaborationSurfaceV2
+        : null,
     resolveWorkbenchSurface: (definition: UiSlotDefinition) =>
       validWorkbenchDefinitionV2(definition) ? DesktopWorkbenchSurfaceV2 : null,
   });
@@ -161,6 +167,18 @@ function validSessionCanvasDefinitionV2(definition: UiSlotDefinition): boolean {
     definition.contract === 'ui-builtin:desktop-session-canvas-surface' &&
     definition.moduleRef === DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.session-canvas' &&
+    definition.sandbox
+  );
+}
+
+function validWorkspaceCollaborationDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'workspace_collaboration_surface' &&
+    definition.id === 'workspace-collaboration' &&
+    definition.contract === 'ui-builtin:desktop-workspace-collaboration-surface' &&
+    definition.moduleRef === DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.workspace-collaboration' &&
     definition.sandbox
   );
 }

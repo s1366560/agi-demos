@@ -7,6 +7,7 @@ import type { DesktopAuthenticatedShellViewModelV2 } from './DesktopAuthenticate
 import type { DesktopMyWorkQueueSurfacePropsV2 } from './DesktopMyWorkQueueSurfaceV2';
 import type { DesktopNewThreadComposerSurfacePropsV2 } from './DesktopNewThreadComposerSurfaceV2';
 import type { DesktopSessionCanvasSurfacePropsV2 } from './DesktopSessionCanvasSurfaceV2';
+import type { DesktopWorkspaceCollaborationSurfacePropsV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import type { DesktopWorkbenchSurfaceViewModelV2 } from './DesktopWorkbenchSurfaceV2';
 import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
 import type { UiSlotDefinition } from './uiSlotRegistry';
@@ -22,6 +23,8 @@ export const DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-my-work-queue-surface' as const;
 export const DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-new-thread-composer-surface' as const;
+export const DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2 =
+  'builtin:desktop-workspace-collaboration-surface' as const;
 
 export type DesktopRendererActivityInboxSurfaceV2 =
   ComponentType<DesktopActivityInboxSurfacePropsV2>;
@@ -29,6 +32,8 @@ export type DesktopRendererMyWorkQueueSurfaceV2 =
   ComponentType<DesktopMyWorkQueueSurfacePropsV2>;
 export type DesktopRendererNewThreadComposerSurfaceV2 =
   ComponentType<DesktopNewThreadComposerSurfacePropsV2>;
+export type DesktopRendererWorkspaceCollaborationSurfaceV2 =
+  ComponentType<DesktopWorkspaceCollaborationSurfacePropsV2>;
 
 export interface DesktopRendererAuthenticatedShellSurfacePropsV2 {
   readonly viewModel: DesktopAuthenticatedShellViewModelV2;
@@ -65,6 +70,9 @@ export interface DesktopRendererCompositionPortV2 {
   readonly resolveSessionCanvasSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererSessionCanvasSurfaceV2 | null;
+  readonly resolveWorkspaceCollaborationSurface: (
+    definition: UiSlotDefinition,
+  ) => DesktopRendererWorkspaceCollaborationSurfaceV2 | null;
   readonly resolveWorkbenchSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererWorkbenchSurfaceV2 | null;
@@ -164,6 +172,22 @@ export type DesktopRendererNewThreadComposerCompositionV2 =
         | 'desktop_renderer_new_thread_composer_contribution_ambiguous'
         | 'desktop_renderer_new_thread_composer_contribution_missing'
         | 'desktop_renderer_new_thread_composer_module_unavailable';
+    }>;
+
+export type DesktopRendererWorkspaceCollaborationCompositionV2 =
+  | Readonly<{
+      status: 'ready';
+      Surface: DesktopRendererWorkspaceCollaborationSurfaceV2;
+    }>
+  | Readonly<{ status: 'loading' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode:
+        | 'desktop_renderer_generation_disabled'
+        | 'desktop_renderer_generation_unavailable'
+        | 'desktop_renderer_workspace_collaboration_contribution_ambiguous'
+        | 'desktop_renderer_workspace_collaboration_contribution_missing'
+        | 'desktop_renderer_workspace_collaboration_module_unavailable';
     }>;
 
 export function projectDesktopAuthenticatedShellCompositionV2(
@@ -338,6 +362,39 @@ export function projectDesktopNewThreadComposerCompositionV2(
   return Object.freeze({ status: 'ready', Surface });
 }
 
+export function projectDesktopWorkspaceCollaborationCompositionV2(
+  authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
+  composition: DesktopRendererCompositionPortV2,
+): DesktopRendererWorkspaceCollaborationCompositionV2 {
+  if (authority.status === 'loading') return Object.freeze({ status: 'loading' });
+  if (authority.status === 'disabled') {
+    return unavailableWorkspaceCollaborationV2('desktop_renderer_generation_disabled');
+  }
+  if (authority.status === 'unavailable') {
+    return unavailableWorkspaceCollaborationV2('desktop_renderer_generation_unavailable');
+  }
+  const definitions = authority.slotDefinitions.filter(
+    ({ slot }) => slot === 'workspace_collaboration_surface',
+  );
+  if (definitions.length === 0) {
+    return unavailableWorkspaceCollaborationV2(
+      'desktop_renderer_workspace_collaboration_contribution_missing',
+    );
+  }
+  if (definitions.length !== 1) {
+    return unavailableWorkspaceCollaborationV2(
+      'desktop_renderer_workspace_collaboration_contribution_ambiguous',
+    );
+  }
+  const Surface = composition.resolveWorkspaceCollaborationSurface(definitions[0]);
+  if (Surface === null) {
+    return unavailableWorkspaceCollaborationV2(
+      'desktop_renderer_workspace_collaboration_module_unavailable',
+    );
+  }
+  return Object.freeze({ status: 'ready', Surface });
+}
+
 function unavailableAuthenticatedShellV2(
   reasonCode: Extract<
     DesktopRendererAuthenticatedShellCompositionV2,
@@ -389,5 +446,14 @@ function unavailableNewThreadComposerV2(
     Readonly<{ status: 'unavailable' }>
   >['reasonCode'],
 ): DesktopRendererNewThreadComposerCompositionV2 {
+  return Object.freeze({ status: 'unavailable', reasonCode });
+}
+
+function unavailableWorkspaceCollaborationV2(
+  reasonCode: Extract<
+    DesktopRendererWorkspaceCollaborationCompositionV2,
+    Readonly<{ status: 'unavailable' }>
+  >['reasonCode'],
+): DesktopRendererWorkspaceCollaborationCompositionV2 {
   return Object.freeze({ status: 'unavailable', reasonCode });
 }
