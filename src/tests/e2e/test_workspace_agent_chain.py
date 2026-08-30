@@ -3,13 +3,42 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import src.application.services.workspace_mention_router as workspace_mention_router_module
 from src.application.services.workspace_mention_router import WorkspaceMentionRouter
 from src.application.services.workspace_message_service import WorkspaceMessageService
 from src.domain.model.workspace.workspace_message import MessageSenderType, WorkspaceMessage
+
+_ACTIVE_AGENT_SERVICE: object | None = None
+
+
+@asynccontextmanager
+async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
+    yield None
+
+
+async def _resolve_active_agent_service() -> object:
+    assert _ACTIVE_AGENT_SERVICE is not None
+    return _ACTIVE_AGENT_SERVICE
+
+
+@pytest.fixture(autouse=True)
+def _isolate_agent_chain_from_generation_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    global _ACTIVE_AGENT_SERVICE
+    _ACTIVE_AGENT_SERVICE = None
+    monkeypatch.setattr(
+        workspace_mention_router_module,
+        "pin_agent_turn_operation_v2",
+        _noop_agent_turn_operation,
+    )
+    monkeypatch.setattr(
+        workspace_mention_router_module,
+        "current_agent_turn_service_v2",
+        _resolve_active_agent_service,
+    )
 
 
 def _make_agent(agent_id: str, display_name: str) -> MagicMock:
@@ -87,11 +116,12 @@ def _build_test_env(agents: list[MagicMock], agent_responses: dict[str, list[str
         yield {"type": "complete", "data": {"content": content}}
 
     agent_service.stream_chat_v2 = stream_chat_v2
+    global _ACTIVE_AGENT_SERVICE
+    _ACTIVE_AGENT_SERVICE = agent_service
 
     router = WorkspaceMentionRouter(
         agent_repo_factory=lambda db: agent_repo,
         member_repo_factory=lambda db: member_repo,
-        agent_service_factory=lambda db, llm: agent_service,
         message_service_factory=message_service_factory,
         conversation_repo_factory=lambda db: conversation_repo,
         db_session_factory=db_session_factory,
@@ -102,9 +132,7 @@ def _build_test_env(agents: list[MagicMock], agent_responses: dict[str, list[str
 
 @pytest.mark.integration
 class TestWorkspaceAgentChain:
-    @patch("src.configuration.factories.create_llm_client", new_callable=AsyncMock)
-    async def test_single_mention_triggers_agent(self, mock_create_llm: AsyncMock) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_single_mention_triggers_agent(self) -> None:
         agents = [_make_agent("agent-oracle", "oracle")]
         agent_responses = {"agent-oracle": ["Hello from oracle!"]}
 
@@ -120,9 +148,7 @@ class TestWorkspaceAgentChain:
         assert messages[0].content == "Hello from oracle!"
         assert messages[0].sender_id == "agent-oracle"
 
-    @patch("src.configuration.factories.create_llm_client", new_callable=AsyncMock)
-    async def test_chain_depth_limit_respected(self, mock_create_llm: AsyncMock) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_chain_depth_limit_respected(self) -> None:
         agents = [_make_agent("a-1", "oracle"), _make_agent("a-2", "explorer")]
 
         # oracle calls explorer, explorer calls oracle, creating an infinite loop
@@ -153,9 +179,7 @@ class TestWorkspaceAgentChain:
         assert total_calls == 4
         assert len(messages) == 4
 
-    @patch("src.configuration.factories.create_llm_client", new_callable=AsyncMock)
-    async def test_mention_nonexistent_agent_ignored(self, mock_create_llm: AsyncMock) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_mention_nonexistent_agent_ignored(self) -> None:
         agents = [_make_agent("a-1", "oracle")]
         agent_responses = {}
 
@@ -171,9 +195,7 @@ class TestWorkspaceAgentChain:
         assert len(agent_service.call_counts) == 0
         assert len(messages) == 0
 
-    @patch("src.configuration.factories.create_llm_client", new_callable=AsyncMock)
-    async def test_multiple_mentions_in_single_message(self, mock_create_llm: AsyncMock) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_multiple_mentions_in_single_message(self) -> None:
         agents = [_make_agent("a-1", "oracle"), _make_agent("a-2", "explorer")]
         agent_responses = {"a-1": ["Oracle response"], "a-2": ["Explorer response"]}
 

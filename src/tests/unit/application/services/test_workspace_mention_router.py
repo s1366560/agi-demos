@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import src.application.services.workspace_mention_router as workspace_mention_router_module
 from src.application.services.workspace_mention_router import (
     WorkspaceMentionRouter,
     _resolve_workspace_authority_context,
@@ -29,6 +30,40 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
 from src.infrastructure.agent.workspace.workspace_metadata_keys import REMEDIATION_STATUS
 
 _DEFAULT_MEMBER = object()
+_ACTIVE_AGENT_SERVICE: object | None = None
+
+
+@asynccontextmanager
+async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
+    yield None
+
+
+async def _resolve_active_agent_service() -> object:
+    assert _ACTIVE_AGENT_SERVICE is not None
+    return _ACTIVE_AGENT_SERVICE
+
+
+def _set_active_agent_service(service: object) -> None:
+    global _ACTIVE_AGENT_SERVICE
+    _ACTIVE_AGENT_SERVICE = service
+
+
+@pytest.fixture(autouse=True)
+def _isolate_mention_router_tests_from_generation_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    global _ACTIVE_AGENT_SERVICE
+    _ACTIVE_AGENT_SERVICE = None
+    monkeypatch.setattr(
+        workspace_mention_router_module,
+        "pin_agent_turn_operation_v2",
+        _noop_agent_turn_operation,
+    )
+    monkeypatch.setattr(
+        workspace_mention_router_module,
+        "current_agent_turn_service_v2",
+        _resolve_active_agent_service,
+    )
 
 
 def _make_agent(agent_id: str, display_name: str = "TestAgent") -> MagicMock:
@@ -76,9 +111,7 @@ def _build_router(
 
     member_repo = AsyncMock()
     member_repo.find_by_workspace_and_user = AsyncMock(
-        return_value=MagicMock(id="member-1")
-        if sender_member is _DEFAULT_MEMBER
-        else sender_member
+        return_value=MagicMock(id="member-1") if sender_member is _DEFAULT_MEMBER else sender_member
     )
 
     conversation_repo = AsyncMock()
@@ -102,11 +135,11 @@ def _build_router(
 
     agent_service = MagicMock()
     agent_service.stream_chat_v2 = _stream_events
+    _set_active_agent_service(agent_service)
 
     router = WorkspaceMentionRouter(
         agent_repo_factory=lambda db: agent_repo,  # type: ignore[arg-type]
         member_repo_factory=lambda db: member_repo,  # type: ignore[arg-type]
-        agent_service_factory=lambda db, llm: agent_service,  # type: ignore[arg-type]
         message_service_factory=lambda db, publisher: message_service,  # type: ignore[arg-type]
         conversation_repo_factory=lambda db: conversation_repo,  # type: ignore[arg-type]
         db_session_factory=session_factory,
@@ -171,14 +204,7 @@ class TestRouterNoMentions:
 
 @pytest.mark.unit
 class TestRouterTriggerAgent:
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
-    async def test_trigger_agent_creates_conversation_and_posts_response(
-        self, mock_create_llm: AsyncMock
-    ) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_trigger_agent_creates_conversation_and_posts_response(self) -> None:
         agent = _make_agent("agent-1", "Bot")
         router, mocks = _build_router(agents=[agent], existing_conversation=None)
         msg = _make_message(mentions=["agent-1"])
@@ -198,14 +224,7 @@ class TestRouterTriggerAgent:
         assert call_kwargs["content"] == "Agent response"
         mocks["message_service"].publish_pending_events.assert_awaited_once()
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
-    async def test_trigger_agent_reuses_existing_conversation(
-        self, mock_create_llm: AsyncMock
-    ) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_trigger_agent_reuses_existing_conversation(self) -> None:
         existing_conv = MagicMock()
         existing_conv.workspace_id = "ws-1"
         existing_conv.agent_config = {"selected_agent_id": "agent-1"}
@@ -220,14 +239,9 @@ class TestRouterTriggerAgent:
 
         mocks["conversation_repo"].save.assert_not_called()
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
     async def test_trigger_agent_backfills_workspace_linkage_on_existing_conversation(
-        self, mock_create_llm: AsyncMock
+        self,
     ) -> None:
-        mock_create_llm.return_value = MagicMock()
         existing_conv = MagicMock()
         existing_conv.workspace_id = None
         existing_conv.agent_config = {}
@@ -245,12 +259,7 @@ class TestRouterTriggerAgent:
         assert existing_conv.agent_config["selected_agent_id"] == "agent-1"
         assert existing_conv.metadata["workspace_id"] == "ws-1"
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
-    async def test_trigger_agent_handles_error_event(self, mock_create_llm: AsyncMock) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_trigger_agent_handles_error_event(self) -> None:
         agent = _make_agent("agent-1", "Bot")
         error_events = [{"type": "error", "data": {"message": "LLM timeout"}}]
         router, mocks = _build_router(
@@ -267,14 +276,7 @@ class TestRouterTriggerAgent:
         assert "[Error]" in call_kwargs["content"]
         assert "LLM timeout" in call_kwargs["content"]
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
-    async def test_trigger_agent_skips_response_when_sender_loses_membership(
-        self, mock_create_llm: AsyncMock
-    ) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_trigger_agent_skips_response_when_sender_loses_membership(self) -> None:
         agent = _make_agent("agent-1", "Bot")
         router, mocks = _build_router(agents=[agent], existing_conversation=MagicMock())
         mocks["member_repo"].find_by_workspace_and_user.side_effect = [
@@ -290,11 +292,14 @@ class TestRouterTriggerAgent:
         mocks["message_service"].send_message.assert_not_called()
 
     @patch(
-        "src.configuration.factories.create_llm_client",
+        "src.application.services.workspace_mention_router.current_agent_turn_service_v2",
         new_callable=AsyncMock,
     )
-    async def test_trigger_agent_exception_posts_error(self, mock_create_llm: AsyncMock) -> None:
-        mock_create_llm.side_effect = RuntimeError("LLM init failed")
+    async def test_trigger_agent_exception_posts_error(
+        self,
+        resolve_turn_service: AsyncMock,
+    ) -> None:
+        resolve_turn_service.side_effect = RuntimeError("turn service unavailable")
         agent = _make_agent("agent-1", "Bot")
         router, mocks = _build_router(agents=[agent], existing_conversation=MagicMock())
         msg = _make_message(mentions=["agent-1"])
@@ -307,18 +312,13 @@ class TestRouterTriggerAgent:
         call_kwargs = mocks["message_service"].send_message.call_args.kwargs
         assert "[Error]" in call_kwargs["content"]
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
     async def test_trigger_agent_uses_scoped_objective_conversation_and_activation_text(
-        self, mock_create_llm: AsyncMock
+        self,
     ) -> None:
         from src.infrastructure.agent.workspace.workspace_goal_runtime import (
             should_activate_workspace_authority,
         )
 
-        mock_create_llm.return_value = MagicMock()
         agent = _make_agent("agent-1", "Leader Agent")
         router, mocks = _build_router(agents=[agent], existing_conversation=None)
         captured: dict[str, Any] = {}
@@ -415,12 +415,7 @@ class TestWorkspaceConversationId:
 
 @pytest.mark.unit
 class TestMultipleAgentMentions:
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
-    async def test_triggers_multiple_agents_sequentially(self, mock_create_llm: AsyncMock) -> None:
-        mock_create_llm.return_value = MagicMock()
+    async def test_triggers_multiple_agents_sequentially(self) -> None:
         agent1 = _make_agent("agent-1", "Bot1")
         agent2 = _make_agent("agent-2", "Bot2")
         router, mocks = _build_router(agents=[agent1, agent2], existing_conversation=MagicMock())
@@ -432,14 +427,9 @@ class TestMultipleAgentMentions:
 
         assert mocks["message_service"].send_message.call_count == 2
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
     async def test_agent_chain_uses_workspace_repo_for_authority_context(
-        self, mock_create_llm: AsyncMock
+        self,
     ) -> None:
-        mock_create_llm.return_value = MagicMock()
         session_factory, _mock_db = _mock_db_session_factory()
         agent = _make_agent("agent-2", "Reviewer")
         message = _make_message(mentions=["agent-2"], sender_name="Agent One")
@@ -466,10 +456,10 @@ class TestMultipleAgentMentions:
 
         agent_service = MagicMock()
         agent_service.stream_chat_v2 = _capturing_stream
+        _set_active_agent_service(agent_service)
         router = WorkspaceMentionRouter(
             agent_repo_factory=lambda db: agent_repo,  # type: ignore[arg-type]
             member_repo_factory=lambda db: member_repo,  # type: ignore[arg-type]
-            agent_service_factory=lambda db, llm: agent_service,  # type: ignore[arg-type]
             message_service_factory=lambda db, publisher: message_service,  # type: ignore[arg-type]
             conversation_repo_factory=lambda db: conversation_repo,  # type: ignore[arg-type]
             db_session_factory=session_factory,
@@ -514,14 +504,9 @@ class TestMultipleAgentMentions:
             "agent-2",
         ]
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
     async def test_trigger_agent_passes_workspace_authority_context_for_scoped_objective_conversation(
-        self, mock_create_llm: AsyncMock
+        self,
     ) -> None:
-        mock_create_llm.return_value = MagicMock()
         agent = _make_agent("agent-1", "Leader Agent")
         router, mocks = _build_router(agents=[agent], existing_conversation=None)
         captured: dict[str, Any] = {}
@@ -561,14 +546,9 @@ class TestMultipleAgentMentions:
             "task_authority": "workspace",
         }
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
     async def test_trigger_agent_backfills_scoped_leader_mention_linkage(
-        self, mock_create_llm: AsyncMock
+        self,
     ) -> None:
-        mock_create_llm.return_value = MagicMock()
         existing_conv = MagicMock()
         existing_conv.workspace_id = "ws-1"
         existing_conv.linked_workspace_task_id = None
@@ -607,14 +587,9 @@ class TestMultipleAgentMentions:
         assert existing_conv.metadata["source"] == "workspace_leader_mention"
         assert existing_conv.metadata["workspace_llm_stage"] == "leader_mention"
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
     async def test_trigger_agent_marks_replan_turn_as_task_ledger_only(
-        self, mock_create_llm: AsyncMock
+        self,
     ) -> None:
-        mock_create_llm.return_value = MagicMock()
         agent = _make_agent("agent-1", "Leader Agent")
         router, mocks = _build_router(agents=[agent], existing_conversation=MagicMock())
         captured: dict[str, Any] = {}
@@ -661,14 +636,9 @@ class TestMultipleAgentMentions:
             WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY
         )
 
-    @patch(
-        "src.configuration.factories.create_llm_client",
-        new_callable=AsyncMock,
-    )
     async def test_trigger_agent_marks_ready_completion_turn_as_task_ledger_only(
-        self, mock_create_llm: AsyncMock
+        self,
     ) -> None:
-        mock_create_llm.return_value = MagicMock()
         agent = _make_agent("agent-1", "Leader Agent")
         router, mocks = _build_router(agents=[agent], existing_conversation=MagicMock())
         captured: dict[str, Any] = {}
