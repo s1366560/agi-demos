@@ -20,6 +20,7 @@ from sqlalchemy import exists, select
 
 from src.application.services.agent_service import canonical_agent_client_turn_payload_hash
 from src.domain.model.agent import (
+    Agent,
     AgentClientTurn,
     AgentClientTurnPayloadConflictError,
     AgentClientTurnStatus,
@@ -39,11 +40,16 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority i
     ensure_chat_run_authority,
 )
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_definition import (
+    AGENT_DEFINITION_RESOLVER_SERVICE_V2,
+    AgentDefinitionResolverProtocolV2,
+)
 from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
+    current_operation_context_v2,
     pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
@@ -51,7 +57,7 @@ from src.infrastructure.plugins.v2.session_event_log import TURN_ADMITTED_EVENT_
 
 if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
-    from src.domain.model.agent import Agent, AgentExecutionEvent, Conversation
+    from src.domain.model.agent import AgentExecutionEvent, Conversation
     from src.domain.model.agent.execution.event_time import EventTimeGenerator
     from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
         SqlAgentExecutionEventRepository,
@@ -745,14 +751,26 @@ async def _load_external_acp_backend(
 ) -> tuple[Agent, dict[str, Any]] | None:
     if not agent_id:
         return None
-    registry = context.get_scoped_container().agent_registry()
-    agent = await registry.get_by_id(
-        agent_id,
+    operation = current_operation_context_v2()
+    resolver = operation.require(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+    if not isinstance(resolver, AgentDefinitionResolverProtocolV2):
+        raise RuntimeV2Error(
+            "invalid_agent_definition_resolver",
+            "external ACP backend requires the generation-owned Agent Definition resolver",
+        )
+    resolved = await resolver.resolve(
+        agent_id=agent_id,
         tenant_id=context.tenant_id,
         project_id=project_id,
     )
-    if agent is None:
+    if resolved is None:
         return None
+    if not isinstance(resolved, Agent):
+        raise RuntimeV2Error(
+            "invalid_agent_definition",
+            "external ACP backend received an invalid Agent Definition",
+        )
+    agent = resolved
     backend = execution_backend_from_metadata(agent.metadata)
     if backend["type"] != "acp_external":
         return None

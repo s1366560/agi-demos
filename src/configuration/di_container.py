@@ -131,9 +131,6 @@ class DIContainer:
     def subagent_repository(self) -> SqlSubAgentRepository:
         return self._agent.subagent_repository()
 
-    def agent_registry(self) -> Any:
-        return self._agent.agent_registry()
-
     def agent_binding_repository(self) -> Any:
         return self._agent.agent_binding_repository()
 

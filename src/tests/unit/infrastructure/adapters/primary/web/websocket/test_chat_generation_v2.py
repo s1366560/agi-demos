@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from inspect import getsource
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.domain.model.agent.agent_definition import Agent
+from src.domain.model.agent.subagent import AgentTrigger
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.websocket.handlers import chat_handler
+from src.infrastructure.plugins.v2.agent_definition import (
+    AGENT_DEFINITION_RESOLVER_SERVICE_V2,
+)
 from src.infrastructure.plugins.v2.agent_turn_services import (
     AGENT_TURN_MODULE_V2,
     AGENT_TURN_SERVICE_V2,
@@ -28,9 +35,11 @@ from src.infrastructure.plugins.v2.boundary import (
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 _ROOT = Path(__file__).resolve().parents[8]
+_DI_CONTAINER_PATH = _ROOT / "src/configuration/di_container.py"
 
 
 class _ConnectionManager:
@@ -61,6 +70,130 @@ class _TurnContext:
 
     def __init__(self) -> None:
         self.connection_manager = _ConnectionManager()
+
+
+class _DefinitionResolver:
+    def __init__(self, result: object | None) -> None:
+        self.result = result
+        self.calls: list[dict[str, object | None]] = []
+
+    async def resolve(
+        self,
+        *,
+        agent_id: str,
+        tenant_id: str,
+        project_id: str | None,
+    ) -> object | None:
+        self.calls.append(
+            {
+                "agent_id": agent_id,
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+            }
+        )
+        return self.result
+
+
+def _external_agent() -> Agent:
+    return Agent(
+        id="external-agent",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        name="external-agent",
+        display_name="External Agent",
+        system_prompt="Run through ACP.",
+        trigger=AgentTrigger(description="External ACP test agent"),
+        metadata={
+            "execution_backend": {
+                "type": "acp_external",
+                "acp_agent_key": "opencode-local",
+            }
+        },
+    )
+
+
+@pytest.mark.unit
+async def test_external_acp_backend_uses_pinned_v2_agent_definition_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = _external_agent()
+    resolver = _DefinitionResolver(agent)
+    operation = SimpleNamespace(require=MagicMock(return_value=resolver))
+    context = _TurnContext()
+    monkeypatch.setattr(chat_handler, "current_operation_context_v2", lambda: operation)
+
+    result = await chat_handler._load_external_acp_backend(
+        context,  # type: ignore[arg-type]
+        agent_id=agent.id,
+        project_id="project-1",
+    )
+
+    assert result == (
+        agent,
+        {"type": "acp_external", "acp_agent_key": "opencode-local"},
+    )
+    operation.require.assert_called_once_with(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+    assert resolver.calls == [
+        {
+            "agent_id": agent.id,
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+        }
+    ]
+
+
+@pytest.mark.unit
+async def test_external_acp_backend_rejects_invalid_v2_resolver_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    operation = SimpleNamespace(require=MagicMock(return_value=object()))
+    context = _TurnContext()
+    monkeypatch.setattr(chat_handler, "current_operation_context_v2", lambda: operation)
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await chat_handler._load_external_acp_backend(
+            context,  # type: ignore[arg-type]
+            agent_id="external-agent",
+            project_id="project-1",
+        )
+
+    assert error.value.code == "invalid_agent_definition_resolver"
+    operation.require.assert_called_once_with(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+
+
+@pytest.mark.unit
+async def test_external_acp_backend_propagates_missing_v2_service_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    operation = SimpleNamespace(
+        require=MagicMock(
+            side_effect=RuntimeV2Error(
+                "missing_service",
+                "Agent Definition resolver is unavailable",
+            )
+        )
+    )
+    context = _TurnContext()
+    monkeypatch.setattr(chat_handler, "current_operation_context_v2", lambda: operation)
+
+    with pytest.raises(RuntimeV2Error) as error:
+        await chat_handler._load_external_acp_backend(
+            context,  # type: ignore[arg-type]
+            agent_id="external-agent",
+            project_id="project-1",
+        )
+
+    assert error.value.code == "missing_service"
+    operation.require.assert_called_once_with(AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+
+
+@pytest.mark.unit
+def test_external_acp_backend_has_no_static_agent_registry_fallback() -> None:
+    source = getsource(chat_handler._load_external_acp_backend)
+
+    assert "get_scoped_container" not in source
+    assert "agent_registry" not in source
+    assert "def agent_registry(" not in _DI_CONTAINER_PATH.read_text(encoding="utf-8")
 
 
 @pytest.mark.unit
