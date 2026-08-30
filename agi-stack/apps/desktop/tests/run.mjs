@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, rmSync, statSync } from 'node:fs';
+import { cpSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,8 +47,10 @@ for (const project of ['project-agent', 'project-administration', 'project-knowl
 
 cpSync(join(desktopRoot, 'src'), join(compiledRoot, 'src'), {
   recursive: true,
-  filter: (source) => statSync(source).isDirectory() || source.endsWith('.css'),
+  filter: (source) =>
+    statSync(source).isDirectory() || source.endsWith('.css') || source.endsWith('.mjs'),
 });
+symlinkSync(join(desktopRoot, 'node_modules'), join(compiledRoot, 'node_modules'), 'dir');
 const testFiles = discoverTestFiles(testsDirectory);
 assertTestInventoryComplete({ testsDirectory, testFiles });
 

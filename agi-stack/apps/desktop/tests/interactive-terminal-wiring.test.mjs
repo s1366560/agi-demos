@@ -28,6 +28,10 @@ const sandboxRuntimeHookSource = readFileSync(
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const reviewPanelSource = readFileSync(new URL('../src/features/session/WorkspaceReviewPanel.tsx', import.meta.url), 'utf8');
+const sessionCanvasSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopSessionCanvasSurfaceV2.tsx', import.meta.url),
+  'utf8'
+);
 
 test('Desktop interactive terminal uses xterm, Fit, and WebLinks', () => {
   assert.match(interactiveTerminalSource, /from '@xterm\/xterm'/);
@@ -53,8 +57,17 @@ test('terminal canvas gates xterm and retains the history fallback', () => {
   assert.match(sessionTerminalSource, /<InteractiveTerminal/);
   assert.match(sessionTerminalSource, /<pre[\s\S]*className="terminal-preview"/);
   assert.match(reviewPanelSource, /interactiveCapability=\{terminalInteractiveCapability\}/);
-  assert.match(appSource, /onTerminalInput=\{terminalProxy\.sendInput\}/);
-  assert.match(appSource, /onTerminalResize=\{terminalProxy\.resize\}/);
+  assert.match(appSource, /onTerminalInput: terminalProxy\.sendInput/);
+  assert.match(appSource, /onTerminalResize: terminalProxy\.resize/);
+  assert.match(appSource, /meta: \{[\s\S]*sandboxRuntime,[\s\S]*terminalInteractiveCapability,/);
+  assert.match(sessionCanvasSurfaceSource, /'onTerminalInput'/);
+  assert.match(sessionCanvasSurfaceSource, /'onTerminalResize'/);
+  assert.match(sessionCanvasSurfaceSource, /'sandboxRuntime'/);
+  assert.match(sessionCanvasSurfaceSource, /'terminalInteractiveCapability'/);
+  assert.match(
+    sessionCanvasSurfaceSource,
+    /<WorkspaceReviewPanel[\s\S]*\{\.\.\.input\.meta\}[\s\S]*\{\.\.\.input\.actions\}/
+  );
 });
 
 test('sandbox file browser uses structured sandbox authority operations', () => {
