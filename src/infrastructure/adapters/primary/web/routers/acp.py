@@ -19,7 +19,6 @@ from src.application.schemas.acp_runner_schemas import (
     ACPRunnerPoolResponse,
 )
 from src.configuration.config import get_settings
-from src.configuration.di_container import DIContainer
 from src.infrastructure.acp.client import (
     ExternalACPAgentConfig,
     ExternalACPAgentSummary,
@@ -438,7 +437,6 @@ async def acp_websocket_endpoint(
     user_id, tenant_id = auth_result
     await websocket.accept(subprotocol=select_websocket_auth_subprotocol(websocket))
 
-    container = cast(DIContainer, websocket.app.state.container)
     peer_ref: dict[str, ACPWebSocketJSONRPCPeer] = {}
 
     async def emit_update(session_id: str, update: ACPUpdate) -> None:
@@ -448,7 +446,6 @@ async def acp_websocket_endpoint(
         )
 
     agent = MemStackACPAgent(
-        container=container,
         session_factory=async_session_factory,
         user_id=user_id,
         tenant_id=tenant_id,

@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import src.infrastructure.acp.server as acp_server_module
 from src.infrastructure.adapters.primary.web.routers import acp
 from src.infrastructure.plugins.v2.boundary import (
     clear_process_generation_host_v2,
@@ -46,6 +47,9 @@ class FakeAgentService:
     async def stream_chat_v2(self, **kwargs: Any) -> Any:
         yield {"type": "text_delta", "data": {"delta": kwargs["user_message"]}}
 
+    async def after_create_committed(self, conversation: object) -> None:
+        del conversation
+
 
 def test_acp_websocket_initialize_new_session_and_prompt(monkeypatch) -> None:
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
@@ -74,13 +78,29 @@ def test_acp_websocket_initialize_new_session_and_prompt(monkeypatch) -> None:
         assert token == "ms_sk_test"
         return ("user-1", "tenant-1")
 
-    async def agent_service(self: object, db: object) -> FakeAgentService:
-        del self, db
-        return FakeAgentService()
+    service = FakeAgentService()
+
+    @asynccontextmanager
+    async def conversation_collection_authority(
+        **_kwargs: object,
+    ) -> AsyncIterator[SimpleNamespace]:
+        yield SimpleNamespace(operation=object(), service=service)
+
+    async def current_agent_turn_service() -> FakeAgentService:
+        return service
 
     monkeypatch.setattr(acp, "authenticate_websocket", authenticate)
     monkeypatch.setattr(acp, "async_session_factory", DummySessionFactory())
-    monkeypatch.setattr(acp.MemStackACPAgent, "_agent_service", agent_service)
+    monkeypatch.setattr(
+        acp_server_module,
+        "acp_conversation_collection_authority_v2",
+        conversation_collection_authority,
+    )
+    monkeypatch.setattr(
+        acp_server_module,
+        "current_agent_turn_service_v2",
+        current_agent_turn_service,
+    )
 
     with (
         TestClient(app) as client,

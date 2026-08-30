@@ -30,10 +30,13 @@ from acp.schema import (
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.application.services.agent_service import AgentService
 from src.configuration.config import Settings, get_settings
-from src.configuration.di_container import DIContainer
+from src.infrastructure.acp.conversation_authority_v2 import (
+    acp_conversation_access_authority_v2,
+    acp_conversation_collection_authority_v2,
+)
 from src.infrastructure.acp.event_mapper import ACPUpdate, memstack_event_to_acp_updates
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
@@ -61,7 +64,6 @@ class MemStackACPAgent:
     def __init__(
         self,
         *,
-        container: DIContainer,
         session_factory: async_sessionmaker[AsyncSession],
         user_id: str,
         tenant_id: str,
@@ -69,7 +71,6 @@ class MemStackACPAgent:
         emit_update: EmitUpdate | None = None,
         settings: Settings | None = None,
     ) -> None:
-        self._container = container
         self._session_factory = session_factory
         self._user_id = user_id
         self._tenant_id = tenant_id
@@ -136,9 +137,17 @@ class MemStackACPAgent:
                 }
             )
 
-        async with self._session_factory() as db:
-            service = await self._agent_service(db)
-            conversation = await service.create_conversation(
+        async with (
+            self._session_factory() as db,
+            acp_conversation_collection_authority_v2(
+                operation_id=f"acp-session-create:{uuid.uuid4()}",
+                db=db,
+                tenant_id=self._tenant_id,
+                user_id=self._user_id,
+                project_id=project_id,
+            ) as authority,
+        ):
+            conversation = await authority.service.create_conversation(
                 project_id=project_id,
                 user_id=self._user_id,
                 tenant_id=self._tenant_id,
@@ -151,6 +160,13 @@ class MemStackACPAgent:
                 },
             )
             await db.commit()
+            try:
+                await authority.service.after_create_committed(conversation)
+            except Exception as exc:
+                logger.error(
+                    "[ACP] Conversation post-commit dispatch failed: error_type=%s",
+                    type(exc).__name__,
+                )
 
         session_id = conversation.id
         self._sessions[session_id] = ACPSessionState(
@@ -178,7 +194,6 @@ class MemStackACPAgent:
 
         try:
             async with self._session_factory() as db:
-                service = await self._agent_service(db)
                 operation_message_id = message_id or str(uuid.uuid4())
                 async with pin_agent_turn_operation_v2(
                     operation_id=f"acp-turn:{operation_message_id}",
@@ -200,6 +215,7 @@ class MemStackACPAgent:
                         },
                     },
                 ):
+                    service = await current_agent_turn_service_v2()
                     agent_stream = cast(
                         AsyncGenerator[dict[str, Any], None],
                         service.stream_chat_v2(
@@ -246,7 +262,7 @@ class MemStackACPAgent:
         if session.current_prompt_task is not None:
             session.current_prompt_task.cancel()
 
-        await self._cancel_underlying_execution(session.conversation_id)
+        await self._cancel_underlying_execution(session)
 
     async def close_session(self, session_id: str, **kwargs: Any) -> CloseSessionResponse:
         """Close ACP session state without deleting the MemStack conversation."""
@@ -264,22 +280,27 @@ class MemStackACPAgent:
         if self._client is not None:
             await self._client.session_update(session_id=session_id, update=update)
 
-    async def _agent_service(self, db: AsyncSession) -> AgentService:
-        from src.configuration.factories import create_llm_client
-
-        llm = await create_llm_client(self._tenant_id)
-        return self._container.with_db(db).agent_service(llm)
-
-    async def _cancel_underlying_execution(self, conversation_id: str) -> None:
+    async def _cancel_underlying_execution(self, session: ACPSessionState) -> None:
         from src.application.services.agent.runtime_cancellation import (
             cancel_conversation_runtime,
         )
-        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-            SqlConversationRepository,
-        )
 
-        async with self._session_factory() as db:
-            conversation = await SqlConversationRepository(db).find_by_id(conversation_id)
+        async with (
+            self._session_factory() as db,
+            acp_conversation_access_authority_v2(
+                operation_id=f"acp-cancel:{session.session_id}:{uuid.uuid4()}",
+                db=db,
+                tenant_id=self._tenant_id,
+                user_id=self._user_id,
+                project_id=session.project_id,
+                conversation_id=session.conversation_id,
+            ) as authority,
+        ):
+            conversation = await authority.service.get_conversation(
+                conversation_id=session.conversation_id,
+                project_id=session.project_id,
+                user_id=self._user_id,
+            )
             if conversation is None or conversation.tenant_id != self._tenant_id:
                 return
             _ = await cancel_conversation_runtime(conversation)
