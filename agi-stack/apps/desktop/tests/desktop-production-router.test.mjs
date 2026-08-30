@@ -196,13 +196,13 @@ test('authenticated shell can mount while its nested workbench remains fail clos
   const value = authenticatedShellGeneration({ workbench: false });
   const markup = renderWithGeneration(
     value,
-    React.createElement(
-      DesktopRendererAuthenticatedShellV2,
-      null,
-      rendererRouter(WORKBENCH_VIEW_MODEL, {
-        permissions: new Set(['authenticated']),
+    React.createElement(DesktopRendererAuthenticatedShellV2, {
+      viewModel: authenticatedShellViewModel({
+        router: rendererRouter(WORKBENCH_VIEW_MODEL, {
+          permissions: new Set(['authenticated']),
+        }),
       }),
-    ),
+    }),
   );
 
   assert.match(markup, /data-authenticated-shell-contribution="true"/u);
@@ -588,20 +588,9 @@ function renderRendererRouter({ workbenchContributed }) {
 function renderAuthenticatedShell(value) {
   return renderWithGeneration(
     value,
-    React.createElement(
-      DesktopRendererAuthenticatedShellV2,
-      null,
-      React.createElement(
-        React.Fragment,
-        null,
-        ...shellMarkers.map((marker) =>
-          React.createElement('output', {
-            'data-shell-component': marker,
-            key: marker,
-          }),
-        ),
-      ),
-    ),
+    React.createElement(DesktopRendererAuthenticatedShellV2, {
+      viewModel: authenticatedShellViewModel(),
+    }),
   );
 }
 
@@ -667,12 +656,25 @@ function authenticatedShellGeneration({ authenticatedShell = true, workbench = t
   });
 }
 
-function AuthenticatedShellSurface({ children }) {
+function AuthenticatedShellSurface({ viewModel }) {
   return React.createElement(
     'section',
     { 'data-authenticated-shell-contribution': true },
-    children,
+    ...viewModel.shellMarkers.map((marker) =>
+      React.createElement('output', {
+        'data-shell-component': marker,
+        key: marker,
+      }),
+    ),
+    viewModel.router,
   );
+}
+
+function authenticatedShellViewModel({ router = null } = {}) {
+  return Object.freeze({
+    router,
+    shellMarkers,
+  });
 }
 
 function WorkbenchSurface({ viewModel }) {

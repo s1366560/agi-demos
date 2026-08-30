@@ -13,6 +13,7 @@ const composition = source('src/plugins/desktopRendererAppCompositionV2.tsx');
 const compositionPort = source('src/plugins/desktopRendererCompositionPortV2.ts');
 const productionRouter = source('src/plugins/DesktopRendererProductionRouterV2.tsx');
 const surface = source('src/plugins/DesktopWorkbenchSurfaceV2.tsx');
+const shellSurface = source('src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx');
 const artifactCatalog = source('src/plugins/desktopRendererArtifactCatalogV2.ts');
 const profile = readFileSync(
   new URL(
@@ -71,7 +72,8 @@ test('the V2 module owns every workbench business surface and App passes data on
   assert.match(surface, /kind:\s*'activity'/u);
   assert.match(surface, /kind:\s*'home'/u);
   assert.doesNotMatch(surface, /viewModel[^;{]*ReactNode|render[A-Z][A-Za-z]+\??:/u);
-  assert.match(app, /viewModel=\{desktopWorkbenchSurfaceViewModelV2\}/u);
+  assert.match(app, /router:\s*\{[\s\S]*viewModel:\s*desktopWorkbenchSurfaceViewModelV2/u);
+  assert.match(shellSurface, /<DesktopRendererProductionRouterV2 \{\.\.\.surfaces\.router\} \/>/u);
   assert.doesNotMatch(
     app,
     /<DesktopRendererProductionRouterV2[\s\S]*?<\/DesktopRendererProductionRouterV2>/u,

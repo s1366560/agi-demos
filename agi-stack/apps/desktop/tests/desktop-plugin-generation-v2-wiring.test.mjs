@@ -11,6 +11,7 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   const host = source('src/plugins/DesktopRendererGenerationHostV2.tsx');
   const context = source('src/plugins/desktopRendererGenerationContextV2.tsx');
   const authenticatedShellBoundary = source('src/plugins/DesktopRendererAuthenticatedShellV2.tsx');
+  const authenticatedShellSurface = source('src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx');
   const authenticationRouteBoundary = source(
     'src/plugins/DesktopRendererAuthenticationRouterV2.tsx'
   );
@@ -80,7 +81,11 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   assert.doesNotMatch(authenticationRouteBoundary, /projectDesktopWorkbenchCompositionV2/u);
   assert.match(authenticatedShellBoundary, /useDesktopRendererGenerationV2\(\)/u);
   assert.match(authenticatedShellBoundary, /projectDesktopAuthenticatedShellCompositionV2/u);
-  assert.match(authenticatedShellBoundary, /readonly children:\s*ReactNode/u);
+  assert.match(
+    authenticatedShellBoundary,
+    /readonly viewModel:\s*DesktopAuthenticatedShellViewModelV2/u,
+  );
+  assert.doesNotMatch(authenticatedShellBoundary, /ReactNode|children/u);
   assert.doesNotMatch(authenticatedShellBoundary, /render[A-Z][A-Za-z]+\??:/u);
   assert.match(routeBoundary, /registry=\{state\.routeRegistry\}/u);
   assert.match(routeBoundary, /acquireOperationLease=\{actions\.acquireOperationLease\}/u);
@@ -95,16 +100,18 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   assert.match(app, /DesktopRendererGenerationProviderV2/u);
   assert.match(app, /DesktopRendererAuthenticatedShellV2/u);
   assert.match(app, /DesktopRendererAuthenticationRouterV2/u);
-  assert.match(app, /DesktopRendererProductionRouterV2/u);
+  assert.doesNotMatch(app, /DesktopRendererProductionRouterV2/u);
+  assert.match(authenticatedShellSurface, /DesktopRendererProductionRouterV2/u);
   assert.match(app, /desktopWorkbenchSurfaceViewModelV2/u);
   assert.doesNotMatch(
     app,
     /<(?:ChatPanel|WorkspaceOverview|WorkspaceCollaborationCanvas|MyWorkQueue|ActivityInbox|NewThreadComposer|SessionWorkspace)\b/u
   );
   assert.doesNotMatch(app, /<DesktopProductionRouter/u);
-  assert.match(app, /desktopRendererGenerationV2\.meta\.digest/u);
-  assert.match(app, /desktopRendererGenerationV2\.meta\.status/u);
-  assert.match(app, /desktopRendererGenerationV2\.meta\.target/u);
+  assert.match(app, /generation:\s*desktopRendererGenerationV2\.meta/u);
+  assert.match(authenticatedShellSurface, /meta\.generation\.digest/u);
+  assert.match(authenticatedShellSurface, /meta\.generation\.status/u);
+  assert.match(authenticatedShellSurface, /meta\.generation\.target/u);
   assert.match(
     app,
     new RegExp(
@@ -193,7 +200,7 @@ test('desktop authenticated shell is an explicit ordered production contribution
   assert.ok(workbenchProfileIndex > shellProfileIndex);
   assert.match(shellProfile, /id:\s*desktop\.authenticated-shell-surface/u);
   assert.match(shellProfile, /order:\s*80/u);
-  assert.match(shellProfile, /desktop\.ui-slots\.authenticated-shell-surface\.v1/u);
+  assert.match(shellProfile, /desktop\.ui-slots\.authenticated-shell-surface\.v2/u);
   assert.match(workbenchProfile, /id:\s*desktop\.workbench-surface/u);
   assert.match(workbenchProfile, /order:\s*90/u);
   assert.match(workbenchProfile, /desktop\.ui-slots\.workbench-surface\.v2/u);
@@ -212,7 +219,7 @@ test('desktop authenticated shell is an explicit ordered production contribution
   assert.equal(shellBootstrap.config.id, 'desktop.authenticated-shell-surface');
   assert.equal(shellBootstrap.config.order, 80);
   assert.deepEqual(shellBootstrap.config.payload.artifact_refs, [
-    'desktop.ui-slots.authenticated-shell-surface.v1',
+    'desktop.ui-slots.authenticated-shell-surface.v2',
   ]);
   assert.equal(workbenchBootstrap.config.id, 'desktop.workbench-surface');
   assert.equal(workbenchBootstrap.config.order, 90);

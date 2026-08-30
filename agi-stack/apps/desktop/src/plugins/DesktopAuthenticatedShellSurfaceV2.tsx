@@ -1,0 +1,137 @@
+import type { ComponentProps, CSSProperties, RefObject } from 'react';
+import { createPortal } from 'react-dom';
+import { Theme } from '@radix-ui/themes';
+
+import { ResizeHandle } from '../components/ResizeHandle';
+import { DesktopRightSidebar } from '../features/chrome/DesktopRightSidebar';
+import { DesktopStatusBar } from '../features/chrome/DesktopStatusBar';
+import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
+import { WorkbenchTabBar } from '../features/chrome/WorkbenchTabBar';
+import { CommandPalette } from '../features/navigation/CommandPalette';
+import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
+import { KeyboardShortcutsDialog } from '../features/navigation/KeyboardShortcutsDialog';
+import { SettingsWindow } from '../features/settings/SettingsWindow';
+import { NewTaskFlow } from '../features/task/NewTaskFlow';
+import { WorkspaceCreateDialog } from '../features/workspace/WorkspaceCreateDialog';
+import { WorkspaceSettingsDialog } from '../features/workspace/WorkspaceSettingsDialog';
+import type { ResolvedTheme } from '../theme';
+import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
+import type { DesktopRendererGenerationMetaV2 } from './desktopRendererGenerationContextV2';
+
+export type DesktopAuthenticatedShellOptionalOutletV2<Props> =
+  | Readonly<{ kind: 'hidden' }>
+  | Readonly<{ kind: 'visible'; props: Props }>;
+
+type DesktopAuthenticatedShellSidebarV2 = Readonly<{
+  props: Omit<ComponentProps<typeof DesktopSidebar>, 'resizeHandle'>;
+  resizeHandle: DesktopAuthenticatedShellOptionalOutletV2<
+    ComponentProps<typeof ResizeHandle>
+  >;
+}>;
+
+export interface DesktopAuthenticatedShellViewModelV2 {
+  readonly meta: Readonly<{
+    appearance: ResolvedTheme;
+    appShellRef: RefObject<HTMLDivElement | null>;
+    generation: DesktopRendererGenerationMetaV2;
+    workbenchRef: RefObject<HTMLElement | null>;
+  }>;
+  readonly state: Readonly<{
+    layoutMode: 'default' | 'my-work';
+    sidebarCollapsed: boolean;
+    sidebarPreferredWidth: number;
+    windowMode: 'browser' | 'native';
+  }>;
+  readonly surfaces: Readonly<{
+    commandPalette: DesktopAuthenticatedShellOptionalOutletV2<
+      ComponentProps<typeof CommandPalette>
+    >;
+    keyboardShortcuts: ComponentProps<typeof KeyboardShortcutsDialog>;
+    newTask: ComponentProps<typeof NewTaskFlow>;
+    rightSidebar: DesktopAuthenticatedShellOptionalOutletV2<
+      ComponentProps<typeof DesktopRightSidebar>
+    >;
+    router: ComponentProps<typeof DesktopRendererProductionRouterV2>;
+    settings: ComponentProps<typeof SettingsWindow>;
+    sidebar: DesktopAuthenticatedShellSidebarV2;
+    statusBar: ComponentProps<typeof DesktopStatusBar>;
+    tabBar: ComponentProps<typeof WorkbenchTabBar>;
+    titlebar: DesktopAuthenticatedShellOptionalOutletV2<
+      ComponentProps<typeof DesktopTitlebar>
+    >;
+    workspaceCreate: ComponentProps<typeof WorkspaceCreateDialog>;
+    workspaceSettings: ComponentProps<typeof WorkspaceSettingsDialog>;
+  }>;
+}
+
+export function DesktopAuthenticatedShellSurfaceV2({
+  viewModel,
+}: Readonly<{ viewModel: DesktopAuthenticatedShellViewModelV2 }>) {
+  const { meta, state, surfaces } = viewModel;
+  const shellClassName = [
+    'app-shell hierarchy-shell runtime-mode',
+    state.windowMode === 'native' ? 'desktop-window' : 'browser-window',
+    state.sidebarCollapsed ? 'sidebar-collapsed' : '',
+    state.layoutMode === 'my-work' ? 'my-work-mode' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const sidebarResizeHandle =
+    surfaces.sidebar.resizeHandle.kind === 'visible' ? (
+      <ResizeHandle {...surfaces.sidebar.resizeHandle.props} />
+    ) : undefined;
+
+  return (
+    <Theme
+      appearance={meta.appearance}
+      accentColor="cyan"
+      grayColor="slate"
+      radius="medium"
+      scaling="95%"
+    >
+      <div
+        ref={meta.appShellRef}
+        data-plugin-generation-v2={meta.generation.digest ?? 'unavailable'}
+        data-plugin-generation-v2-status={meta.generation.status}
+        data-plugin-generation-v2-target={meta.generation.target}
+        className={shellClassName}
+        style={
+          {
+            '--desktop-sidebar-preferred-width': `${Math.round(
+              state.sidebarPreferredWidth,
+            )}px`,
+          } as CSSProperties
+        }
+      >
+        {surfaces.titlebar.kind === 'visible' ? (
+          <DesktopTitlebar {...surfaces.titlebar.props} />
+        ) : null}
+        <section className="desktop-body">
+          <DesktopSidebar {...surfaces.sidebar.props} resizeHandle={sidebarResizeHandle} />
+
+          <main ref={meta.workbenchRef} className="workbench" tabIndex={-1}>
+            <WorkbenchTabBar {...surfaces.tabBar} />
+            <div className="workbench-content">
+              <DesktopRendererProductionRouterV2 {...surfaces.router} />
+            </div>
+          </main>
+
+          {surfaces.rightSidebar.kind === 'visible' ? (
+            <DesktopRightSidebar {...surfaces.rightSidebar.props} />
+          ) : null}
+        </section>
+
+        <DesktopStatusBar {...surfaces.statusBar} />
+
+        {surfaces.commandPalette.kind === 'visible'
+          ? createPortal(<CommandPalette {...surfaces.commandPalette.props} />, document.body)
+          : null}
+        <KeyboardShortcutsDialog {...surfaces.keyboardShortcuts} />
+        <NewTaskFlow {...surfaces.newTask} />
+        <WorkspaceCreateDialog {...surfaces.workspaceCreate} />
+        <WorkspaceSettingsDialog {...surfaces.workspaceSettings} />
+        <SettingsWindow {...surfaces.settings} />
+      </div>
+    </Theme>
+  );
+}

@@ -206,8 +206,8 @@ test('create-workspace tombstones require an explicit authoritative existing-wor
 });
 
 test('actor changes invalidate in-flight work and close the actor-bound modal', () => {
-  assert.match(appSource, /actorId=\{auth\.user\?\.user_id\}/);
-  assert.doesNotMatch(appSource, /actorId=\{[^}]*apiKey/);
+  assert.match(appSource, /actorId:\s*auth\.user\?\.user_id/);
+  assert.doesNotMatch(appSource, /actorId:\s*[^,\n]*apiKey/);
   assert.match(taskFlowSource, /activeActorIdRef\.current = normalizedActorId/);
   assert.notEqual(actorChangeEffectSource, '');
   assert.match(
@@ -296,7 +296,7 @@ test('Plan capability network failures expose connection recovery before any wri
 });
 
 test('App passes structured workspace authority and stale selection cannot silently create', () => {
-  assert.match(appSource, /workspaceAuthority=\{newTaskWorkspaceAuthority\}/);
+  assert.match(appSource, /workspaceAuthority:\s*newTaskWorkspaceAuthority/);
   assert.match(appSource, /resolveNewTaskWorkspaceAuthority\(/);
   assert.match(taskFlowSource, /canUseNewTaskWorkspaceSelection\(/);
   assert.doesNotMatch(generatePlanSource, /selectedWorkspace \?\?[\s\S]*createWorkspaceForProject/);

@@ -1,7 +1,8 @@
-import type { ComponentType, ReactNode } from 'react';
+import type { ComponentType } from 'react';
 
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
+import type { DesktopAuthenticatedShellViewModelV2 } from './DesktopAuthenticatedShellSurfaceV2';
 import type { DesktopWorkbenchSurfaceViewModelV2 } from './DesktopWorkbenchSurfaceV2';
 import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
 import type { UiSlotDefinition } from './uiSlotRegistry';
@@ -11,7 +12,7 @@ export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2 =
 export const DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2 = 'builtin:desktop-workbench-surface' as const;
 
 export interface DesktopRendererAuthenticatedShellSurfacePropsV2 {
-  readonly children: ReactNode;
+  readonly viewModel: DesktopAuthenticatedShellViewModelV2;
 }
 
 export type DesktopRendererAuthenticatedShellSurfaceV2 =

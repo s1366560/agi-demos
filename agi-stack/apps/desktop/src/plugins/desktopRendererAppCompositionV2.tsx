@@ -1,5 +1,3 @@
-import { Fragment, type ComponentType } from 'react';
-
 import {
   createAppAuthenticationRouteRegistry,
   createAppAuxiliaryRouteRegistry,
@@ -18,6 +16,7 @@ import {
 } from '../features/navigation/appRouteRegistry';
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
+import { DesktopAuthenticatedShellSurfaceV2 } from './DesktopAuthenticatedShellSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
@@ -36,8 +35,6 @@ import {
 import {
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
-  type DesktopRendererAuthenticatedShellSurfacePropsV2,
-  type DesktopRendererAuthenticatedShellSurfaceV2,
   type DesktopRendererCompositionPortV2,
   type DesktopRendererWorkbenchSurfaceV2,
 } from './desktopRendererCompositionPortV2';
@@ -89,10 +86,6 @@ export function createDesktopRendererAppCompositionPortV2(
       validWorkbenchDefinitionV2(definition) ? DesktopWorkbenchSurfaceV2 : null,
   });
 }
-
-const DesktopAuthenticatedShellSurfaceV2: ComponentType<
-  DesktopRendererAuthenticatedShellSurfacePropsV2
-> = ({ children }) => <Fragment>{children}</Fragment>;
 
 function validAuthenticatedShellDefinitionV2(definition: UiSlotDefinition): boolean {
   return (

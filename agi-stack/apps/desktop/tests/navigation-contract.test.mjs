@@ -34,7 +34,7 @@ test('only shell-owned views remain first-class workbench sections', () => {
 
 test('Search and Automations enter only through V2 route and navigation contributions', () => {
   const navigationHandler =
-    appSource.match(/onNavigate=\{\(section\) => \{[\s\S]*?\n\s*\}\}/)?.[0] ?? '';
+    appSource.match(/onNavigate:\s*\(section\) => \{[\s\S]*?\n\s*\},/)?.[0] ?? '';
   const primaryItems =
     sidebarSource.match(/const primaryItems = \[[\s\S]*?\] as const;/u)?.[0] ?? '';
   const selectWorkbenchView =

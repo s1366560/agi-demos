@@ -213,7 +213,7 @@ profile:
         payload:
           schema_version: 1
           artifact_refs:
-            - desktop.ui-slots.authenticated-shell-surface.v1
+            - desktop.ui-slots.authenticated-shell-surface.v2
       inject:
         registry: service:desktop-renderer.renderer-contribution-registry
       isolate: {}

@@ -7,6 +7,10 @@ const workbenchSurfaceSource = readFileSync(
   new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
   'utf8',
 );
+const authenticatedShellSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const desktopAuthSource = [
   '../src/hooks/useDesktopAuth.ts',
   '../src/hooks/useCloudSessionAuth.ts',
@@ -113,7 +117,8 @@ const noProjectQaHtml = readFileSync(
 test('desktop shell mounts only the prototype sidebar and page-owned headers', () => {
   assert.doesNotMatch(appSource, /className="titlebar"/);
   assert.doesNotMatch(appSource, /className="copilot-sidebar"/);
-  assert.equal((appSource.match(/<DesktopSidebar\b/g) ?? []).length, 1);
+  assert.equal((authenticatedShellSurfaceSource.match(/<DesktopSidebar\b/g) ?? []).length, 1);
+  assert.doesNotMatch(appSource, /<DesktopSidebar\b/u);
 });
 
 test('streaming conversation replies expose a dedicated stop-session control', () => {
@@ -327,7 +332,12 @@ test('workspace settings freeze and expose selection semantics while a switch is
 });
 
 test('workspace creation uses its dedicated surface while session creation stays in new task', () => {
-  assert.match(appSource, /import \{ WorkspaceCreateDialog \}/);
+  assert.match(authenticatedShellSurfaceSource, /import \{ WorkspaceCreateDialog \}/);
+  assert.match(
+    authenticatedShellSurfaceSource,
+    /<WorkspaceCreateDialog \{\.\.\.surfaces\.workspaceCreate\} \/>/u,
+  );
+  assert.match(appSource, /workspaceCreate:\s*\{/u);
   assert.match(appSource, /const createWorkspaceFromDialog = async/);
   assert.doesNotMatch(appSource, /const createSessionForWorkspace = async/);
   assert.doesNotMatch(appSource, /newWorkspaceName|creatingWorkspace|creatingSessionWorkspaceId/);
@@ -388,10 +398,10 @@ test('workspace tree loading and error states announce changes and expose explic
   assert.match(workspaceDockSource, /actionLabel=\{t\('workspaceTree\.retry'\)\}/);
   assert.match(sidebarSource, /onRetryProject=\{onRetryProject\}/);
   assert.match(sidebarSource, /onRetryWorkspace=\{onRetryWorkspace\}/);
-  assert.match(appSource, /onRetryProject=\{\(\) => void refreshRuntime\(\)\}/);
+  assert.match(appSource, /onRetryProject:\s*\(\) => void refreshRuntime\(\)/);
   assert.match(
     appSource,
-    /onRetryWorkspace=\{\(workspaceId\) => void loadWorkspaceConversations\(workspaceId\)\}/,
+    /onRetryWorkspace:\s*\(workspaceId\) =>\s*void loadWorkspaceConversations\(workspaceId\)/,
   );
   assert.match(workspaceDockStyles, /\.workspace-tree-state > button/);
   assert.match(workspaceDockSource, /availability === 'refreshing'/);
@@ -592,7 +602,7 @@ test('sidebar exposes one focus-restoring all-features launcher', () => {
   assert.match(sidebarSource, /onOpenFeatureDirectory\(event\.currentTarget\)/);
   assert.match(
     appSource,
-    /onOpenFeatureDirectory=\{\(trigger\) => openCommandPalette\(trigger\)\}/,
+    /onOpenFeatureDirectory:\s*\(trigger\) => openCommandPalette\(trigger\)/,
   );
 });
 
@@ -876,7 +886,7 @@ test('composer model switcher explains an unconfigured model instead of a bare u
 
 test('sidebar and context rail widths are user resizable', () => {
   assert.match(appSource, /useResizablePanelWidth\(/);
-  assert.match(appSource, /--desktop-sidebar-preferred-width/);
+  assert.match(authenticatedShellSurfaceSource, /--desktop-sidebar-preferred-width/);
   assert.match(
     globalStyles,
     /--desktop-sidebar-width:\s*var\(--desktop-sidebar-preferred-width,\s*220px\)/,
@@ -885,7 +895,7 @@ test('sidebar and context rail widths are user resizable', () => {
     sidebarStyles,
     /--desktop-sidebar-width:\s*min\(\s*var\(--desktop-sidebar-preferred-width,\s*220px\),\s*200px\s*\)/,
   );
-  assert.match(appSource, /<ResizeHandle/);
+  assert.match(authenticatedShellSurfaceSource, /<ResizeHandle/);
   // The resizable rail moved to the right sidebar, which owns its own width.
   assert.match(rightSidebarSource, /useResizablePanelWidth\(/);
   assert.match(rightSidebarSource, /agistack\.desktop\.rightSidebarWidth/);

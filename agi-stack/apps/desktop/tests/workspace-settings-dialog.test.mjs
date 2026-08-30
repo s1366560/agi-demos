@@ -7,6 +7,10 @@ const dialogSource = await readFile(
   'utf8',
 );
 const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const shellSurfaceSource = await readFile(
+  new URL('../src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 
 test('workspace Configure routes selected workspaces to their dedicated settings dialog', () => {
   assert.match(appSource, /const \[workspaceSettingsOpen, setWorkspaceSettingsOpen\]/);
@@ -14,8 +18,12 @@ test('workspace Configure routes selected workspaces to their dedicated settings
     appSource,
     /const openWorkspaceSettings = \(\) => \{[\s\S]*selectedWorkspace[\s\S]*setWorkspaceSettingsOpen\(true\)[\s\S]*openSettingsEntry\('workspace_overview'\)/,
   );
-  assert.match(appSource, /<WorkspaceSettingsDialog[\s\S]*workspace=\{selectedWorkspace\}/);
-  assert.match(appSource, /onSave=\{updateWorkspaceFromDialog\}/);
+  assert.match(
+    shellSurfaceSource,
+    /<WorkspaceSettingsDialog \{\.\.\.surfaces\.workspaceSettings\} \/>/u,
+  );
+  assert.match(appSource, /workspaceSettings:\s*\{[\s\S]*workspace:\s*selectedWorkspace/u);
+  assert.match(appSource, /onSave:\s*updateWorkspaceFromDialog/u);
 });
 
 test('workspace settings dialog exposes save, reset, archive, validation, and feedback contracts', () => {

@@ -7,6 +7,10 @@ const workbenchSurfaceSource = readFileSync(
   new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
   'utf8',
 );
+const authenticatedShellSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const mainProcessSource = readFileSync(
   new URL('../electron/main/index.ts', import.meta.url),
   'utf8',
@@ -78,20 +82,21 @@ const sidebarStyles = readFileSync(
 const i18nSource = readFileSync(new URL('../src/i18n.tsx', import.meta.url), 'utf8');
 
 test('app shell mounts the desktop titlebar and status bar exactly once', () => {
-  assert.equal((appSource.match(/<DesktopTitlebar\b/g) ?? []).length, 1);
-  assert.equal((appSource.match(/<DesktopStatusBar\b/g) ?? []).length, 1);
+  assert.equal((authenticatedShellSurfaceSource.match(/<DesktopTitlebar\b/g) ?? []).length, 1);
+  assert.equal((authenticatedShellSurfaceSource.match(/<DesktopStatusBar\b/g) ?? []).length, 1);
   // The titlebar only renders inside the native desktop window shell.
+  assert.match(appSource, /titlebar:\s*runsInNativeDesktop\s*\?[\s\S]*kind:\s*'visible'/u);
   assert.match(
-    appSource,
-    /runsInNativeDesktop \? \([\s\S]*?<DesktopTitlebar/,
+    authenticatedShellSurfaceSource,
+    /surfaces\.titlebar\.kind === 'visible'[\s\S]*<DesktopTitlebar/u,
   );
   // The right sidebar toggle state is owned by the shell for later phases.
   assert.match(appSource, /const \[rightSidebarOpen, setRightSidebarOpen\] = useState\(true\)/);
-  assert.match(appSource, /rightSidebarOpen=\{rightSidebarOpen\}/);
-  assert.match(appSource, /onToggleRightSidebar=\{/);
+  assert.match(appSource, /rightSidebarOpen,/);
+  assert.match(appSource, /onToggleRightSidebar:\s*\(\) => \{/);
   // The titlebar reuses the existing sidebar collapse state.
-  assert.match(appSource, /sidebarCollapsed=\{sidebarCollapsed\}/);
-  assert.match(appSource, /onToggleSidebar=\{/);
+  assert.match(appSource, /sidebarCollapsed,/);
+  assert.match(appSource, /onToggleSidebar:\s*\(\) =>/);
 });
 
 test('main window is frameless with platform-specific titlebar styles', () => {
@@ -217,7 +222,7 @@ test('sidebar renders the authoritative project conversation status summary', ()
   assert.match(sidebarSource, /workspaceTree\.completed/);
   assert.match(sidebarSource, /workspaceTree\.failed/);
   assert.match(sidebarStyles, /\.desktop-conversation-status-summary\s*\{/);
-  assert.match(appSource, /conversationStatusSummary=\{conversationStatusSummary\}/);
+  assert.match(appSource, /conversationStatusSummary,/);
   assert.doesNotMatch(appSource, /conversationStatusSummary=\{[^}]*conversationsByWorkspace/);
   assert.match(appSource, /conversationStatusScopeRef/);
   assert.match(
@@ -231,14 +236,14 @@ test('sidebar renders the authoritative project conversation status summary', ()
 });
 
 test('workbench mounts the tab bar above a dedicated content layer', () => {
-  assert.equal((appSource.match(/<WorkbenchTabBar\b/g) ?? []).length, 1);
-  assert.match(appSource, /tabs=\{openTabs\}/);
-  assert.match(appSource, /activeTabKey=\{activeWorkbenchTabKey\}/);
-  assert.match(appSource, /onActivate=\{activateWorkbenchTab\}/);
-  assert.match(appSource, /onClose=\{closeWorkbenchTab\}/);
+  assert.equal((authenticatedShellSurfaceSource.match(/<WorkbenchTabBar\b/g) ?? []).length, 1);
+  assert.match(appSource, /tabBar:\s*\{[\s\S]*tabs:\s*openTabs/u);
+  assert.match(appSource, /activeTabKey:\s*activeWorkbenchTabKey/);
+  assert.match(appSource, /onActivate:\s*activateWorkbenchTab/);
+  assert.match(appSource, /onClose:\s*closeWorkbenchTab/);
   // The router subtree stays intact inside the content layer.
   assert.match(
-    appSource,
+    authenticatedShellSurfaceSource,
     /<div className="workbench-content">[\s\S]*?<DesktopRendererProductionRouterV2/,
   );
   assert.match(workbenchSurfaceSource, /className="workbench-layout"/);
@@ -281,11 +286,18 @@ test('tab bar exposes localized activation and close controls', () => {
 });
 
 test('right sidebar hosts the context rail and canvas behind an activity bar', () => {
-  assert.equal((appSource.match(/<DesktopRightSidebar\b/g) ?? []).length, 1);
+  assert.equal((authenticatedShellSurfaceSource.match(/<DesktopRightSidebar\b/g) ?? []).length, 1);
   // Only rendered for chat sessions, and the titlebar toggle greys out otherwise.
   assert.match(appSource, /rightSidebarAvailable[\s\S]*?activeSection === 'chat'/);
-  assert.match(appSource, /rightSidebarAvailable && rightSidebarOpen[\s\S]*?<DesktopRightSidebar/);
-  assert.match(appSource, /rightSidebarAvailable=\{rightSidebarAvailable\}/);
+  assert.match(
+    appSource,
+    /rightSidebarAvailable && rightSidebarOpen[\s\S]*?kind:\s*'visible'/u,
+  );
+  assert.match(appSource, /rightSidebarAvailable,/);
+  assert.match(
+    authenticatedShellSurfaceSource,
+    /surfaces\.rightSidebar\.kind === 'visible'[\s\S]*<DesktopRightSidebar/u,
+  );
   // Activity bar: context, canvas, and browser entries with pressed state;
   // context/canvas stay session-scoped, browser does not.
   assert.match(rightSidebarSource, /desktop-right-activity-bar/);

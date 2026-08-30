@@ -1,12 +1,10 @@
 import {
-  type CSSProperties,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { Theme } from '@radix-ui/themes';
 import {
   DashboardIcon,
@@ -42,7 +40,7 @@ import {
   selectPlatformPluginAuthorityV2,
 } from './api/trustedSession';
 import type { CloudSessionProjection } from './api/cloudSessionProjectionClient';
-import { ResizeHandle, useResizablePanelWidth } from './components/ResizeHandle';
+import { useResizablePanelWidth } from './components/ResizeHandle';
 import { createDesktopAgentAuthorityAdapter } from './features/agent-authority/cloudAgentAuthorityClient';
 import type {
   CloudAgentAuthorityScope,
@@ -79,6 +77,7 @@ import { initialDesktopRuntimeConfig } from './features/auth/loginRuntimeModel';
 import { resolveNativeOAuthResumePath } from './features/auth/nativeOAuthSessionModel';
 import type { ChatWorkflowTarget } from './features/chat/ChatWorkflowStrip';
 import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuthorityStateV2';
+import type { DesktopAuthenticatedShellViewModelV2 } from './plugins/DesktopAuthenticatedShellSurfaceV2';
 import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRendererAppCompositionV2';
 import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
 import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
@@ -86,7 +85,6 @@ import {
   DesktopRendererGenerationProviderV2,
   useDesktopRendererGenerationHostV2,
 } from './plugins/DesktopRendererGenerationHostV2';
-import { DesktopRendererProductionRouterV2 } from './plugins/DesktopRendererProductionRouterV2';
 import type {
   DesktopWorkbenchSurfaceViewModelV2,
   DesktopWorkbenchViewV2,
@@ -133,11 +131,7 @@ import {
   type MCPAppCanvasState,
 } from './features/chat/mcpAppCanvasEventModel';
 import { useToast } from './features/feedback/ToastCenter';
-import { DesktopStatusBar } from './features/chrome/DesktopStatusBar';
-import { DesktopRightSidebar } from './features/chrome/DesktopRightSidebar';
 import type { DesktopRightPanel } from './features/chrome/DesktopRightSidebar';
-import { DesktopTitlebar } from './features/chrome/DesktopTitlebar';
-import { WorkbenchTabBar } from './features/chrome/WorkbenchTabBar';
 import {
   clearConversationTabs,
   closeTab,
@@ -236,8 +230,6 @@ import {
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
 import { AuxiliaryView } from './features/navigation/AuxiliaryView';
-import { DesktopSidebar } from './features/navigation/DesktopSidebar';
-import { KeyboardShortcutsDialog } from './features/navigation/KeyboardShortcutsDialog';
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
 import {
   DEVICE_APPROVAL_ROUTE_ID,
@@ -294,7 +286,7 @@ import {
   settingsSectionForEntry,
   type SettingsEntry,
 } from './features/settings/settingsEntryRouting';
-import { SettingsWindow, type SettingsSection } from './features/settings/SettingsWindow';
+import type { SettingsSection } from './features/settings/SettingsWindow';
 import {
   createProfileGenerationHashLocationPort,
 } from './features/settings-routes/profileAuxiliaryRoute';
@@ -306,7 +298,7 @@ import {
   latestConversationRuntimeModelEvent,
   projectRuntimeModelOptions,
 } from './features/settings/workspaceRuntimeProviderModel';
-import { NewTaskFlow, type NewTaskResumeDraft } from './features/task/NewTaskFlow';
+import type { NewTaskResumeDraft } from './features/task/NewTaskFlow';
 import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
@@ -318,8 +310,6 @@ import {
   type NewTaskAgentTurnOutcome,
 } from './features/task/newTaskPlanModel';
 import { resolveNewTaskWorkspaceAuthority } from './features/task/newTaskSessionModel';
-import { WorkspaceCreateDialog } from './features/workspace/WorkspaceCreateDialog';
-import { WorkspaceSettingsDialog } from './features/workspace/WorkspaceSettingsDialog';
 import {
   currentWorkspaceAutonomyAttentionResolveAttempt,
   discardWorkspaceAutonomyAttentionResolveAttempt,
@@ -471,7 +461,6 @@ import {
   WorkspaceReviewPanel,
   chatWorkflowTargetForReviewTab,
 } from './features/session/WorkspaceReviewPanel';
-import { CommandPalette } from './features/navigation/CommandPalette';
 import { useDesktopAuth } from './hooks/useDesktopAuth';
 import { useAgentConversation } from './hooks/useAgentConversation';
 
@@ -6615,262 +6604,251 @@ export function App() {
     t('settings.noTenantSelected');
   const activeProjectName =
     selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected');
+  const desktopAuthenticatedShellViewModelV2: DesktopAuthenticatedShellViewModelV2 = {
+    meta: {
+      appearance: themeAppearance,
+      appShellRef,
+      generation: desktopRendererGenerationV2.meta,
+      workbenchRef,
+    },
+    state: {
+      layoutMode: activeSection === 'board' ? 'my-work' : 'default',
+      sidebarCollapsed,
+      sidebarPreferredWidth: sidebarPanelWidth.width,
+      windowMode: runsInNativeDesktop ? 'native' : 'browser',
+    },
+    surfaces: {
+      titlebar: runsInNativeDesktop
+        ? {
+            kind: 'visible',
+            props: {
+              contextTitle: `${activeTenantName} · ${activeProjectName}`,
+              sidebarCollapsed,
+              rightSidebarOpen,
+              rightSidebarAvailable,
+              onToggleSidebar: () => setSidebarCollapsed((collapsed) => !collapsed),
+              onToggleRightSidebar: () => {
+                if (!rightSidebarAvailable) return;
+                setRightSidebarOpen((open) => !open);
+              },
+            },
+          }
+        : { kind: 'hidden' },
+      sidebar: {
+        props: {
+          activeSection:
+            activeSection === 'board'
+              ? 'my-work'
+              : activeSection === 'home' || activeSection === 'activity'
+                ? activeSection
+                : null,
+          taskCount: dataset.myWork.length,
+          activityUnreadCount: activityInbox.unreadCount,
+          conversationStatusSummary,
+          tenantName: activeTenantName,
+          projectName: activeProjectName,
+          user: auth.user,
+          workspaces: dataset.workspacesByProject[config.projectId] ?? [],
+          conversationsByWorkspace: dataset.conversationsByWorkspace,
+          nodeState: dataset.nodeState,
+          currentProjectId: config.projectId,
+          currentWorkspaceId: config.workspaceId,
+          currentConversationId: selectedConversation?.id ?? null,
+          workspaceTreeSelectionMode:
+            activeSection === 'workspace'
+              ? 'overview'
+              : activeSection === 'chat'
+                ? 'conversation'
+                : activeSection === 'board'
+                  ? 'my-work'
+                  : 'none',
+          expandedWorkspaceIds,
+          newTaskDisabledReason,
+          onNavigate: (section) => {
+            if (section === 'home') switchSection('home');
+            if (section === 'my-work') switchSection('board');
+            if (section === 'activity') switchSection('activity');
+          },
+          onOpenFeatureDirectory: (trigger) => openCommandPalette(trigger),
+          onToggleWorkspace: toggleWorkspace,
+          onRetryProject: () => void refreshRuntime(),
+          onRetryWorkspace: (workspaceId) => void loadWorkspaceConversations(workspaceId),
+          onSelectWorkspace: (projectId, workspaceId) =>
+            selectWorkspace(workspaceId, projectId),
+          onSelectConversation: selectConversation,
+          onRenameConversation: renameConversation,
+          onDeleteConversation: deleteConversation,
+          workspaceCreateDisabledReason,
+          onCreateWorkspace: () => setWorkspaceCreateOpen(true),
+          onNewTask: startNewSession,
+          onOpenAccountSettings: openSidebarSettings,
+          onSwitchWorkspace: openProfileWorkspaceSettings,
+          onSignOut: () => void logout(),
+        },
+        resizeHandle: sidebarCollapsed
+          ? { kind: 'hidden' }
+          : {
+              kind: 'visible',
+              props: {
+                side: 'trailing',
+                width: sidebarPanelWidth.width,
+                constraints: SIDEBAR_WIDTH_CONSTRAINTS,
+                label: t('layout.resizeSidebar'),
+                onResize: sidebarPanelWidth.resize,
+                onReset: sidebarPanelWidth.reset,
+              },
+            },
+      },
+      tabBar: {
+        tabs: openTabs,
+        activeTabKey: activeWorkbenchTabKey,
+        onActivate: activateWorkbenchTab,
+        onClose: closeWorkbenchTab,
+      },
+      router: {
+        authenticationPassthroughRouteIds: AUTHENTICATION_PASSTHROUGH_ROUTE_IDS,
+        location: desktopProductionRouteLocation,
+        mode: productionRouteRuntimeMode,
+        navigation: desktopProductionRouteNavigation,
+        permissions: productionRouteBasePermissions,
+        resolveCapability: resolveProductionRouteCapability,
+        resolvePermissionSnapshot: resolveProductionRoutePermissionSnapshot,
+        switchScope: switchProductionRouteScope,
+        viewModel: desktopWorkbenchSurfaceViewModelV2,
+      },
+      rightSidebar:
+        rightSidebarAvailable && rightSidebarOpen
+          ? {
+              kind: 'visible',
+              props: {
+                activePanel: activeRightPanel,
+                canvasAvailable: showReviewPanel,
+                viewModel: sessionDetailViewModel,
+                runActionPending: sessionRunActionPending,
+                onRunAction: (action, feedback) =>
+                  void handleSessionRunAction(action, feedback),
+                onOpenCanvas: handleOpenCanvas,
+                onSelectPanel: handleSelectRightPanel,
+                onCloseCanvas: handleCloseCanvas,
+                onClose: () => setRightSidebarOpen(false),
+                renderCanvas: showReviewPanel
+                  ? (controls) => renderWorkspaceReviewPanel(controls)
+                  : null,
+              },
+            }
+          : { kind: 'hidden' },
+      statusBar: {
+        connection,
+        liveConnected: socket.connected,
+        liveError: socket.error,
+        tenantName: activeTenantName,
+        projectName: activeProjectName,
+      },
+      commandPalette: commandPaletteOpen
+        ? {
+            kind: 'visible',
+            props: {
+              inputRef: commandInputRef,
+              query: commandQuery,
+              items: filteredCommandItems,
+              onQueryChange: setCommandQuery,
+              onClose: closeCommandPalette,
+            },
+          }
+        : { kind: 'hidden' },
+      keyboardShortcuts: {
+        open: shortcutsDialogOpen,
+        onClose: () => setShortcutsDialogOpen(false),
+      },
+      newTask: {
+        open: newTaskOpen,
+        config,
+        actorId: auth.user?.user_id,
+        workspaceAuthority: newTaskWorkspaceAuthority,
+        resumeDraft: newTaskResumeDraft,
+        preferredWorkspaceId: newTaskPreferredWorkspaceId,
+        preferredKind: preferredTaskMode === 'code' ? 'programming' : 'general',
+        disabledReason: newTaskDisabledReason,
+        onClose: () => {
+          setNewTaskOpen(false);
+          setNewTaskResumeDraft(null);
+        },
+        onSessionPersisted: persistNewTaskSession,
+        onSessionReady: activateNewTaskSession,
+        onRunAgentTurn: runNewTaskAgentTurn,
+        onOpenRuntimeSettings: () => {
+          setNewTaskOpen(false);
+          setNewTaskResumeDraft(null);
+          openConnectionSettings();
+        },
+        onError: setError,
+      },
+      workspaceCreate: {
+        open: workspaceCreateOpen,
+        projectName:
+          selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected'),
+        scope: {
+          tenantId: config.tenantId,
+          projectId: config.projectId,
+          epoch: configScopeEpochRef.current,
+          contextRevision: contextRevisionRef.current,
+        },
+        onOpenChange: setWorkspaceCreateOpen,
+        onCreate: createWorkspaceFromDialog,
+      },
+      workspaceSettings: {
+        open: workspaceSettingsOpen,
+        workspace: selectedWorkspace,
+        agents: dataset.workspaceAgents,
+        members: dataset.workspaceMembers,
+        actorUserId: auth.user?.user_id ?? '',
+        scope: {
+          tenantId: config.tenantId,
+          projectId: config.projectId,
+          workspaceId: config.workspaceId,
+          epoch: configScopeEpochRef.current,
+          contextRevision: contextRevisionRef.current,
+        },
+        onOpenChange: setWorkspaceSettingsOpen,
+        onSave: updateWorkspaceFromDialog,
+        onAddMember: addWorkspaceMemberFromDialog,
+        onUpdateMemberRole: updateWorkspaceMemberRoleFromDialog,
+        onRemoveMember: removeWorkspaceMemberFromDialog,
+        onLoadAgentDefinitions: loadWorkspaceAgentDefinitionsFromDialog,
+        onBindAgent: bindWorkspaceAgentFromDialog,
+        onUnbindAgent: unbindWorkspaceAgentFromDialog,
+      },
+      settings: {
+        open: settingsWindowOpen,
+        initialSection: settingsInitialSection,
+        auth,
+        config,
+        connection,
+        wsConnected: socket.connected,
+        wsError: socket.error,
+        runtimeDisabledReason,
+        agentDefinitionEvent,
+        rendererRouteRegistry: desktopProductionRouteRegistry,
+        onClose: () => {
+          const closeRoute = settingsRouteCloseNavigationRef.current;
+          settingsRouteCloseNavigationRef.current = null;
+          setSettingsWindowOpen(false);
+          closeRoute?.();
+        },
+        onConfigChange: handleConfigChange,
+        onRuntimeStatusRefresh: refreshLocalRuntimeStatus,
+        onRefreshRuntime: () => void refreshRuntime(),
+        onContextChange: applySettingsContext,
+        onSignOut: () => void logout(),
+      },
+    },
+  };
 
   return (
     <DesktopRendererGenerationProviderV2 value={desktopRendererGenerationV2}>
-      <Theme
-        appearance={themeAppearance}
-        accentColor="cyan"
-        grayColor="slate"
-        radius="medium"
-        scaling="95%"
-      >
-      <DesktopRendererAuthenticatedShellV2>
-      <div
-        ref={appShellRef}
-        data-plugin-generation-v2={
-          desktopRendererGenerationV2.meta.digest ?? 'unavailable'
-        }
-        data-plugin-generation-v2-status={desktopRendererGenerationV2.meta.status}
-        data-plugin-generation-v2-target={desktopRendererGenerationV2.meta.target}
-        className={`app-shell hierarchy-shell runtime-mode ${
-          runsInNativeDesktop ? 'desktop-window' : 'browser-window'
-        } ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${
-          activeSection === 'board' ? 'my-work-mode' : ''
-        }`}
-        style={
-          {
-            '--desktop-sidebar-preferred-width': `${Math.round(sidebarPanelWidth.width)}px`,
-          } as CSSProperties
-        }
-      >
-        {runsInNativeDesktop ? (
-          <DesktopTitlebar
-            contextTitle={`${activeTenantName} · ${activeProjectName}`}
-            sidebarCollapsed={sidebarCollapsed}
-            rightSidebarOpen={rightSidebarOpen}
-            rightSidebarAvailable={rightSidebarAvailable}
-            onToggleSidebar={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            onToggleRightSidebar={() => {
-              if (!rightSidebarAvailable) return;
-              setRightSidebarOpen((open) => !open);
-            }}
-          />
-        ) : null}
-        <section className="desktop-body">
-          <DesktopSidebar
-            activeSection={
-              activeSection === 'board'
-                ? 'my-work'
-                : activeSection === 'home' || activeSection === 'activity'
-                  ? activeSection
-                  : null
-            }
-            taskCount={dataset.myWork.length}
-            activityUnreadCount={activityInbox.unreadCount}
-            conversationStatusSummary={conversationStatusSummary}
-            tenantName={activeTenantName}
-            projectName={activeProjectName}
-            user={auth.user}
-            workspaces={dataset.workspacesByProject[config.projectId] ?? []}
-            conversationsByWorkspace={dataset.conversationsByWorkspace}
-            nodeState={dataset.nodeState}
-            currentProjectId={config.projectId}
-            currentWorkspaceId={config.workspaceId}
-            currentConversationId={selectedConversation?.id ?? null}
-            workspaceTreeSelectionMode={
-              activeSection === 'workspace'
-                ? 'overview'
-                : activeSection === 'chat'
-                  ? 'conversation'
-                  : activeSection === 'board'
-                    ? 'my-work'
-                    : 'none'
-            }
-            expandedWorkspaceIds={expandedWorkspaceIds}
-            newTaskDisabledReason={newTaskDisabledReason}
-            onNavigate={(section) => {
-              if (section === 'home') switchSection('home');
-              if (section === 'my-work') switchSection('board');
-              if (section === 'activity') switchSection('activity');
-            }}
-            onOpenFeatureDirectory={(trigger) => openCommandPalette(trigger)}
-            onToggleWorkspace={toggleWorkspace}
-            onRetryProject={() => void refreshRuntime()}
-            onRetryWorkspace={(workspaceId) => void loadWorkspaceConversations(workspaceId)}
-            onSelectWorkspace={(projectId, workspaceId) => selectWorkspace(workspaceId, projectId)}
-            onSelectConversation={selectConversation}
-            onRenameConversation={renameConversation}
-            onDeleteConversation={deleteConversation}
-            workspaceCreateDisabledReason={workspaceCreateDisabledReason}
-            onCreateWorkspace={() => setWorkspaceCreateOpen(true)}
-            onNewTask={startNewSession}
-            onOpenAccountSettings={openSidebarSettings}
-            onSwitchWorkspace={openProfileWorkspaceSettings}
-            onSignOut={() => void logout()}
-            resizeHandle={
-              sidebarCollapsed ? undefined : (
-                <ResizeHandle
-                  side="trailing"
-                  width={sidebarPanelWidth.width}
-                  constraints={SIDEBAR_WIDTH_CONSTRAINTS}
-                  label={t('layout.resizeSidebar')}
-                  onResize={sidebarPanelWidth.resize}
-                  onReset={sidebarPanelWidth.reset}
-                />
-              )
-            }
-          />
-
-          <main ref={workbenchRef} className="workbench" tabIndex={-1}>
-            <WorkbenchTabBar
-              tabs={openTabs}
-              activeTabKey={activeWorkbenchTabKey}
-              onActivate={activateWorkbenchTab}
-              onClose={closeWorkbenchTab}
-            />
-            <div className="workbench-content">
-              <DesktopRendererProductionRouterV2
-                authenticationPassthroughRouteIds={AUTHENTICATION_PASSTHROUGH_ROUTE_IDS}
-                location={desktopProductionRouteLocation}
-                mode={productionRouteRuntimeMode}
-                navigation={desktopProductionRouteNavigation}
-                permissions={productionRouteBasePermissions}
-                resolveCapability={resolveProductionRouteCapability}
-                resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
-                switchScope={switchProductionRouteScope}
-                viewModel={desktopWorkbenchSurfaceViewModelV2}
-              />
-            </div>
-          </main>
-
-          {rightSidebarAvailable && rightSidebarOpen ? (
-            <DesktopRightSidebar
-              activePanel={activeRightPanel}
-              canvasAvailable={showReviewPanel}
-              viewModel={sessionDetailViewModel}
-              runActionPending={sessionRunActionPending}
-              onRunAction={(action, feedback) => void handleSessionRunAction(action, feedback)}
-              onOpenCanvas={handleOpenCanvas}
-              onSelectPanel={handleSelectRightPanel}
-              onCloseCanvas={handleCloseCanvas}
-              onClose={() => setRightSidebarOpen(false)}
-              renderCanvas={
-                showReviewPanel ? (controls) => renderWorkspaceReviewPanel(controls) : null
-              }
-            />
-          ) : null}
-        </section>
-
-        <DesktopStatusBar
-          connection={connection}
-          liveConnected={socket.connected}
-          liveError={socket.error}
-          tenantName={activeTenantName}
-          projectName={activeProjectName}
-        />
-
-        {commandPaletteOpen
-          ? createPortal(
-              <CommandPalette
-                inputRef={commandInputRef}
-                query={commandQuery}
-                items={filteredCommandItems}
-                onQueryChange={setCommandQuery}
-                onClose={closeCommandPalette}
-              />,
-              document.body,
-            )
-          : null}
-        <KeyboardShortcutsDialog
-          open={shortcutsDialogOpen}
-          onClose={() => setShortcutsDialogOpen(false)}
-        />
-        <NewTaskFlow
-          open={newTaskOpen}
-          config={config}
-          actorId={auth.user?.user_id}
-          workspaceAuthority={newTaskWorkspaceAuthority}
-          resumeDraft={newTaskResumeDraft}
-          preferredWorkspaceId={newTaskPreferredWorkspaceId}
-          preferredKind={preferredTaskMode === 'code' ? 'programming' : 'general'}
-          disabledReason={newTaskDisabledReason}
-          onClose={() => {
-            setNewTaskOpen(false);
-            setNewTaskResumeDraft(null);
-          }}
-          onSessionPersisted={persistNewTaskSession}
-          onSessionReady={activateNewTaskSession}
-          onRunAgentTurn={runNewTaskAgentTurn}
-          onOpenRuntimeSettings={() => {
-            setNewTaskOpen(false);
-            setNewTaskResumeDraft(null);
-            openConnectionSettings();
-          }}
-          onError={setError}
-        />
-        <WorkspaceCreateDialog
-          open={workspaceCreateOpen}
-          projectName={
-            selectedProject?.name ?? selectedProject?.id ?? t('settings.noProjectSelected')
-          }
-          scope={{
-            tenantId: config.tenantId,
-            projectId: config.projectId,
-            epoch: configScopeEpochRef.current,
-            contextRevision: contextRevisionRef.current,
-          }}
-          onOpenChange={setWorkspaceCreateOpen}
-          onCreate={createWorkspaceFromDialog}
-        />
-        <WorkspaceSettingsDialog
-          open={workspaceSettingsOpen}
-          workspace={selectedWorkspace}
-          agents={dataset.workspaceAgents}
-          members={dataset.workspaceMembers}
-          actorUserId={auth.user?.user_id ?? ''}
-          scope={{
-            tenantId: config.tenantId,
-            projectId: config.projectId,
-            workspaceId: config.workspaceId,
-            epoch: configScopeEpochRef.current,
-            contextRevision: contextRevisionRef.current,
-          }}
-          onOpenChange={setWorkspaceSettingsOpen}
-          onSave={updateWorkspaceFromDialog}
-          onAddMember={addWorkspaceMemberFromDialog}
-          onUpdateMemberRole={updateWorkspaceMemberRoleFromDialog}
-          onRemoveMember={removeWorkspaceMemberFromDialog}
-          onLoadAgentDefinitions={loadWorkspaceAgentDefinitionsFromDialog}
-          onBindAgent={bindWorkspaceAgentFromDialog}
-          onUnbindAgent={unbindWorkspaceAgentFromDialog}
-        />
-        <SettingsWindow
-          open={settingsWindowOpen}
-          initialSection={settingsInitialSection}
-          auth={auth}
-          config={config}
-          connection={connection}
-          wsConnected={socket.connected}
-          wsError={socket.error}
-          runtimeDisabledReason={runtimeDisabledReason}
-          agentDefinitionEvent={agentDefinitionEvent}
-          rendererRouteRegistry={desktopProductionRouteRegistry}
-          onClose={() => {
-            const closeRoute = settingsRouteCloseNavigationRef.current;
-            settingsRouteCloseNavigationRef.current = null;
-            setSettingsWindowOpen(false);
-            closeRoute?.();
-          }}
-          onConfigChange={handleConfigChange}
-          onRuntimeStatusRefresh={refreshLocalRuntimeStatus}
-          onRefreshRuntime={() => void refreshRuntime()}
-          onContextChange={applySettingsContext}
-          onSignOut={() => void logout()}
-        />
-      </div>
-      </DesktopRendererAuthenticatedShellV2>
-      </Theme>
+      <DesktopRendererAuthenticatedShellV2
+        viewModel={desktopAuthenticatedShellViewModelV2}
+      />
     </DesktopRendererGenerationProviderV2>
   );
 }

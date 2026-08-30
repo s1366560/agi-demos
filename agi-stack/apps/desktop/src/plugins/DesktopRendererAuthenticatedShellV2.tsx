@@ -1,6 +1,5 @@
-import type { ReactNode } from 'react';
-
 import { useI18n } from '../i18n';
+import type { DesktopAuthenticatedShellViewModelV2 } from './DesktopAuthenticatedShellSurfaceV2';
 import {
   projectDesktopAuthenticatedShellCompositionV2,
   type DesktopRendererAuthenticatedShellCompositionV2,
@@ -8,17 +7,17 @@ import {
 import { useDesktopRendererGenerationV2 } from './desktopRendererGenerationContextV2';
 
 export interface DesktopRendererAuthenticatedShellV2Props {
-  readonly children: ReactNode;
+  readonly viewModel: DesktopAuthenticatedShellViewModelV2;
 }
 
 export function DesktopRendererAuthenticatedShellV2({
-  children,
+  viewModel,
 }: DesktopRendererAuthenticatedShellV2Props) {
   const { composition, state } = useDesktopRendererGenerationV2();
   const shell = projectDesktopAuthenticatedShellCompositionV2(state.authority, composition);
   if (shell.status === 'ready') {
     const Surface = shell.Surface;
-    return <Surface>{children}</Surface>;
+    return <Surface viewModel={viewModel} />;
   }
   return <DesktopRendererAuthenticatedShellBoundaryV2 composition={shell} />;
 }

@@ -15,6 +15,10 @@ const authenticatedShellSource = readFileSync(
   new URL('../src/plugins/DesktopRendererAuthenticatedShellV2.tsx', import.meta.url),
   'utf8',
 );
+const authenticatedShellSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const authenticationRouterSource = readFileSync(
   new URL('../src/plugins/DesktopRendererAuthenticationRouterV2.tsx', import.meta.url),
   'utf8',
@@ -614,12 +618,20 @@ test('App scope switching uses the abort-aware transaction and no reset helper',
 });
 
 test('production routing passes a typed model to the module-owned workbench without remount keys', () => {
-  const routerStart = appSource.lastIndexOf('<DesktopRendererProductionRouterV2');
-  const routerEnd = appSource.indexOf('/>', routerStart);
+  const routerStart = authenticatedShellSurfaceSource.lastIndexOf(
+    '<DesktopRendererProductionRouterV2',
+  );
+  const routerEnd = authenticatedShellSurfaceSource.indexOf('/>', routerStart);
   const routedWorkbench =
-    routerStart >= 0 && routerEnd > routerStart ? appSource.slice(routerStart, routerEnd) : '';
+    routerStart >= 0 && routerEnd > routerStart
+      ? authenticatedShellSurfaceSource.slice(routerStart, routerEnd)
+      : '';
 
-  assert.match(routedWorkbench, /viewModel=\{desktopWorkbenchSurfaceViewModelV2\}/u);
+  assert.match(routedWorkbench, /\{\.\.\.surfaces\.router\}/u);
+  assert.match(
+    appSource,
+    /router:\s*\{[\s\S]*viewModel:\s*desktopWorkbenchSurfaceViewModelV2/u,
+  );
   assert.doesNotMatch(routedWorkbench, /\bkey=/u);
   assert.doesNotMatch(routedWorkbench, /<iframe|<webview|window\.open|shell\.openExternal/iu);
   assert.doesNotMatch(rendererProductionRouterSource, /childrenAuthority|ReactNode/u);
@@ -642,14 +654,15 @@ test('production routing passes a typed model to the module-owned workbench with
 
 test('authenticated shell contribution owns the complete signed-in app shell', () => {
   const authenticatedStart = appSource.indexOf('\n  const activeTenantName =');
-  const shellStart = appSource.indexOf('<DesktopRendererAuthenticatedShellV2>', authenticatedStart);
-  const shellEnd = appSource.indexOf('</DesktopRendererAuthenticatedShellV2>', shellStart);
-  const shellSource =
+  const shellStart = appSource.indexOf('<DesktopRendererAuthenticatedShellV2', authenticatedStart);
+  const shellEnd = appSource.indexOf('/>', shellStart);
+  const shellBoundary =
     shellStart >= 0 && shellEnd > shellStart ? appSource.slice(shellStart, shellEnd) : '';
 
   assert.ok(authenticatedStart >= 0);
   assert.ok(shellStart > authenticatedStart);
-  assert.match(shellSource, /<div[\s\S]*className=\{`app-shell/u);
+  assert.match(shellBoundary, /viewModel=\{desktopAuthenticatedShellViewModelV2\}/u);
+  assert.match(authenticatedShellSurfaceSource, /<div[\s\S]*className=\{shellClassName\}/u);
   for (const component of [
     'DesktopTitlebar',
     'DesktopSidebar',
@@ -664,14 +677,16 @@ test('authenticated shell contribution owns the complete signed-in app shell', (
     'WorkspaceSettingsDialog',
     'SettingsWindow',
   ]) {
-    assert.match(shellSource, new RegExp(`<${component}\\b`, 'u'));
+    assert.match(authenticatedShellSurfaceSource, new RegExp(`<${component}\\b`, 'u'));
+    assert.doesNotMatch(appSource, new RegExp(`<${component}\\b`, 'u'));
   }
   assert.doesNotMatch(
     authenticatedShellSource,
     /\b(?:enabled|mode|variant|workbench|authenticated)\??:\s*boolean/u,
   );
-  assert.match(authenticatedShellSource, /readonly children:\s*ReactNode/u);
-  assert.doesNotMatch(shellSource.slice(0, shellSource.indexOf('>') + 1), /\bkey=/u);
+  assert.match(authenticatedShellSource, /readonly viewModel:\s*DesktopAuthenticatedShellViewModelV2/u);
+  assert.doesNotMatch(authenticatedShellSource, /ReactNode|children/u);
+  assert.doesNotMatch(shellBoundary, /\bkey=/u);
 });
 
 test('workbench selections release an active native production route before changing sections', () => {
