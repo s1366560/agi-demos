@@ -21,6 +21,7 @@ from src.domain.model.channels.message import ChannelAdapter, ChatType, Message,
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.artifact_lifecycle_projection import (
     current_artifact_lifecycle_application_service_v2,
 )
@@ -41,7 +42,9 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from src.application.services.channels.media_import_service import MediaImportService
+    from src.infrastructure.adapters.secondary.persistence.models import Conversation
     from src.infrastructure.agent.channels.channel_router import ChannelRouter
+    from src.infrastructure.plugins.v2.agent_turn_services import AgentTurnStreamProtocolV2
 
 logger = logging.getLogger(__name__)
 
@@ -779,24 +782,27 @@ class ChannelMessageRouter:
           so the user knows the agent is working, not stuck.
         """
         try:
-            session_ctx = await self._setup_agent_session(message, conversation_id)
-            if session_ctx is None:
-                return
+            async with with_session() as db_session:
+                conversation = await self._setup_agent_session(
+                    message,
+                    conversation_id,
+                    db_session,
+                )
+                if conversation is None:
+                    return
 
-            db_session, agent_service, conversation = session_ctx
-            channel_message_id = self._extract_channel_message_id(message)
-            operation_message_id = channel_message_id or message.id or str(uuid.uuid4())
+                channel_message_id = self._extract_channel_message_id(message)
+                operation_message_id = channel_message_id or message.id or str(uuid.uuid4())
 
-            await self._run_agent_stream(
-                message=message,
-                conversation_id=conversation_id,
-                conversation=conversation,
-                agent_service=agent_service,
-                db_session=db_session,
-                operation_id=f"channel-turn:{operation_message_id}",
-                channel_message_id=channel_message_id,
-                file_metadata=file_metadata,
-            )
+                await self._run_agent_stream(
+                    message=message,
+                    conversation_id=conversation_id,
+                    conversation=conversation,
+                    db_session=db_session,
+                    operation_id=f"channel-turn:{operation_message_id}",
+                    channel_message_id=channel_message_id,
+                    file_metadata=file_metadata,
+                )
 
         except Exception as e:
             logger.error(
@@ -805,14 +811,12 @@ class ChannelMessageRouter:
             )
 
     async def _setup_agent_session(
-        self, message: Message, conversation_id: str
-    ) -> tuple[Any, Any, Any] | None:
+        self,
+        message: Message,
+        conversation_id: str,
+        db_session: AsyncSession,
+    ) -> Conversation | None:
         """Set up DB-backed state needed before the scoped agent operation."""
-        from src.configuration.factories import create_llm_client
-        from src.infrastructure.adapters.primary.web.startup.container import get_app_container
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
         from src.infrastructure.adapters.secondary.persistence.models import Conversation
 
         text = message.content.generate_display_text()
@@ -820,35 +824,20 @@ class ChannelMessageRouter:
             logger.debug("[MessageRouter] Empty message, skipping agent invocation")
             return None
 
-        session = async_session_factory()
-        db_session = await session.__aenter__()
-
         conversation = await db_session.get(Conversation, conversation_id)
         if not conversation:
             logger.error(
                 "[MessageRouter] Conversation not found: has_conversation_id=%s",
                 bool(conversation_id),
             )
-            await session.__aexit__(None, None, None)
             return None
-
-        app_container = get_app_container()
-        if not app_container:
-            logger.error("[MessageRouter] App container is not initialized")
-            await session.__aexit__(None, None, None)
-            return None
-
-        llm = await create_llm_client(conversation.tenant_id)
-        container = app_container.with_db(db_session)
-        agent_service = container.agent_service(llm)
-        return db_session, agent_service, conversation
+        return conversation
 
     async def _run_agent_stream(
         self,
         message: Message,
         conversation_id: str,
         conversation: Any,
-        agent_service: Any,
         db_session: Any,
         operation_id: str,
         channel_message_id: str | None,
@@ -877,6 +866,7 @@ class ChannelMessageRouter:
             },
         ):
             agent_id = await self._resolve_channel_agent_id_v2(message, conversation)
+            agent_service = await current_agent_turn_service_v2()
             await self._run_agent_stream_pinned(
                 message=message,
                 conversation_id=conversation_id,
@@ -923,7 +913,7 @@ class ChannelMessageRouter:
         message: Message,
         conversation_id: str,
         conversation: Any,
-        agent_service: Any,
+        agent_service: AgentTurnStreamProtocolV2,
         file_metadata: list[dict[str, Any]] | None = None,
         agent_id: str | None = None,
     ) -> None:

@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.channels.channel_message_router import ChannelMessageRouter
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.websocket.handlers import chat_handler
 from src.infrastructure.plugins.v2 import (
@@ -180,3 +181,14 @@ def test_websocket_turn_handler_has_no_static_llm_or_di_composition() -> None:
     assert "create_llm_client" not in source
     assert "get_scoped_container" not in source
     assert ".agent_service(" not in source
+
+
+def test_channel_turn_handler_has_no_static_llm_or_di_composition() -> None:
+    setup_source = getsource(ChannelMessageRouter._setup_agent_session)
+    stream_source = getsource(ChannelMessageRouter._run_agent_stream)
+    combined_source = f"{setup_source}\n{stream_source}"
+
+    assert "create_llm_client" not in combined_source
+    assert "get_app_container" not in combined_source
+    assert ".agent_service(" not in combined_source
+    assert "current_agent_turn_service_v2" in stream_source

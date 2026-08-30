@@ -50,6 +50,11 @@ async def _noop_operation(*_args: object, **_kwargs: object) -> AsyncIterator[No
     yield None
 
 
+@asynccontextmanager
+async def _test_session(session: object) -> AsyncIterator[object]:
+    yield session
+
+
 async def _profile_default_agent_id(*_args: object, **_kwargs: object) -> str:
     return BUILTIN_SISYPHUS_ID
 
@@ -1138,29 +1143,21 @@ async def test_invoke_agent_streams_and_sends_final_response() -> None:
     agent_service = MagicMock()
     agent_service.stream_chat_v2 = fake_stream_chat_v2
 
-    scoped_container = MagicMock()
-    scoped_container.agent_service.return_value = agent_service
-
-    app_container = MagicMock()
-    app_container.with_db.return_value = scoped_container
-
     with (
         patch(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             return_value=session_ctx,
         ),
-        patch(
-            "src.configuration.factories.create_llm_client",
-            new=AsyncMock(return_value=object()),
-        ) as mock_create_llm_client,
-        patch(
-            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
-            return_value=app_container,
-        ),
+        patch.object(
+            channel_message_router_module,
+            "current_agent_turn_service_v2",
+            new=AsyncMock(return_value=agent_service),
+        ) as resolve_turn_service,
     ):
         await router._invoke_agent(message, "conv-1")
 
-    mock_create_llm_client.assert_awaited_once_with("tenant-1")
+    resolve_turn_service.assert_awaited_once_with()
+    session_ctx.__aexit__.assert_awaited_once_with(None, None, None)
     # text_delta and complete are both broadcast to WebSocket for web UI rendering
     assert router._broadcast_workspace_event.await_count == 2
     router._send_response.assert_awaited_once_with(message, "conv-1", "final answer")
@@ -1233,6 +1230,7 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
             return None
 
     binding_repository = BindingRepository()
+
     class AgentService:
         async def stream_chat_v2(self, **kwargs: object):
             operation = current_operation_context_v2()
@@ -1245,7 +1243,21 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
             observed["agent_id"] = kwargs["agent_id"]
             yield {"type": "complete", "data": {"content": "final answer"}}
 
-    router._setup_agent_session = AsyncMock(return_value=(db_session, AgentService(), conversation))
+    async def resolve_turn_service() -> AgentService:
+        observed["resolver_operation"] = current_operation_context_v2()
+        return AgentService()
+
+    router._setup_agent_session = AsyncMock(return_value=conversation)
+    monkeypatch.setattr(
+        channel_message_router_module,
+        "with_session",
+        lambda: _test_session(db_session),
+    )
+    monkeypatch.setattr(
+        channel_message_router_module,
+        "current_agent_turn_service_v2",
+        resolve_turn_service,
+    )
     monkeypatch.setattr(
         router,
         "_resolve_channel_agent_id_v2",
@@ -1280,6 +1292,7 @@ async def test_invoke_agent_pins_channel_turn_with_persisted_identity_and_messag
 
         assert observed["operation_id"] == "channel-turn:msg-1"
         assert observed["routing_operation"] is observed["stream_operation"]
+        assert observed["resolver_operation"] is observed["stream_operation"]
         assert observed["db"] is db_session
         assert observed["agent_id"] == BUILTIN_SISYPHUS_ID
         assert observed["identity"] == {
@@ -1322,7 +1335,19 @@ async def test_invoke_agent_routing_failure_never_starts_stream_or_default_fallb
         tenant_id="tenant-1",
     )
     agent_service = SimpleNamespace(stream_chat_v2=Mock())
-    router._setup_agent_session = AsyncMock(return_value=(object(), agent_service, conversation))
+    db_session = object()
+    router._setup_agent_session = AsyncMock(return_value=conversation)
+    monkeypatch.setattr(
+        channel_message_router_module,
+        "with_session",
+        lambda: _test_session(db_session),
+    )
+    resolve_turn_service = AsyncMock(return_value=agent_service)
+    monkeypatch.setattr(
+        channel_message_router_module,
+        "current_agent_turn_service_v2",
+        resolve_turn_service,
+    )
     routing = AsyncMock(
         side_effect=RuntimeV2Error(
             "agent_route_definition_not_found",
@@ -1334,6 +1359,7 @@ async def test_invoke_agent_routing_failure_never_starts_stream_or_default_fallb
     await router._invoke_agent(message, "conv-1")
 
     routing.assert_awaited_once_with(message, conversation)
+    resolve_turn_service.assert_not_awaited()
     agent_service.stream_chat_v2.assert_not_called()
 
 
@@ -1341,11 +1367,18 @@ async def test_invoke_agent_routing_failure_never_starts_stream_or_default_fallb
 @pytest.mark.asyncio
 async def test_invoke_agent_error_log_omits_exception_text(
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Agent invocation errors should log error type without exception details."""
     router = ChannelMessageRouter()
     router._setup_agent_session = AsyncMock(side_effect=RuntimeError("secret-agent-token"))
     message = _build_message(text="hello")
+    db_session = object()
+    monkeypatch.setattr(
+        channel_message_router_module,
+        "with_session",
+        lambda: _test_session(db_session),
+    )
     caplog.set_level(
         logging.ERROR,
         logger="src.application.services.channels.channel_message_router",
@@ -1355,6 +1388,7 @@ async def test_invoke_agent_error_log_omits_exception_text(
 
     assert "secret-agent-token" not in caplog.text
     assert "RuntimeError" in caplog.text
+    router._setup_agent_session.assert_awaited_once_with(message, "conv-1", db_session)
 
 
 @pytest.mark.unit
@@ -1367,24 +1401,85 @@ async def test_setup_agent_session_missing_conversation_log_omits_id(
     message = _build_message(text="hello")
     session = MagicMock()
     session.get = AsyncMock(return_value=None)
-    session_ctx = AsyncMock()
-    session_ctx.__aenter__.return_value = session
-    session_ctx.__aexit__.return_value = None
     caplog.set_level(
         logging.ERROR,
         logger="src.application.services.channels.channel_message_router",
     )
 
+    result = await router._setup_agent_session(
+        message,
+        "secret-conversation-id",
+        session,
+    )
+
+    assert result is None
+    session.get.assert_awaited_once()
+    assert "secret-conversation-id" not in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+
+
+@pytest.mark.unit
+async def test_invoke_agent_closes_session_when_conversation_is_missing() -> None:
+    router = ChannelMessageRouter()
+    message = _build_message(text="hello")
+    session = MagicMock()
+    session.get = AsyncMock(return_value=None)
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
     with patch(
         "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
         return_value=session_ctx,
     ):
-        result = await router._setup_agent_session(message, "secret-conversation-id")
+        await router._invoke_agent(message, "missing-conversation")
 
-    assert result is None
     session_ctx.__aexit__.assert_awaited_once_with(None, None, None)
-    assert "secret-conversation-id" not in caplog.text
-    assert "has_conversation_id=True" in caplog.text
+
+
+@pytest.mark.unit
+async def test_invoke_agent_closes_session_when_v2_turn_service_fails() -> None:
+    router = ChannelMessageRouter()
+    router._send_response = AsyncMock()
+    message = _build_message(text="hello")
+    conversation = SimpleNamespace(
+        id="conv-1",
+        project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
+    )
+    session = MagicMock()
+    session.get = AsyncMock(return_value=conversation)
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+    resolve_turn_service = AsyncMock(
+        side_effect=RuntimeV2Error(
+            "missing_service_provider",
+            "channel turn service is unavailable",
+        )
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch.object(
+            channel_message_router_module,
+            "current_agent_turn_service_v2",
+            resolve_turn_service,
+        ),
+    ):
+        await router._invoke_agent(message, "conv-1")
+
+    resolve_turn_service.assert_awaited_once_with()
+    router._send_response.assert_not_awaited()
+    session_ctx.__aexit__.assert_awaited_once()
+    exit_args = session_ctx.__aexit__.await_args.args
+    assert exit_args[0] is RuntimeV2Error
+    assert isinstance(exit_args[1], RuntimeV2Error)
+    assert exit_args[1].code == "missing_service_provider"
 
 
 @pytest.mark.unit
@@ -1542,28 +1637,21 @@ async def test_invoke_agent_sends_response_text_on_no_progress_error() -> None:
     agent_service = MagicMock()
     agent_service.stream_chat_v2 = fake_stream
 
-    scoped_container = MagicMock()
-    scoped_container.agent_service.return_value = agent_service
-
-    app_container = MagicMock()
-    app_container.with_db.return_value = scoped_container
-
     with (
         patch(
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             return_value=session_ctx,
         ),
-        patch(
-            "src.configuration.factories.create_llm_client",
-            new=AsyncMock(return_value=object()),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
-            return_value=app_container,
-        ),
+        patch.object(
+            channel_message_router_module,
+            "current_agent_turn_service_v2",
+            new=AsyncMock(return_value=agent_service),
+        ) as resolve_turn_service,
     ):
         await router._invoke_agent(message, "conv-1")
 
+    resolve_turn_service.assert_awaited_once_with()
+    session_ctx.__aexit__.assert_awaited_once_with(None, None, None)
     # Should send the accumulated response, NOT the generic error feedback
     router._send_response.assert_awaited_once_with(message, "conv-1", "Hello! How can I help?")
     router._send_error_feedback.assert_not_awaited()
@@ -1612,10 +1700,6 @@ async def test_invoke_agent_streams_via_card_when_adapter_supports_it() -> None:
 
     agent_service = MagicMock()
     agent_service.stream_chat_v2 = fake_stream
-    scoped_container = MagicMock()
-    scoped_container.agent_service.return_value = agent_service
-    app_container = MagicMock()
-    app_container.with_db.return_value = scoped_container
 
     # Return an adapter that supports legacy streaming but NOT CardKit
     router._get_streaming_adapter = MagicMock(return_value=fake_adapter)
@@ -1625,17 +1709,16 @@ async def test_invoke_agent_streams_via_card_when_adapter_supports_it() -> None:
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             return_value=session_ctx,
         ),
-        patch(
-            "src.configuration.factories.create_llm_client",
-            new=AsyncMock(return_value=object()),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
-            return_value=app_container,
-        ),
+        patch.object(
+            channel_message_router_module,
+            "current_agent_turn_service_v2",
+            new=AsyncMock(return_value=agent_service),
+        ) as resolve_turn_service,
     ):
         await router._invoke_agent(message, "conv-1")
 
+    resolve_turn_service.assert_awaited_once_with()
+    session_ctx.__aexit__.assert_awaited_once_with(None, None, None)
     # Background task sent initial streaming card
     fake_adapter.send_streaming_card.assert_awaited_once()
     # Streaming path handled response -- _send_response NOT called
@@ -1685,10 +1768,6 @@ async def test_invoke_agent_falls_back_when_initial_card_fails() -> None:
 
     agent_service = MagicMock()
     agent_service.stream_chat_v2 = fake_stream
-    scoped_container = MagicMock()
-    scoped_container.agent_service.return_value = agent_service
-    app_container = MagicMock()
-    app_container.with_db.return_value = scoped_container
 
     router._get_streaming_adapter = MagicMock(return_value=fake_adapter)
 
@@ -1697,17 +1776,16 @@ async def test_invoke_agent_falls_back_when_initial_card_fails() -> None:
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             return_value=session_ctx,
         ),
-        patch(
-            "src.configuration.factories.create_llm_client",
-            new=AsyncMock(return_value=object()),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
-            return_value=app_container,
-        ),
+        patch.object(
+            channel_message_router_module,
+            "current_agent_turn_service_v2",
+            new=AsyncMock(return_value=agent_service),
+        ) as resolve_turn_service,
     ):
         await router._invoke_agent(message, "conv-1")
 
+    resolve_turn_service.assert_awaited_once_with()
+    session_ctx.__aexit__.assert_awaited_once_with(None, None, None)
     # Initial card failed (_card_msg_id=None) -> falls through to regular send
     router._send_response.assert_awaited_once_with(message, "conv-1", "Hello world")
     router._record_streaming_outbox.assert_not_awaited()
@@ -1871,10 +1949,6 @@ async def test_invoke_agent_uses_cardkit_streaming_when_available() -> None:
 
     agent_service = MagicMock()
     agent_service.stream_chat_v2 = fake_stream
-    scoped_container = MagicMock()
-    scoped_container.agent_service.return_value = agent_service
-    app_container = MagicMock()
-    app_container.with_db.return_value = scoped_container
 
     router._get_streaming_adapter = MagicMock(return_value=fake_adapter)
 
@@ -1883,17 +1957,16 @@ async def test_invoke_agent_uses_cardkit_streaming_when_available() -> None:
             "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
             return_value=session_ctx,
         ),
-        patch(
-            "src.configuration.factories.create_llm_client",
-            new=AsyncMock(return_value=object()),
-        ),
-        patch(
-            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
-            return_value=app_container,
-        ),
+        patch.object(
+            channel_message_router_module,
+            "current_agent_turn_service_v2",
+            new=AsyncMock(return_value=agent_service),
+        ) as resolve_turn_service,
     ):
         await router._invoke_agent(message, "conv-1")
 
+    resolve_turn_service.assert_awaited_once_with()
+    session_ctx.__aexit__.assert_awaited_once_with(None, None, None)
     # CardKit flow: card entity was created, settings were updated, card was sent
     fake_adapter.create_card_entity.assert_awaited_once()
     fake_adapter.update_card_settings.assert_awaited()  # enable + disable
