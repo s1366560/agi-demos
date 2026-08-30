@@ -5,17 +5,11 @@ the exact same public interface for all callers.
 """
 
 import logging
-from typing import Any, cast
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.agent_service import AgentService
-from src.application.use_cases.agent import (
-    CreateConversationUseCase,
-    GetConversationUseCase,
-    ListConversationsUseCase,
-)
 from src.configuration.config import get_settings
 from src.configuration.containers import (
     AgentContainer,
@@ -28,18 +22,6 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event
 )
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
-    SqlHITLRequestRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
-    SqlSkillRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_subagent_repository import (
-    SqlSubAgentRepository,
-)
-from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record_repository import (
-    SqlToolExecutionRecordRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,44 +95,8 @@ class DIContainer:
     def conversation_repository(self) -> SqlConversationRepository:
         return self._agent.conversation_repository()
 
-    def tool_execution_record_repository(self) -> SqlToolExecutionRecordRepository:
-        return self._agent.tool_execution_record_repository()
-
     def agent_execution_event_repository(self) -> SqlAgentExecutionEventRepository:
         return self._agent.agent_execution_event_repository()
 
-    def context_summary_adapter(self) -> Any:
-        return cast(Any, self._agent.context_summary_adapter())
-
-    def hitl_request_repository(self) -> SqlHITLRequestRepository:
-        return self._agent.hitl_request_repository()
-
-    def skill_repository(self) -> SqlSkillRepository:
-        return self._agent.skill_repository()
-
-    def subagent_repository(self) -> SqlSubAgentRepository:
-        return self._agent.subagent_repository()
-
-    def agent_binding_repository(self) -> Any:
-        return self._agent.agent_binding_repository()
-
-    def agent_orchestrator(self) -> Any:
-        return self._agent.agent_orchestrator()
-
-    def graph_repository(self) -> Any:
-        return cast(Any, self._agent.graph_repository())
-
-    def graph_orchestrator(self) -> Any:
-        return self._agent.graph_orchestrator()
-
     def agent_service(self, llm: LLMClient) -> AgentService:
         return self._agent.agent_service(llm)
-
-    def create_conversation_use_case(self, llm: LLMClient) -> CreateConversationUseCase:
-        return self._agent.create_conversation_use_case(llm)
-
-    def list_conversations_use_case(self, llm: LLMClient) -> ListConversationsUseCase:
-        return self._agent.list_conversations_use_case(llm)
-
-    def get_conversation_use_case(self, llm: LLMClient) -> GetConversationUseCase:
-        return self._agent.get_conversation_use_case(llm)
