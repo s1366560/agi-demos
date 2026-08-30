@@ -23,6 +23,7 @@ import { DesktopMyWorkQueueSurfaceV2 } from './DesktopMyWorkQueueSurfaceV2';
 import { DesktopNewThreadComposerSurfaceV2 } from './DesktopNewThreadComposerSurfaceV2';
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopSessionWorkspaceSurfaceV2 } from './DesktopSessionWorkspaceSurfaceV2';
+import { DesktopSettingsWindowSurfaceV2 } from './DesktopSettingsWindowSurfaceV2';
 import { DesktopWorkspaceCollaborationSurfaceV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
@@ -55,6 +56,7 @@ import {
   DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2,
+  DESKTOP_SETTINGS_WINDOW_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   type DesktopRendererCompositionPortV2,
@@ -122,6 +124,8 @@ export function createDesktopRendererAppCompositionPortV2(
       validNewThreadComposerDefinitionV2(definition)
         ? DesktopNewThreadComposerSurfaceV2
         : null,
+    resolveSettingsWindowSurface: (definition: UiSlotDefinition) =>
+      validSettingsWindowDefinitionV2(definition) ? DesktopSettingsWindowSurfaceV2 : null,
     resolveSessionCanvasSurface: (definition: UiSlotDefinition) =>
       validSessionCanvasDefinitionV2(definition) ? DesktopSessionCanvasSurfaceV2 : null,
     resolveSessionWorkspaceSurface: (definition: UiSlotDefinition) =>
@@ -221,6 +225,18 @@ function validNewThreadComposerDefinitionV2(definition: UiSlotDefinition): boole
     definition.contract === 'ui-builtin:desktop-new-thread-composer-surface' &&
     definition.moduleRef === DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.new-thread-composer' &&
+    definition.sandbox
+  );
+}
+
+function validSettingsWindowDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'settings_window_surface' &&
+    definition.id === 'settings-window' &&
+    definition.contract === 'ui-builtin:desktop-settings-window-surface' &&
+    definition.moduleRef === DESKTOP_SETTINGS_WINDOW_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.settings-window' &&
     definition.sandbox
   );
 }

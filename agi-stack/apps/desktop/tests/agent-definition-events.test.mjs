@@ -44,7 +44,10 @@ test('latest Agent definition event follows the newest-first socket contract', (
 test('Desktop forwards Agent definition events into the active settings resource snapshot', () => {
   assert.match(appSource, /latestAgentDefinitionEvent\(socket\.events\)/);
   assert.match(appSource, /settings:\s*\{[\s\S]*agentDefinitionEvent,/u);
-  assert.match(shellSurfaceSource, /<SettingsWindow \{\.\.\.surfaces\.settings\} \/>/u);
+  assert.match(
+    shellSurfaceSource,
+    /<DesktopRendererSettingsWindowV2 input=\{surfaces\.settings\} \/>/u,
+  );
   assert.match(settingsSource, /agentDefinitionEvent: AgentWsEvent \| null/);
   assert.match(settingsSource, /agentDefinitionEventRef/);
   assert.match(settingsSource, /activeSectionRef\.current !== 'agents'/);

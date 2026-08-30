@@ -51,11 +51,12 @@ test('the V2 authenticated shell surface owns every production chrome outlet', (
     'NewTaskFlow',
     'WorkspaceCreateDialog',
     'WorkspaceSettingsDialog',
-    'SettingsWindow',
+    'DesktopRendererSettingsWindowV2',
   ]) {
     assert.match(shell, new RegExp(`<${component}\\b`, 'u'), `${component} owned by V2 surface`);
     assert.doesNotMatch(app, new RegExp(`<${component}\\b`, 'u'), `${component} absent from App`);
   }
+  assert.doesNotMatch(shell, /<SettingsWindow\b|features\/settings\/SettingsWindow/u);
   assert.match(shell, /kind:\s*'hidden'/u);
   assert.match(shell, /kind:\s*'visible'/u);
   assert.match(app, /<DesktopRendererAuthenticatedShellV2\s+viewModel=\{desktopAuthenticatedShellViewModelV2\}\s*\/>/u);

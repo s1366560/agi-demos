@@ -675,7 +675,7 @@ test('authenticated shell contribution owns the complete signed-in app shell', (
     'NewTaskFlow',
     'WorkspaceCreateDialog',
     'WorkspaceSettingsDialog',
-    'SettingsWindow',
+    'DesktopRendererSettingsWindowV2',
   ]) {
     assert.match(authenticatedShellSurfaceSource, new RegExp(`<${component}\\b`, 'u'));
     assert.doesNotMatch(appSource, new RegExp(`<${component}\\b`, 'u'));

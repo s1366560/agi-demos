@@ -114,6 +114,8 @@ export const DESKTOP_TENANT_GOVERNANCE_NAVIGATION_ARTIFACT_ID_V2 =
 export const DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2 = 'desktop.ui-slots.default.v1';
 export const DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.authenticated-shell-surface.v2';
+export const DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.settings-window-surface.v1';
 export const DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.session-canvas-surface.v1';
 export const DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2 = 'desktop.ui-slots.workbench-surface.v2';
@@ -325,6 +327,17 @@ const AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = 
     contract: 'ui-builtin:desktop-authenticated-shell-surface',
     moduleRef: 'builtin:desktop-authenticated-shell-surface',
     permission: 'ui.authenticated-shell',
+    sandbox: true,
+  }),
+]);
+const SETTINGS_WINDOW_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'settings_window_surface',
+    id: 'settings-window',
+    contract: 'ui-builtin:desktop-settings-window-surface',
+    moduleRef: 'builtin:desktop-settings-window-surface',
+    permission: 'ui.settings-window',
     sandbox: true,
   }),
 ]);
@@ -664,6 +677,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopUiSlotArtifactV2(
       DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2,
       AUTHENTICATED_SHELL_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2,
+      SETTINGS_WINDOW_SURFACE_DEFINITIONS_V2,
     ),
   ],
   [

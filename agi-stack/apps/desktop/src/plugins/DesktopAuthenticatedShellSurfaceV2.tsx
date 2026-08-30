@@ -10,12 +10,13 @@ import { WorkbenchTabBar } from '../features/chrome/WorkbenchTabBar';
 import { CommandPalette } from '../features/navigation/CommandPalette';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { KeyboardShortcutsDialog } from '../features/navigation/KeyboardShortcutsDialog';
-import { SettingsWindow } from '../features/settings/SettingsWindow';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import { WorkspaceCreateDialog } from '../features/workspace/WorkspaceCreateDialog';
 import { WorkspaceSettingsDialog } from '../features/workspace/WorkspaceSettingsDialog';
 import type { ResolvedTheme } from '../theme';
 import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
+import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
+import type { DesktopSettingsWindowInputV2 } from './DesktopSettingsWindowSurfaceV2';
 import type { DesktopRendererGenerationMetaV2 } from './desktopRendererGenerationContextV2';
 
 export type DesktopAuthenticatedShellOptionalOutletV2<Props> =
@@ -52,7 +53,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
       ComponentProps<typeof DesktopRightSidebar>
     >;
     router: ComponentProps<typeof DesktopRendererProductionRouterV2>;
-    settings: ComponentProps<typeof SettingsWindow>;
+    settings: DesktopSettingsWindowInputV2;
     sidebar: DesktopAuthenticatedShellSidebarV2;
     statusBar: ComponentProps<typeof DesktopStatusBar>;
     tabBar: ComponentProps<typeof WorkbenchTabBar>;
@@ -130,7 +131,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
         <NewTaskFlow {...surfaces.newTask} />
         <WorkspaceCreateDialog {...surfaces.workspaceCreate} />
         <WorkspaceSettingsDialog {...surfaces.workspaceSettings} />
-        <SettingsWindow {...surfaces.settings} />
+        <DesktopRendererSettingsWindowV2 input={surfaces.settings} />
       </div>
     </Theme>
   );
