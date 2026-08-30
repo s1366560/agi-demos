@@ -92,6 +92,11 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-workbench-surface"
     )
+    new_thread_composer_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-new-thread-composer-surface"
+    )
     session_canvas_index = next(
         index
         for index, entry in enumerate(entries)
@@ -112,7 +117,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 321
+    assert len(entries) == 322
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -127,6 +132,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         shell_index
         < session_canvas_index
         < workbench_index
+        < new_thread_composer_index
         < my_work_queue_index
         < activity_inbox_index
         < desktop_routes_index
@@ -155,6 +161,15 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         "order": 90,
         "payload": {
             "artifact_refs": ["desktop.ui-slots.workbench-surface.v2"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[new_thread_composer_index]["config"] == {
+        "id": "desktop.new-thread-composer-surface",
+        "kind": "ui-slot",
+        "order": 93,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.new-thread-composer-surface.v1"],
             "schema_version": 1,
         },
     }

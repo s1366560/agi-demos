@@ -22,6 +22,10 @@ const workbenchSurfaceSource = readFileSync(
   new URL('../src/plugins/DesktopWorkbenchSurfaceV2.tsx', import.meta.url),
   'utf8',
 );
+const newThreadComposerSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopNewThreadComposerSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const runtimeProviderHookSource = readFileSync(
   new URL('../src/features/settings/useWorkspaceRuntimeProvider.ts', import.meta.url),
   'utf8',
@@ -221,10 +225,17 @@ test('composer catalogs remount when new-thread or chat scope changes', () => {
     renderNewThreadSource,
     /const newThreadComposerScopeKey = \[[\s\S]*config\.mode,[\s\S]*config\.apiBaseUrl,[\s\S]*config\.tenantId,[\s\S]*config\.projectId,[\s\S]*auth\.user\?\.user_id/,
   );
-  assert.match(renderNewThreadSource, /composerScopeKey:\s*newThreadComposerScopeKey/u);
+  assert.match(
+    renderNewThreadSource,
+    /newThreadComposer:\s*\{[\s\S]*scopeKey:\s*newThreadComposerScopeKey/u,
+  );
   assert.match(
     workbenchSurfaceSource,
-    /<NewThreadComposer key=\{view\.composerScopeKey\} \{\.\.\.view\.composer\} \/>/u,
+    /<DesktopRendererNewThreadComposerV2 input=\{view\.newThreadComposer\}\s*\/>/u,
+  );
+  assert.match(
+    newThreadComposerSurfaceSource,
+    /<NewThreadComposer key=\{input\.scopeKey\} \{\.\.\.input\.composer\} \/>/u,
   );
   assert.match(composerSource, /<ComposerPlusMenu[\s\S]{0,160}key=\{workspaceId \|\| 'unbound'\}/);
   assert.match(chatPanelSource, /<ChatComposer[\s\S]{0,240}key=\{composerResetKey\}/);

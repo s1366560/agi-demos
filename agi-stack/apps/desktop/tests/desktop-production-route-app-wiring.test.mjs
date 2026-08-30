@@ -639,7 +639,6 @@ test('production routing passes a typed model to the module-owned workbench with
     'ChatPanel',
     'WorkspaceOverview',
     'WorkspaceCollaborationCanvas',
-    'NewThreadComposer',
     'SessionWorkspace',
   ]) {
     assert.match(workbenchSurfaceSource, new RegExp(`<${component}\\b`, 'u'));
@@ -647,9 +646,10 @@ test('production routing passes a typed model to the module-owned workbench with
   }
   assert.match(workbenchSurfaceSource, /<DesktopRendererActivityInboxV2/u);
   assert.match(workbenchSurfaceSource, /<DesktopRendererMyWorkQueueV2/u);
+  assert.match(workbenchSurfaceSource, /<DesktopRendererNewThreadComposerV2/u);
   assert.doesNotMatch(
     workbenchSurfaceSource,
-    /<ActivityInbox\b|view\.inbox|<MyWorkQueue\b|view\.queue/u,
+    /<ActivityInbox\b|view\.inbox|<MyWorkQueue\b|view\.queue|<NewThreadComposer\b|view\.composer/u,
   );
   assert.match(rendererAppCompositionSource, /DesktopWorkbenchSurfaceV2/u);
   assert.match(workbenchSurfaceSource, /<section className="workbench-layout">/u);

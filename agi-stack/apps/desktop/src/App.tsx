@@ -6319,39 +6319,42 @@ export function App() {
       !newThreadWorkspaceId && config.mode === 'cloud' && connection !== 'ready';
     return {
       kind: 'home',
-      composerScopeKey: newThreadComposerScopeKey,
-      composer: {
-        api: newThreadComposerApi,
-        workspaceId: newThreadWorkspaceId,
-        workspace,
-        workspaces: newThreadWorkspaces,
-        conversations:
-          dataset.conversationsByWorkspace[newThreadWorkspaceId || UNBOUND_CONVERSATIONS_KEY] ?? [],
-        mode: preferredTaskMode,
-        policy: workspaceAgentPolicy.policy,
-        modelOptions,
-        canManagePolicy: canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode,
-        loadingPolicy: workspaceAgentPolicy.loading,
-        compatibilityMode: Boolean(newThreadWorkspaceId) && workspaceAgentPolicy.compatibilityMode,
-        disabledReason:
-          newTaskDisabledReason ??
-          (unboundTransportUnavailable
-            ? t('task.liveConnectionRequired')
-            : policyUnavailable
-              ? t('task.policyUnavailable')
-              : modelUnavailable
-                ? t('task.noModelsAvailable')
-                : null),
-        creating: newThreadCreating,
-        error: newThreadError,
-        onModeChange: setPreferredTaskMode,
-        onWorkspaceChange: changeNewThreadWorkspace,
-        onCreate: (input) => void createComposerThread(input),
-        onOpenThread: (conversation) =>
-          selectConversation(config.projectId, newThreadWorkspaceId, conversation, 'chat'),
-        onManageModels: () => {
-          setSettingsInitialSection('models');
-          setSettingsWindowOpen(true);
+      newThreadComposer: {
+        scopeKey: newThreadComposerScopeKey,
+        composer: {
+          api: newThreadComposerApi,
+          workspaceId: newThreadWorkspaceId,
+          workspace,
+          workspaces: newThreadWorkspaces,
+          conversations:
+            dataset.conversationsByWorkspace[newThreadWorkspaceId || UNBOUND_CONVERSATIONS_KEY] ??
+            [],
+          mode: preferredTaskMode,
+          policy: workspaceAgentPolicy.policy,
+          modelOptions,
+          canManagePolicy: canManageWorkspacePolicy && !workspaceAgentPolicy.compatibilityMode,
+          loadingPolicy: workspaceAgentPolicy.loading,
+          compatibilityMode: Boolean(newThreadWorkspaceId) && workspaceAgentPolicy.compatibilityMode,
+          disabledReason:
+            newTaskDisabledReason ??
+            (unboundTransportUnavailable
+              ? t('task.liveConnectionRequired')
+              : policyUnavailable
+                ? t('task.policyUnavailable')
+                : modelUnavailable
+                  ? t('task.noModelsAvailable')
+                  : null),
+          creating: newThreadCreating,
+          error: newThreadError,
+          onModeChange: setPreferredTaskMode,
+          onWorkspaceChange: changeNewThreadWorkspace,
+          onCreate: (input) => void createComposerThread(input),
+          onOpenThread: (conversation) =>
+            selectConversation(config.projectId, newThreadWorkspaceId, conversation, 'chat'),
+          onManageModels: () => {
+            setSettingsInitialSection('models');
+            setSettingsWindowOpen(true);
+          },
         },
       },
     };

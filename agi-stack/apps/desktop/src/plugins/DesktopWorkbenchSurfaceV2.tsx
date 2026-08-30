@@ -3,14 +3,15 @@ import type { ComponentProps } from 'react';
 import { ChatPanel } from '../features/chat/ChatPanel';
 import { PlatformPluginConversationSlots } from '../features/chat/PlatformPluginConversationSlots';
 import { SessionWorkspace } from '../features/session/SessionWorkspace';
-import { NewThreadComposer } from '../features/task/NewThreadComposer';
 import { WorkspaceCollaborationCanvas } from '../features/workspace/WorkspaceCollaborationCanvas';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { useI18n } from '../i18n';
 import type { DesktopActivityInboxInputV2 } from './DesktopActivityInboxSurfaceV2';
 import type { DesktopMyWorkQueueInputV2 } from './DesktopMyWorkQueueSurfaceV2';
+import type { DesktopNewThreadComposerInputV2 } from './DesktopNewThreadComposerSurfaceV2';
 import { DesktopRendererActivityInboxV2 } from './DesktopRendererActivityInboxV2';
 import { DesktopRendererMyWorkQueueV2 } from './DesktopRendererMyWorkQueueV2';
+import { DesktopRendererNewThreadComposerV2 } from './DesktopRendererNewThreadComposerV2';
 
 type DesktopWorkbenchWorkspaceViewV2 = Readonly<{
   kind: 'workspace';
@@ -35,8 +36,7 @@ type DesktopWorkbenchActivityViewV2 = Readonly<{
 
 type DesktopWorkbenchHomeViewV2 = Readonly<{
   kind: 'home';
-  composerScopeKey: string;
-  composer: Readonly<ComponentProps<typeof NewThreadComposer>>;
+  newThreadComposer: DesktopNewThreadComposerInputV2;
 }>;
 
 export type DesktopWorkbenchViewV2 =
@@ -114,6 +114,6 @@ function renderDesktopWorkbenchViewV2(view: DesktopWorkbenchViewV2) {
     case 'activity':
       return <DesktopRendererActivityInboxV2 input={view.activityInbox} />;
     case 'home':
-      return <NewThreadComposer key={view.composerScopeKey} {...view.composer} />;
+      return <DesktopRendererNewThreadComposerV2 input={view.newThreadComposer} />;
   }
 }

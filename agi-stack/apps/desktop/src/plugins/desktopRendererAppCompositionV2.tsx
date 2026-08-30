@@ -19,6 +19,7 @@ import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRe
 import { DesktopActivityInboxSurfaceV2 } from './DesktopActivityInboxSurfaceV2';
 import { DesktopAuthenticatedShellSurfaceV2 } from './DesktopAuthenticatedShellSurfaceV2';
 import { DesktopMyWorkQueueSurfaceV2 } from './DesktopMyWorkQueueSurfaceV2';
+import { DesktopNewThreadComposerSurfaceV2 } from './DesktopNewThreadComposerSurfaceV2';
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
@@ -39,6 +40,7 @@ import {
   DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
+  DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   type DesktopRendererCompositionPortV2,
@@ -92,6 +94,10 @@ export function createDesktopRendererAppCompositionPortV2(
       validAuthenticatedShellDefinitionV2(definition) ? DesktopAuthenticatedShellSurfaceV2 : null,
     resolveMyWorkQueueSurface: (definition: UiSlotDefinition) =>
       validMyWorkQueueDefinitionV2(definition) ? DesktopMyWorkQueueSurfaceV2 : null,
+    resolveNewThreadComposerSurface: (definition: UiSlotDefinition) =>
+      validNewThreadComposerDefinitionV2(definition)
+        ? DesktopNewThreadComposerSurfaceV2
+        : null,
     resolveSessionCanvasSurface: (definition: UiSlotDefinition) =>
       validSessionCanvasDefinitionV2(definition) ? DesktopSessionCanvasSurfaceV2 : null,
     resolveWorkbenchSurface: (definition: UiSlotDefinition) =>
@@ -131,6 +137,18 @@ function validMyWorkQueueDefinitionV2(definition: UiSlotDefinition): boolean {
     definition.contract === 'ui-builtin:desktop-my-work-queue-surface' &&
     definition.moduleRef === DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.my-work-queue' &&
+    definition.sandbox
+  );
+}
+
+function validNewThreadComposerDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'new_thread_composer_surface' &&
+    definition.id === 'new-thread-composer' &&
+    definition.contract === 'ui-builtin:desktop-new-thread-composer-surface' &&
+    definition.moduleRef === DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.new-thread-composer' &&
     definition.sandbox
   );
 }

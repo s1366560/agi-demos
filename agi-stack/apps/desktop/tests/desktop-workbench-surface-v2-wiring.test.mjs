@@ -57,7 +57,6 @@ test('the V2 modules own every workbench business surface and App passes data on
     'ChatPanel',
     'WorkspaceOverview',
     'WorkspaceCollaborationCanvas',
-    'NewThreadComposer',
     'SessionWorkspace',
   ]) {
     assert.match(surface, new RegExp(`<${component}\\b`, 'u'));
@@ -71,9 +70,10 @@ test('the V2 modules own every workbench business surface and App passes data on
   assert.match(surface, /kind:\s*'home'/u);
   assert.match(surface, /<DesktopRendererActivityInboxV2/u);
   assert.match(surface, /<DesktopRendererMyWorkQueueV2/u);
+  assert.match(surface, /<DesktopRendererNewThreadComposerV2/u);
   assert.doesNotMatch(
     surface,
-    /<ActivityInbox\b|ComponentProps<typeof ActivityInbox>|view\.inbox|<MyWorkQueue\b|ComponentProps<typeof MyWorkQueue>|view\.queue/u,
+    /<ActivityInbox\b|ComponentProps<typeof ActivityInbox>|view\.inbox|<MyWorkQueue\b|ComponentProps<typeof MyWorkQueue>|view\.queue|<NewThreadComposer\b|ComponentProps<typeof NewThreadComposer>|view\.composer/u,
   );
   assert.doesNotMatch(surface, /viewModel[^;{]*ReactNode|render[A-Z][A-Za-z]+\??:/u);
   assert.match(app, /router:\s*\{[\s\S]*viewModel:\s*desktopWorkbenchSurfaceViewModelV2/u);

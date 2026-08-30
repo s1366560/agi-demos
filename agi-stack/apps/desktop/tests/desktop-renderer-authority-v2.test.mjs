@@ -12,6 +12,7 @@ const {
   DESKTOP_AUXILIARY_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2,
+  DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_AGENT_NAVIGATION_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_AGENT_ROUTE_ARTIFACT_ID_V2,
   DESKTOP_PROJECT_ADMINISTRATION_NAVIGATION_ARTIFACT_ID_V2,
@@ -44,6 +45,9 @@ const {
 const {
   DesktopMyWorkQueueSurfaceV2,
 } = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopMyWorkQueueSurfaceV2.js");
+const {
+  DesktopNewThreadComposerSurfaceV2,
+} = require("/tmp/agistack-desktop-test-dist/src/plugins/DesktopNewThreadComposerSurfaceV2.js");
 const {
   isDesktopNavigationRouteEnabledV2,
   projectDesktopNavigationRegistryV2,
@@ -137,6 +141,34 @@ test("My Work queue resolver requires the exact builtin V2 slot contract", () =>
     { ...definition, sandbox: false },
   ]) {
     assert.equal(appComposition.resolveMyWorkQueueSurface(invalid), null);
+  }
+});
+
+test("new-thread composer resolver requires the exact builtin V2 slot contract", () => {
+  const definition = Object.freeze({
+    pluginId: "builtin-shell",
+    slot: "new_thread_composer_surface",
+    id: "new-thread-composer",
+    contract: "ui-builtin:desktop-new-thread-composer-surface",
+    moduleRef: "builtin:desktop-new-thread-composer-surface",
+    permission: "ui.new-thread-composer",
+    sandbox: true,
+  });
+
+  assert.equal(
+    appComposition.resolveNewThreadComposerSurface(definition),
+    DesktopNewThreadComposerSurfaceV2,
+  );
+  for (const invalid of [
+    { ...definition, pluginId: "third-party-shell" },
+    { ...definition, slot: "workbench_surface" },
+    { ...definition, id: "wrong-new-thread-composer" },
+    { ...definition, contract: "ui-builtin:wrong-new-thread-composer-surface" },
+    { ...definition, moduleRef: "builtin:wrong-new-thread-composer-surface" },
+    { ...definition, permission: "ui.wrong-new-thread-composer" },
+    { ...definition, sandbox: false },
+  ]) {
+    assert.equal(appComposition.resolveNewThreadComposerSurface(invalid), null);
   }
 });
 
@@ -314,22 +346,28 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       300,
     ),
     contribution(
+      "desktop.new-thread-composer-surface",
+      "ui-slot",
+      [DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2],
+      301,
+    ),
+    contribution(
       "desktop.my-work-queue-surface",
       "ui-slot",
       [DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2],
-      301,
+      302,
     ),
     contribution(
       "desktop.activity-inbox-surface",
       "ui-slot",
       [DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2],
-      302,
+      303,
     ),
     contribution(
       "desktop.default-ui-slots",
       "ui-slot",
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2],
-      303,
+      304,
     ),
   ]);
 
@@ -362,6 +400,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       [DESKTOP_AUTHENTICATED_SHELL_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_WORKBENCH_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
+      [DESKTOP_NEW_THREAD_COMPOSER_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_MY_WORK_QUEUE_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_ACTIVITY_INBOX_SURFACE_ARTIFACT_ID_V2, "ui-slot"],
       [DESKTOP_DEFAULT_UI_SLOT_ARTIFACT_ID_V2, "ui-slot"],
@@ -702,6 +741,17 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
   assert.deepEqual(artifacts[26].slotDefinitions, [
     {
       pluginId: "builtin-shell",
+      slot: "new_thread_composer_surface",
+      id: "new-thread-composer",
+      contract: "ui-builtin:desktop-new-thread-composer-surface",
+      moduleRef: "builtin:desktop-new-thread-composer-surface",
+      permission: "ui.new-thread-composer",
+      sandbox: true,
+    },
+  ]);
+  assert.deepEqual(artifacts[27].slotDefinitions, [
+    {
+      pluginId: "builtin-shell",
       slot: "my_work_queue_surface",
       id: "my-work-queue",
       contract: "ui-builtin:desktop-my-work-queue-surface",
@@ -710,7 +760,7 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.deepEqual(artifacts[27].slotDefinitions, [
+  assert.deepEqual(artifacts[28].slotDefinitions, [
     {
       pluginId: "builtin-shell",
       slot: "activity_inbox_surface",
@@ -721,9 +771,9 @@ test("desktop catalog resolves explicit route, navigation, and UI-slot artifacts
       sandbox: true,
     },
   ]);
-  assert.equal(artifacts[28].slotDefinitions.length, 2);
+  assert.equal(artifacts[29].slotDefinitions.length, 2);
   assert.ok(
-    artifacts[28].slotDefinitions.every(({ moduleRef }) =>
+    artifacts[29].slotDefinitions.every(({ moduleRef }) =>
       moduleRef.startsWith("builtin:"),
     ),
   );

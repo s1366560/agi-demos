@@ -78,7 +78,8 @@ test('auxiliary navigation uses the shared prototype overview surface', () => {
 });
 
 test('Work and Code mode controls live in the new-thread composer', () => {
-  assert.match(workbenchSurfaceSource, /<NewThreadComposer/u);
+  assert.match(workbenchSurfaceSource, /<DesktopRendererNewThreadComposerV2/u);
+  assert.doesNotMatch(workbenchSurfaceSource, /<NewThreadComposer/u);
   assert.doesNotMatch(appSource, /<NewThreadComposer/u);
   assert.match(appSource, /onModeChange:\s*setPreferredTaskMode/u);
   assert.doesNotMatch(appSource, /setPreferredTaskMode\(mode\)[\s\S]*switchSection\('board'\)/);

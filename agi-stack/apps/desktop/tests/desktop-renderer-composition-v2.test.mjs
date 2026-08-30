@@ -7,11 +7,13 @@ const {
   DESKTOP_ACTIVITY_INBOX_SURFACE_MODULE_REF_V2,
   DESKTOP_AUTHENTICATED_SHELL_SURFACE_MODULE_REF_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
+  DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   projectDesktopActivityInboxCompositionV2,
   projectDesktopAuthenticatedShellCompositionV2,
   projectDesktopMyWorkQueueCompositionV2,
+  projectDesktopNewThreadComposerCompositionV2,
   projectDesktopSessionCanvasCompositionV2,
   projectDesktopWorkbenchCompositionV2,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopRendererCompositionPortV2.js');
@@ -44,6 +46,15 @@ const myWorkQueueSlot = Object.freeze({
   permission: 'ui.my-work-queue',
   sandbox: true,
 });
+const newThreadComposerSlot = Object.freeze({
+  pluginId: 'builtin-shell',
+  slot: 'new_thread_composer_surface',
+  id: 'new-thread-composer',
+  contract: 'ui-builtin:desktop-new-thread-composer-surface',
+  moduleRef: DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
+  permission: 'ui.new-thread-composer',
+  sandbox: true,
+});
 const workbenchSlot = Object.freeze({
   pluginId: 'builtin-shell',
   slot: 'workbench_surface',
@@ -70,6 +81,7 @@ function authority(status = 'ready', slotDefinitions = [workbenchSlot]) {
 function composition({
   activityInbox = ActivityInboxSurface,
   myWorkQueue = MyWorkQueueSurface,
+  newThreadComposer = NewThreadComposerSurface,
   sessionCanvas = SessionCanvasSurface,
   shell = AuthenticatedShellSurface,
   workbench = WorkbenchSurface,
@@ -96,6 +108,11 @@ function composition({
         ? myWorkQueue
         : null;
     },
+    resolveNewThreadComposerSurface(definition) {
+      return definition.moduleRef === DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2
+        ? newThreadComposer
+        : null;
+    },
     resolveSessionCanvasSurface(definition) {
       return definition.moduleRef === DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2
         ? sessionCanvas
@@ -116,6 +133,10 @@ function ActivityInboxSurface() {
 }
 
 function MyWorkQueueSurface() {
+  return null;
+}
+
+function NewThreadComposerSurface() {
   return null;
 }
 
@@ -449,6 +470,82 @@ test('My Work queue composition preserves generation failure without static fall
   );
   assert.deepEqual(
     projectDesktopMyWorkQueueCompositionV2(authority('disabled', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_disabled',
+    }),
+  );
+});
+
+test('new-thread composer composition resolves one explicit active V2 surface contribution', () => {
+  assert.deepEqual(
+    projectDesktopNewThreadComposerCompositionV2(
+      authority('ready', [newThreadComposerSlot]),
+      composition(),
+    ),
+    Object.freeze({ status: 'ready', Surface: NewThreadComposerSurface }),
+  );
+  assert.deepEqual(
+    projectDesktopNewThreadComposerCompositionV2(authority('loading', []), composition()),
+    Object.freeze({ status: 'loading' }),
+  );
+});
+
+test('new-thread composer composition fails closed for missing, ambiguous, and wrong modules', () => {
+  assert.deepEqual(
+    projectDesktopNewThreadComposerCompositionV2(authority('ready', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_new_thread_composer_contribution_missing',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopNewThreadComposerCompositionV2(
+      authority('ready', [
+        newThreadComposerSlot,
+        { ...newThreadComposerSlot, id: 'duplicate' },
+      ]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_new_thread_composer_contribution_ambiguous',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopNewThreadComposerCompositionV2(
+      authority('ready', [
+        { ...newThreadComposerSlot, moduleRef: 'builtin:wrong-new-thread-composer' },
+      ]),
+      composition(),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_new_thread_composer_module_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopNewThreadComposerCompositionV2(
+      authority('ready', [newThreadComposerSlot]),
+      composition({ newThreadComposer: null }),
+    ),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_new_thread_composer_module_unavailable',
+    }),
+  );
+});
+
+test('new-thread composer composition preserves generation failure without static fallback', () => {
+  assert.deepEqual(
+    projectDesktopNewThreadComposerCompositionV2(authority('unavailable', []), composition()),
+    Object.freeze({
+      status: 'unavailable',
+      reasonCode: 'desktop_renderer_generation_unavailable',
+    }),
+  );
+  assert.deepEqual(
+    projectDesktopNewThreadComposerCompositionV2(authority('disabled', []), composition()),
     Object.freeze({
       status: 'unavailable',
       reasonCode: 'desktop_renderer_generation_disabled',
