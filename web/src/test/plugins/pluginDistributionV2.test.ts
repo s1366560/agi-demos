@@ -247,6 +247,71 @@ describe('protocol-v2 control-plane distribution', () => {
     await reconciler.close();
   });
 
+  it('replaces a cloud publication with a local baseline before reapplying the same cloud publication', async () => {
+    const cloud = await snapshotAt(26);
+    const local = await snapshotAt(27);
+    const publication = distribution(cloud, 17);
+    const reconciler = new PluginSnapshotReconcilerV2(
+      new LoaderV2(webRendererDefinitionsV2, 'web')
+    );
+
+    await reconciler.apply(publication);
+    const firstCloudGeneration = reconciler.manager.current;
+
+    await reconciler.replaceBaseline(local);
+    const localGeneration = reconciler.manager.current;
+    const reapplied = await reconciler.apply(publication);
+
+    expect(localGeneration?.snapshot.digest).toBe(local.digest);
+    expect(localGeneration).not.toBe(firstCloudGeneration);
+    expect(reapplied).toMatchObject({
+      status: 'ack',
+      applied_version: 17,
+      applied_digest: cloud.digest,
+    });
+    expect(reconciler.manager.current?.snapshot.digest).toBe(cloud.digest);
+    expect(reconciler.manager.current).not.toBe(firstCloudGeneration);
+    expect(reconciler.manager.current).not.toBe(localGeneration);
+    await reconciler.close();
+  });
+
+  it('retains last-good and publication ordering when a baseline candidate cannot stage', async () => {
+    const localCandidate = await snapshotAt(29);
+    const emptyProjection = await snapshotAt(28, (snapshot) => {
+      const { digest: _digest, ...payload } = snapshot;
+      const webModuleRefs = new Set(
+        payload.manifests.flatMap((manifest) =>
+          manifest.modules
+            .filter((module) => module.targets.includes('web'))
+            .map((module) => module.module_ref)
+        )
+      );
+      return {
+        ...payload,
+        entries: payload.entries.map((entry) =>
+          webModuleRefs.has(entry.module_ref) ? { ...entry, enabled: false } : entry
+        ),
+      };
+    });
+    const reconciler = new PluginSnapshotReconcilerV2(new LoaderV2([], 'web'));
+    await reconciler.apply(distribution(emptyProjection, 19));
+    const lastGood = reconciler.manager.current;
+
+    await expect(reconciler.replaceBaseline(localCandidate)).rejects.toMatchObject({
+      code: 'missing_module_definition',
+    });
+    const stale = await reconciler.apply(distribution(emptyProjection, 18));
+
+    expect(stale).toMatchObject({
+      status: 'nack',
+      error_code: 'stale_version',
+      applied_version: 19,
+      applied_digest: emptyProjection.digest,
+    });
+    expect(reconciler.manager.current).toBe(lastGood);
+    await reconciler.close();
+  });
+
   it('nacks stale and same-version conflicting publications without replacing last-good', async () => {
     const current = await snapshotAt(13);
     const conflicting = await snapshotAt(14);

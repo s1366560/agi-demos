@@ -77,7 +77,8 @@ export class PluginSnapshotReconcilerV2 {
     try {
       await bootstrapPromise;
     } finally {
-      if (this.bootstrapPromise === bootstrapPromise) this.bootstrapPromise = null;
+      if (this.bootstrapPromise === bootstrapPromise)
+        this.bootstrapPromise = null;
     }
   }
 
@@ -93,6 +94,18 @@ export class PluginSnapshotReconcilerV2 {
       () => undefined,
     );
     return applyPromise;
+  }
+
+  async replaceBaseline(snapshot: ProfileSnapshotV2): Promise<void> {
+    if (this.closePromise !== null) await this.closePromise;
+    const replacePromise = this.applyTail.then(() =>
+      this.replaceBaselineSnapshot(snapshot),
+    );
+    this.applyTail = replacePromise.then(
+      () => undefined,
+      () => undefined,
+    );
+    return replacePromise;
   }
 
   private async applyDistribution(
@@ -130,6 +143,15 @@ export class PluginSnapshotReconcilerV2 {
         errorMessage(error),
       );
     }
+  }
+
+  private async replaceBaselineSnapshot(
+    snapshot: ProfileSnapshotV2,
+  ): Promise<void> {
+    const generation = await this.loader.stage(snapshot);
+    await this.manager.publish(generation);
+    this.appliedVersion = null;
+    this.appliedDigest = null;
   }
 
   async close(): Promise<void> {

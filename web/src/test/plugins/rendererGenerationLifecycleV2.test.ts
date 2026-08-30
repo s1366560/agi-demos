@@ -204,4 +204,33 @@ describe('renderer generation lifecycle', () => {
 
     expect(statusStore.getSnapshot()).toMatchObject({ status: 'loading', error: undefined });
   });
+
+  it('does not apply a payload that resolves after polling has stopped', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    const statusStore = new RendererGenerationStatusStoreV2();
+    const publication = await distributionAt(3, 3);
+    let resolveSource: ((value: unknown) => void) | undefined;
+    const source = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          resolveSource = resolve;
+        })
+    );
+    const apply = vi.fn(async () => undefined);
+    const stop = startRendererGenerationPollingV2({
+      runtime,
+      source,
+      apply,
+      statusStore,
+      pollIntervalMs: 60_000,
+    });
+
+    await vi.waitFor(() => expect(source).toHaveBeenCalledOnce());
+    stop();
+    resolveSource?.(publication);
+    await vi.waitFor(() => expect(apply).not.toHaveBeenCalled());
+
+    expect(runtime.getSnapshot()).toBeUndefined();
+    expect(statusStore.getSnapshot()).toMatchObject({ status: 'loading', error: undefined });
+  });
 });

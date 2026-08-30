@@ -1,13 +1,9 @@
 import { RuntimeV2Error } from './errors';
+import type { SnapshotApplyReceiptV2 } from './generated';
 import type { RendererPluginRuntimeV2 } from './renderer';
 import type { RuntimeGenerationV2 } from './runtime';
 
-export type RendererGenerationStatusV2 =
-  | 'loading'
-  | 'empty'
-  | 'ready'
-  | 'degraded'
-  | 'error';
+export type RendererGenerationStatusV2 = 'loading' | 'empty' | 'ready' | 'degraded' | 'error';
 
 export interface RendererGenerationStatusSnapshotV2 {
   readonly status: RendererGenerationStatusV2;
@@ -17,17 +13,28 @@ export interface RendererGenerationStatusSnapshotV2 {
 export type RendererPluginGenerationStateV2 =
   | Readonly<{ status: 'loading'; generation: undefined; error: undefined }>
   | Readonly<{ status: 'empty'; generation: undefined; error: undefined }>
-  | Readonly<{ status: 'ready'; generation: RuntimeGenerationV2; error: undefined }>
-  | Readonly<{ status: 'degraded'; generation: RuntimeGenerationV2; error: unknown }>
+  | Readonly<{
+      status: 'ready';
+      generation: RuntimeGenerationV2;
+      error: undefined;
+    }>
+  | Readonly<{
+      status: 'degraded';
+      generation: RuntimeGenerationV2;
+      error: unknown;
+    }>
   | Readonly<{ status: 'error'; generation: undefined; error: unknown }>;
 
-export type RendererPluginDistributionSourceV2 = (
-  signal: AbortSignal
-) => Promise<unknown | null>;
+export type RendererPluginDistributionSourceV2 = (signal: AbortSignal) => Promise<unknown | null>;
+
+export type RendererPluginDistributionApplyV2 = (
+  payload: unknown
+) => Promise<SnapshotApplyReceiptV2 | undefined>;
 
 export interface StartRendererGenerationPollingOptionsV2 {
   readonly runtime: RendererPluginRuntimeV2;
   readonly source: RendererPluginDistributionSourceV2;
+  readonly apply?: RendererPluginDistributionApplyV2;
   readonly statusStore: RendererGenerationStatusStoreV2;
   readonly bootstrap?: () => Promise<void>;
   readonly pollIntervalMs: number;
@@ -46,10 +53,7 @@ const EMPTY_STATE_V2: RendererPluginGenerationStateV2 = Object.freeze({
 
 export class RendererGenerationStatusStoreV2 {
   private readonly listeners = new Set<() => void>();
-  private snapshot: RendererGenerationStatusSnapshotV2 = statusSnapshotV2(
-    'loading',
-    undefined
-  );
+  private snapshot: RendererGenerationStatusSnapshotV2 = statusSnapshotV2('loading', undefined);
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -86,13 +90,21 @@ export function projectRendererPluginGenerationStateV2(
   if (!enabled) return EMPTY_STATE_V2;
   if (generation !== undefined) {
     if (status.status === 'degraded' || status.status === 'error') {
-      return Object.freeze({ status: 'degraded', generation, error: status.error });
+      return Object.freeze({
+        status: 'degraded',
+        generation,
+        error: status.error,
+      });
     }
     return Object.freeze({ status: 'ready', generation, error: undefined });
   }
   if (status.status === 'loading') return LOADING_STATE_V2;
   if (status.status === 'empty' || status.status === 'ready') return EMPTY_STATE_V2;
-  return Object.freeze({ status: 'error', generation: undefined, error: status.error });
+  return Object.freeze({
+    status: 'error',
+    generation: undefined,
+    error: status.error,
+  });
 }
 
 export function startRendererGenerationPollingV2(
@@ -140,8 +152,8 @@ async function refreshRendererGenerationV2(
   const payload = await options.source(signal);
   if (isStopped()) return;
   if (payload !== null) {
-    const receipt = await options.runtime.apply(payload);
-    if (receipt.status === 'nack') {
+    const receipt = await applyRendererDistributionV2(options, payload);
+    if (receipt?.status === 'nack') {
       throw new RuntimeV2Error(
         receipt.error_code ?? 'renderer_generation_apply_nack',
         receipt.error_message ?? 'renderer generation publication was rejected'
@@ -150,6 +162,14 @@ async function refreshRendererGenerationV2(
   }
   if (isStopped()) return;
   options.statusStore.settle(options.runtime.getSnapshot() !== undefined);
+}
+
+async function applyRendererDistributionV2(
+  options: StartRendererGenerationPollingOptionsV2,
+  payload: unknown
+): Promise<SnapshotApplyReceiptV2 | undefined> {
+  if (options.apply !== undefined) return options.apply(payload);
+  return options.runtime.apply(payload);
 }
 
 function statusSnapshotV2(

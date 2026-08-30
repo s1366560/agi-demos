@@ -1,5 +1,10 @@
 export { canonicalJsonV2, digestV2 } from './canonical';
 export {
+  DesktopRendererDistributionReconcilerV2,
+  parseDesktopRendererDistributionV2,
+  type DesktopRendererDistributionV2,
+} from './desktopRendererDistribution';
+export {
   parseControlPlaneDistributionV2,
   PluginSnapshotReconcilerV2,
   type ControlPlaneDistributionV2,
@@ -20,6 +25,7 @@ export {
   type RendererGenerationStatusSnapshotV2,
   type RendererGenerationStatusV2,
   type RendererPluginDistributionSourceV2,
+  type RendererPluginDistributionApplyV2,
   type RendererPluginGenerationStateV2,
   type StartRendererGenerationPollingOptionsV2,
 } from './rendererLifecycle';

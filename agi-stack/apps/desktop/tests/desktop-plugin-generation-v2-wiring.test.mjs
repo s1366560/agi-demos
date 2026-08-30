@@ -6,13 +6,13 @@ function source(relativePath) {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 }
 
-test('desktop renderer owns a protocol-v2 generation host through the public fetch seam', () => {
+test('desktop renderer owns a protocol-v2 generation host through the trusted sidecar IPC seam', () => {
   const hook = source('src/plugins/useDesktopPluginGenerationV2.ts');
   const host = source('src/plugins/DesktopRendererGenerationHostV2.tsx');
   const context = source('src/plugins/desktopRendererGenerationContextV2.tsx');
   const authenticatedShellBoundary = source('src/plugins/DesktopRendererAuthenticatedShellV2.tsx');
   const authenticationRouteBoundary = source(
-    'src/plugins/DesktopRendererAuthenticationRouterV2.tsx',
+    'src/plugins/DesktopRendererAuthenticationRouterV2.tsx'
   );
   const routeBoundary = source('src/plugins/DesktopRendererProductionRouterV2.tsx');
   const workbenchSurface = source('src/plugins/DesktopWorkbenchSurfaceV2.tsx');
@@ -38,16 +38,26 @@ test('desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(hook, /return state/u);
   assert.match(hook, /if \(!enabled\) \{\s*scheduleClose\(\);\s*return;\s*\}/u);
   assert.doesNotMatch(hook, /if \(!enabled\) return \(\) => scheduleClose\(\)/u);
-  assert.match(hook, /desktopApiFetch\(/u);
-  assert.doesNotMatch(hook, /DesktopApiClient/u);
+  assert.match(hook, /DesktopRendererDistributionReconcilerV2/u);
+  assert.match(hook, /platform_plugin_renderer_distribution_current_v2/u);
+  assert.match(hook, /window\.__MEMSTACK_DESKTOP__\?\.core\?\.invoke/u);
+  assert.doesNotMatch(
+    hook,
+    /desktopApiFetch|desktopApiCredential|desktopLaunchCapability|Authorization|X-Agistack-Launch/u
+  );
+  assert.doesNotMatch(hook, /memstack-default-bootstrap\.v2\.json|bootstrapProfileV2/u);
   assert.match(hook, /startRendererGenerationPollingV2/u);
-  assert.match(hook, /runtime\.bootstrap\(bootstrapProfileV2\)/u);
-  assert.match(hook, /source:\s*\(signal\) => fetchDesktopPluginDistributionV2\(config, signal\)/u);
-  const bootstrapIndex = lifecycle.search(/await options\.bootstrap\(\)/u);
+  assert.match(hook, /source:\s*fetchDesktopPluginDistributionV2/u);
+  assert.match(
+    hook,
+    /apply:\s*\(payload\) => desktopRendererDistributionReconcilerV2\.apply\(payload\)/u
+  );
+  assert.match(hook, /\}, \[enabled\]\);/u);
   const remoteFetchIndex = lifecycle.search(/await options\.source\(signal\)/u);
+  const applyIndex = lifecycle.search(/await applyRendererDistributionV2\(options, payload\)/u);
   assert.ok(
-    bootstrapIndex >= 0 && remoteFetchIndex > bootstrapIndex,
-    'local bootstrap must activate before the first remote request',
+    remoteFetchIndex >= 0 && applyIndex > remoteFetchIndex,
+    'a stopped IPC request must be checked before its payload can be applied'
   );
   assert.match(host, /useDesktopPluginGenerationV2\(\s*config,\s*enabled\s*,?\s*\)/u);
   assert.match(host, /DesktopRendererCompositionPortV2/u);
@@ -76,7 +86,7 @@ test('desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(routeBoundary, /acquireOperationLease=\{actions\.acquireOperationLease\}/u);
   assert.match(
     routeBoundary,
-    /Omit<[\s\S]+?'acquireOperationLease'\s*\|\s*'children'\s*\|\s*'registry'[\s\S]+?>/u,
+    /Omit<[\s\S]+?'acquireOperationLease'\s*\|\s*'children'\s*\|\s*'registry'[\s\S]+?>/u
   );
   assert.match(routeHost, /acquireOperationLease/u);
   assert.match(routeHost, /finally\s*\{\s*await operationLease\?\.release\(\)/u);
@@ -89,7 +99,7 @@ test('desktop renderer owns a protocol-v2 generation host through the public fet
   assert.match(app, /desktopWorkbenchSurfaceViewModelV2/u);
   assert.doesNotMatch(
     app,
-    /<(?:ChatPanel|WorkspaceOverview|WorkspaceCollaborationCanvas|MyWorkQueue|ActivityInbox|NewThreadComposer|SessionWorkspace)\b/u,
+    /<(?:ChatPanel|WorkspaceOverview|WorkspaceCollaborationCanvas|MyWorkQueue|ActivityInbox|NewThreadComposer|SessionWorkspace)\b/u
   );
   assert.doesNotMatch(app, /<DesktopProductionRouter/u);
   assert.match(app, /desktopRendererGenerationV2\.meta\.digest/u);
@@ -100,20 +110,20 @@ test('desktop renderer owns a protocol-v2 generation host through the public fet
     new RegExp(
       String.raw`useAgentSocket\([\s\S]+?` +
         String.raw`desktopRendererGenerationV2\.actions\.acquireOperationLease[\s\S]+?\)`,
-      'u',
-    ),
+      'u'
+    )
   );
   assert.match(agentSocket, /AgentSocketGenerationLeaseFactoryV2/u);
   assert.match(agentSocket, /acquireAgentSocketGenerationLeaseV2\(acquireGenerationLease\)/u);
   assert.match(agentSocket, /generationLease\.constructSocket\(\(\) =>/u);
   const socketLeaseIndex = agentSocket.indexOf(
-    'acquireAgentSocketGenerationLeaseV2(acquireGenerationLease)',
+    'acquireAgentSocketGenerationLeaseV2(acquireGenerationLease)'
   );
   const socketConnectIndex = agentSocket.indexOf('const connect = () =>', socketLeaseIndex);
   assert.ok(socketLeaseIndex >= 0 && socketConnectIndex > socketLeaseIndex);
   assert.match(
     agentSocket,
-    /\[\s*acquireGenerationLease,[\s\S]+?socketAuthenticationAvailable,[\s\S]+?\]\);/u,
+    /\[\s*acquireGenerationLease,[\s\S]+?socketAuthenticationAvailable,[\s\S]+?\]\);/u
   );
   const socketCleanupSequence = [
     String.raw`socket\.onopen = null;`,
@@ -159,15 +169,15 @@ test('desktop authenticated shell is an explicit ordered production contribution
   const profile = readFileSync(
     new URL(
       '../../../../config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
-      import.meta.url,
+      import.meta.url
     ),
-    'utf8',
+    'utf8'
   );
   const bootstrap = JSON.parse(
     readFileSync(
       new URL('../../../../shared/profiles/memstack-default-bootstrap.v2.json', import.meta.url),
-      'utf8',
-    ),
+      'utf8'
+    )
   );
   const shellEntryId = 'builtin-desktop-authenticated-shell-surface';
   const workbenchEntryId = 'builtin-desktop-workbench-surface';
@@ -176,7 +186,7 @@ test('desktop authenticated shell is an explicit ordered production contribution
   const shellProfile = profile.slice(shellProfileIndex, workbenchProfileIndex);
   const workbenchProfile = profile.slice(
     workbenchProfileIndex,
-    profile.indexOf('\n    - entry_id:', workbenchProfileIndex + 1),
+    profile.indexOf('\n    - entry_id:', workbenchProfileIndex + 1)
   );
 
   assert.ok(shellProfileIndex >= 0);
@@ -189,10 +199,10 @@ test('desktop authenticated shell is an explicit ordered production contribution
   assert.match(workbenchProfile, /desktop\.ui-slots\.workbench-surface\.v2/u);
 
   const shellBootstrapIndex = bootstrap.entries.findIndex(
-    ({ entry_id: entryId }) => entryId === shellEntryId,
+    ({ entry_id: entryId }) => entryId === shellEntryId
   );
   const workbenchBootstrapIndex = bootstrap.entries.findIndex(
-    ({ entry_id: entryId }) => entryId === workbenchEntryId,
+    ({ entry_id: entryId }) => entryId === workbenchEntryId
   );
   const shellBootstrap = bootstrap.entries[shellBootstrapIndex];
   const workbenchBootstrap = bootstrap.entries[workbenchBootstrapIndex];
@@ -227,7 +237,7 @@ test('desktop UI slot consumers use the pinned V2 authority without V1 fallback'
   assert.doesNotMatch(settingsSlots, /SignedUiModuleBoundary|signed:/u);
   assert.doesNotMatch(
     client,
-    /getPlatformPlugin(?:ApplyState|Snapshot|FrontendModule)|platform-plugins\/(?:apply-state|snapshot|frontend)/u,
+    /getPlatformPlugin(?:ApplyState|Snapshot|FrontendModule)|platform-plugins\/(?:apply-state|snapshot|frontend)/u
   );
   assert.doesNotMatch(activity, /snapshotState|getPlatformPluginApplyState/u);
 });

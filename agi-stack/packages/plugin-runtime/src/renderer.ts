@@ -42,6 +42,11 @@ export class RendererPluginRuntimeV2 {
     return this.reconciler.apply(distribution);
   }
 
+  async replaceBaseline(value: unknown): Promise<void> {
+    const snapshot = await parseProfileSnapshotV2(value);
+    await this.reconciler.replaceBaseline(snapshot);
+  }
+
   async close(): Promise<void> {
     await this.reconciler.close();
   }
