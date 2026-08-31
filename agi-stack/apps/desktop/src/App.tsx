@@ -214,7 +214,6 @@ import {
 } from './features/session/sessionTimelinePaginationModel';
 import { useActivityInbox } from './features/activity/useActivityInbox';
 import { useCompletionNotifications } from './features/activity/useCompletionNotifications';
-import { desktopCapability } from './features/runtime/capabilitySnapshot';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
 import { createDesktopWorkbenchCapabilityClient } from './features/runtime/workbenchCapabilityClient';
 import { createProjectSearchRouteBindingProviderV2 } from './features/search/projectSearchRouteBindingProviderV2';
@@ -294,8 +293,7 @@ import {
   retainOpenWorkspaceAutonomyAttentionResolveAttempts,
   type WorkspaceAutonomyAttentionResolveAttempt,
 } from './features/workspace/autonomyAttentionResolveAttemptModel';
-import { createCapabilityWorkspaceCollaborationClient } from './features/workspace/capabilityWorkspaceCollaborationClient';
-import { createHttpWorkspaceCollaborationClient } from './features/workspace/httpWorkspaceCollaborationClient';
+import { createWorkspaceCollaborationClientProviderV2 } from './features/workspace/workspaceCollaborationClientProviderV2';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
 import type {
   WorkspaceAuthorityInvalidation,
@@ -727,6 +725,10 @@ export function App() {
     () => createDesktopProductionRouteAuthorityProviderV2(),
     [],
   );
+  const workspaceCollaborationClientProviderV2 = useMemo(
+    () => createWorkspaceCollaborationClientProviderV2(),
+    [],
+  );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
   const desktopProductionRouteLocation = useMemo(
     () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
@@ -993,29 +995,16 @@ export function App() {
     capabilityLoading: desktopCapabilityState.loading,
     onRetryCapability: desktopCapabilityState.reload,
   });
-  const workspaceCollaborationCapability = desktopCapability(
-    desktopCapabilityState.snapshot,
-    'workspace_collaboration',
-  );
-  const workspaceCollaborationAuthority = useMemo(
-    () => createHttpWorkspaceCollaborationClient(config),
-    [config],
-  );
-  const workspaceCollaborationClient = useMemo(
+  const workspaceCollaborationClientV2 = useMemo(
     () =>
-      createCapabilityWorkspaceCollaborationClient(
-        workspaceCollaborationAuthority,
-        workspaceCollaborationCapability,
-        config.mode,
-      ),
+      workspaceCollaborationClientProviderV2.publish({
+        config,
+        capabilitySnapshot: desktopCapabilityState.snapshot,
+      }),
     [
-      config.mode,
-      workspaceCollaborationAuthority,
-      workspaceCollaborationCapability.available,
-      workspaceCollaborationCapability.contract_version,
-      workspaceCollaborationCapability.reason_code,
-      workspaceCollaborationCapability.service_version,
-      workspaceCollaborationCapability.status,
+      config,
+      desktopCapabilityState.snapshot,
+      workspaceCollaborationClientProviderV2,
     ],
   );
   const runtimeModelRole: LlmRoutingRole =
@@ -6081,7 +6070,7 @@ export function App() {
       selectedWorkspace && config.workspaceId.trim()
         ? {
             workspaceId: config.workspaceId,
-            client: workspaceCollaborationClient,
+            client: workspaceCollaborationClientV2.client,
             authorityInvalidation: workspaceCollaborationAuthorityInvalidation,
           }
         : null,
