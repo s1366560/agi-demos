@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +10,11 @@ import {
   parseManifestGeneratorOptions,
   writeValidatedArtifactSync,
 } from './parity-judgment-ledger.mjs';
+import {
+  createParityJudgmentOutput,
+  digestParityJudgmentInput,
+  finalizeParityJudgmentClosure,
+} from './parity-judgment-closure.mjs';
 import {
   assertParityStructuralClosure,
   downgradeStructurallyInvalidSurfaces,
@@ -79,11 +83,16 @@ const browserCapability = {
     judgmentsByCapability,
   }),
 };
-const manifest = downgradeStructurallyInvalidSurfaces({
+const candidateManifest = {
   ...v3Manifest,
   $schema: './parity-manifest.v4.schema.json',
   schema_version: '4.0.0',
   capabilities: [...enrichedCapabilities, browserCapability],
+};
+const manifest = finalizeParityJudgmentClosure({
+  beforeStructuralClosure: candidateManifest,
+  afterStructuralClosure: downgradeStructurallyInvalidSurfaces(candidateManifest),
+  externalJudgmentCapabilityIds: [browserCapabilityId],
 });
 assertSchemaValid(schema, manifest);
 assertParityStructuralClosure(manifest);
@@ -289,37 +298,16 @@ function projectJudgment({
     surfaces,
     journeys,
   };
-  const output = {
-    verdict: 'accepted',
-    ...Object.fromEntries(
-      surfaceNames.map((surfaceName) => [surfaceName, surfaceSummary(surfaces[surfaceName])]),
-    ),
-  };
   return {
     ...capability.judgment,
     input,
-    input_digest: digestInput(input),
-    output,
+    input_digest: digestParityJudgmentInput(input),
+    output: createParityJudgmentOutput(surfaces),
     rationale:
       `${capability.judgment.rationale} Manifest v4 projects local_online and ` +
       `local_offline from the accepted ${localPolicy} policy and records compound authority roles ` +
       'without mutating the historical v2/v3 judgment.',
   };
-}
-
-function surfaceSummary(surface) {
-  return {
-    disposition: surface.disposition,
-    implementation_status: surface.implementation_status,
-    availability: surface.availability,
-    reason_code: surface.reason_code,
-    authority: surface.authority,
-    supporting_authorities: [...surface.supporting_authorities],
-  };
-}
-
-function digestInput(input) {
-  return `sha256:${createHash('sha256').update(JSON.stringify(input)).digest('hex')}`;
 }
 
 function indexAuthorityOverrides(catalog) {
@@ -565,13 +553,8 @@ function createBrowserBridgeCapability(sourceRevision) {
       ],
     },
     input,
-    inputDigest: digestInput(input),
-    output: {
-      verdict: 'accepted',
-      ...Object.fromEntries(
-        surfaceNames.map((surface) => [surface, surfaceSummary(surfaces[surface])]),
-      ),
-    },
+    inputDigest: digestParityJudgmentInput(input),
+    output: createParityJudgmentOutput(surfaces),
   };
 }
 

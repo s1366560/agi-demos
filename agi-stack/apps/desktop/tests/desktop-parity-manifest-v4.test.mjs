@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
@@ -14,6 +15,9 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
+import {
+  finalizeParityJudgmentClosure,
+} from '../contracts/desktop-web-parity/parity-judgment-closure.mjs';
 import { validateJsonSchema } from '../contracts/desktop-web-parity/schema-validator.mjs';
 
 const contractRoot = new URL('../contracts/desktop-web-parity/', import.meta.url);
@@ -21,6 +25,7 @@ const repositoryRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const generatorFixtureFiles = [
   'generate-parity-manifest-v4.mjs',
   'parity-authority-overrides.v4.json',
+  'parity-judgment-closure.mjs',
   'parity-judgment-ledger.mjs',
   'parity-manifest.v2.json',
   'parity-manifest.v3.json',
@@ -227,6 +232,55 @@ test('parity manifest v4 adds explicit primary and supporting authority roles', 
       assert.equal(['primary', 'supporting'].includes(contract.authority_role), true);
     }
   }
+});
+
+test('every v4 judgment binds the final structurally closed input and output', () => {
+  const manifest = readJson('parity-manifest.v4.json');
+
+  for (const capability of manifest.capabilities) {
+    const expectedDigest = `sha256:${createHash('sha256')
+      .update(JSON.stringify(capability.judgment.input))
+      .digest('hex')}`;
+    assert.equal(capability.judgment.input_digest, expectedDigest, capability.id);
+    assert.deepEqual(
+      capability.judgment.input.surfaces,
+      capability.surfaces,
+      capability.id,
+    );
+    assert.deepEqual(
+      capability.judgment.output,
+      {
+        verdict: 'accepted',
+        ...Object.fromEntries(
+          Object.entries(capability.surfaces).map(([surfaceName, surface]) => [
+            surfaceName,
+            surfaceSummary(surface),
+          ]),
+        ),
+      },
+      capability.id,
+    );
+  }
+});
+
+test('v4 fails closed when structural closure changes an external Agent judgment', () => {
+  const beforeStructuralClosure = readJson('parity-manifest.v4.json');
+  const afterStructuralClosure = structuredClone(beforeStructuralClosure);
+  const browserBridge = afterStructuralClosure.capabilities.find(
+    ({ id }) => id === 'browser-integration-browser-bridge',
+  );
+  browserBridge.surfaces.native_only.availability = 'unavailable';
+  browserBridge.judgment.input.surfaces.native_only.availability = 'unavailable';
+
+  assert.throws(
+    () =>
+      finalizeParityJudgmentClosure({
+        beforeStructuralClosure,
+        afterStructuralClosure,
+        externalJudgmentCapabilityIds: ['browser-integration-browser-bridge'],
+      }),
+    /changed external structured Agent judgment/iu,
+  );
 });
 
 test('Agent Workspace declares Electron support without replacing service authority', () => {
