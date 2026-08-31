@@ -44,6 +44,8 @@
     "src/plugins/DesktopRendererAuthenticatedShellV2.tsx",
     "src/plugins/DesktopRendererAuthenticationRouterV2.tsx",
     "src/plugins/DesktopRendererProductionRouterV2.tsx",
+    "src/plugins/DesktopRendererWorkbenchTabBarV2.tsx",
+    "src/plugins/DesktopWorkbenchTabBarSurfaceV2.tsx",
     "src/plugins/DesktopWorkbenchSurfaceV2.tsx",
     "src/plugins/desktopRendererAppCompositionV2.tsx",
     "src/plugins/desktopConversationRendererModuleV2.ts",

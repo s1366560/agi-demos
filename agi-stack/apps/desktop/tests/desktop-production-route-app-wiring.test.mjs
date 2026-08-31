@@ -666,7 +666,7 @@ test('authenticated shell contribution owns the complete signed-in app shell', (
   for (const component of [
     'DesktopTitlebar',
     'DesktopSidebar',
-    'WorkbenchTabBar',
+    'DesktopRendererWorkbenchTabBarV2',
     'DesktopRendererProductionRouterV2',
     'DesktopRightSidebar',
     'DesktopRendererStatusBarV2',

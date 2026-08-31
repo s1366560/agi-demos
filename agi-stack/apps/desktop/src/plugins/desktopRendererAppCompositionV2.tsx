@@ -30,6 +30,7 @@ import { DesktopStatusBarSurfaceV2 } from './DesktopStatusBarSurfaceV2';
 import { DesktopWorkspaceCollaborationSurfaceV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopWorkspaceCreateSurfaceV2 } from './DesktopWorkspaceCreateSurfaceV2';
 import { DesktopWorkspaceSettingsSurfaceV2 } from './DesktopWorkspaceSettingsSurfaceV2';
+import { DesktopWorkbenchTabBarSurfaceV2 } from './DesktopWorkbenchTabBarSurfaceV2';
 import { DesktopWorkbenchSurfaceV2 } from './DesktopWorkbenchSurfaceV2';
 import {
   DESKTOP_CONVERSATION_RENDERER_MODULE_REF_V2,
@@ -68,6 +69,7 @@ import {
   DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_CREATE_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_SETTINGS_SURFACE_MODULE_REF_V2,
+  DESKTOP_WORKBENCH_TAB_BAR_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKBENCH_SURFACE_MODULE_REF_V2,
   type DesktopRendererCompositionPortV2,
   type DesktopRendererWorkbenchSurfaceV2,
@@ -157,6 +159,10 @@ export function createDesktopRendererAppCompositionPortV2(
     resolveWorkspaceSettingsSurface: (definition: UiSlotDefinition) =>
       validWorkspaceSettingsDefinitionV2(definition)
         ? DesktopWorkspaceSettingsSurfaceV2
+        : null,
+    resolveWorkbenchTabBarSurface: (definition: UiSlotDefinition) =>
+      validWorkbenchTabBarDefinitionV2(definition)
+        ? DesktopWorkbenchTabBarSurfaceV2
         : null,
     resolveWorkbenchSurface: (definition: UiSlotDefinition) =>
       validWorkbenchDefinitionV2(definition) ? DesktopWorkbenchSurfaceV2 : null,
@@ -357,6 +363,18 @@ function validWorkspaceSettingsDefinitionV2(definition: UiSlotDefinition): boole
     definition.contract === 'ui-builtin:desktop-workspace-settings-surface' &&
     definition.moduleRef === DESKTOP_WORKSPACE_SETTINGS_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.workspace-settings' &&
+    definition.sandbox
+  );
+}
+
+function validWorkbenchTabBarDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'workbench_tab_bar_surface' &&
+    definition.id === 'workbench-tab-bar' &&
+    definition.contract === 'ui-builtin:desktop-workbench-tab-bar-surface' &&
+    definition.moduleRef === DESKTOP_WORKBENCH_TAB_BAR_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.workbench-tabs' &&
     definition.sandbox
   );
 }

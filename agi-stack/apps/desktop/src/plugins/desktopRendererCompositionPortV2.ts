@@ -16,6 +16,7 @@ import type { DesktopStatusBarSurfacePropsV2 } from './DesktopStatusBarSurfaceV2
 import type { DesktopWorkspaceCollaborationSurfacePropsV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import type { DesktopWorkspaceCreateSurfacePropsV2 } from './DesktopWorkspaceCreateSurfaceV2';
 import type { DesktopWorkspaceSettingsSurfacePropsV2 } from './DesktopWorkspaceSettingsSurfaceV2';
+import type { DesktopWorkbenchTabBarSurfacePropsV2 } from './DesktopWorkbenchTabBarSurfaceV2';
 import type { DesktopWorkbenchSurfaceViewModelV2 } from './DesktopWorkbenchSurfaceV2';
 import type { DesktopConversationRendererModuleV2 } from './desktopConversationRendererModuleV2';
 import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
@@ -51,6 +52,8 @@ export const DESKTOP_WORKSPACE_CREATE_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-workspace-create-surface' as const;
 export const DESKTOP_WORKSPACE_SETTINGS_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-workspace-settings-surface' as const;
+export const DESKTOP_WORKBENCH_TAB_BAR_SURFACE_MODULE_REF_V2 =
+  'builtin:desktop-workbench-tab-bar-surface' as const;
 
 export type DesktopRendererActivityInboxSurfaceV2 =
   ComponentType<DesktopActivityInboxSurfacePropsV2>;
@@ -75,6 +78,8 @@ export type DesktopRendererWorkspaceCreateSurfaceV2 =
   ComponentType<DesktopWorkspaceCreateSurfacePropsV2>;
 export type DesktopRendererWorkspaceSettingsSurfaceV2 =
   ComponentType<DesktopWorkspaceSettingsSurfacePropsV2>;
+export type DesktopRendererWorkbenchTabBarSurfaceV2 =
+  ComponentType<DesktopWorkbenchTabBarSurfacePropsV2>;
 
 export interface DesktopRendererAuthenticatedShellSurfacePropsV2 {
   readonly viewModel: DesktopAuthenticatedShellViewModelV2;
@@ -144,6 +149,9 @@ export interface DesktopRendererCompositionPortV2 {
   readonly resolveWorkspaceSettingsSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererWorkspaceSettingsSurfaceV2 | null;
+  readonly resolveWorkbenchTabBarSurface: (
+    definition: UiSlotDefinition,
+  ) => DesktopRendererWorkbenchTabBarSurfaceV2 | null;
   readonly resolveWorkbenchSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererWorkbenchSurfaceV2 | null;
@@ -389,6 +397,22 @@ export type DesktopRendererWorkspaceSettingsCompositionV2 =
         | 'desktop_renderer_workspace_settings_module_unavailable';
     }>;
 
+export type DesktopRendererWorkbenchTabBarCompositionV2 =
+  | Readonly<{
+      status: 'ready';
+      Surface: DesktopRendererWorkbenchTabBarSurfaceV2;
+    }>
+  | Readonly<{ status: 'loading' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode:
+        | 'desktop_renderer_generation_disabled'
+        | 'desktop_renderer_generation_unavailable'
+        | 'desktop_renderer_workbench_tab_bar_contribution_ambiguous'
+        | 'desktop_renderer_workbench_tab_bar_contribution_missing'
+        | 'desktop_renderer_workbench_tab_bar_module_unavailable';
+    }>;
+
 export function projectDesktopAuthenticatedShellCompositionV2(
   authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
   composition: DesktopRendererCompositionPortV2,
@@ -512,6 +536,39 @@ export function projectDesktopWorkspaceSettingsCompositionV2(
   if (Surface === null) {
     return unavailableWorkspaceSettingsV2(
       'desktop_renderer_workspace_settings_module_unavailable',
+    );
+  }
+  return Object.freeze({ status: 'ready', Surface });
+}
+
+export function projectDesktopWorkbenchTabBarCompositionV2(
+  authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
+  composition: DesktopRendererCompositionPortV2,
+): DesktopRendererWorkbenchTabBarCompositionV2 {
+  if (authority.status === 'loading') return Object.freeze({ status: 'loading' });
+  if (authority.status === 'disabled') {
+    return unavailableWorkbenchTabBarV2('desktop_renderer_generation_disabled');
+  }
+  if (authority.status === 'unavailable') {
+    return unavailableWorkbenchTabBarV2('desktop_renderer_generation_unavailable');
+  }
+  const definitions = authority.slotDefinitions.filter(
+    ({ slot }) => slot === 'workbench_tab_bar_surface',
+  );
+  if (definitions.length === 0) {
+    return unavailableWorkbenchTabBarV2(
+      'desktop_renderer_workbench_tab_bar_contribution_missing',
+    );
+  }
+  if (definitions.length !== 1) {
+    return unavailableWorkbenchTabBarV2(
+      'desktop_renderer_workbench_tab_bar_contribution_ambiguous',
+    );
+  }
+  const Surface = composition.resolveWorkbenchTabBarSurface(definitions[0]);
+  if (Surface === null) {
+    return unavailableWorkbenchTabBarV2(
+      'desktop_renderer_workbench_tab_bar_module_unavailable',
     );
   }
   return Object.freeze({ status: 'ready', Surface });
@@ -880,6 +937,15 @@ function unavailableWorkspaceSettingsV2(
     Readonly<{ status: 'unavailable' }>
   >['reasonCode'],
 ): DesktopRendererWorkspaceSettingsCompositionV2 {
+  return Object.freeze({ status: 'unavailable', reasonCode });
+}
+
+function unavailableWorkbenchTabBarV2(
+  reasonCode: Extract<
+    DesktopRendererWorkbenchTabBarCompositionV2,
+    Readonly<{ status: 'unavailable' }>
+  >['reasonCode'],
+): DesktopRendererWorkbenchTabBarCompositionV2 {
   return Object.freeze({ status: 'unavailable', reasonCode });
 }
 

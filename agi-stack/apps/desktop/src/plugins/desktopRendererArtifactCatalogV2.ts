@@ -124,6 +124,8 @@ export const DESKTOP_WORKSPACE_CREATE_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.workspace-create-surface.v1';
 export const DESKTOP_WORKSPACE_SETTINGS_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.workspace-settings-surface.v1';
+export const DESKTOP_WORKBENCH_TAB_BAR_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.workbench-tab-bar-surface.v1';
 export const DESKTOP_SETTINGS_WINDOW_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.settings-window-surface.v1';
 export const DESKTOP_SESSION_CANVAS_SURFACE_ARTIFACT_ID_V2 =
@@ -392,6 +394,17 @@ const WORKSPACE_SETTINGS_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = O
     contract: 'ui-builtin:desktop-workspace-settings-surface',
     moduleRef: 'builtin:desktop-workspace-settings-surface',
     permission: 'ui.workspace-settings',
+    sandbox: true,
+  }),
+]);
+const WORKBENCH_TAB_BAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'workbench_tab_bar_surface',
+    id: 'workbench-tab-bar',
+    contract: 'ui-builtin:desktop-workbench-tab-bar-surface',
+    moduleRef: 'builtin:desktop-workbench-tab-bar-surface',
+    permission: 'ui.workbench-tabs',
     sandbox: true,
   }),
 ]);
@@ -791,6 +804,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopUiSlotArtifactV2(
       DESKTOP_WORKSPACE_SETTINGS_SURFACE_ARTIFACT_ID_V2,
       WORKSPACE_SETTINGS_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_WORKBENCH_TAB_BAR_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_WORKBENCH_TAB_BAR_SURFACE_ARTIFACT_ID_V2,
+      WORKBENCH_TAB_BAR_SURFACE_DEFINITIONS_V2,
     ),
   ],
   [

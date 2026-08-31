@@ -42,7 +42,7 @@ test('the V2 authenticated shell surface owns every production chrome outlet', (
   for (const component of [
     'DesktopTitlebar',
     'DesktopSidebar',
-    'WorkbenchTabBar',
+    'DesktopRendererWorkbenchTabBarV2',
     'DesktopRendererProductionRouterV2',
     'DesktopRightSidebar',
     'DesktopRendererStatusBarV2',

@@ -22,6 +22,7 @@ export type UiSlotKind =
   | 'command_palette_surface'
   | 'workspace_create_surface'
   | 'workspace_settings_surface'
+  | 'workbench_tab_bar_surface'
   | 'settings_window_surface'
   | 'session_canvas_surface'
   | 'workbench_surface';

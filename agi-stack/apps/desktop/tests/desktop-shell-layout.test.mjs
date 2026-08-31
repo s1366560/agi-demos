@@ -240,7 +240,11 @@ test('sidebar renders the authoritative project conversation status summary', ()
 });
 
 test('workbench mounts the tab bar above a dedicated content layer', () => {
-  assert.equal((authenticatedShellSurfaceSource.match(/<WorkbenchTabBar\b/g) ?? []).length, 1);
+  assert.equal(
+    (authenticatedShellSurfaceSource.match(/<DesktopRendererWorkbenchTabBarV2\b/g) ?? [])
+      .length,
+    1,
+  );
   assert.match(appSource, /tabBar:\s*\{[\s\S]*tabs:\s*openTabs/u);
   assert.match(appSource, /activeTabKey:\s*activeWorkbenchTabKey/);
   assert.match(appSource, /onActivate:\s*activateWorkbenchTab/);

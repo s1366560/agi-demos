@@ -4,7 +4,6 @@ import { Theme } from '@radix-ui/themes';
 import { ResizeHandle } from '../components/ResizeHandle';
 import { DesktopRightSidebar } from '../features/chrome/DesktopRightSidebar';
 import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
-import { WorkbenchTabBar } from '../features/chrome/WorkbenchTabBar';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import type { ResolvedTheme } from '../theme';
@@ -17,10 +16,12 @@ import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindow
 import { DesktopRendererStatusBarV2 } from './DesktopRendererStatusBarV2';
 import { DesktopRendererWorkspaceCreateV2 } from './DesktopRendererWorkspaceCreateV2';
 import { DesktopRendererWorkspaceSettingsV2 } from './DesktopRendererWorkspaceSettingsV2';
+import { DesktopRendererWorkbenchTabBarV2 } from './DesktopRendererWorkbenchTabBarV2';
 import type { DesktopSettingsWindowInputV2 } from './DesktopSettingsWindowSurfaceV2';
 import type { DesktopStatusBarInputV2 } from './DesktopStatusBarSurfaceV2';
 import type { DesktopWorkspaceCreateInputV2 } from './DesktopWorkspaceCreateSurfaceV2';
 import type { DesktopWorkspaceSettingsInputV2 } from './DesktopWorkspaceSettingsSurfaceV2';
+import type { DesktopWorkbenchTabBarInputV2 } from './DesktopWorkbenchTabBarSurfaceV2';
 import type { DesktopRendererGenerationMetaV2 } from './desktopRendererGenerationContextV2';
 
 export type DesktopAuthenticatedShellOptionalOutletV2<Props> =
@@ -58,7 +59,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
     settings: DesktopSettingsWindowInputV2;
     sidebar: DesktopAuthenticatedShellSidebarV2;
     statusBar: DesktopStatusBarInputV2;
-    tabBar: ComponentProps<typeof WorkbenchTabBar>;
+    tabBar: DesktopWorkbenchTabBarInputV2;
     titlebar: DesktopAuthenticatedShellOptionalOutletV2<
       ComponentProps<typeof DesktopTitlebar>
     >;
@@ -113,7 +114,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
           <DesktopSidebar {...surfaces.sidebar.props} resizeHandle={sidebarResizeHandle} />
 
           <main ref={meta.workbenchRef} className="workbench" tabIndex={-1}>
-            <WorkbenchTabBar {...surfaces.tabBar} />
+            <DesktopRendererWorkbenchTabBarV2 input={surfaces.tabBar} />
             <div className="workbench-content">
               <DesktopRendererProductionRouterV2 {...surfaces.router} />
             </div>
