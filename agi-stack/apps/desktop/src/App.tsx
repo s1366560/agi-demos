@@ -151,6 +151,9 @@ import {
   createDesktopSessionArtifactActionClientProviderV2,
 } from './features/session/desktopSessionArtifactActionClientProviderV2';
 import {
+  createDesktopHitlResponseClientProviderV2,
+} from './features/session/desktopHitlResponseClientProviderV2';
+import {
   chatWorkflowTargetForReviewTab,
   defaultSessionCanvasTab,
   shouldShowSessionCanvas,
@@ -813,6 +816,10 @@ export function App() {
     () => createDesktopSessionArtifactActionClientProviderV2(),
     [],
   );
+  const desktopHitlResponseClientProviderV2 = useMemo(
+    () => createDesktopHitlResponseClientProviderV2(),
+    [],
+  );
   const desktopConversationConfigClientProviderV2 = useMemo(
     () => createDesktopConversationConfigClientProviderV2(),
     [],
@@ -974,6 +981,10 @@ export function App() {
   const desktopSessionArtifactActionClientV2 = useMemo(
     () => desktopSessionArtifactActionClientProviderV2.publish({ config }),
     [config, desktopSessionArtifactActionClientProviderV2],
+  );
+  const desktopHitlResponseClientV2 = useMemo(
+    () => desktopHitlResponseClientProviderV2.publish({ config }),
+    [config, desktopHitlResponseClientProviderV2],
   );
   const desktopConversationConfigClientV2 = useMemo(
     () => desktopConversationConfigClientProviderV2.publish({ config }),
@@ -1767,6 +1778,7 @@ export function App() {
 
   const respondToHitl = useCallback(
     async (submission: HitlResponseSubmission) => {
+      const requestConfig = configRef.current;
       if (scopedConversation) {
         const request = sessionProjection?.pendingHitl.find(
           (candidate) => candidate.id === submission.requestId,
@@ -1787,11 +1799,12 @@ export function App() {
       }
       setError(null);
       try {
-        await api.respondToHitl(submission);
+        const client = desktopHitlResponseClientV2.bindOperation(requestConfig);
+        await client.respondToHitl(submission);
         invalidateSessionAuthority();
         const conversation = agentConversationSession?.conversation;
         if (conversation) {
-          await loadConversationTimeline(conversation, config.projectId);
+          await loadConversationTimeline(conversation, requestConfig.projectId);
         }
       } catch (caught) {
         const recovery = classifyHitlAuthorityRecovery(caught);
@@ -1799,20 +1812,18 @@ export function App() {
           invalidateSessionAuthority();
           const conversation = agentConversationSession?.conversation;
           if (conversation) {
-            await loadConversationTimeline(conversation, config.projectId);
+            await loadConversationTimeline(conversation, requestConfig.projectId);
           }
           if (recovery.settledByAuthority) return;
         }
-        const message = formatConnectionError(caught, config.apiBaseUrl);
+        const message = formatConnectionError(caught, requestConfig.apiBaseUrl);
         setError(message);
         throw new Error(message, { cause: caught });
       }
     },
     [
       agentConversationSession?.conversation,
-      api,
-      config.apiBaseUrl,
-      config.projectId,
+      desktopHitlResponseClientV2,
       invalidateSessionAuthority,
       loadConversationTimeline,
       respondableHitlRequestIdSet,

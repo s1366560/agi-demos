@@ -5,7 +5,6 @@ import { test } from "node:test";
 const require = createRequire(import.meta.url);
 const {
   confirmPendingAgentRunMessageReceipt,
-  buildHitlSocketMessage,
   canQueuePendingAgentRunMessage,
   createPendingAgentMessageQueue,
   conversationSubscriptionMessages,
@@ -714,33 +713,6 @@ test("queued cloud turns preserve Agent, skill, Sub Agent, mention, attachment, 
       },
     },
   ]);
-});
-
-test("buildHitlSocketMessage preserves the backend WebSocket contract", () => {
-  assert.deepEqual(
-    buildHitlSocketMessage({
-      requestId: "clarification-1",
-      hitlType: "clarification",
-      responseData: { answer: "Use the indexed repository." },
-    }),
-    {
-      type: "clarification_respond",
-      request_id: "clarification-1",
-      answer: "Use the indexed repository.",
-    },
-  );
-  assert.deepEqual(
-    buildHitlSocketMessage({
-      requestId: "permission-1",
-      hitlType: "permission",
-      responseData: { granted: false },
-    }),
-    {
-      type: "permission_respond",
-      request_id: "permission-1",
-      granted: false,
-    },
-  );
 });
 
 test("eventCursor accepts Python, server Rust, and desktop Rust cursor fields", () => {

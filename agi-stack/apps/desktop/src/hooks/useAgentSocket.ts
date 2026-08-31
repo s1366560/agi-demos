@@ -10,7 +10,6 @@ import type {
   AgentInputFileMetadata,
   AgentWsEvent,
   DesktopRuntimeConfig,
-  HitlResponseSubmission,
   WorkspacePermissionMode,
 } from "../types";
 import {
@@ -64,7 +63,6 @@ type AgentSocketState = {
     command: SubAgentControlCommand,
   ) => Promise<SubAgentControlReceipt>;
   stopAgentResponse: (conversationId: string) => boolean;
-  respondToHitl: (submission: HitlResponseSubmission) => boolean;
 };
 
 export type AgentSocketConversationTransition = {
@@ -613,12 +611,6 @@ export function useAgentSocket(
     subscribeConversation,
   ]);
 
-  const respondToHitl = useCallback(
-    (submission: HitlResponseSubmission) =>
-      sendSocketMessage(buildHitlSocketMessage(submission)),
-    [sendSocketMessage],
-  );
-
   const stopAgentResponse = useCallback(
     (conversationId: string) =>
       deliverAgentStopSession(conversationId, sendSocketMessage),
@@ -972,7 +964,6 @@ export function useAgentSocket(
     sendSteerMessage,
     sendSubAgentControl,
     stopAgentResponse,
-    respondToHitl,
   };
 }
 
@@ -1065,54 +1056,6 @@ export function conversationSubscriptionMessages(
         : {}),
     };
   });
-}
-
-export function buildHitlSocketMessage(
-  submission: HitlResponseSubmission,
-): Record<string, unknown> {
-  const { requestId, hitlType, responseData } = submission;
-  switch (hitlType) {
-    case "clarification":
-      return {
-        type: "clarification_respond",
-        request_id: requestId,
-        answer: responseData.answer,
-      };
-    case "decision":
-      return {
-        type: "decision_respond",
-        request_id: requestId,
-        decision: responseData.decision,
-      };
-    case "env_var":
-      return {
-        type: "env_var_respond",
-        request_id: requestId,
-        ...(responseData.values ? { values: responseData.values } : {}),
-        ...(responseData.cancelled === true ? { cancelled: true } : {}),
-        ...(responseData.timeout === true ? { timeout: true } : {}),
-      };
-    case "permission": {
-      const granted =
-        typeof responseData.granted === "boolean"
-          ? responseData.granted
-          : responseData.action === "allow" ||
-            responseData.action === "allow_always";
-      return {
-        type: "permission_respond",
-        request_id: requestId,
-        granted,
-      };
-    }
-    case "a2ui_action":
-      return {
-        type: "a2ui_action_respond",
-        request_id: requestId,
-        action_name: responseData.action_name,
-        source_component_id: responseData.source_component_id,
-        context: responseData.context ?? {},
-      };
-  }
 }
 
 export function reconnectDelay(attempt: number): number {
