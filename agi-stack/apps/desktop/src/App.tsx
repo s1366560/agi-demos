@@ -151,6 +151,9 @@ import {
   createDesktopSessionArtifactActionClientProviderV2,
 } from './features/session/desktopSessionArtifactActionClientProviderV2';
 import {
+  createDesktopSessionRunControlClientProviderV2,
+} from './features/session/desktopSessionRunControlClientProviderV2';
+import {
   createDesktopHitlResponseClientProviderV2,
 } from './features/session/desktopHitlResponseClientProviderV2';
 import {
@@ -823,6 +826,10 @@ export function App() {
     () => createDesktopSessionArtifactActionClientProviderV2(),
     [],
   );
+  const desktopSessionRunControlClientProviderV2 = useMemo(
+    () => createDesktopSessionRunControlClientProviderV2(),
+    [],
+  );
   const desktopHitlResponseClientProviderV2 = useMemo(
     () => createDesktopHitlResponseClientProviderV2(),
     [],
@@ -992,6 +999,10 @@ export function App() {
   const desktopSessionArtifactActionClientV2 = useMemo(
     () => desktopSessionArtifactActionClientProviderV2.publish({ config }),
     [config, desktopSessionArtifactActionClientProviderV2],
+  );
+  const desktopSessionRunControlClientV2 = useMemo(
+    () => desktopSessionRunControlClientProviderV2.publish({ config }),
+    [config, desktopSessionRunControlClientProviderV2],
   );
   const desktopHitlResponseClientV2 = useMemo(
     () => desktopHitlResponseClientProviderV2.publish({ config }),
@@ -4740,23 +4751,25 @@ export function App() {
         setError(t('session.authorityActionUnavailable'));
         return;
       }
+      const requestConfig = configRef.current;
       setSessionRunActionPending(action);
       setError(null);
       try {
+        const client = desktopSessionRunControlClientV2.bindOperation(requestConfig);
         const outcome =
           action === 'pause'
-            ? await api.pauseRun(runId, revision)
+            ? await client.pauseRun(runId, revision)
             : action === 'resume' || action === 'reconnect'
-              ? await api.resumeRun(runId, revision)
+              ? await client.resumeRun(runId, revision)
               : action === 'fork'
-                ? await api.forkRecoveryRun(
+                ? await client.forkRecoveryRun(
                     runId,
                     revision,
                     `desktop-recovery-fork:${runId}:${revision}`,
                   )
                 : action === 'cancel'
-                  ? await api.cancelRun(runId, revision)
-                  : await api.reviewRun(runId, {
+                  ? await client.cancelRun(runId, revision)
+                  : await client.reviewRun(runId, {
                       action: action === 'approve' ? 'approve' : 'request_changes',
                       expectedRevision: revision,
                       ...(feedback ? { feedback } : {}),
@@ -4775,7 +4788,14 @@ export function App() {
         setSessionRunActionPending(null);
       }
     },
-    [api, applyAuthoritativeRun, invalidateSessionAuthority, sessionDetailViewModel, showToast, t],
+    [
+      applyAuthoritativeRun,
+      desktopSessionRunControlClientV2,
+      invalidateSessionAuthority,
+      sessionDetailViewModel,
+      showToast,
+      t,
+    ],
   );
   const handleArtifactAction = useCallback(
     async (version: DesktopArtifactVersion, action: ArtifactVersionAction, feedback?: string) => {

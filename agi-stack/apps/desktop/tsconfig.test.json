@@ -200,6 +200,7 @@
     "src/features/session/desktopConversationConfigClientProviderV2.ts",
     "src/features/session/desktopHitlResponseClientProviderV2.ts",
     "src/features/session/desktopSessionArtifactActionClientProviderV2.ts",
+    "src/features/session/desktopSessionRunControlClientProviderV2.ts",
     "src/features/session/desktopSessionTimelineClientProviderV2.ts",
     "src/features/session/sessionTimelinePaginationModel.ts",
     "src/features/session/sessionTimelineScrollModel.ts",
