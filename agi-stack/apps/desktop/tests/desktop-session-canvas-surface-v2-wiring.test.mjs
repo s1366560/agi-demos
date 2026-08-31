@@ -8,6 +8,9 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
+const artifactClientProvider = source(
+  'src/features/chat/desktopArtifactClientProviderV2.ts',
+);
 const artifactCatalog = source('src/plugins/desktopRendererArtifactCatalogV2.ts');
 const boundary = source('src/plugins/DesktopRendererSessionCanvasV2.tsx');
 const composition = source('src/plugins/desktopRendererAppCompositionV2.tsx');
@@ -48,6 +51,10 @@ test('session canvas is selected from one typed V2 surface without a React callb
     app,
     /\bWorkspaceReviewPanel\b|SessionCanvasControls|renderWorkspaceReviewPanel|renderCanvas/u,
   );
+  assert.match(app, /desktopArtifactClientProviderV2\.publish\(\{/u);
+  assert.match(app, /artifactClient:\s*desktopArtifactClientV2\.client/u);
+  assert.doesNotMatch(app, /createHttpDesktopArtifactClient\(/u);
+  assert.match(artifactClientProvider, /createHttpDesktopArtifactClient\(config\)/u);
 });
 
 test('session canvas resolver validates the exact slot contract and fails closed in the boundary', () => {

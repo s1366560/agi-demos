@@ -93,7 +93,7 @@ import {
   type AgentTaskSignal,
 } from './features/chat/agentTaskSignalModel';
 import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
-import { createHttpDesktopArtifactClient } from './features/chat/desktopArtifactClient';
+import { createDesktopArtifactClientProviderV2 } from './features/chat/desktopArtifactClientProviderV2';
 import {
   applyArtifactCanvasStreamEvent,
   emptyArtifactCanvasState,
@@ -729,6 +729,10 @@ export function App() {
     () => createWorkspaceCollaborationClientProviderV2(),
     [],
   );
+  const desktopArtifactClientProviderV2 = useMemo(
+    () => createDesktopArtifactClientProviderV2(),
+    [],
+  );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
   const desktopProductionRouteLocation = useMemo(
     () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
@@ -872,7 +876,10 @@ export function App() {
     routeRegistry: desktopProductionRouteRegistry,
   } = desktopRendererGenerationV2.state;
   const automationApi = useMemo(() => createDesktopAutomationApi(api, config), [api, config]);
-  const artifactApi = useMemo(() => createHttpDesktopArtifactClient(config), [config]);
+  const desktopArtifactClientV2 = useMemo(
+    () => desktopArtifactClientProviderV2.publish({ config }),
+    [config, desktopArtifactClientProviderV2],
+  );
   const workbenchCapabilityClient = useMemo(
     () => createDesktopWorkbenchCapabilityClient(automationApi, config),
     [automationApi, config],
@@ -6314,7 +6321,7 @@ export function App() {
         setRunInputReferences((current) => toggleRunInputReference(current, reference)),
     },
     meta: {
-      artifactClient: artifactApi,
+      artifactClient: desktopArtifactClientV2.client,
       mcpAppApi: api,
       mcpAppProjectId: config.projectId,
       mcpAppSandboxProxyUrl: desktopMCPAppSandboxProxyUrl(config.apiBaseUrl),
