@@ -437,6 +437,7 @@
     "src/features/search/localSearchClient.ts",
     "src/features/search/projectSearchRouteModule.tsx",
     "src/features/task/NewTaskFlow.tsx",
+    "src/features/task/desktopNewThreadComposerCatalogClientProviderV2.ts",
     "src/features/task/newTaskPlanModel.ts",
     "src/features/task/newTaskSessionModel.ts",
     "src/features/workspace/WorkspaceDock.tsx",

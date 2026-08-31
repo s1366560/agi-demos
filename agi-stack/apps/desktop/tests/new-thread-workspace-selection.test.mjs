@@ -210,9 +210,10 @@ test('new-thread recent conversations and open actions follow the selected creat
   assert.match(appSource, /onWorkspaceChange:\s*changeNewThreadWorkspace/u);
   assert.match(
     appSource,
-    /if \(newThreadWorkspaceId\) return newThreadApi;[\s\S]*unboundComposerCatalogClient\(newThreadApi\)/,
+    /desktopNewThreadComposerCatalogClientProviderV2\.publish\(\{[\s\S]*config: newThreadRuntimeConfig/,
   );
-  assert.match(appSource, /api:\s*newThreadComposerApi/u);
+  assert.match(appSource, /api:\s*desktopNewThreadComposerCatalogClientV2\.client/u);
+  assert.doesNotMatch(appSource, /const newThreadApi =/u);
 });
 
 test('desktop unbound group uses the authoritative server filter', () => {

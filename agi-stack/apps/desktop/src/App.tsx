@@ -277,6 +277,9 @@ import {
 } from './features/settings/workspaceRuntimeProviderModel';
 import type { NewTaskResumeDraft } from './features/task/NewTaskFlow';
 import {
+  createDesktopNewThreadComposerCatalogClientProviderV2,
+} from './features/task/desktopNewThreadComposerCatalogClientProviderV2';
+import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
   clearLegacyPlanApprovalRecovery,
@@ -745,6 +748,10 @@ export function App() {
     () => createDesktopConversationLifecycleClientProviderV2(),
     [],
   );
+  const desktopNewThreadComposerCatalogClientProviderV2 = useMemo(
+    () => createDesktopNewThreadComposerCatalogClientProviderV2(),
+    [],
+  );
   const workspaceCollaborationClientProviderV2 = useMemo(
     () => createWorkspaceCollaborationClientProviderV2(),
     [],
@@ -1075,14 +1082,13 @@ export function App() {
     () => ({ ...config, workspaceId: newThreadWorkspaceId }),
     [config, newThreadWorkspaceId],
   );
-  const newThreadApi = useMemo(
-    () => new DesktopApiClient(newThreadRuntimeConfig),
-    [newThreadRuntimeConfig],
+  const desktopNewThreadComposerCatalogClientV2 = useMemo(
+    () =>
+      desktopNewThreadComposerCatalogClientProviderV2.publish({
+        config: newThreadRuntimeConfig,
+      }),
+    [newThreadRuntimeConfig, desktopNewThreadComposerCatalogClientProviderV2],
   );
-  const newThreadComposerApi = useMemo(() => {
-    if (newThreadWorkspaceId) return newThreadApi;
-    return unboundComposerCatalogClient(newThreadApi);
-  }, [newThreadApi, newThreadWorkspaceId]);
   const workspaceAgentPolicy = useWorkspaceAgentPolicy(
     newThreadRuntimeConfig,
     identityAuthenticated && showRuntimeConfig && connection === 'ready',
@@ -6257,7 +6263,7 @@ export function App() {
       newThreadComposer: {
         scopeKey: newThreadComposerScopeKey,
         composer: {
-          api: newThreadComposerApi,
+          api: desktopNewThreadComposerCatalogClientV2.client,
           workspaceId: newThreadWorkspaceId,
           workspace,
           workspaces: newThreadWorkspaces,

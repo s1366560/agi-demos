@@ -126,3 +126,17 @@ test('new-thread composer is ordered after workbench and before My Work', () => 
     },
   });
 });
+
+test('new-thread composer receives its catalog and upload authority from one V2 provider', () => {
+  assert.match(app, /createDesktopNewThreadComposerCatalogClientProviderV2/u);
+  assert.match(
+    app,
+    /desktopNewThreadComposerCatalogClientProviderV2\.publish\(\{[\s\S]*config: newThreadRuntimeConfig/u,
+  );
+  assert.match(
+    app,
+    /newThreadComposer:\s*\{[\s\S]*api:\s*desktopNewThreadComposerCatalogClientV2\.client/u,
+  );
+  assert.doesNotMatch(app, /const newThreadApi =/u);
+  assert.doesNotMatch(app, /const newThreadComposerApi =/u);
+});
