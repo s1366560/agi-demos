@@ -80,7 +80,7 @@ const refreshRuntimeSource =
     : '';
 const renderNewThreadStart = appSource.indexOf('const createHomeWorkbenchViewV2');
 const renderNewThreadEnd = appSource.indexOf(
-  '\n\n  const renderAuxiliaryView',
+  '\n\n  const desktopSessionCanvasInputV2',
   renderNewThreadStart,
 );
 const renderNewThreadSource =

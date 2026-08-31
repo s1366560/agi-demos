@@ -371,7 +371,6 @@
     "src/features/project-support/useProjectSupportController.ts",
     "src/features/project-support/ProjectSupportPage.tsx",
     "src/features/project-support/locales/projectSupportMessages.ts",
-    "src/features/navigation/AuxiliaryView.tsx",
     "src/features/navigation/locales/nativeUnavailableRouteMessages.ts",
     "src/features/navigation/desktopRouteModule.ts",
     "src/features/navigation/desktopProductionRouteRegistry.ts",

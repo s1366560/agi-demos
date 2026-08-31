@@ -230,7 +230,6 @@ import {
   socketEventInvalidatesMyWork,
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
-import { AuxiliaryView } from './features/navigation/AuxiliaryView';
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
 import {
   DEVICE_APPROVAL_ROUTE_ID,
@@ -6359,18 +6358,6 @@ export function App() {
       },
     };
   };
-
-  const renderAuxiliaryView = () => (
-    <AuxiliaryView
-      userName={auxiliaryUserName}
-      runningCount={myWorkCounts.running}
-      needsInputCount={myWorkCounts.needs_input + myWorkCounts.needs_approval}
-      readyCount={myWorkCounts.ready_review}
-      metricStatus={myWorkMetricStatus}
-      onOpenMyWork={() => switchSection('board')}
-      onRetryMyWork={() => void refreshMyWork()}
-    />
-  );
 
   const desktopSessionCanvasInputV2: DesktopSessionCanvasInputV2 = {
     actions: {
