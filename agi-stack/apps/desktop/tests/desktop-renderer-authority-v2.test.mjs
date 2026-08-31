@@ -110,13 +110,18 @@ function readyState(overrides = {}) {
 }
 
 const appComposition = createDesktopRendererAppCompositionPortV2({
-  api: {},
   authRef: { current: { tenants: [] } },
   configRef: { current: {} },
   desktopProductionRouteLocation: { readHash: () => "", subscribe: () => () => {} },
   desktopProductionRouteNavigation: {
     clearHash: () => undefined,
     openPath: () => undefined,
+  },
+  desktopTenantCatalogClientProviderV2: {
+    publish: () => undefined,
+    resolve: () => {
+      throw new Error("desktop_tenant_catalog_client_unpublished");
+    },
   },
   projectCronJobsRouteBindingProviderV2: {
     publish: () => undefined,

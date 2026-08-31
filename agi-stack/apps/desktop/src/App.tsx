@@ -307,6 +307,9 @@ import {
 } from './features/task/newTaskPlanModel';
 import { resolveNewTaskWorkspaceAuthority } from './features/task/newTaskSessionModel';
 import {
+  createDesktopTenantCatalogClientProviderV2,
+} from './features/tenant/desktopTenantCatalogClientProviderV2';
+import {
   currentWorkspaceAutonomyAttentionResolveAttempt,
   discardWorkspaceAutonomyAttentionResolveAttempt,
   resolveWorkspaceAutonomyAttentionAttempt,
@@ -772,6 +775,10 @@ export function App() {
     () => createDesktopProductionRouteAuthorityProviderV2(),
     [],
   );
+  const desktopTenantCatalogClientProviderV2 = useMemo(
+    () => createDesktopTenantCatalogClientProviderV2(),
+    [],
+  );
   const desktopConversationLifecycleClientProviderV2 = useMemo(
     () => createDesktopConversationLifecycleClientProviderV2(),
     [],
@@ -938,13 +945,17 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
+  const desktopTenantCatalogClientV2 = useMemo(
+    () => desktopTenantCatalogClientProviderV2.publish({ config }),
+    [config, desktopTenantCatalogClientProviderV2],
+  );
   const desktopRendererRouteRefsV2 = useMemo(
     () => ({
-      api,
       authRef,
       configRef,
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
+      desktopTenantCatalogClientProviderV2,
       projectCronJobsRouteBindingProviderV2,
       projectSearchRouteBindingProviderV2,
       setAuth,
@@ -954,7 +965,7 @@ export function App() {
       commitRuntimeConfig,
       settingsRouteCloseNavigationRef,
     }),
-    [],
+    [desktopTenantCatalogClientProviderV2, desktopTenantCatalogClientV2],
   );
   const desktopRendererCompositionV2 = useMemo(
     () => createDesktopRendererAppCompositionPortV2(desktopRendererRouteRefsV2),

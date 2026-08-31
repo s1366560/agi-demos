@@ -551,7 +551,7 @@ test('tenant creation V2 route composition preserves catalog refresh and navigat
   );
   assert.match(
     tenantCreationFactorySource,
-    /await client\.listTenants\(signal\)[\s\S]*if \(signal\.aborted\)[\s\S]*tenants:\s*authoritativeTenants/u,
+    /await tenantCatalogClient\.listTenants\(signal\)[\s\S]*if \(signal\.aborted\)[\s\S]*tenants:\s*authoritativeTenants/u,
   );
   assert.match(
     tenantCreationFactorySource,

@@ -298,6 +298,7 @@
     "src/features/backend-stores/**/*.ts",
     "src/features/backend-stores/**/*.tsx",
     "src/features/tenant/tenantOverviewClient.ts",
+    "src/features/tenant/desktopTenantCatalogClientProviderV2.ts",
     "src/features/tenant/tenantOverviewCapability.ts",
     "src/features/tenant/tenantOverviewHttpClient.ts",
     "src/features/tenant/tenantOverviewController.ts",

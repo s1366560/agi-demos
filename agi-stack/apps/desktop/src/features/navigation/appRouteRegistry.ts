@@ -2,7 +2,6 @@ import { type Dispatch, type RefObject, type SetStateAction, useEffect } from 'r
 
 import type { DesktopHashLocationPort } from './desktopHashRouteHost';
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
-import { DesktopApiClient } from '../../api/client';
 import { desktopVaultBoundCloudRequestBroker } from '../../api/cloudRequestBroker';
 import {
   AGENT_WORKSPACE_ROUTE_ID,
@@ -18,6 +17,7 @@ import { createDeviceApprovalRouteModuleLoader } from '../device-approval/device
 import { createTenantCreationClient } from '../tenant-creation/tenantCreationClient';
 import { upsertCreatedTenant } from '../tenant-creation/tenantCreationModel';
 import { createTenantCreationRouteModuleLoader } from '../tenant-creation/tenantCreationRouteModule';
+import type { DesktopTenantCatalogClientProviderV2 } from '../tenant/desktopTenantCatalogClientProviderV2';
 import {
   createInvitationAcceptanceClient,
   type InvitationAcceptanceClient,
@@ -233,9 +233,9 @@ import { createSkillsRouteModuleLoader } from '../settings-routes/skillsRouteMod
 import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRouteModule';
 
 export type AppRouteRegistryRefs = {
-  api: DesktopApiClient;
   authRef: RefObject<AuthState>;
   configRef: RefObject<DesktopRuntimeConfig>;
+  desktopTenantCatalogClientProviderV2: DesktopTenantCatalogClientProviderV2;
   desktopProductionRouteLocation: DesktopHashLocationPort;
   desktopProductionRouteNavigation: Readonly<{
     clearHash: () => void;
@@ -356,6 +356,7 @@ function createInvitationAcceptanceRouteLoader(
     configRef,
     desktopProductionRouteLocation,
     desktopProductionRouteNavigation,
+    desktopTenantCatalogClientProviderV2,
     setAuth,
     setInvitationSignInRequested,
     commitRuntimeConfig,
@@ -375,8 +376,10 @@ function createInvitationAcceptanceRouteLoader(
         onRequireSignIn: () => setInvitationSignInRequested(true),
         onAccepted: async (invitation, signal) => {
           try {
-            const client = new DesktopApiClient(configRef.current);
-            const authoritativeTenants = await client.listTenants(signal);
+            const tenantCatalogClient = desktopTenantCatalogClientProviderV2
+              .resolve()
+              .bindOperation(configRef.current);
+            const authoritativeTenants = await tenantCatalogClient.listTenants(signal);
             if (signal.aborted) return;
             setAuth((current) => ({
               ...current,
@@ -1006,12 +1009,20 @@ export function createAppTenantGovernanceRouteRegistry(
 }
 
 export function createAppTenantCreationRouteRegistry(refs: AppRouteRegistryRefs) {
-  const { configRef, desktopProductionRouteNavigation, setAuth } = refs;
+  const {
+    configRef,
+    desktopProductionRouteNavigation,
+    desktopTenantCatalogClientProviderV2,
+    setAuth,
+  } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
         createBinding: () => {
           const currentConfig = configRef.current;
+          const tenantCatalogClient = desktopTenantCatalogClientProviderV2
+            .resolve()
+            .bindOperation(currentConfig);
           return Object.freeze({
             client: createTenantCreationClient(currentConfig),
             onCreated: async (created, signal) => {
@@ -1020,8 +1031,7 @@ export function createAppTenantCreationRouteRegistry(refs: AppRouteRegistryRefs)
                 tenants: [...upsertCreatedTenant(current.tenants, created)],
               }));
               try {
-                const client = new DesktopApiClient(currentConfig);
-                const authoritativeTenants = await client.listTenants(signal);
+                const authoritativeTenants = await tenantCatalogClient.listTenants(signal);
                 if (signal.aborted) {
                   return Object.freeze({
                     catalogRefreshed: false,
