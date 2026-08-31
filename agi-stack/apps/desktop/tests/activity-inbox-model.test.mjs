@@ -202,10 +202,10 @@ test("Desktop production App injects the scoped authority adapter into Activity"
     "utf8",
   );
 
-  assert.match(source, /createDesktopAgentAuthorityAdapter/);
+  assert.match(source, /desktopAgentAuthorityProviderV2\.publish/);
   assert.match(source, /authorityAdapter: activityAuthorityAdapter/);
   assert.match(source, /authorityScope: activityAuthorityScope/);
-  assert.match(source, /principalId: auth\.user\.user_id/);
+  assert.match(source, /principalId: auth\.user\?\.user_id/);
 });
 
 test("Activity inbox never infers categories from narrative titles", () => {

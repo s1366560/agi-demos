@@ -41,15 +41,14 @@ import {
 } from './api/trustedSession';
 import type { CloudSessionProjection } from './api/cloudSessionProjectionClient';
 import { useResizablePanelWidth } from './components/ResizeHandle';
-import { createDesktopAgentAuthorityAdapter } from './features/agent-authority/cloudAgentAuthorityClient';
-import type {
-  CloudAgentAuthorityScope,
-  RunChangeScope,
-} from './features/agent-authority/agentAuthorityTypes';
+import type { RunChangeScope } from './features/agent-authority/agentAuthorityTypes';
 import {
   desktopChangeSnapshotFromCloud,
   desktopRunInputFromCloud,
 } from './features/agent-authority/agentAuthorityProjection';
+import {
+  createDesktopAgentAuthorityProviderV2,
+} from './features/agent-authority/desktopAgentAuthorityProviderV2';
 import {
   findWorkspaceProject,
   isCurrentContextRevision,
@@ -731,6 +730,10 @@ export function App() {
     () => createDesktopWorkbenchCapabilityClientProviderV2(),
     [],
   );
+  const desktopAgentAuthorityProviderV2 = useMemo(
+    () => createDesktopAgentAuthorityProviderV2(),
+    [],
+  );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
     () => createDesktopProductionRouteAuthorityProviderV2(),
     [],
@@ -968,26 +971,18 @@ export function App() {
     settingsWindowOpen ||
     shortcutsDialogOpen;
   const localRuntimeMode = config.mode === 'local' && runsInNativeDesktop;
-  const activityAuthorityAdapter = useMemo(
-    () => createDesktopAgentAuthorityAdapter(config),
-    [config],
+  const desktopAgentAuthorityV2 = useMemo(
+    () =>
+      desktopAgentAuthorityProviderV2.publish({
+        config,
+        principalId: auth.user?.user_id,
+      }),
+    [auth.user?.user_id, config, desktopAgentAuthorityProviderV2],
   );
-  const activityAuthorityScope = useMemo<CloudAgentAuthorityScope | undefined>(() => {
-    if (
-      config.mode !== 'cloud' ||
-      !auth.user?.user_id ||
-      config.tenantId.trim().length === 0 ||
-      config.projectId.trim().length === 0
-    ) {
-      return undefined;
-    }
-    return Object.freeze({
-      authority: 'cloud',
-      principalId: auth.user.user_id,
-      tenantId: config.tenantId,
-      projectId: config.projectId,
-    });
-  }, [auth.user?.user_id, config.mode, config.projectId, config.tenantId]);
+  const {
+    adapter: activityAuthorityAdapter,
+    cloudScope: activityAuthorityScope,
+  } = desktopAgentAuthorityV2;
   const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
     config,
     localRuntimeStatus,
