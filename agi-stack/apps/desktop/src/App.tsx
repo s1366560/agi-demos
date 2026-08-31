@@ -294,6 +294,9 @@ import {
   retainOpenWorkspaceAutonomyAttentionResolveAttempts,
   type WorkspaceAutonomyAttentionResolveAttempt,
 } from './features/workspace/autonomyAttentionResolveAttemptModel';
+import {
+  createDesktopConversationLifecycleClientProviderV2,
+} from './features/workspace/desktopConversationLifecycleClientProviderV2';
 import { createWorkspaceCollaborationClientProviderV2 } from './features/workspace/workspaceCollaborationClientProviderV2';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
 import type {
@@ -738,6 +741,10 @@ export function App() {
     () => createDesktopProductionRouteAuthorityProviderV2(),
     [],
   );
+  const desktopConversationLifecycleClientProviderV2 = useMemo(
+    () => createDesktopConversationLifecycleClientProviderV2(),
+    [],
+  );
   const workspaceCollaborationClientProviderV2 = useMemo(
     () => createWorkspaceCollaborationClientProviderV2(),
     [],
@@ -895,6 +902,10 @@ export function App() {
   const desktopArtifactClientV2 = useMemo(
     () => desktopArtifactClientProviderV2.publish({ config }),
     [config, desktopArtifactClientProviderV2],
+  );
+  const desktopConversationLifecycleClientV2 = useMemo(
+    () => desktopConversationLifecycleClientProviderV2.publish({ config }),
+    [config, desktopConversationLifecycleClientProviderV2],
   );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
@@ -3610,21 +3621,17 @@ export function App() {
       ) {
         throw new Error('Invalid conversation lifecycle scope');
       }
-      const apiClient = new DesktopApiClient({
-        ...requestConfig,
-        projectId,
-        workspaceId: normalizedWorkspaceId,
-      });
       const mutationScopeIsCurrent = () =>
         expectedScopeEpoch === configScopeEpochRef.current &&
         expectedContextRevision === contextRevisionRef.current &&
         isSameDesktopProjectRequestScope(requestConfig, configRef.current);
-      const updated = await apiClient.updateAgentConversationTitle(
-        conversation.id,
-        title,
-        projectId,
-        normalizedWorkspaceId,
-      );
+      const updated =
+        await desktopConversationLifecycleClientV2.client.updateAgentConversationTitle(
+          conversation.id,
+          title,
+          projectId,
+          normalizedWorkspaceId,
+        );
       if (!mutationScopeIsCurrent()) return;
       updateDataset((current) => {
         const conversationsByWorkspace = replaceConversationInWorkspaceRows(
@@ -3676,15 +3683,12 @@ export function App() {
     ) {
       throw new Error('Invalid conversation summary scope');
     }
-    const apiClient = new DesktopApiClient({
-      ...requestConfig,
-      workspaceId: normalizedWorkspaceId,
-    });
-    const updated = await apiClient.generateAgentConversationSummary(
-      requiredConversationId,
-      requestConfig.projectId,
-      normalizedWorkspaceId,
-    );
+    const updated =
+      await desktopConversationLifecycleClientV2.client.generateAgentConversationSummary(
+        requiredConversationId,
+        requestConfig.projectId,
+        normalizedWorkspaceId,
+      );
     const latestSession = agentConversationSessionRef.current;
     if (
       conversationSummaryMutationRequestRef.current !== requestGeneration ||
@@ -3728,16 +3732,14 @@ export function App() {
       ) {
         throw new Error('Invalid conversation lifecycle scope');
       }
-      const apiClient = new DesktopApiClient({
-        ...requestConfig,
-        projectId,
-        workspaceId: normalizedWorkspaceId,
-      });
       const mutationScopeIsCurrent = () =>
         expectedScopeEpoch === configScopeEpochRef.current &&
         expectedContextRevision === contextRevisionRef.current &&
         isSameDesktopProjectRequestScope(requestConfig, configRef.current);
-      await apiClient.deleteAgentConversation(conversation.id, projectId);
+      await desktopConversationLifecycleClientV2.client.deleteAgentConversation(
+        conversation.id,
+        projectId,
+      );
       if (!mutationScopeIsCurrent()) return;
       updateDataset((current) => {
         const conversationsByWorkspace = removeConversationFromWorkspaceRows(
