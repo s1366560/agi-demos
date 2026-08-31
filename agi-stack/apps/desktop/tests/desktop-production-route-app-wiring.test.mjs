@@ -14,6 +14,13 @@ const projectSearchBindingProviderSource = readFileSync(
   ),
   'utf8',
 );
+const projectCronJobsBindingProviderSource = readFileSync(
+  new URL(
+    '../src/features/automations/projectCronJobsRouteBindingProviderV2.ts',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const rendererAppCompositionSource = readFileSync(
   new URL('../src/plugins/desktopRendererAppCompositionV2.tsx', import.meta.url),
   'utf8',
@@ -56,6 +63,16 @@ test('V2 route factories retain the latest native route bindings', () => {
     projectDiscoveryFactoryStart,
     tenantCoreFactoryStart,
   );
+  const projectAdministrationFactoryStart = registrySource.indexOf(
+    'export function createAppProjectAdministrationRouteRegistry',
+  );
+  const runtimeInfrastructureFactoryStart = registrySource.indexOf(
+    'export function createAppRuntimeInfrastructureRouteRegistry',
+  );
+  const projectAdministrationFactorySource = registrySource.slice(
+    projectAdministrationFactoryStart,
+    runtimeInfrastructureFactoryStart,
+  );
   assert.match(
     registrySource,
     /createDesktopProductionRouteRegistry\(\{[\s\S]*PROJECT_OVERVIEW_ROUTE_ID[\s\S]*createProjectOverviewRouteModuleLoader\(\{[\s\S]*configRef\.current/u,
@@ -87,11 +104,20 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
   assert.match(
     registrySource,
-    /PROJECT_CRON_JOBS_ROUTE_ID[\s\S]*createProjectCronJobsRouteModuleLoader\(\{[\s\S]*projectCronJobsRouteBindingRef\.current/u,
+    /PROJECT_CRON_JOBS_ROUTE_ID[\s\S]*createProjectCronJobsRouteModuleLoader\(\{[\s\S]*projectCronJobsRouteBindingProviderV2\.resolve\(context\)/u,
   );
   assert.match(
     appSource,
-    /projectCronJobsRouteBindingRef\.current\s*=\s*Object\.freeze\(\{[\s\S]*api:\s*automationApi,[\s\S]*config,[\s\S]*project:\s*selectedProject,[\s\S]*runCapability:\s*automationRunCapability/u,
+    /projectCronJobsRouteBindingProviderV2\.publish\(\{[\s\S]*api:\s*automationApi,[\s\S]*scope:[\s\S]*projects:\s*auth\.projects,[\s\S]*capabilitySnapshot:\s*desktopCapabilityState\.snapshot/u,
+  );
+  assert.doesNotMatch(appSource, /projectCronJobsRouteBindingRef|automationRunCapability/u);
+  assert.doesNotMatch(
+    projectAdministrationFactorySource,
+    /new DesktopApiClient\(currentConfig\)|desktopCapability\(null,\s*['"]automation_run['"]\)|\(\) => undefined/u,
+  );
+  assert.match(
+    projectCronJobsBindingProviderSource,
+    /desktopCapability\(input\.capabilitySnapshot,\s*AUTOMATION_RUN_CAPABILITY_ID\)/u,
   );
   assert.match(
     registrySource,

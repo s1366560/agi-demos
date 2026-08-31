@@ -1,7 +1,7 @@
 import { type Dispatch, type RefObject, type SetStateAction, useEffect } from 'react';
 
 import type { DesktopHashLocationPort } from './desktopHashRouteHost';
-import type { AuthState, DesktopRuntimeConfig, ProjectSummary } from '../../types';
+import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { DesktopApiClient } from '../../api/client';
 import { desktopVaultBoundCloudRequestBroker } from '../../api/cloudRequestBroker';
 import {
@@ -24,15 +24,10 @@ import {
 } from '../invitation-acceptance/invitationAcceptanceClient';
 import { readInvitationTokenFromHash } from '../invitation-acceptance/invitationAcceptanceModel';
 import { createInvitationAcceptanceRouteModuleLoader } from '../invitation-acceptance/invitationAcceptanceRouteModule';
-import {
-  createDesktopAutomationApi,
-  type DesktopAutomationApi,
-} from '../automations/automationClient';
-import {
-  createProjectCronJobsRouteModuleLoader,
-  type ProjectCronJobsRouteBinding,
-} from '../automations/projectCronJobsRouteModule';
-import { desktopCapability, type DesktopCapabilityView } from '../runtime/capabilitySnapshot';
+import type {
+  ProjectCronJobsRouteBindingProviderV2,
+} from '../automations/projectCronJobsRouteBindingProviderV2';
+import { createProjectCronJobsRouteModuleLoader } from '../automations/projectCronJobsRouteModule';
 import {
   createDesktopProductionRouteRegistry,
   registerDesktopProductionRouteLoaders,
@@ -246,14 +241,7 @@ export type AppRouteRegistryRefs = {
     clearHash: () => void;
     openPath: (path: string) => void;
   }>;
-  projectCronJobsRouteBindingRef: RefObject<Readonly<{
-    api: DesktopAutomationApi;
-    config: DesktopRuntimeConfig;
-    project: ProjectSummary | null;
-    runCapability: DesktopCapabilityView;
-    onOpenProjectSettings: () => void;
-    onOpenConnection: () => void;
-  }> | null>;
+  projectCronJobsRouteBindingProviderV2: ProjectCronJobsRouteBindingProviderV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
   setInvitationSignInRequested: Dispatch<SetStateAction<boolean>>;
@@ -271,7 +259,7 @@ export type AppProjectKnowledgeRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'c
 export type AppProjectAgentRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectAdministrationRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'projectCronJobsRouteBindingRef'
+  'configRef' | 'projectCronJobsRouteBindingProviderV2'
 >;
 export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
@@ -660,7 +648,7 @@ export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteReg
 export function createAppProjectAdministrationRouteRegistry(
   refs: AppProjectAdministrationRouteRegistryRefs,
 ) {
-  const { configRef, projectCronJobsRouteBindingRef } = refs;
+  const { configRef, projectCronJobsRouteBindingProviderV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_SCHEMA_ROUTE_ID]: createProjectSchemaRouteModuleLoader({
@@ -702,23 +690,7 @@ export function createAppProjectAdministrationRouteRegistry(
         },
       }),
       [PROJECT_CRON_JOBS_ROUTE_ID]: createProjectCronJobsRouteModuleLoader({
-        createBinding: (_context): ProjectCronJobsRouteBinding => {
-          const current = projectCronJobsRouteBindingRef.current;
-          const currentConfig = current?.config ?? configRef.current;
-          return Object.freeze({
-            api:
-              current?.api ??
-              createDesktopAutomationApi(new DesktopApiClient(currentConfig), currentConfig),
-            scope: Object.freeze({
-              tenantId: currentConfig.tenantId,
-              projectId: currentConfig.projectId,
-            }),
-            projectName: current?.project?.name ?? current?.project?.id ?? null,
-            runCapability: current?.runCapability ?? desktopCapability(null, 'automation_run'),
-            onOpenProjectSettings: current?.onOpenProjectSettings ?? (() => undefined),
-            onOpenConnection: current?.onOpenConnection ?? (() => undefined),
-          });
-        },
+        createBinding: (context) => projectCronJobsRouteBindingProviderV2.resolve(context),
       }),
       [PROJECT_SETTINGS_ROUTE_ID]: createProjectSettingsRouteModuleLoader({
         createBinding: (context) => {

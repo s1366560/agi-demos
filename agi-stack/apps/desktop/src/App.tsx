@@ -69,10 +69,10 @@ import {
   type PendingPasswordChangeAttempt,
 } from './features/auth/forcePasswordChangeModel';
 import { LoginScreen, type WorkspaceSsoPresentation } from './features/auth/LoginScreen';
+import { createDesktopAutomationApi } from './features/automations/automationClient';
 import {
-  createDesktopAutomationApi,
-  type DesktopAutomationApi,
-} from './features/automations/automationClient';
+  createProjectCronJobsRouteBindingProviderV2,
+} from './features/automations/projectCronJobsRouteBindingProviderV2';
 import { initialDesktopRuntimeConfig } from './features/auth/loginRuntimeModel';
 import { resolveNativeOAuthResumePath } from './features/auth/nativeOAuthSessionModel';
 import type { ChatWorkflowTarget } from './features/chat/ChatWorkflowStrip';
@@ -217,10 +217,7 @@ import {
 } from './features/session/sessionTimelinePaginationModel';
 import { useActivityInbox } from './features/activity/useActivityInbox';
 import { useCompletionNotifications } from './features/activity/useCompletionNotifications';
-import {
-  desktopCapability,
-  type DesktopCapabilityView,
-} from './features/runtime/capabilitySnapshot';
+import { desktopCapability } from './features/runtime/capabilitySnapshot';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
 import { createDesktopWorkbenchCapabilityClient } from './features/runtime/workbenchCapabilityClient';
 import { createProjectSearchRouteBindingProviderV2 } from './features/search/projectSearchRouteBindingProviderV2';
@@ -742,14 +739,10 @@ export function App() {
     () => createProjectSearchRouteBindingProviderV2(),
     [],
   );
-  const projectCronJobsRouteBindingRef = useRef<Readonly<{
-    api: DesktopAutomationApi;
-    config: DesktopRuntimeConfig;
-    project: ProjectSummary | null;
-    runCapability: DesktopCapabilityView;
-    onOpenProjectSettings: () => void;
-    onOpenConnection: () => void;
-  }> | null>(null);
+  const projectCronJobsRouteBindingProviderV2 = useMemo(
+    () => createProjectCronJobsRouteBindingProviderV2(),
+    [],
+  );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
   const desktopProductionRouteLocation = useMemo(
     () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
@@ -867,7 +860,7 @@ export function App() {
       configRef,
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
-      projectCronJobsRouteBindingRef,
+      projectCronJobsRouteBindingProviderV2,
       projectSearchRouteBindingProviderV2,
       setAuth,
       setInvitationSignInRequested,
@@ -1063,10 +1056,6 @@ export function App() {
     capabilityLoading: desktopCapabilityState.loading,
     onRetryCapability: desktopCapabilityState.reload,
   });
-  const automationRunCapability = desktopCapability(
-    desktopCapabilityState.snapshot,
-    'automation_run',
-  );
   const workspaceCollaborationCapability = desktopCapability(
     desktopCapabilityState.snapshot,
     'workspace_collaboration',
@@ -5663,11 +5652,14 @@ export function App() {
     }
     openSettingsEntry('runtime_connection');
   };
-  projectCronJobsRouteBindingRef.current = Object.freeze({
+  projectCronJobsRouteBindingProviderV2.publish({
     api: automationApi,
-    config,
-    project: selectedProject,
-    runCapability: automationRunCapability,
+    scope: Object.freeze({
+      tenantId: config.tenantId,
+      projectId: config.projectId,
+    }),
+    projects: auth.projects,
+    capabilitySnapshot: desktopCapabilityState.snapshot,
     onOpenProjectSettings: openWorkspaceSettings,
     onOpenConnection: openConnectionSettings,
   });

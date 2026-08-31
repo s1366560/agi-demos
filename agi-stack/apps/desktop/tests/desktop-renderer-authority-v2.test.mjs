@@ -118,7 +118,12 @@ const appComposition = createDesktopRendererAppCompositionPortV2({
     clearHash: () => undefined,
     openPath: () => undefined,
   },
-  projectCronJobsRouteBindingRef: { current: null },
+  projectCronJobsRouteBindingProviderV2: {
+    publish: () => undefined,
+    resolve: () => {
+      throw new Error("project_cron_jobs_route_binding_unpublished");
+    },
+  },
   projectSearchRouteBindingProviderV2: {
     publish: () => undefined,
     resolve: () => {

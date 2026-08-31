@@ -37,8 +37,9 @@ test('App projects the narrow automation API into the route binding and the page
   assert.match(appSource, /createDesktopAutomationApi/u);
   assert.match(
     appSource,
-    /projectCronJobsRouteBindingRef\.current = Object\.freeze\([\s\S]*api: automationApi/u,
+    /projectCronJobsRouteBindingProviderV2\.publish\([\s\S]*api: automationApi/u,
   );
+  assert.doesNotMatch(appSource, /projectCronJobsRouteBindingRef/u);
   assert.doesNotMatch(appSource, /api=\{automationApi\}/u);
   assert.match(automationsPageSource, /api\.runAutomation/u);
   assert.match(automationsPageSource, /expected_revision: job\.revision/u);

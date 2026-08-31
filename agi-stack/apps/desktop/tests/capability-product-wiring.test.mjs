@@ -14,6 +14,13 @@ const projectSearchBindingProviderSource = readFileSync(
   ),
   'utf8',
 );
+const projectCronJobsBindingProviderSource = readFileSync(
+  new URL(
+    '../src/features/automations/projectCronJobsRouteBindingProviderV2.ts',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const searchSource = readFileSync(
   new URL('../src/features/search/DesktopSearch.tsx', import.meta.url),
   'utf8',
@@ -37,10 +44,16 @@ test('App projects capabilities into V2 Search and Automation route bindings', (
   assert.doesNotMatch(appSource, /projectSearchCapability|PROJECT_SEARCH_ROUTE_ID/u);
   assert.match(
     appSource,
-    /projectCronJobsRouteBindingRef\.current = Object\.freeze\([\s\S]*runCapability: automationRunCapability/u,
+    /projectCronJobsRouteBindingProviderV2\.publish\([\s\S]*capabilitySnapshot: desktopCapabilityState\.snapshot/u,
+  );
+  assert.match(
+    projectCronJobsBindingProviderSource,
+    /desktopCapability\(input\.capabilitySnapshot,\s*AUTOMATION_RUN_CAPABILITY_ID\)/u,
   );
   assert.match(registrySource, /projectSearchRouteBindingProviderV2\.resolve\(context\)/u);
-  assert.match(registrySource, /current\?\.runCapability/u);
+  assert.match(registrySource, /projectCronJobsRouteBindingProviderV2\.resolve\(context\)/u);
+  assert.doesNotMatch(appSource, /projectCronJobsRouteBindingRef|automationRunCapability/u);
+  assert.doesNotMatch(registrySource, /current\?\.runCapability/u);
   assert.doesNotMatch(appSource, /capability=\{searchCapability\}/u);
   assert.doesNotMatch(appSource, /runCapability=\{automationRunCapability\}/u);
 });
