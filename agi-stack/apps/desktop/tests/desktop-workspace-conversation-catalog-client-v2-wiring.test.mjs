@@ -41,6 +41,34 @@ test('workspace conversation hydration pins one submitted-scope V2 operation bin
   assert.doesNotMatch(loader, /new DesktopApiClient\(/u);
 });
 
+test('session fallback lookups pin submitted-scope V2 conversation catalog operations', () => {
+  const myWorkLoader = functionSource(app, 'openMyWorkSession', 'openAgentSession');
+  assert.match(
+    myWorkLoader,
+    /desktopWorkspaceConversationCatalogClientV2\.bindOperation\(\{[\s\S]*?\.\.\.config,[\s\S]*?projectId: item\.project_id,[\s\S]*?workspaceId,[\s\S]*?\}\)/u,
+  );
+  assert.match(
+    myWorkLoader,
+    /client\.listConversations\(\s*item\.project_id,\s*workspaceId \? workspaceId : \{ workspaceId: null, unboundOnly: true \},\s*\)/u,
+  );
+  assert.match(myWorkLoader, /myWorkConversationMatchesScope/u);
+  assert.match(myWorkLoader, /contextRevisionRef\.current/u);
+  assert.match(myWorkLoader, /configScopeEpochRef\.current/u);
+  assert.doesNotMatch(myWorkLoader, /api\.listConversations/u);
+
+  const agentLoader = functionSource(app, 'openAgentSession', 'createBoardWorkbenchViewV2');
+  assert.match(
+    agentLoader,
+    /desktopWorkspaceConversationCatalogClientV2\.bindOperation\(\{[\s\S]*?\.\.\.config,[\s\S]*?projectId,[\s\S]*?workspaceId,[\s\S]*?\}\)/u,
+  );
+  assert.match(agentLoader, /client\.listConversations\(projectId, workspaceId\)/u);
+  assert.match(agentLoader, /conversation\.tenant_id !== config\.tenantId/u);
+  assert.match(agentLoader, /conversation\.workspace_id !== workspaceId/u);
+  assert.match(agentLoader, /contextRevisionRef\.current/u);
+  assert.match(agentLoader, /configScopeEpochRef\.current/u);
+  assert.doesNotMatch(agentLoader, /api\.listConversations/u);
+});
+
 test('workspace conversation catalog Provider owns exactly one read method', () => {
   assert.match(provider, /type DesktopWorkspaceConversationCatalogMethod = 'listConversations'/u);
   assert.match(provider, /listConversations:/u);
@@ -53,6 +81,14 @@ test('workspace conversation catalog Provider owns exactly one read method', () 
 
 function callbackSource(sourceText, name, nextName) {
   const start = sourceText.indexOf(`const ${name} = useCallback(`);
+  assert.notEqual(start, -1);
+  const end = sourceText.indexOf(`\n\n  const ${nextName}`, start + 1);
+  assert.notEqual(end, -1);
+  return sourceText.slice(start, end);
+}
+
+function functionSource(sourceText, name, nextName) {
+  const start = sourceText.indexOf(`const ${name} = async`);
   assert.notEqual(start, -1);
   const end = sourceText.indexOf(`\n\n  const ${nextName}`, start + 1);
   assert.notEqual(end, -1);

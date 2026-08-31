@@ -6284,7 +6284,12 @@ export function App() {
     }
     if (!conversation) {
       try {
-        const response = await api.listConversations(
+        const client = desktopWorkspaceConversationCatalogClientV2.bindOperation({
+          ...config,
+          projectId: item.project_id,
+          workspaceId,
+        });
+        const response = await client.listConversations(
           item.project_id,
           workspaceId ? workspaceId : { workspaceId: null, unboundOnly: true },
         );
@@ -6334,7 +6339,12 @@ export function App() {
     );
     if (!conversation) {
       try {
-        const response = await api.listConversations(projectId, workspaceId);
+        const client = desktopWorkspaceConversationCatalogClientV2.bindOperation({
+          ...config,
+          projectId,
+          workspaceId,
+        });
+        const response = await client.listConversations(projectId, workspaceId);
         conversation = response.items.find((candidate) => candidate.id === conversationId);
       } catch (caught) {
         if (
