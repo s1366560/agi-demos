@@ -2,6 +2,7 @@ import {
   DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
   type RegisteredRendererContributionV2,
   type RendererContributionRegistryV2,
+  type RendererPluginGenerationStateV2,
   type RuntimeGenerationV2,
 } from '@agistack/plugin-runtime';
 
@@ -97,27 +98,36 @@ export function projectDesktopRendererAuthorityV2(
 }
 
 export function resolveDesktopRendererAuthorityStateV2(
-  generation: RuntimeGenerationV2 | undefined,
+  generationState: RendererPluginGenerationStateV2,
   enabled: boolean,
 ): DesktopRendererAuthorityStateV2 {
   if (!enabled) return DISABLED_STATE_V2;
-  if (generation === undefined) return LOADING_STATE_V2;
-  try {
-    return projectDesktopRendererAuthorityV2(generation);
-  } catch (error) {
-    return Object.freeze({
-      error,
-      navigationArtifactIds: EMPTY_IDS_V2,
-      navigationDiscoveryRouteIds: EMPTY_IDS_V2,
-      navigationRouteIds: EMPTY_IDS_V2,
-      routeArtifactIds: EMPTY_IDS_V2,
-      routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
-      routeIds: EMPTY_IDS_V2,
-      slotDefinitions: EMPTY_UI_SLOT_DEFINITIONS_V2,
-      status: 'unavailable',
-      uiSlotArtifactIds: EMPTY_IDS_V2,
-    });
+  if (generationState.status === 'loading') return LOADING_STATE_V2;
+  if (generationState.generation === undefined) {
+    return unavailableAuthorityStateV2(generationState.error);
   }
+  try {
+    const authority = projectDesktopRendererAuthorityV2(generationState.generation);
+    if (generationState.status !== 'degraded') return authority;
+    return Object.freeze({ ...authority, error: generationState.error });
+  } catch (error) {
+    return unavailableAuthorityStateV2(error);
+  }
+}
+
+function unavailableAuthorityStateV2(error: unknown): DesktopRendererAuthorityStateV2 {
+  return Object.freeze({
+    error,
+    navigationArtifactIds: EMPTY_IDS_V2,
+    navigationDiscoveryRouteIds: EMPTY_IDS_V2,
+    navigationRouteIds: EMPTY_IDS_V2,
+    routeArtifactIds: EMPTY_IDS_V2,
+    routeArtifacts: EMPTY_ROUTE_ARTIFACTS_V2,
+    routeIds: EMPTY_IDS_V2,
+    slotDefinitions: EMPTY_UI_SLOT_DEFINITIONS_V2,
+    status: 'unavailable',
+    uiSlotArtifactIds: EMPTY_IDS_V2,
+  });
 }
 
 function freezeStringsV2(values: readonly string[]): readonly string[] {

@@ -25,6 +25,7 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   const agentSocketLease = source('src/hooks/agentSocketGenerationLeaseV2.ts');
   const artifactCatalog = source('src/plugins/desktopRendererArtifactCatalogV2.ts');
   const authority = source('src/plugins/desktopRendererAuthorityStateV2.ts');
+  const authorityProjection = source('src/plugins/desktopRendererAuthorityProjectionV2.ts');
   const main = source('src/main.tsx');
 
   assert.match(hook, /RendererPluginRuntimeV2\(\s*["']desktop-renderer["']/u);
@@ -63,7 +64,13 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   assert.match(host, /useDesktopPluginGenerationV2\(\s*config,\s*enabled\s*,?\s*\)/u);
   assert.match(host, /DesktopRendererCompositionPortV2/u);
   assert.doesNotMatch(host, /AppRouteRegistryRefs/u);
-  assert.match(host, /resolveDesktopRendererAuthorityStateV2/u);
+  assert.match(
+    host,
+    /resolveDesktopRendererAuthorityStateV2\(\s*generationState,\s*enabled\s*,?\s*\)/u
+  );
+  assert.match(authorityProjection, /generationState\.status === 'loading'/u);
+  assert.match(authorityProjection, /generationState\.generation/u);
+  assert.match(authorityProjection, /generationState\.error/u);
   assert.match(host, /projectDesktopRouteRegistryV2/u);
   assert.match(host, /projectDesktopNavigationRegistryV2/u);
   assert.match(context, /DesktopRendererGenerationContextV2/u);

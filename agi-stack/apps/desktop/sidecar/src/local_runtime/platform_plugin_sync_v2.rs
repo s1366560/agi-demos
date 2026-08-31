@@ -14,6 +14,7 @@ use agistack_plugin_host::{
 };
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, oneshot, watch};
 use url::Url;
@@ -336,8 +337,20 @@ fn desktop_loader() -> LoaderV2 {
     )
 }
 
-fn local_bootstrap_snapshot() -> Result<ProfileSnapshotV2, String> {
-    parse_profile_snapshot_v2(LOCAL_BOOTSTRAP_PROFILE_V2).map_err(|error| error.to_string())
+struct LocalBootstrapSnapshotV2 {
+    snapshot: ProfileSnapshotV2,
+    snapshot_wire: Value,
+}
+
+fn local_bootstrap_snapshot() -> Result<LocalBootstrapSnapshotV2, String> {
+    let snapshot =
+        parse_profile_snapshot_v2(LOCAL_BOOTSTRAP_PROFILE_V2).map_err(|error| error.to_string())?;
+    let snapshot_wire =
+        serde_json::from_str(LOCAL_BOOTSTRAP_PROFILE_V2).map_err(|error| error.to_string())?;
+    Ok(LocalBootstrapSnapshotV2 {
+        snapshot,
+        snapshot_wire,
+    })
 }
 
 async fn activate_authority_source(
@@ -368,12 +381,12 @@ async fn activate_authority_source(
         DesktopAuthoritySourceV2::Local => {
             let baseline = local_bootstrap_snapshot()?;
             let generation = reconciler
-                .stage_snapshot(baseline.clone())
+                .stage_snapshot(baseline.snapshot.clone())
                 .await
                 .map_err(|error| error.to_string())?;
             state
                 .platform_plugin_authority_v2
-                .publish_local_baseline(&baseline, generation)
+                .publish_local_baseline(&baseline.snapshot, &baseline.snapshot_wire, generation)
                 .await;
             reconciler.reset_publication_ordering();
         }
@@ -499,13 +512,15 @@ async fn activate_authority_source_for_selection(
         DesktopAuthoritySourceV2::Local => {
             let baseline = local_bootstrap_snapshot()?;
             let generation = reconciler
-                .stage_snapshot(baseline.clone())
+                .stage_snapshot(baseline.snapshot.clone())
                 .await
                 .map_err(|error| error.to_string())?;
             let retirement = begin_selected_publication(selection, expected_selection, || {
-                state
-                    .platform_plugin_authority_v2
-                    .replace_local_baseline(&baseline, Arc::clone(&generation))
+                state.platform_plugin_authority_v2.replace_local_baseline(
+                    &baseline.snapshot,
+                    &baseline.snapshot_wire,
+                    Arc::clone(&generation),
+                )
             });
             let retirement = match retirement {
                 Ok(retirement) => retirement,

@@ -52,7 +52,11 @@ async fn publish_generation(
     .expect("desktop generation must stage");
     state
         .platform_plugin_authority_v2
-        .publish_local_baseline(&snapshot, Arc::clone(&generation))
+        .publish_local_baseline(
+            &snapshot,
+            &serde_json::to_value(&snapshot).expect("test snapshot must serialize"),
+            Arc::clone(&generation),
+        )
         .await;
     generation
 }

@@ -14,6 +14,7 @@ use agistack_plugin_host::{
     DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2,
 };
 use serde::Serialize;
+use serde_json::Value;
 use tokio::sync::oneshot;
 
 use crate::trusted_session::TrustedSessionBroker;
@@ -181,7 +182,7 @@ struct PublishedPlatformPluginGenerationV2 {
 #[serde(tag = "source", rename_all = "snake_case")]
 pub(crate) enum PlatformPluginRendererDistributionV2 {
     Local {
-        snapshot: ProfileSnapshotV2,
+        snapshot: Value,
     },
     Cloud {
         distribution: ControlPlaneDistributionV2,
@@ -293,9 +294,10 @@ impl PlatformPluginAuthorityV2 {
     pub(super) async fn publish_local_baseline(
         &self,
         snapshot: &ProfileSnapshotV2,
+        snapshot_wire: &Value,
         generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     ) {
-        self.replace_local_baseline(snapshot, generation)
+        self.replace_local_baseline(snapshot, snapshot_wire, generation)
             .dispose()
             .await;
     }
@@ -318,13 +320,14 @@ impl PlatformPluginAuthorityV2 {
     pub(super) fn replace_local_baseline(
         &self,
         snapshot: &ProfileSnapshotV2,
+        snapshot_wire: &Value,
         generation: Arc<agistack_plugin_host::RuntimeGenerationV2>,
     ) -> GenerationRetirementV2 {
         self.replace_snapshot(
             snapshot,
             None,
             PlatformPluginRendererDistributionV2::Local {
-                snapshot: snapshot.clone(),
+                snapshot: snapshot_wire.clone(),
             },
             generation,
         )
@@ -714,6 +717,8 @@ mod tests {
     #[tokio::test]
     async fn local_baseline_exports_only_its_validated_snapshot() {
         let distribution = bootstrap_distribution();
+        let snapshot_wire: Value =
+            serde_json::from_str(BOOTSTRAP).expect("bootstrap wire must parse");
         let authority = PlatformPluginAuthorityV2::default();
         let reconciler = PluginSnapshotReconcilerV2::new_with_manager(
             LoaderV2::for_target(
@@ -730,7 +735,7 @@ mod tests {
             .await
             .expect("generation must stage");
         authority
-            .publish_local_baseline(&distribution.snapshot, generation)
+            .publish_local_baseline(&distribution.snapshot, &snapshot_wire, generation)
             .await;
 
         assert_eq!(
@@ -743,7 +748,7 @@ mod tests {
             .expect("local renderer snapshot must serialize"),
             json!({
                 "source": "local",
-                "snapshot": distribution.snapshot,
+                "snapshot": snapshot_wire,
             })
         );
 

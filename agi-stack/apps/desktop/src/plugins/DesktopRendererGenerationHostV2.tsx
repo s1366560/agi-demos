@@ -47,7 +47,7 @@ export function useDesktopRendererGenerationHostV2(
   const generationStatus = generationState.status;
 
   return useMemo(() => {
-    const authority = resolveDesktopRendererAuthorityStateV2(generation, enabled);
+    const authority = resolveDesktopRendererAuthorityStateV2(generationState, enabled);
     const routeRegistry = projectDesktopRouteRegistryV2(composition, authority);
     const navigationRegistry = projectDesktopNavigationRegistryV2(routeRegistry, authority);
     const actions: DesktopRendererGenerationActionsV2 = Object.freeze({
@@ -72,5 +72,13 @@ export function useDesktopRendererGenerationHostV2(
       }),
       state: Object.freeze({ authority, navigationRegistry, routeRegistry }),
     });
-  }, [composition, enabled, generation, generationDigest, generationError, generationStatus]);
+  }, [
+    composition,
+    enabled,
+    generation,
+    generationDigest,
+    generationError,
+    generationState,
+    generationStatus,
+  ]);
 }
