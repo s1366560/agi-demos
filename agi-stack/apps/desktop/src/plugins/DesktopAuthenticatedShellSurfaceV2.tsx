@@ -7,7 +7,6 @@ import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
 import { WorkbenchTabBar } from '../features/chrome/WorkbenchTabBar';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
-import { WorkspaceSettingsDialog } from '../features/workspace/WorkspaceSettingsDialog';
 import type { ResolvedTheme } from '../theme';
 import type { DesktopCommandPaletteInputV2 } from './DesktopCommandPaletteSurfaceV2';
 import type { DesktopKeyboardShortcutsInputV2 } from './DesktopKeyboardShortcutsSurfaceV2';
@@ -17,9 +16,11 @@ import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRo
 import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
 import { DesktopRendererStatusBarV2 } from './DesktopRendererStatusBarV2';
 import { DesktopRendererWorkspaceCreateV2 } from './DesktopRendererWorkspaceCreateV2';
+import { DesktopRendererWorkspaceSettingsV2 } from './DesktopRendererWorkspaceSettingsV2';
 import type { DesktopSettingsWindowInputV2 } from './DesktopSettingsWindowSurfaceV2';
 import type { DesktopStatusBarInputV2 } from './DesktopStatusBarSurfaceV2';
 import type { DesktopWorkspaceCreateInputV2 } from './DesktopWorkspaceCreateSurfaceV2';
+import type { DesktopWorkspaceSettingsInputV2 } from './DesktopWorkspaceSettingsSurfaceV2';
 import type { DesktopRendererGenerationMetaV2 } from './desktopRendererGenerationContextV2';
 
 export type DesktopAuthenticatedShellOptionalOutletV2<Props> =
@@ -62,7 +63,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
       ComponentProps<typeof DesktopTitlebar>
     >;
     workspaceCreate: DesktopWorkspaceCreateInputV2;
-    workspaceSettings: ComponentProps<typeof WorkspaceSettingsDialog>;
+    workspaceSettings: DesktopWorkspaceSettingsInputV2;
   }>;
 }
 
@@ -129,7 +130,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
         <DesktopRendererKeyboardShortcutsV2 input={surfaces.keyboardShortcuts} />
         <NewTaskFlow {...surfaces.newTask} />
         <DesktopRendererWorkspaceCreateV2 input={surfaces.workspaceCreate} />
-        <WorkspaceSettingsDialog {...surfaces.workspaceSettings} />
+        <DesktopRendererWorkspaceSettingsV2 input={surfaces.workspaceSettings} />
         <DesktopRendererSettingsWindowV2 input={surfaces.settings} />
       </div>
     </Theme>

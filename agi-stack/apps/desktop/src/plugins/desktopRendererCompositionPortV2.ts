@@ -15,6 +15,7 @@ import type { DesktopSettingsWindowSurfacePropsV2 } from './DesktopSettingsWindo
 import type { DesktopStatusBarSurfacePropsV2 } from './DesktopStatusBarSurfaceV2';
 import type { DesktopWorkspaceCollaborationSurfacePropsV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import type { DesktopWorkspaceCreateSurfacePropsV2 } from './DesktopWorkspaceCreateSurfaceV2';
+import type { DesktopWorkspaceSettingsSurfacePropsV2 } from './DesktopWorkspaceSettingsSurfaceV2';
 import type { DesktopWorkbenchSurfaceViewModelV2 } from './DesktopWorkbenchSurfaceV2';
 import type { DesktopConversationRendererModuleV2 } from './desktopConversationRendererModuleV2';
 import type { DesktopRendererAuthorityStateV2 } from './desktopRendererAuthorityStateV2';
@@ -48,6 +49,8 @@ export const DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-workspace-collaboration-surface' as const;
 export const DESKTOP_WORKSPACE_CREATE_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-workspace-create-surface' as const;
+export const DESKTOP_WORKSPACE_SETTINGS_SURFACE_MODULE_REF_V2 =
+  'builtin:desktop-workspace-settings-surface' as const;
 
 export type DesktopRendererActivityInboxSurfaceV2 =
   ComponentType<DesktopActivityInboxSurfacePropsV2>;
@@ -70,6 +73,8 @@ export type DesktopRendererWorkspaceCollaborationSurfaceV2 =
   ComponentType<DesktopWorkspaceCollaborationSurfacePropsV2>;
 export type DesktopRendererWorkspaceCreateSurfaceV2 =
   ComponentType<DesktopWorkspaceCreateSurfacePropsV2>;
+export type DesktopRendererWorkspaceSettingsSurfaceV2 =
+  ComponentType<DesktopWorkspaceSettingsSurfacePropsV2>;
 
 export interface DesktopRendererAuthenticatedShellSurfacePropsV2 {
   readonly viewModel: DesktopAuthenticatedShellViewModelV2;
@@ -136,6 +141,9 @@ export interface DesktopRendererCompositionPortV2 {
   readonly resolveWorkspaceCreateSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererWorkspaceCreateSurfaceV2 | null;
+  readonly resolveWorkspaceSettingsSurface: (
+    definition: UiSlotDefinition,
+  ) => DesktopRendererWorkspaceSettingsSurfaceV2 | null;
   readonly resolveWorkbenchSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererWorkbenchSurfaceV2 | null;
@@ -365,6 +373,22 @@ export type DesktopRendererWorkspaceCreateCompositionV2 =
         | 'desktop_renderer_workspace_create_module_unavailable';
     }>;
 
+export type DesktopRendererWorkspaceSettingsCompositionV2 =
+  | Readonly<{
+      status: 'ready';
+      Surface: DesktopRendererWorkspaceSettingsSurfaceV2;
+    }>
+  | Readonly<{ status: 'loading' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode:
+        | 'desktop_renderer_generation_disabled'
+        | 'desktop_renderer_generation_unavailable'
+        | 'desktop_renderer_workspace_settings_contribution_ambiguous'
+        | 'desktop_renderer_workspace_settings_contribution_missing'
+        | 'desktop_renderer_workspace_settings_module_unavailable';
+    }>;
+
 export function projectDesktopAuthenticatedShellCompositionV2(
   authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
   composition: DesktopRendererCompositionPortV2,
@@ -456,6 +480,39 @@ export function projectDesktopWorkspaceCreateCompositionV2(
   const Surface = composition.resolveWorkspaceCreateSurface(definitions[0]);
   if (Surface === null) {
     return unavailableWorkspaceCreateV2('desktop_renderer_workspace_create_module_unavailable');
+  }
+  return Object.freeze({ status: 'ready', Surface });
+}
+
+export function projectDesktopWorkspaceSettingsCompositionV2(
+  authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
+  composition: DesktopRendererCompositionPortV2,
+): DesktopRendererWorkspaceSettingsCompositionV2 {
+  if (authority.status === 'loading') return Object.freeze({ status: 'loading' });
+  if (authority.status === 'disabled') {
+    return unavailableWorkspaceSettingsV2('desktop_renderer_generation_disabled');
+  }
+  if (authority.status === 'unavailable') {
+    return unavailableWorkspaceSettingsV2('desktop_renderer_generation_unavailable');
+  }
+  const definitions = authority.slotDefinitions.filter(
+    ({ slot }) => slot === 'workspace_settings_surface',
+  );
+  if (definitions.length === 0) {
+    return unavailableWorkspaceSettingsV2(
+      'desktop_renderer_workspace_settings_contribution_missing',
+    );
+  }
+  if (definitions.length !== 1) {
+    return unavailableWorkspaceSettingsV2(
+      'desktop_renderer_workspace_settings_contribution_ambiguous',
+    );
+  }
+  const Surface = composition.resolveWorkspaceSettingsSurface(definitions[0]);
+  if (Surface === null) {
+    return unavailableWorkspaceSettingsV2(
+      'desktop_renderer_workspace_settings_module_unavailable',
+    );
   }
   return Object.freeze({ status: 'ready', Surface });
 }
@@ -814,6 +871,15 @@ function unavailableWorkspaceCreateV2(
     Readonly<{ status: 'unavailable' }>
   >['reasonCode'],
 ): DesktopRendererWorkspaceCreateCompositionV2 {
+  return Object.freeze({ status: 'unavailable', reasonCode });
+}
+
+function unavailableWorkspaceSettingsV2(
+  reasonCode: Extract<
+    DesktopRendererWorkspaceSettingsCompositionV2,
+    Readonly<{ status: 'unavailable' }>
+  >['reasonCode'],
+): DesktopRendererWorkspaceSettingsCompositionV2 {
   return Object.freeze({ status: 'unavailable', reasonCode });
 }
 

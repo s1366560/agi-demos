@@ -20,8 +20,9 @@ test('workspace Configure routes selected workspaces to their dedicated settings
   );
   assert.match(
     shellSurfaceSource,
-    /<WorkspaceSettingsDialog \{\.\.\.surfaces\.workspaceSettings\} \/>/u,
+    /<DesktopRendererWorkspaceSettingsV2 input=\{surfaces\.workspaceSettings\}\s*\/>/u,
   );
+  assert.doesNotMatch(shellSurfaceSource, /<WorkspaceSettingsDialog\b/u);
   assert.match(appSource, /workspaceSettings:\s*\{[\s\S]*workspace:\s*selectedWorkspace/u);
   assert.match(appSource, /onSave:\s*updateWorkspaceFromDialog/u);
 });

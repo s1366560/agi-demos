@@ -348,6 +348,27 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-workspace-settings-surface
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution
+      enabled: true
+      config:
+        id: desktop.workspace-settings-surface
+        kind: ui-slot
+        order: 87
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - desktop.ui-slots.workspace-settings-surface.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-workbench-surface
       parent_entry_id: builtin-desktop-renderer-contribution-registry
       plugin_ref: memstack-renderer-contributions
