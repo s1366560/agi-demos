@@ -664,7 +664,7 @@ test('authenticated shell contribution owns the complete signed-in app shell', (
   assert.match(shellBoundary, /viewModel=\{desktopAuthenticatedShellViewModelV2\}/u);
   assert.match(authenticatedShellSurfaceSource, /<div[\s\S]*className=\{shellClassName\}/u);
   for (const component of [
-    'DesktopTitlebar',
+    'DesktopRendererTitlebarV2',
     'DesktopSidebar',
     'DesktopRendererWorkbenchTabBarV2',
     'DesktopRendererProductionRouterV2',

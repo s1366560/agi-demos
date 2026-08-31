@@ -27,6 +27,7 @@ import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopSessionWorkspaceSurfaceV2 } from './DesktopSessionWorkspaceSurfaceV2';
 import { DesktopSettingsWindowSurfaceV2 } from './DesktopSettingsWindowSurfaceV2';
 import { DesktopStatusBarSurfaceV2 } from './DesktopStatusBarSurfaceV2';
+import { DesktopTitlebarSurfaceV2 } from './DesktopTitlebarSurfaceV2';
 import { DesktopWorkspaceCollaborationSurfaceV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
 import { DesktopWorkspaceCreateSurfaceV2 } from './DesktopWorkspaceCreateSurfaceV2';
 import { DesktopWorkspaceSettingsSurfaceV2 } from './DesktopWorkspaceSettingsSurfaceV2';
@@ -66,6 +67,7 @@ import {
   DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2,
   DESKTOP_SETTINGS_WINDOW_SURFACE_MODULE_REF_V2,
   DESKTOP_STATUS_BAR_SURFACE_MODULE_REF_V2,
+  DESKTOP_TITLEBAR_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_CREATE_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_SETTINGS_SURFACE_MODULE_REF_V2,
@@ -130,6 +132,8 @@ export function createDesktopRendererAppCompositionPortV2(
         : null,
     resolveStatusBarSurface: (definition: UiSlotDefinition) =>
       validStatusBarDefinitionV2(definition) ? DesktopStatusBarSurfaceV2 : null,
+    resolveTitlebarSurface: (definition: UiSlotDefinition) =>
+      validTitlebarDefinitionV2(definition) ? DesktopTitlebarSurfaceV2 : null,
     resolveConversationRendererModule: (definition: AuthorizedUiSlotDefinitionV2) =>
       validConversationRendererDefinitionV2(definition)
         ? DESKTOP_CONVERSATION_RENDERER_MODULE_V2
@@ -279,6 +283,18 @@ function validStatusBarDefinitionV2(definition: UiSlotDefinition): boolean {
     definition.contract === 'ui-builtin:desktop-status-bar-surface' &&
     definition.moduleRef === DESKTOP_STATUS_BAR_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.status-bar' &&
+    definition.sandbox
+  );
+}
+
+function validTitlebarDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'titlebar_surface' &&
+    definition.id === 'titlebar' &&
+    definition.contract === 'ui-builtin:desktop-titlebar-surface' &&
+    definition.moduleRef === DESKTOP_TITLEBAR_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.titlebar' &&
     definition.sandbox
   );
 }

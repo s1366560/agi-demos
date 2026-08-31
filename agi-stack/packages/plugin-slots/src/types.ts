@@ -19,6 +19,7 @@ export type UiSlotKind =
   | 'authenticated_shell_surface'
   | 'keyboard_shortcuts_surface'
   | 'status_bar_surface'
+  | 'titlebar_surface'
   | 'command_palette_surface'
   | 'workspace_create_surface'
   | 'workspace_settings_surface'

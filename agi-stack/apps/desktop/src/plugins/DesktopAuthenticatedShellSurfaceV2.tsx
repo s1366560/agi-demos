@@ -3,7 +3,6 @@ import { Theme } from '@radix-ui/themes';
 
 import { ResizeHandle } from '../components/ResizeHandle';
 import { DesktopRightSidebar } from '../features/chrome/DesktopRightSidebar';
-import { DesktopTitlebar } from '../features/chrome/DesktopTitlebar';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import type { ResolvedTheme } from '../theme';
@@ -14,11 +13,13 @@ import { DesktopRendererKeyboardShortcutsV2 } from './DesktopRendererKeyboardSho
 import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
 import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
 import { DesktopRendererStatusBarV2 } from './DesktopRendererStatusBarV2';
+import { DesktopRendererTitlebarV2 } from './DesktopRendererTitlebarV2';
 import { DesktopRendererWorkspaceCreateV2 } from './DesktopRendererWorkspaceCreateV2';
 import { DesktopRendererWorkspaceSettingsV2 } from './DesktopRendererWorkspaceSettingsV2';
 import { DesktopRendererWorkbenchTabBarV2 } from './DesktopRendererWorkbenchTabBarV2';
 import type { DesktopSettingsWindowInputV2 } from './DesktopSettingsWindowSurfaceV2';
 import type { DesktopStatusBarInputV2 } from './DesktopStatusBarSurfaceV2';
+import type { DesktopTitlebarInputV2 } from './DesktopTitlebarSurfaceV2';
 import type { DesktopWorkspaceCreateInputV2 } from './DesktopWorkspaceCreateSurfaceV2';
 import type { DesktopWorkspaceSettingsInputV2 } from './DesktopWorkspaceSettingsSurfaceV2';
 import type { DesktopWorkbenchTabBarInputV2 } from './DesktopWorkbenchTabBarSurfaceV2';
@@ -60,9 +61,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
     sidebar: DesktopAuthenticatedShellSidebarV2;
     statusBar: DesktopStatusBarInputV2;
     tabBar: DesktopWorkbenchTabBarInputV2;
-    titlebar: DesktopAuthenticatedShellOptionalOutletV2<
-      ComponentProps<typeof DesktopTitlebar>
-    >;
+    titlebar: DesktopTitlebarInputV2;
     workspaceCreate: DesktopWorkspaceCreateInputV2;
     workspaceSettings: DesktopWorkspaceSettingsInputV2;
   }>;
@@ -107,9 +106,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
           } as CSSProperties
         }
       >
-        {surfaces.titlebar.kind === 'visible' ? (
-          <DesktopTitlebar {...surfaces.titlebar.props} />
-        ) : null}
+        <DesktopRendererTitlebarV2 input={surfaces.titlebar} />
         <section className="desktop-body">
           <DesktopSidebar {...surfaces.sidebar.props} resizeHandle={sidebarResizeHandle} />
 
