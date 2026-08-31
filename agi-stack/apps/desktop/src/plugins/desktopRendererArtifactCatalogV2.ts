@@ -119,6 +119,8 @@ export const DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_ARTIFACT_ID_V2 =
 export const DESKTOP_STATUS_BAR_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.status-bar-surface.v1';
 export const DESKTOP_TITLEBAR_SURFACE_ARTIFACT_ID_V2 = 'desktop.ui-slots.titlebar-surface.v1';
+export const DESKTOP_SIDEBAR_SURFACE_ARTIFACT_ID_V2 =
+  'desktop.ui-slots.sidebar-surface.v1';
 export const DESKTOP_COMMAND_PALETTE_SURFACE_ARTIFACT_ID_V2 =
   'desktop.ui-slots.command-palette-surface.v1';
 export const DESKTOP_WORKSPACE_CREATE_SURFACE_ARTIFACT_ID_V2 =
@@ -373,6 +375,17 @@ const TITLEBAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.free
     contract: 'ui-builtin:desktop-titlebar-surface',
     moduleRef: 'builtin:desktop-titlebar-surface',
     permission: 'ui.titlebar',
+    sandbox: true,
+  }),
+]);
+const SIDEBAR_SURFACE_DEFINITIONS_V2: readonly UiSlotDefinition[] = Object.freeze([
+  Object.freeze({
+    pluginId: 'builtin-shell',
+    slot: 'sidebar_surface',
+    id: 'sidebar',
+    contract: 'ui-builtin:desktop-sidebar-surface',
+    moduleRef: 'builtin:desktop-sidebar-surface',
+    permission: 'ui.sidebar',
     sandbox: true,
   }),
 ]);
@@ -823,6 +836,13 @@ const DESKTOP_RENDERER_ARTIFACT_CATALOG_V2 = new Map<string, DesktopRendererArti
     defineDesktopUiSlotArtifactV2(
       DESKTOP_TITLEBAR_SURFACE_ARTIFACT_ID_V2,
       TITLEBAR_SURFACE_DEFINITIONS_V2,
+    ),
+  ],
+  [
+    DESKTOP_SIDEBAR_SURFACE_ARTIFACT_ID_V2,
+    defineDesktopUiSlotArtifactV2(
+      DESKTOP_SIDEBAR_SURFACE_ARTIFACT_ID_V2,
+      SIDEBAR_SURFACE_DEFINITIONS_V2,
     ),
   ],
   [

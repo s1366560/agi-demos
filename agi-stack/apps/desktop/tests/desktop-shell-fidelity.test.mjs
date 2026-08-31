@@ -11,6 +11,10 @@ const authenticatedShellSurfaceSource = readFileSync(
   new URL('../src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx', import.meta.url),
   'utf8',
 );
+const sidebarSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopSidebarSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const desktopAuthSource = [
   '../src/hooks/useDesktopAuth.ts',
   '../src/hooks/useCloudSessionAuth.ts',
@@ -117,7 +121,12 @@ const noProjectQaHtml = readFileSync(
 test('desktop shell mounts only the prototype sidebar and page-owned headers', () => {
   assert.doesNotMatch(appSource, /className="titlebar"/);
   assert.doesNotMatch(appSource, /className="copilot-sidebar"/);
-  assert.equal((authenticatedShellSurfaceSource.match(/<DesktopSidebar\b/g) ?? []).length, 1);
+  assert.equal(
+    (authenticatedShellSurfaceSource.match(/<DesktopRendererSidebarV2\b/g) ?? []).length,
+    1,
+  );
+  assert.equal((sidebarSurfaceSource.match(/<DesktopSidebar\b/g) ?? []).length, 1);
+  assert.doesNotMatch(authenticatedShellSurfaceSource, /<DesktopSidebar\b/u);
   assert.doesNotMatch(appSource, /<DesktopSidebar\b/u);
 });
 
@@ -895,7 +904,8 @@ test('sidebar and context rail widths are user resizable', () => {
     sidebarStyles,
     /--desktop-sidebar-width:\s*min\(\s*var\(--desktop-sidebar-preferred-width,\s*220px\),\s*200px\s*\)/,
   );
-  assert.match(authenticatedShellSurfaceSource, /<ResizeHandle/);
+  assert.match(sidebarSurfaceSource, /<ResizeHandle/);
+  assert.doesNotMatch(authenticatedShellSurfaceSource, /<ResizeHandle/);
   // The resizable rail moved to the right sidebar, which owns its own width.
   assert.match(rightSidebarSource, /useResizablePanelWidth\(/);
   assert.match(rightSidebarSource, /agistack\.desktop\.rightSidebarWidth/);

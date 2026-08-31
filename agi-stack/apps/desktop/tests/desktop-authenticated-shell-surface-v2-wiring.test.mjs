@@ -41,7 +41,7 @@ test('authenticated shell contribution owns desktop chrome without React child p
 test('the V2 authenticated shell surface owns every production chrome outlet', () => {
   for (const component of [
     'DesktopRendererTitlebarV2',
-    'DesktopSidebar',
+    'DesktopRendererSidebarV2',
     'DesktopRendererWorkbenchTabBarV2',
     'DesktopRendererProductionRouterV2',
     'DesktopRightSidebar',

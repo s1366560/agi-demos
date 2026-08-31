@@ -26,6 +26,7 @@ import { DesktopNewThreadComposerSurfaceV2 } from './DesktopNewThreadComposerSur
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopSessionWorkspaceSurfaceV2 } from './DesktopSessionWorkspaceSurfaceV2';
 import { DesktopSettingsWindowSurfaceV2 } from './DesktopSettingsWindowSurfaceV2';
+import { DesktopSidebarSurfaceV2 } from './DesktopSidebarSurfaceV2';
 import { DesktopStatusBarSurfaceV2 } from './DesktopStatusBarSurfaceV2';
 import { DesktopTitlebarSurfaceV2 } from './DesktopTitlebarSurfaceV2';
 import { DesktopWorkspaceCollaborationSurfaceV2 } from './DesktopWorkspaceCollaborationSurfaceV2';
@@ -66,6 +67,7 @@ import {
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2,
   DESKTOP_SETTINGS_WINDOW_SURFACE_MODULE_REF_V2,
+  DESKTOP_SIDEBAR_SURFACE_MODULE_REF_V2,
   DESKTOP_STATUS_BAR_SURFACE_MODULE_REF_V2,
   DESKTOP_TITLEBAR_SURFACE_MODULE_REF_V2,
   DESKTOP_WORKSPACE_COLLABORATION_SURFACE_MODULE_REF_V2,
@@ -134,6 +136,8 @@ export function createDesktopRendererAppCompositionPortV2(
       validStatusBarDefinitionV2(definition) ? DesktopStatusBarSurfaceV2 : null,
     resolveTitlebarSurface: (definition: UiSlotDefinition) =>
       validTitlebarDefinitionV2(definition) ? DesktopTitlebarSurfaceV2 : null,
+    resolveSidebarSurface: (definition: UiSlotDefinition) =>
+      validSidebarDefinitionV2(definition) ? DesktopSidebarSurfaceV2 : null,
     resolveConversationRendererModule: (definition: AuthorizedUiSlotDefinitionV2) =>
       validConversationRendererDefinitionV2(definition)
         ? DESKTOP_CONVERSATION_RENDERER_MODULE_V2
@@ -295,6 +299,18 @@ function validTitlebarDefinitionV2(definition: UiSlotDefinition): boolean {
     definition.contract === 'ui-builtin:desktop-titlebar-surface' &&
     definition.moduleRef === DESKTOP_TITLEBAR_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.titlebar' &&
+    definition.sandbox
+  );
+}
+
+function validSidebarDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'sidebar_surface' &&
+    definition.id === 'sidebar' &&
+    definition.contract === 'ui-builtin:desktop-sidebar-surface' &&
+    definition.moduleRef === DESKTOP_SIDEBAR_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.sidebar' &&
     definition.sandbox
   );
 }

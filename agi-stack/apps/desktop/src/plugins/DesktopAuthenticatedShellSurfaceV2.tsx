@@ -1,9 +1,7 @@
 import type { ComponentProps, CSSProperties, RefObject } from 'react';
 import { Theme } from '@radix-ui/themes';
 
-import { ResizeHandle } from '../components/ResizeHandle';
 import { DesktopRightSidebar } from '../features/chrome/DesktopRightSidebar';
-import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import type { ResolvedTheme } from '../theme';
 import type { DesktopCommandPaletteInputV2 } from './DesktopCommandPaletteSurfaceV2';
@@ -12,12 +10,14 @@ import { DesktopRendererCommandPaletteV2 } from './DesktopRendererCommandPalette
 import { DesktopRendererKeyboardShortcutsV2 } from './DesktopRendererKeyboardShortcutsV2';
 import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
 import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
+import { DesktopRendererSidebarV2 } from './DesktopRendererSidebarV2';
 import { DesktopRendererStatusBarV2 } from './DesktopRendererStatusBarV2';
 import { DesktopRendererTitlebarV2 } from './DesktopRendererTitlebarV2';
 import { DesktopRendererWorkspaceCreateV2 } from './DesktopRendererWorkspaceCreateV2';
 import { DesktopRendererWorkspaceSettingsV2 } from './DesktopRendererWorkspaceSettingsV2';
 import { DesktopRendererWorkbenchTabBarV2 } from './DesktopRendererWorkbenchTabBarV2';
 import type { DesktopSettingsWindowInputV2 } from './DesktopSettingsWindowSurfaceV2';
+import type { DesktopSidebarInputV2 } from './DesktopSidebarSurfaceV2';
 import type { DesktopStatusBarInputV2 } from './DesktopStatusBarSurfaceV2';
 import type { DesktopTitlebarInputV2 } from './DesktopTitlebarSurfaceV2';
 import type { DesktopWorkspaceCreateInputV2 } from './DesktopWorkspaceCreateSurfaceV2';
@@ -28,13 +28,6 @@ import type { DesktopRendererGenerationMetaV2 } from './desktopRendererGeneratio
 export type DesktopAuthenticatedShellOptionalOutletV2<Props> =
   | Readonly<{ kind: 'hidden' }>
   | Readonly<{ kind: 'visible'; props: Props }>;
-
-type DesktopAuthenticatedShellSidebarV2 = Readonly<{
-  props: Omit<ComponentProps<typeof DesktopSidebar>, 'resizeHandle'>;
-  resizeHandle: DesktopAuthenticatedShellOptionalOutletV2<
-    ComponentProps<typeof ResizeHandle>
-  >;
-}>;
 
 export interface DesktopAuthenticatedShellViewModelV2 {
   readonly meta: Readonly<{
@@ -58,7 +51,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
     >;
     router: ComponentProps<typeof DesktopRendererProductionRouterV2>;
     settings: DesktopSettingsWindowInputV2;
-    sidebar: DesktopAuthenticatedShellSidebarV2;
+    sidebar: DesktopSidebarInputV2;
     statusBar: DesktopStatusBarInputV2;
     tabBar: DesktopWorkbenchTabBarInputV2;
     titlebar: DesktopTitlebarInputV2;
@@ -79,11 +72,6 @@ export function DesktopAuthenticatedShellSurfaceV2({
   ]
     .filter(Boolean)
     .join(' ');
-  const sidebarResizeHandle =
-    surfaces.sidebar.resizeHandle.kind === 'visible' ? (
-      <ResizeHandle {...surfaces.sidebar.resizeHandle.props} />
-    ) : undefined;
-
   return (
     <Theme
       appearance={meta.appearance}
@@ -108,7 +96,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
       >
         <DesktopRendererTitlebarV2 input={surfaces.titlebar} />
         <section className="desktop-body">
-          <DesktopSidebar {...surfaces.sidebar.props} resizeHandle={sidebarResizeHandle} />
+          <DesktopRendererSidebarV2 input={surfaces.sidebar} />
 
           <main ref={meta.workbenchRef} className="workbench" tabIndex={-1}>
             <DesktopRendererWorkbenchTabBarV2 input={surfaces.tabBar} />
