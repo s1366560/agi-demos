@@ -172,7 +172,7 @@ test('only a structured task-session conflict offers an explicit key rotation', 
 test('create-workspace tombstones require an explicit authoritative existing-workspace choice', () => {
   assert.match(
     generatePlanSource,
-    /targetWorkspaceSelection === NEW_WORKSPACE_VALUE[\s\S]*new DesktopApiClient\(config\)\.listWorkspaces\(\)[\s\S]*resolveTaskSessionConflictWorkspace\([\s\S]*definition\.title/,
+    /targetWorkspaceSelection === NEW_WORKSPACE_VALUE[\s\S]*newTaskFlowClientV2\.bindOperation\(config\)\.listWorkspaces\(\)[\s\S]*resolveTaskSessionConflictWorkspace\([\s\S]*definition\.title/,
   );
   assert.match(
     generatePlanSource,

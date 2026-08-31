@@ -282,6 +282,7 @@ import {
 import {
   createDesktopNewThreadCreationClientProviderV2,
 } from './features/task/desktopNewThreadCreationClientProviderV2';
+import { createDesktopNewTaskFlowClientProviderV2 } from './features/task/desktopNewTaskFlowClientProviderV2';
 import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
@@ -759,6 +760,10 @@ export function App() {
     () => createDesktopNewThreadCreationClientProviderV2(),
     [],
   );
+  const desktopNewTaskFlowClientProviderV2 = useMemo(
+    () => createDesktopNewTaskFlowClientProviderV2(),
+    [],
+  );
   const workspaceCollaborationClientProviderV2 = useMemo(
     () => createWorkspaceCollaborationClientProviderV2(),
     [],
@@ -924,6 +929,10 @@ export function App() {
   const desktopNewThreadCreationClientV2 = useMemo(
     () => desktopNewThreadCreationClientProviderV2.publish({ config }),
     [config, desktopNewThreadCreationClientProviderV2],
+  );
+  const desktopNewTaskFlowClientV2 = useMemo(
+    () => desktopNewTaskFlowClientProviderV2.publish({ config }),
+    [config, desktopNewTaskFlowClientProviderV2],
   );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
@@ -6706,6 +6715,7 @@ export function App() {
         open: newTaskOpen,
         config,
         actorId: auth.user?.user_id,
+        newTaskFlowClientV2: desktopNewTaskFlowClientV2,
         workspaceAuthority: newTaskWorkspaceAuthority,
         resumeDraft: newTaskResumeDraft,
         preferredWorkspaceId: newTaskPreferredWorkspaceId,

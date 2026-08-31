@@ -7,6 +7,7 @@ import {
   type NewTaskAgentTurnInput,
   type NewTaskSession,
 } from '../features/task/NewTaskFlow';
+import { createDesktopNewTaskFlowClientProviderV2 } from '../features/task/desktopNewTaskFlowClientProviderV2';
 import { I18nProvider } from '../i18n';
 import type {
   AgentConversation,
@@ -143,6 +144,7 @@ const config: DesktopRuntimeConfig = {
   mode: 'local',
   workspaceRoot: '/workspace/product-strategy',
 };
+const newTaskFlowClientV2 = createDesktopNewTaskFlowClientProviderV2().publish({ config });
 
 let planningTurnAcceptedAt = 0;
 let taskSessionPostCount = 0;
@@ -396,6 +398,7 @@ function NewTaskFlowQa() {
         open={open}
         config={config}
         actorId={conversation.user_id}
+        newTaskFlowClientV2={newTaskFlowClientV2}
         workspaceAuthority={{ status: 'ready', items: [], error: null }}
         preferredKind="general"
         onClose={() => {
