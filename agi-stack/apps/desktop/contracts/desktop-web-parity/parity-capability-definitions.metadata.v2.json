@@ -5,9 +5,9 @@
     "execution_evidence": false
   },
   "references": {
-    "audit_revision": "3ac4aec06e6a50a90051ea088eb663b46e4ea36e",
-    "prototype_revision": "3ac4aec06e6a50a90051ea088eb663b46e4ea36e",
-    "web_revision": "3ac4aec06e6a50a90051ea088eb663b46e4ea36e",
-    "desktop_revision": "3ac4aec06e6a50a90051ea088eb663b46e4ea36e"
+    "audit_revision": "7594cf62540c8fcccd1c648a8949cbe2c3ef9f5a",
+    "prototype_revision": "7594cf62540c8fcccd1c648a8949cbe2c3ef9f5a",
+    "web_revision": "7594cf62540c8fcccd1c648a8949cbe2c3ef9f5a",
+    "desktop_revision": "7594cf62540c8fcccd1c648a8949cbe2c3ef9f5a"
   }
 }
