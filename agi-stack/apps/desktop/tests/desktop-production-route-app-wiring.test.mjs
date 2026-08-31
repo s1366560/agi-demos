@@ -115,7 +115,7 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
   assert.match(
     appSource,
-    /projectCronJobsRouteBindingProviderV2\.publish\(\{[\s\S]*api:\s*automationApi,[\s\S]*scope:[\s\S]*projects:\s*auth\.projects,[\s\S]*capabilitySnapshot:\s*desktopCapabilityState\.snapshot/u,
+    /projectCronJobsRouteBindingProviderV2\.publish\(\{[\s\S]*api:\s*desktopAutomationApiV2\.api,[\s\S]*scope:[\s\S]*projects:\s*auth\.projects,[\s\S]*capabilitySnapshot:\s*desktopCapabilityState\.snapshot/u,
   );
   assert.doesNotMatch(appSource, /projectCronJobsRouteBindingRef|automationRunCapability/u);
   assert.doesNotMatch(

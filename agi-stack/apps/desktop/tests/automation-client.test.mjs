@@ -34,10 +34,11 @@ test('Automations navigation is contributed by the V2 renderer catalog, not the 
 });
 
 test('App projects the narrow automation API into the route binding and the page invokes guarded run-now', () => {
-  assert.match(appSource, /createDesktopAutomationApi/u);
+  assert.match(appSource, /desktopAutomationApiProviderV2\.publish\(\{/u);
+  assert.doesNotMatch(appSource, /createDesktopAutomationApi\(/u);
   assert.match(
     appSource,
-    /projectCronJobsRouteBindingProviderV2\.publish\([\s\S]*api: automationApi/u,
+    /projectCronJobsRouteBindingProviderV2\.publish\([\s\S]*api: desktopAutomationApiV2\.api/u,
   );
   assert.doesNotMatch(appSource, /projectCronJobsRouteBindingRef/u);
   assert.doesNotMatch(appSource, /api=\{automationApi\}/u);

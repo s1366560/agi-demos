@@ -82,6 +82,7 @@
     "src/features/auth/loginScreenModel.ts",
     "src/features/auth/nativeOAuthSessionModel.ts",
     "src/features/automations/automationClient.ts",
+    "src/features/automations/desktopAutomationApiProviderV2.ts",
     "src/features/automations/automationClientPort.ts",
     "src/features/automations/automationModel.ts",
     "src/features/automations/AutomationEditorDialog.tsx",

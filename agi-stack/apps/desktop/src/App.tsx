@@ -66,7 +66,7 @@ import {
   type PendingPasswordChangeAttempt,
 } from './features/auth/forcePasswordChangeModel';
 import { LoginScreen, type WorkspaceSsoPresentation } from './features/auth/LoginScreen';
-import { createDesktopAutomationApi } from './features/automations/automationClient';
+import { createDesktopAutomationApiProviderV2 } from './features/automations/desktopAutomationApiProviderV2';
 import {
   createProjectCronJobsRouteBindingProviderV2,
 } from './features/automations/projectCronJobsRouteBindingProviderV2';
@@ -721,6 +721,10 @@ export function App() {
     () => createProjectCronJobsRouteBindingProviderV2(),
     [],
   );
+  const desktopAutomationApiProviderV2 = useMemo(
+    () => createDesktopAutomationApiProviderV2(),
+    [],
+  );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
     () => createDesktopProductionRouteAuthorityProviderV2(),
     [],
@@ -875,14 +879,17 @@ export function App() {
     navigationRegistry: desktopCanonicalNavigationRegistry,
     routeRegistry: desktopProductionRouteRegistry,
   } = desktopRendererGenerationV2.state;
-  const automationApi = useMemo(() => createDesktopAutomationApi(api, config), [api, config]);
+  const desktopAutomationApiV2 = useMemo(
+    () => desktopAutomationApiProviderV2.publish({ baseApi: api, config }),
+    [api, config, desktopAutomationApiProviderV2],
+  );
   const desktopArtifactClientV2 = useMemo(
     () => desktopArtifactClientProviderV2.publish({ config }),
     [config, desktopArtifactClientProviderV2],
   );
   const workbenchCapabilityClient = useMemo(
-    () => createDesktopWorkbenchCapabilityClient(automationApi, config),
-    [automationApi, config],
+    () => createDesktopWorkbenchCapabilityClient(desktopAutomationApiV2.api, config),
+    [desktopAutomationApiV2.api, config],
   );
   const sandboxRuntime = useSandboxRuntimeSurface(
     config,
@@ -5586,7 +5593,7 @@ export function App() {
     openSettingsEntry('runtime_connection');
   };
   projectCronJobsRouteBindingProviderV2.publish({
-    api: automationApi,
+    api: desktopAutomationApiV2.api,
     scope: Object.freeze({
       tenantId: config.tenantId,
       projectId: config.projectId,
