@@ -304,6 +304,9 @@ import {
 import {
   createDesktopConversationLifecycleClientProviderV2,
 } from './features/workspace/desktopConversationLifecycleClientProviderV2';
+import {
+  createDesktopWorkspaceMemberMutationClientProviderV2,
+} from './features/workspace/desktopWorkspaceMemberMutationClientProviderV2';
 import { createWorkspaceCollaborationClientProviderV2 } from './features/workspace/workspaceCollaborationClientProviderV2';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
 import type {
@@ -752,6 +755,10 @@ export function App() {
     () => createDesktopConversationLifecycleClientProviderV2(),
     [],
   );
+  const desktopWorkspaceMemberMutationClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceMemberMutationClientProviderV2(),
+    [],
+  );
   const desktopNewThreadComposerCatalogClientProviderV2 = useMemo(
     () => createDesktopNewThreadComposerCatalogClientProviderV2(),
     [],
@@ -925,6 +932,10 @@ export function App() {
   const desktopConversationLifecycleClientV2 = useMemo(
     () => desktopConversationLifecycleClientProviderV2.publish({ config }),
     [config, desktopConversationLifecycleClientProviderV2],
+  );
+  const desktopWorkspaceMemberMutationClientV2 = useMemo(
+    () => desktopWorkspaceMemberMutationClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceMemberMutationClientProviderV2],
   );
   const desktopNewThreadCreationClientV2 = useMemo(
     () => desktopNewThreadCreationClientProviderV2.publish({ config }),
@@ -3448,8 +3459,8 @@ export function App() {
     }
   };
 
-  const workspaceMemberClient = (scope: WorkspaceSettingsScope) =>
-    new DesktopApiClient({
+  const workspaceMemberMutationClient = (scope: WorkspaceSettingsScope) =>
+    desktopWorkspaceMemberMutationClientV2.bindOperation({
       ...configRef.current,
       tenantId: scope.tenantId,
       projectId: scope.projectId,
@@ -3463,7 +3474,9 @@ export function App() {
     signal: AbortSignal,
   ): Promise<WorkspaceMemberSummary> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    const member = await workspaceMemberClient(submittedScope).addWorkspaceMemberForProject(
+    const member = await workspaceMemberMutationClient(
+      submittedScope,
+    ).addWorkspaceMemberForProject(
       submittedScope.projectId,
       submittedScope.workspaceId,
       userId,
@@ -3490,7 +3503,9 @@ export function App() {
     signal: AbortSignal,
   ): Promise<WorkspaceMemberSummary> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    const member = await workspaceMemberClient(submittedScope).updateWorkspaceMemberRoleForProject(
+    const member = await workspaceMemberMutationClient(
+      submittedScope,
+    ).updateWorkspaceMemberRoleForProject(
       submittedScope.projectId,
       submittedScope.workspaceId,
       userId,
@@ -3516,7 +3531,9 @@ export function App() {
     signal: AbortSignal,
   ): Promise<void> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    await workspaceMemberClient(submittedScope).removeWorkspaceMemberForProject(
+    await workspaceMemberMutationClient(
+      submittedScope,
+    ).removeWorkspaceMemberForProject(
       submittedScope.projectId,
       submittedScope.workspaceId,
       userId,

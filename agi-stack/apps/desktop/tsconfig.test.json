@@ -449,6 +449,7 @@
     "src/features/workspace/capabilityWorkspaceCollaborationClient.ts",
     "src/features/workspace/httpWorkspaceCollaborationClient.ts",
     "src/features/workspace/desktopConversationLifecycleClientProviderV2.ts",
+    "src/features/workspace/desktopWorkspaceMemberMutationClientProviderV2.ts",
     "src/features/workspace/workspaceCollaborationClientProviderV2.ts",
     "src/features/workspace/workspaceCollaborationAuthorityEvent.ts",
     "src/features/workspace/workspaceCollaborationClient.ts",
