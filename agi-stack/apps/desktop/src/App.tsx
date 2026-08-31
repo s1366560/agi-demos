@@ -280,6 +280,9 @@ import {
   createDesktopNewThreadComposerCatalogClientProviderV2,
 } from './features/task/desktopNewThreadComposerCatalogClientProviderV2';
 import {
+  createDesktopNewThreadCreationClientProviderV2,
+} from './features/task/desktopNewThreadCreationClientProviderV2';
+import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
   clearLegacyPlanApprovalRecovery,
@@ -752,6 +755,10 @@ export function App() {
     () => createDesktopNewThreadComposerCatalogClientProviderV2(),
     [],
   );
+  const desktopNewThreadCreationClientProviderV2 = useMemo(
+    () => createDesktopNewThreadCreationClientProviderV2(),
+    [],
+  );
   const workspaceCollaborationClientProviderV2 = useMemo(
     () => createWorkspaceCollaborationClientProviderV2(),
     [],
@@ -913,6 +920,10 @@ export function App() {
   const desktopConversationLifecycleClientV2 = useMemo(
     () => desktopConversationLifecycleClientProviderV2.publish({ config }),
     [config, desktopConversationLifecycleClientProviderV2],
+  );
+  const desktopNewThreadCreationClientV2 = useMemo(
+    () => desktopNewThreadCreationClientProviderV2.publish({ config }),
+    [config, desktopNewThreadCreationClientProviderV2],
   );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
@@ -5394,6 +5405,7 @@ export function App() {
     loadConversationTimeline,
     localRuntimeMode,
     newThreadWorkspaces,
+    newThreadCreationClientV2: desktopNewThreadCreationClientV2,
     pendingNewTaskAgentTurnsRef,
     permissionPreset,
     resetConversationTimeline,

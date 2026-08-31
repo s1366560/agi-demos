@@ -1,8 +1,5 @@
 import { useI18n } from '../i18n';
 import {
-  DesktopApiClient,
-} from '../api/client';
-import {
   isCurrentContextRevision,
   isSameDesktopRequestScope,
 } from '../features/auth/authContextModel';
@@ -62,6 +59,7 @@ export function useConversationThreads(params: AgentConversationParams) {
     newThreadWorkspaces,
     configuredNewThreadWorkspaceId,
     canManageWorkspacePolicy,
+    newThreadCreationClientV2,
     socket,
     workspaceAgentPolicy,
     setLoginModalOpen,
@@ -309,7 +307,7 @@ export function useConversationThreads(params: AgentConversationParams) {
     }
     clearPendingAgentTurn();
     if (transport === 'local_http') {
-      const client = new DesktopApiClient(input.config);
+      const client = newThreadCreationClientV2.bindOperation(input.config);
       await client.runAgentMessage(
         input.conversationId,
         input.message,
@@ -370,7 +368,7 @@ export function useConversationThreads(params: AgentConversationParams) {
       setNewThreadError(null);
       setError(null);
       try {
-        const client = new DesktopApiClient(threadConfig);
+        const client = newThreadCreationClientV2.bindOperation(threadConfig);
         const conversation = await client.createAgentConversation(
           title,
           threadConfig.projectId,
@@ -526,7 +524,7 @@ export function useConversationThreads(params: AgentConversationParams) {
     setNewThreadCreating(true);
     setNewThreadError(null);
     try {
-      const client = new DesktopApiClient(threadConfig);
+      const client = newThreadCreationClientV2.bindOperation(threadConfig);
       const request = buildRuntimeTaskSessionRequest(
         threadConfig.mode,
         definition,

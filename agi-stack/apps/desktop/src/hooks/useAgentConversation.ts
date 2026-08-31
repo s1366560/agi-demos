@@ -20,6 +20,9 @@ import type { AgentTaskSignal } from '../features/chat/agentTaskSignalModel';
 import {
   type NewTaskResumeDraft,
 } from '../features/task/NewTaskFlow';
+import type {
+  DesktopNewThreadCreationClientBindingV2,
+} from '../features/task/desktopNewThreadCreationClientProviderV2';
 import {
   type NewTaskAgentTurnOutcome,
 } from '../features/task/newTaskPlanModel';
@@ -68,6 +71,7 @@ export type AgentConversationParams = {
   localRuntimeMode: boolean;
   canManageWorkspacePolicy: boolean;
   api: DesktopApiClient;
+  newThreadCreationClientV2: DesktopNewThreadCreationClientBindingV2;
   socket: ReturnType<typeof useAgentSocket>;
   activityAuthorityAdapter: ReturnType<typeof createDesktopAgentAuthorityAdapter>;
   activityAuthorityScope: CloudAgentAuthorityScope | undefined;
