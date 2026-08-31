@@ -8,6 +8,7 @@ import type { DesktopCommandPaletteSurfacePropsV2 } from './DesktopCommandPalett
 import type { DesktopConversationSurfacePropsV2 } from './DesktopConversationSurfaceV2';
 import type { DesktopKeyboardShortcutsSurfacePropsV2 } from './DesktopKeyboardShortcutsSurfaceV2';
 import type { DesktopMyWorkQueueSurfacePropsV2 } from './DesktopMyWorkQueueSurfaceV2';
+import type { DesktopNewTaskFlowSurfacePropsV2 } from './DesktopNewTaskFlowSurfaceV2';
 import type { DesktopNewThreadComposerSurfacePropsV2 } from './DesktopNewThreadComposerSurfaceV2';
 import type { DesktopRightSidebarSurfacePropsV2 } from './DesktopRightSidebarSurfaceV2';
 import type { DesktopSessionCanvasSurfacePropsV2 } from './DesktopSessionCanvasSurfaceV2';
@@ -40,6 +41,8 @@ export const DESKTOP_TITLEBAR_SURFACE_MODULE_REF_V2 = 'builtin:desktop-titlebar-
 export const DESKTOP_SIDEBAR_SURFACE_MODULE_REF_V2 = 'builtin:desktop-sidebar-surface' as const;
 export const DESKTOP_RIGHT_SIDEBAR_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-right-sidebar-surface' as const;
+export const DESKTOP_NEW_TASK_FLOW_SURFACE_MODULE_REF_V2 =
+  'builtin:desktop-new-task-flow-surface' as const;
 export const DESKTOP_SETTINGS_WINDOW_SURFACE_MODULE_REF_V2 =
   'builtin:desktop-settings-window-surface' as const;
 export const DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2 =
@@ -75,6 +78,8 @@ export type DesktopRendererTitlebarSurfaceV2 = ComponentType<DesktopTitlebarSurf
 export type DesktopRendererSidebarSurfaceV2 = ComponentType<DesktopSidebarSurfacePropsV2>;
 export type DesktopRendererRightSidebarSurfaceV2 =
   ComponentType<DesktopRightSidebarSurfacePropsV2>;
+export type DesktopRendererNewTaskFlowSurfaceV2 =
+  ComponentType<DesktopNewTaskFlowSurfacePropsV2>;
 export type DesktopRendererMyWorkQueueSurfaceV2 =
   ComponentType<DesktopMyWorkQueueSurfacePropsV2>;
 export type DesktopRendererNewThreadComposerSurfaceV2 =
@@ -139,6 +144,9 @@ export interface DesktopRendererCompositionPortV2 {
   readonly resolveRightSidebarSurface: (
     definition: UiSlotDefinition,
   ) => DesktopRendererRightSidebarSurfaceV2 | null;
+  readonly resolveNewTaskFlowSurface: (
+    definition: UiSlotDefinition,
+  ) => DesktopRendererNewTaskFlowSurfaceV2 | null;
   readonly resolveConversationRendererModule: (
     definition: AuthorizedUiSlotDefinitionV2,
   ) => DesktopConversationRendererModuleV2 | null;
@@ -335,6 +343,22 @@ export type DesktopRendererRightSidebarCompositionV2 =
         | 'desktop_renderer_right_sidebar_contribution_ambiguous'
         | 'desktop_renderer_right_sidebar_contribution_missing'
         | 'desktop_renderer_right_sidebar_module_unavailable';
+    }>;
+
+export type DesktopRendererNewTaskFlowCompositionV2 =
+  | Readonly<{
+      status: 'ready';
+      Surface: DesktopRendererNewTaskFlowSurfaceV2;
+    }>
+  | Readonly<{ status: 'loading' }>
+  | Readonly<{
+      status: 'unavailable';
+      reasonCode:
+        | 'desktop_renderer_generation_disabled'
+        | 'desktop_renderer_generation_unavailable'
+        | 'desktop_renderer_new_task_flow_contribution_ambiguous'
+        | 'desktop_renderer_new_task_flow_contribution_missing'
+        | 'desktop_renderer_new_task_flow_module_unavailable';
     }>;
 
 export type DesktopRendererSettingsWindowCompositionV2 =
@@ -856,6 +880,33 @@ export function projectDesktopRightSidebarCompositionV2(
   return Object.freeze({ status: 'ready', Surface });
 }
 
+export function projectDesktopNewTaskFlowCompositionV2(
+  authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
+  composition: DesktopRendererCompositionPortV2,
+): DesktopRendererNewTaskFlowCompositionV2 {
+  if (authority.status === 'loading') return Object.freeze({ status: 'loading' });
+  if (authority.status === 'disabled') {
+    return unavailableNewTaskFlowV2('desktop_renderer_generation_disabled');
+  }
+  if (authority.status === 'unavailable') {
+    return unavailableNewTaskFlowV2('desktop_renderer_generation_unavailable');
+  }
+  const definitions = authority.slotDefinitions.filter(
+    ({ slot }) => slot === 'new_task_flow_surface',
+  );
+  if (definitions.length === 0) {
+    return unavailableNewTaskFlowV2('desktop_renderer_new_task_flow_contribution_missing');
+  }
+  if (definitions.length !== 1) {
+    return unavailableNewTaskFlowV2('desktop_renderer_new_task_flow_contribution_ambiguous');
+  }
+  const Surface = composition.resolveNewTaskFlowSurface(definitions[0]);
+  if (Surface === null) {
+    return unavailableNewTaskFlowV2('desktop_renderer_new_task_flow_module_unavailable');
+  }
+  return Object.freeze({ status: 'ready', Surface });
+}
+
 export function projectDesktopSettingsWindowCompositionV2(
   authority: Pick<DesktopRendererAuthorityStateV2, 'slotDefinitions' | 'status'>,
   composition: DesktopRendererCompositionPortV2,
@@ -1154,6 +1205,15 @@ function unavailableRightSidebarV2(
     Readonly<{ status: 'unavailable' }>
   >['reasonCode'],
 ): DesktopRendererRightSidebarCompositionV2 {
+  return Object.freeze({ status: 'unavailable', reasonCode });
+}
+
+function unavailableNewTaskFlowV2(
+  reasonCode: Extract<
+    DesktopRendererNewTaskFlowCompositionV2,
+    Readonly<{ status: 'unavailable' }>
+  >['reasonCode'],
+): DesktopRendererNewTaskFlowCompositionV2 {
   return Object.freeze({ status: 'unavailable', reasonCode });
 }
 

@@ -1,12 +1,13 @@
 import type { ComponentProps, CSSProperties, RefObject } from 'react';
 import { Theme } from '@radix-ui/themes';
 
-import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import type { ResolvedTheme } from '../theme';
 import type { DesktopCommandPaletteInputV2 } from './DesktopCommandPaletteSurfaceV2';
 import type { DesktopKeyboardShortcutsInputV2 } from './DesktopKeyboardShortcutsSurfaceV2';
+import type { DesktopNewTaskFlowInputV2 } from './DesktopNewTaskFlowSurfaceV2';
 import { DesktopRendererCommandPaletteV2 } from './DesktopRendererCommandPaletteV2';
 import { DesktopRendererKeyboardShortcutsV2 } from './DesktopRendererKeyboardShortcutsV2';
+import { DesktopRendererNewTaskFlowV2 } from './DesktopRendererNewTaskFlowV2';
 import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
 import { DesktopRendererRightSidebarV2 } from './DesktopRendererRightSidebarV2';
 import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
@@ -46,7 +47,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
   readonly surfaces: Readonly<{
     commandPalette: DesktopCommandPaletteInputV2;
     keyboardShortcuts: DesktopKeyboardShortcutsInputV2;
-    newTask: ComponentProps<typeof NewTaskFlow>;
+    newTask: DesktopNewTaskFlowInputV2;
     rightSidebar: DesktopAuthenticatedShellOptionalOutletV2<DesktopRightSidebarInputV2>;
     router: ComponentProps<typeof DesktopRendererProductionRouterV2>;
     settings: DesktopSettingsWindowInputV2;
@@ -113,7 +114,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
 
         <DesktopRendererCommandPaletteV2 input={surfaces.commandPalette} />
         <DesktopRendererKeyboardShortcutsV2 input={surfaces.keyboardShortcuts} />
-        <NewTaskFlow {...surfaces.newTask} />
+        <DesktopRendererNewTaskFlowV2 input={surfaces.newTask} />
         <DesktopRendererWorkspaceCreateV2 input={surfaces.workspaceCreate} />
         <DesktopRendererWorkspaceSettingsV2 input={surfaces.workspaceSettings} />
         <DesktopRendererSettingsWindowV2 input={surfaces.settings} />

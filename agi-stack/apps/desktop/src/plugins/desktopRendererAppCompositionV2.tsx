@@ -22,6 +22,7 @@ import { DesktopCommandPaletteSurfaceV2 } from './DesktopCommandPaletteSurfaceV2
 import { DesktopConversationSurfaceV2 } from './DesktopConversationSurfaceV2';
 import { DesktopKeyboardShortcutsSurfaceV2 } from './DesktopKeyboardShortcutsSurfaceV2';
 import { DesktopMyWorkQueueSurfaceV2 } from './DesktopMyWorkQueueSurfaceV2';
+import { DesktopNewTaskFlowSurfaceV2 } from './DesktopNewTaskFlowSurfaceV2';
 import { DesktopNewThreadComposerSurfaceV2 } from './DesktopNewThreadComposerSurfaceV2';
 import { DesktopRightSidebarSurfaceV2 } from './DesktopRightSidebarSurfaceV2';
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
@@ -64,6 +65,7 @@ import {
   DESKTOP_CONVERSATION_SURFACE_MODULE_REF_V2,
   DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_MODULE_REF_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
+  DESKTOP_NEW_TASK_FLOW_SURFACE_MODULE_REF_V2,
   DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
   DESKTOP_RIGHT_SIDEBAR_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
@@ -142,6 +144,8 @@ export function createDesktopRendererAppCompositionPortV2(
       validSidebarDefinitionV2(definition) ? DesktopSidebarSurfaceV2 : null,
     resolveRightSidebarSurface: (definition: UiSlotDefinition) =>
       validRightSidebarDefinitionV2(definition) ? DesktopRightSidebarSurfaceV2 : null,
+    resolveNewTaskFlowSurface: (definition: UiSlotDefinition) =>
+      validNewTaskFlowDefinitionV2(definition) ? DesktopNewTaskFlowSurfaceV2 : null,
     resolveConversationRendererModule: (definition: AuthorizedUiSlotDefinitionV2) =>
       validConversationRendererDefinitionV2(definition)
         ? DESKTOP_CONVERSATION_RENDERER_MODULE_V2
@@ -327,6 +331,18 @@ function validRightSidebarDefinitionV2(definition: UiSlotDefinition): boolean {
     definition.contract === 'ui-builtin:desktop-right-sidebar-surface' &&
     definition.moduleRef === DESKTOP_RIGHT_SIDEBAR_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.right-sidebar' &&
+    definition.sandbox
+  );
+}
+
+function validNewTaskFlowDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'new_task_flow_surface' &&
+    definition.id === 'new-task-flow' &&
+    definition.contract === 'ui-builtin:desktop-new-task-flow-surface' &&
+    definition.moduleRef === DESKTOP_NEW_TASK_FLOW_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.new-task-flow' &&
     definition.sandbox
   );
 }
