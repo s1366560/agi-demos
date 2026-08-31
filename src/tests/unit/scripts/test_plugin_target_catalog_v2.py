@@ -170,6 +170,11 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-sidebar-surface"
     )
+    right_sidebar_index = next(
+        index
+        for index, entry in enumerate(entries)
+        if entry["entry_id"] == "builtin-desktop-right-sidebar-surface"
+    )
     my_work_queue_index = next(
         index
         for index, entry in enumerate(entries)
@@ -180,7 +185,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 336
+    assert len(entries) == 337
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
@@ -209,6 +214,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         < conversation_index
         < conversation_renderer_index
         < sidebar_index
+        < right_sidebar_index
         < desktop_routes_index
     )
     assert entries[shell_index]["config"] == {
@@ -362,6 +368,15 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         "order": 99,
         "payload": {
             "artifact_refs": ["desktop.ui-slots.sidebar-surface.v1"],
+            "schema_version": 1,
+        },
+    }
+    assert entries[right_sidebar_index]["config"] == {
+        "id": "desktop.right-sidebar-surface",
+        "kind": "ui-slot",
+        "order": 100,
+        "payload": {
+            "artifact_refs": ["desktop.ui-slots.right-sidebar-surface.v1"],
             "schema_version": 1,
         },
     }

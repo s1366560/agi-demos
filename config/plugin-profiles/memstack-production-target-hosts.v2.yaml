@@ -623,6 +623,27 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-right-sidebar-surface
+      parent_entry_id: builtin-desktop-renderer-contribution-registry
+      plugin_ref: memstack-renderer-contributions
+      module_ref: builtin://memstack/desktop/renderer-contribution
+      enabled: true
+      config:
+        id: desktop.right-sidebar-surface
+        kind: ui-slot
+        order: 100
+        payload:
+          schema_version: 1
+          artifact_refs:
+            - desktop.ui-slots.right-sidebar-surface.v1
+      inject:
+        registry: service:desktop-renderer.renderer-contribution-registry
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-tenant-creation-routes
       parent_entry_id: builtin-desktop-renderer-contribution-registry
       plugin_ref: memstack-renderer-contributions

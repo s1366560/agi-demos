@@ -44,7 +44,7 @@ test('the V2 authenticated shell surface owns every production chrome outlet', (
     'DesktopRendererSidebarV2',
     'DesktopRendererWorkbenchTabBarV2',
     'DesktopRendererProductionRouterV2',
-    'DesktopRightSidebar',
+    'DesktopRendererRightSidebarV2',
     'DesktopRendererStatusBarV2',
     'DesktopRendererCommandPaletteV2',
     'DesktopRendererKeyboardShortcutsV2',

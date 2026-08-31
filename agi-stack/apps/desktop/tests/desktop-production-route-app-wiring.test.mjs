@@ -668,7 +668,7 @@ test('authenticated shell contribution owns the complete signed-in app shell', (
     'DesktopRendererSidebarV2',
     'DesktopRendererWorkbenchTabBarV2',
     'DesktopRendererProductionRouterV2',
-    'DesktopRightSidebar',
+    'DesktopRendererRightSidebarV2',
     'DesktopRendererStatusBarV2',
     'DesktopRendererCommandPaletteV2',
     'DesktopRendererKeyboardShortcutsV2',

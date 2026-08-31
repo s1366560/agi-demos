@@ -67,6 +67,10 @@ const rightSidebarSource = readFileSync(
   new URL('../src/features/chrome/DesktopRightSidebar.tsx', import.meta.url),
   'utf8',
 );
+const rightSidebarSurfaceSource = readFileSync(
+  new URL('../src/plugins/DesktopRightSidebarSurfaceV2.tsx', import.meta.url),
+  'utf8',
+);
 const rightSidebarStyles = readFileSync(
   new URL('../src/features/chrome/DesktopRightSidebar.css', import.meta.url),
   'utf8',
@@ -298,7 +302,12 @@ test('tab bar exposes localized activation and close controls', () => {
 });
 
 test('right sidebar hosts the context rail and canvas behind an activity bar', () => {
-  assert.equal((authenticatedShellSurfaceSource.match(/<DesktopRightSidebar\b/g) ?? []).length, 1);
+  assert.equal(
+    (authenticatedShellSurfaceSource.match(/<DesktopRendererRightSidebarV2\b/g) ?? []).length,
+    1,
+  );
+  assert.equal((rightSidebarSurfaceSource.match(/<DesktopRightSidebar\b/g) ?? []).length, 1);
+  assert.doesNotMatch(authenticatedShellSurfaceSource, /<DesktopRightSidebar\b/u);
   // Only rendered for chat sessions, and the titlebar toggle greys out otherwise.
   assert.match(appSource, /rightSidebarAvailable[\s\S]*?activeSection === 'chat'/);
   assert.match(
@@ -308,7 +317,7 @@ test('right sidebar hosts the context rail and canvas behind an activity bar', (
   assert.match(appSource, /rightSidebarAvailable,/);
   assert.match(
     authenticatedShellSurfaceSource,
-    /surfaces\.rightSidebar\.kind === 'visible'[\s\S]*<DesktopRightSidebar/u,
+    /surfaces\.rightSidebar\.kind === 'visible'[\s\S]*<DesktopRendererRightSidebarV2/u,
   );
   // Activity bar: context, canvas, and browser entries with pressed state;
   // context/canvas stay session-scoped, browser does not.

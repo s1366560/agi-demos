@@ -1,7 +1,6 @@
 import type { ComponentProps, CSSProperties, RefObject } from 'react';
 import { Theme } from '@radix-ui/themes';
 
-import { DesktopRightSidebar } from '../features/chrome/DesktopRightSidebar';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import type { ResolvedTheme } from '../theme';
 import type { DesktopCommandPaletteInputV2 } from './DesktopCommandPaletteSurfaceV2';
@@ -9,6 +8,7 @@ import type { DesktopKeyboardShortcutsInputV2 } from './DesktopKeyboardShortcuts
 import { DesktopRendererCommandPaletteV2 } from './DesktopRendererCommandPaletteV2';
 import { DesktopRendererKeyboardShortcutsV2 } from './DesktopRendererKeyboardShortcutsV2';
 import { DesktopRendererProductionRouterV2 } from './DesktopRendererProductionRouterV2';
+import { DesktopRendererRightSidebarV2 } from './DesktopRendererRightSidebarV2';
 import { DesktopRendererSettingsWindowV2 } from './DesktopRendererSettingsWindowV2';
 import { DesktopRendererSidebarV2 } from './DesktopRendererSidebarV2';
 import { DesktopRendererStatusBarV2 } from './DesktopRendererStatusBarV2';
@@ -17,6 +17,7 @@ import { DesktopRendererWorkspaceCreateV2 } from './DesktopRendererWorkspaceCrea
 import { DesktopRendererWorkspaceSettingsV2 } from './DesktopRendererWorkspaceSettingsV2';
 import { DesktopRendererWorkbenchTabBarV2 } from './DesktopRendererWorkbenchTabBarV2';
 import type { DesktopSettingsWindowInputV2 } from './DesktopSettingsWindowSurfaceV2';
+import type { DesktopRightSidebarInputV2 } from './DesktopRightSidebarSurfaceV2';
 import type { DesktopSidebarInputV2 } from './DesktopSidebarSurfaceV2';
 import type { DesktopStatusBarInputV2 } from './DesktopStatusBarSurfaceV2';
 import type { DesktopTitlebarInputV2 } from './DesktopTitlebarSurfaceV2';
@@ -46,9 +47,7 @@ export interface DesktopAuthenticatedShellViewModelV2 {
     commandPalette: DesktopCommandPaletteInputV2;
     keyboardShortcuts: DesktopKeyboardShortcutsInputV2;
     newTask: ComponentProps<typeof NewTaskFlow>;
-    rightSidebar: DesktopAuthenticatedShellOptionalOutletV2<
-      ComponentProps<typeof DesktopRightSidebar>
-    >;
+    rightSidebar: DesktopAuthenticatedShellOptionalOutletV2<DesktopRightSidebarInputV2>;
     router: ComponentProps<typeof DesktopRendererProductionRouterV2>;
     settings: DesktopSettingsWindowInputV2;
     sidebar: DesktopSidebarInputV2;
@@ -106,7 +105,7 @@ export function DesktopAuthenticatedShellSurfaceV2({
           </main>
 
           {surfaces.rightSidebar.kind === 'visible' ? (
-            <DesktopRightSidebar {...surfaces.rightSidebar.props} />
+            <DesktopRendererRightSidebarV2 input={surfaces.rightSidebar.props} />
           ) : null}
         </section>
 

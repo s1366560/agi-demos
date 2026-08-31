@@ -21,6 +21,7 @@ export type UiSlotKind =
   | 'status_bar_surface'
   | 'titlebar_surface'
   | 'sidebar_surface'
+  | 'right_sidebar_surface'
   | 'command_palette_surface'
   | 'workspace_create_surface'
   | 'workspace_settings_surface'

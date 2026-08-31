@@ -23,6 +23,7 @@ import { DesktopConversationSurfaceV2 } from './DesktopConversationSurfaceV2';
 import { DesktopKeyboardShortcutsSurfaceV2 } from './DesktopKeyboardShortcutsSurfaceV2';
 import { DesktopMyWorkQueueSurfaceV2 } from './DesktopMyWorkQueueSurfaceV2';
 import { DesktopNewThreadComposerSurfaceV2 } from './DesktopNewThreadComposerSurfaceV2';
+import { DesktopRightSidebarSurfaceV2 } from './DesktopRightSidebarSurfaceV2';
 import { DesktopSessionCanvasSurfaceV2 } from './DesktopSessionCanvasSurfaceV2';
 import { DesktopSessionWorkspaceSurfaceV2 } from './DesktopSessionWorkspaceSurfaceV2';
 import { DesktopSettingsWindowSurfaceV2 } from './DesktopSettingsWindowSurfaceV2';
@@ -64,6 +65,7 @@ import {
   DESKTOP_KEYBOARD_SHORTCUTS_SURFACE_MODULE_REF_V2,
   DESKTOP_MY_WORK_QUEUE_SURFACE_MODULE_REF_V2,
   DESKTOP_NEW_THREAD_COMPOSER_SURFACE_MODULE_REF_V2,
+  DESKTOP_RIGHT_SIDEBAR_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_CANVAS_SURFACE_MODULE_REF_V2,
   DESKTOP_SESSION_WORKSPACE_SURFACE_MODULE_REF_V2,
   DESKTOP_SETTINGS_WINDOW_SURFACE_MODULE_REF_V2,
@@ -138,6 +140,8 @@ export function createDesktopRendererAppCompositionPortV2(
       validTitlebarDefinitionV2(definition) ? DesktopTitlebarSurfaceV2 : null,
     resolveSidebarSurface: (definition: UiSlotDefinition) =>
       validSidebarDefinitionV2(definition) ? DesktopSidebarSurfaceV2 : null,
+    resolveRightSidebarSurface: (definition: UiSlotDefinition) =>
+      validRightSidebarDefinitionV2(definition) ? DesktopRightSidebarSurfaceV2 : null,
     resolveConversationRendererModule: (definition: AuthorizedUiSlotDefinitionV2) =>
       validConversationRendererDefinitionV2(definition)
         ? DESKTOP_CONVERSATION_RENDERER_MODULE_V2
@@ -311,6 +315,18 @@ function validSidebarDefinitionV2(definition: UiSlotDefinition): boolean {
     definition.contract === 'ui-builtin:desktop-sidebar-surface' &&
     definition.moduleRef === DESKTOP_SIDEBAR_SURFACE_MODULE_REF_V2 &&
     definition.permission === 'ui.sidebar' &&
+    definition.sandbox
+  );
+}
+
+function validRightSidebarDefinitionV2(definition: UiSlotDefinition): boolean {
+  return (
+    definition.pluginId === 'builtin-shell' &&
+    definition.slot === 'right_sidebar_surface' &&
+    definition.id === 'right-sidebar' &&
+    definition.contract === 'ui-builtin:desktop-right-sidebar-surface' &&
+    definition.moduleRef === DESKTOP_RIGHT_SIDEBAR_SURFACE_MODULE_REF_V2 &&
+    definition.permission === 'ui.right-sidebar' &&
     definition.sandbox
   );
 }
