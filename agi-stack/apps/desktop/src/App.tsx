@@ -305,6 +305,9 @@ import {
   createDesktopConversationLifecycleClientProviderV2,
 } from './features/workspace/desktopConversationLifecycleClientProviderV2';
 import {
+  createDesktopWorkspaceAgentBindingDialogClientProviderV2,
+} from './features/workspace/desktopWorkspaceAgentBindingDialogClientProviderV2';
+import {
   createDesktopWorkspaceLifecycleClientProviderV2,
 } from './features/workspace/desktopWorkspaceLifecycleClientProviderV2';
 import {
@@ -758,6 +761,10 @@ export function App() {
     () => createDesktopConversationLifecycleClientProviderV2(),
     [],
   );
+  const desktopWorkspaceAgentBindingDialogClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceAgentBindingDialogClientProviderV2(),
+    [],
+  );
   const desktopWorkspaceLifecycleClientProviderV2 = useMemo(
     () => createDesktopWorkspaceLifecycleClientProviderV2(),
     [],
@@ -939,6 +946,10 @@ export function App() {
   const desktopConversationLifecycleClientV2 = useMemo(
     () => desktopConversationLifecycleClientProviderV2.publish({ config }),
     [config, desktopConversationLifecycleClientProviderV2],
+  );
+  const desktopWorkspaceAgentBindingDialogClientV2 = useMemo(
+    () => desktopWorkspaceAgentBindingDialogClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceAgentBindingDialogClientProviderV2],
   );
   const desktopWorkspaceLifecycleClientV2 = useMemo(
     () => desktopWorkspaceLifecycleClientProviderV2.publish({ config }),
@@ -3586,7 +3597,7 @@ export function App() {
   };
 
   const workspaceAgentBindingClient = (scope: WorkspaceSettingsScope) =>
-    new DesktopApiClient({
+    desktopWorkspaceAgentBindingDialogClientV2.bindOperation({
       ...configRef.current,
       tenantId: scope.tenantId,
       projectId: scope.projectId,
