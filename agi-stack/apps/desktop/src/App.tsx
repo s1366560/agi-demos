@@ -305,6 +305,9 @@ import {
   createDesktopConversationLifecycleClientProviderV2,
 } from './features/workspace/desktopConversationLifecycleClientProviderV2';
 import {
+  createDesktopWorkspaceLifecycleClientProviderV2,
+} from './features/workspace/desktopWorkspaceLifecycleClientProviderV2';
+import {
   createDesktopWorkspaceMemberMutationClientProviderV2,
 } from './features/workspace/desktopWorkspaceMemberMutationClientProviderV2';
 import { createWorkspaceCollaborationClientProviderV2 } from './features/workspace/workspaceCollaborationClientProviderV2';
@@ -755,6 +758,10 @@ export function App() {
     () => createDesktopConversationLifecycleClientProviderV2(),
     [],
   );
+  const desktopWorkspaceLifecycleClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceLifecycleClientProviderV2(),
+    [],
+  );
   const desktopWorkspaceMemberMutationClientProviderV2 = useMemo(
     () => createDesktopWorkspaceMemberMutationClientProviderV2(),
     [],
@@ -932,6 +939,10 @@ export function App() {
   const desktopConversationLifecycleClientV2 = useMemo(
     () => desktopConversationLifecycleClientProviderV2.publish({ config }),
     [config, desktopConversationLifecycleClientProviderV2],
+  );
+  const desktopWorkspaceLifecycleClientV2 = useMemo(
+    () => desktopWorkspaceLifecycleClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceLifecycleClientProviderV2],
   );
   const desktopWorkspaceMemberMutationClientV2 = useMemo(
     () => desktopWorkspaceMemberMutationClientProviderV2.publish({ config }),
@@ -3341,6 +3352,16 @@ export function App() {
     void refreshRuntime(nextConfig);
   };
 
+  const workspaceLifecycleClient = (
+    scope: Readonly<{ tenantId: string; projectId: string; workspaceId: string }>,
+  ) =>
+    desktopWorkspaceLifecycleClientV2.bindOperation({
+      ...configRef.current,
+      tenantId: scope.tenantId,
+      projectId: scope.projectId,
+      workspaceId: scope.workspaceId,
+    });
+
   const createWorkspaceFromDialog = async (
     input: WorkspaceCreateInput,
     submittedScope: WorkspaceCreateScope,
@@ -3355,8 +3376,7 @@ export function App() {
     if (!workspaceCreateScopeIsCurrent(submittedScope, currentScope)) {
       throw new WorkspaceCreateScopeChangedError();
     }
-    const creationClient = new DesktopApiClient({
-      ...configRef.current,
+    const creationClient = workspaceLifecycleClient({
       tenantId: submittedScope.tenantId,
       projectId: submittedScope.projectId,
       workspaceId: '',
@@ -3409,12 +3429,7 @@ export function App() {
     if (!scopedWorkspace || !workspaceSettingsScopeIsCurrent(submittedScope, currentScope)) {
       throw new WorkspaceSettingsScopeChangedError();
     }
-    const settingsClient = new DesktopApiClient({
-      ...configRef.current,
-      tenantId: submittedScope.tenantId,
-      projectId: submittedScope.projectId,
-      workspaceId: submittedScope.workspaceId,
-    });
+    const settingsClient = workspaceLifecycleClient(submittedScope);
     const updated = await settingsClient.updateWorkspaceForProject(
       submittedScope.projectId,
       submittedScope.workspaceId,
