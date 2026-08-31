@@ -31,7 +31,8 @@ const automationsSource = readFileSync(
 );
 
 test('App projects capabilities into V2 Search and Automation route bindings', () => {
-  assert.match(appSource, /createDesktopWorkbenchCapabilityClient/u);
+  assert.match(appSource, /desktopWorkbenchCapabilityClientProviderV2\.publish/u);
+  assert.doesNotMatch(appSource, /createDesktopWorkbenchCapabilityClient\(/u);
   assert.match(appSource, /useDesktopCapabilitySnapshot/u);
   assert.match(
     appSource,

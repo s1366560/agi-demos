@@ -214,8 +214,10 @@ import {
 } from './features/session/sessionTimelinePaginationModel';
 import { useActivityInbox } from './features/activity/useActivityInbox';
 import { useCompletionNotifications } from './features/activity/useCompletionNotifications';
+import {
+  createDesktopWorkbenchCapabilityClientProviderV2,
+} from './features/runtime/desktopWorkbenchCapabilityClientProviderV2';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
-import { createDesktopWorkbenchCapabilityClient } from './features/runtime/workbenchCapabilityClient';
 import { createProjectSearchRouteBindingProviderV2 } from './features/search/projectSearchRouteBindingProviderV2';
 import {
   countMyWorkGroups,
@@ -725,6 +727,10 @@ export function App() {
     () => createDesktopAutomationApiProviderV2(),
     [],
   );
+  const desktopWorkbenchCapabilityClientProviderV2 = useMemo(
+    () => createDesktopWorkbenchCapabilityClientProviderV2(),
+    [],
+  );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
     () => createDesktopProductionRouteAuthorityProviderV2(),
     [],
@@ -887,9 +893,17 @@ export function App() {
     () => desktopArtifactClientProviderV2.publish({ config }),
     [config, desktopArtifactClientProviderV2],
   );
-  const workbenchCapabilityClient = useMemo(
-    () => createDesktopWorkbenchCapabilityClient(desktopAutomationApiV2.api, config),
-    [desktopAutomationApiV2.api, config],
+  const desktopWorkbenchCapabilityClientV2 = useMemo(
+    () =>
+      desktopWorkbenchCapabilityClientProviderV2.publish({
+        automationApi: desktopAutomationApiV2.api,
+        config,
+      }),
+    [
+      config,
+      desktopAutomationApiV2.api,
+      desktopWorkbenchCapabilityClientProviderV2,
+    ],
   );
   const sandboxRuntime = useSandboxRuntimeSurface(
     config,
@@ -980,7 +994,7 @@ export function App() {
     runsInNativeDesktop,
   );
   const desktopCapabilityState = useDesktopCapabilitySnapshot(
-    workbenchCapabilityClient,
+    desktopWorkbenchCapabilityClientV2.client,
     identityAuthenticated && showRuntimeConfig,
   );
   const desktopProductionRouteAuthorityV2 = useMemo(

@@ -107,7 +107,8 @@ test('failed automation API publication keeps the last-good binding', () => {
 test('App consumes the published V2 automation API without constructing it directly', () => {
   assert.match(appSource, /desktopAutomationApiProviderV2\.publish\(\{/u);
   assert.match(appSource, /baseApi:\s*api/u);
-  assert.match(appSource, /createDesktopWorkbenchCapabilityClient\(desktopAutomationApiV2\.api/u);
+  assert.match(appSource, /desktopWorkbenchCapabilityClientProviderV2\.publish\(\{/u);
+  assert.match(appSource, /automationApi:\s*desktopAutomationApiV2\.api/u);
   assert.match(appSource, /api:\s*desktopAutomationApiV2\.api/u);
   assert.doesNotMatch(appSource, /createDesktopAutomationApi\(/u);
   assert.match(providerSource, /createDesktopAutomationApi\(input\.baseApi, config\)/u);
