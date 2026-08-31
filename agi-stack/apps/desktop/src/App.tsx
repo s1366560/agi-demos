@@ -60,9 +60,6 @@ import {
   isWorkspaceReady,
   workspaceContextMatchesSelection,
 } from './features/auth/authContextModel';
-import { deviceApprovalCapability } from './features/device-approval/deviceApprovalCapability';
-import { tenantCreationCapability } from './features/tenant-creation/tenantCreationCapability';
-import { invitationAcceptanceCapability } from './features/invitation-acceptance/invitationAcceptanceCapability';
 import { ForcePasswordChangeScreen } from './features/auth/ForcePasswordChangeScreen';
 import {
   completeForcedPasswordChangeOutcome,
@@ -229,26 +226,9 @@ import {
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
-import {
-  DEVICE_APPROVAL_ROUTE_ID,
-  INVITATION_ACCEPTANCE_ROUTE_ID,
-  TENANT_CREATION_ROUTE_ID,
-} from './features/navigation/desktopProductionRouteRegistry';
+import { DEVICE_APPROVAL_ROUTE_ID } from './features/navigation/desktopProductionRouteRegistry';
 import { restoreDesktopRoute } from './features/navigation/desktopRouteRegistry';
-import {
-  desktopRouteBasePermissionsForAuth,
-  resolveDesktopRouteCapability,
-} from './features/navigation/desktopProductionRouteRuntime';
-import {
-  createCloudDesktopRoutePermissionResolver,
-  createLocalDesktopRoutePermissionResolver,
-  type DesktopRoutePermissionSnapshotResolver,
-} from './features/navigation/desktopRoutePermissionAuthority';
-import {
-  createCloudDesktopRoutePermissionClient,
-  createLocalDesktopRoutePermissionClient,
-  createVaultBoundCloudDesktopRoutePermissionClient,
-} from './features/navigation/desktopRoutePermissionHttpClient';
+import { createDesktopProductionRouteAuthorityProviderV2 } from './features/navigation/desktopProductionRouteAuthorityProviderV2';
 import { createDesktopRouteScopeTransaction } from './features/navigation/desktopRouteScopeTransaction';
 import {
   deriveDesktopNavigationDiscoveryEntries,
@@ -743,6 +723,10 @@ export function App() {
     () => createProjectCronJobsRouteBindingProviderV2(),
     [],
   );
+  const desktopProductionRouteAuthorityProviderV2 = useMemo(
+    () => createDesktopProductionRouteAuthorityProviderV2(),
+    [],
+  );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
   const desktopProductionRouteLocation = useMemo(
     () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
@@ -983,67 +967,20 @@ export function App() {
     workbenchCapabilityClient,
     identityAuthenticated && showRuntimeConfig,
   );
-  const observedRouteRuntimeMode = desktopCapabilityState.snapshot?.runtime_state;
-  const productionRouteRuntimeMode =
-    observedRouteRuntimeMode && observedRouteRuntimeMode !== 'native'
-      ? observedRouteRuntimeMode
-      : config.mode;
-  const productionRouteBasePermissions = useMemo(
-    () => desktopRouteBasePermissionsForAuth(auth),
-    [auth],
-  );
-  const productionRoutePermissionClient = useMemo(
+  const desktopProductionRouteAuthorityV2 = useMemo(
     () =>
-      config.mode === 'cloud'
-        ? createCloudDesktopRoutePermissionClient(
-            config,
-            desktopVaultBoundCloudRequestBroker(),
-          )
-        : createLocalDesktopRoutePermissionClient(config),
-    [config],
-  );
-  const resolveProductionRoutePermissionSnapshot =
-    useMemo<DesktopRoutePermissionSnapshotResolver>(() => {
-      const options = Object.freeze({
-        client: productionRoutePermissionClient,
-      });
-      if (config.mode === 'cloud') {
-        return createCloudDesktopRoutePermissionResolver(options);
-      }
-      const localResolver = createLocalDesktopRoutePermissionResolver(options);
-      const broker = desktopVaultBoundCloudRequestBroker();
-      const localOnlineCloudResolver = broker
-        ? createCloudDesktopRoutePermissionResolver({
-            client: createVaultBoundCloudDesktopRoutePermissionClient(config, broker),
-          })
-        : null;
-      return (context, signal, match) => {
-        if (
-          productionRouteRuntimeMode === 'local_online' &&
-          match.definition.localPolicy === 'cloud_only'
-        ) {
-          if (!localOnlineCloudResolver) {
-            return Promise.reject(new Error('cloud_request_broker_missing'));
-          }
-          return localOnlineCloudResolver(context, signal, match);
-        }
-        return localResolver(context, signal, match);
-      };
-    }, [config, productionRoutePermissionClient, productionRouteRuntimeMode]);
-  const resolveProductionRouteCapability = useCallback(
-    (capability: string, context: Parameters<typeof resolveDesktopRouteCapability>[2]) => {
-      if (capability === DEVICE_APPROVAL_ROUTE_ID) {
-        return deviceApprovalCapability(config);
-      }
-      if (capability === TENANT_CREATION_ROUTE_ID) {
-        return tenantCreationCapability(config);
-      }
-      if (capability === INVITATION_ACCEPTANCE_ROUTE_ID) {
-        return invitationAcceptanceCapability(config);
-      }
-      return resolveDesktopRouteCapability(desktopCapabilityState.snapshot, capability, context);
-    },
-    [config, desktopCapabilityState.snapshot],
+      desktopProductionRouteAuthorityProviderV2.publish({
+        auth,
+        config,
+        capabilitySnapshot: desktopCapabilityState.snapshot,
+        cloudRequestBroker: desktopVaultBoundCloudRequestBroker(),
+      }),
+    [
+      auth,
+      config,
+      desktopCapabilityState.snapshot,
+      desktopProductionRouteAuthorityProviderV2,
+    ],
   );
   projectSearchRouteBindingProviderV2.publish({
     api,
@@ -6490,11 +6427,13 @@ export function App() {
             authenticationPassthroughRouteIds={authenticationPassthroughRouteIds}
             forceLegacyChildren={invitationSignInRequested}
             location={desktopProductionRouteLocation}
-            mode={productionRouteRuntimeMode}
+            mode={desktopProductionRouteAuthorityV2.mode}
             navigation={desktopProductionRouteNavigation}
-            permissions={productionRouteBasePermissions}
-            resolveCapability={resolveProductionRouteCapability}
-            resolvePermissionSnapshot={resolveProductionRoutePermissionSnapshot}
+            permissions={desktopProductionRouteAuthorityV2.permissions}
+            resolveCapability={desktopProductionRouteAuthorityV2.resolveCapability}
+            resolvePermissionSnapshot={
+              desktopProductionRouteAuthorityV2.resolvePermissionSnapshot
+            }
             switchScope={switchProductionRouteScope}
           >
             <LoginScreen
@@ -6679,11 +6618,12 @@ export function App() {
       router: {
         authenticationPassthroughRouteIds: AUTHENTICATION_PASSTHROUGH_ROUTE_IDS,
         location: desktopProductionRouteLocation,
-        mode: productionRouteRuntimeMode,
+        mode: desktopProductionRouteAuthorityV2.mode,
         navigation: desktopProductionRouteNavigation,
-        permissions: productionRouteBasePermissions,
-        resolveCapability: resolveProductionRouteCapability,
-        resolvePermissionSnapshot: resolveProductionRoutePermissionSnapshot,
+        permissions: desktopProductionRouteAuthorityV2.permissions,
+        resolveCapability: desktopProductionRouteAuthorityV2.resolveCapability,
+        resolvePermissionSnapshot:
+          desktopProductionRouteAuthorityV2.resolvePermissionSnapshot,
         switchScope: switchProductionRouteScope,
         viewModel: desktopWorkbenchSurfaceViewModelV2,
       },

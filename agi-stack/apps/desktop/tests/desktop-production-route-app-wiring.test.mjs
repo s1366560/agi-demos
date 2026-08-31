@@ -21,6 +21,13 @@ const projectCronJobsBindingProviderSource = readFileSync(
   ),
   'utf8',
 );
+const productionRouteAuthorityProviderSource = readFileSync(
+  new URL(
+    '../src/features/navigation/desktopProductionRouteAuthorityProviderV2.ts',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const rendererAppCompositionSource = readFileSync(
   new URL('../src/plugins/desktopRendererAppCompositionV2.tsx', import.meta.url),
   'utf8',
@@ -610,37 +617,49 @@ test('App wires Unified Runtimes through one scoped Cloud or Local binding', () 
   );
 });
 
-test('App injects async Cloud or Local permission authority and real capability snapshots', () => {
-  assert.match(appSource, /desktopRouteBasePermissionsForAuth\(auth\)/u);
+test('App publishes one V2 production route authority binding for both route hosts', () => {
   assert.match(
     appSource,
-    /const broker = desktopVaultBoundCloudRequestBroker\(\)[\s\S]*createVaultBoundCloudDesktopRoutePermissionClient\(config, broker\)/u,
+    /createDesktopProductionRouteAuthorityProviderV2\(\)/u,
   );
   assert.match(
     appSource,
-    /createCloudDesktopRoutePermissionClient\(\s*config,\s*desktopVaultBoundCloudRequestBroker\(\),?\s*\)/u,
+    /desktopProductionRouteAuthorityProviderV2\.publish\(\{[\s\S]*auth,[\s\S]*config,[\s\S]*capabilitySnapshot:\s*desktopCapabilityState\.snapshot,[\s\S]*cloudRequestBroker:\s*desktopVaultBoundCloudRequestBroker\(\)/u,
+  );
+  assert.match(
+    productionRouteAuthorityProviderSource,
+    /desktopRouteBasePermissionsForAuth\(input\.auth\)/u,
+  );
+  assert.match(
+    productionRouteAuthorityProviderSource,
+    /createCloudDesktopRoutePermissionClient\([\s\S]*createLocalDesktopRoutePermissionClient\([\s\S]*createVaultBoundCloudDesktopRoutePermissionClient\(/u,
+  );
+  assert.match(
+    productionRouteAuthorityProviderSource,
+    /createCloudDesktopRoutePermissionResolver\([\s\S]*createLocalDesktopRoutePermissionResolver\(/u,
+  );
+  assert.match(
+    productionRouteAuthorityProviderSource,
+    /resolveDesktopRouteCapability\(input\.capabilitySnapshot,\s*capability,\s*context\)/u,
+  );
+  assert.match(
+    productionRouteAuthorityProviderSource,
+    /observedRuntimeMode\s*&&\s*observedRuntimeMode\s*!==\s*['"]native['"][\s\S]*match\.definition\.localPolicy\s*===\s*['"]cloud_only['"]/u,
   );
   assert.match(
     appSource,
-    /createCloudDesktopRoutePermissionResolver\(options\)[\s\S]*createLocalDesktopRoutePermissionResolver\(options\)/u,
+    /mode=\{desktopProductionRouteAuthorityV2\.mode\}[\s\S]*permissions=\{desktopProductionRouteAuthorityV2\.permissions\}[\s\S]*resolveCapability=\{desktopProductionRouteAuthorityV2\.resolveCapability\}/u,
+  );
+  assert.match(
+    appSource,
+    /router:\s*\{[\s\S]*mode:\s*desktopProductionRouteAuthorityV2\.mode,[\s\S]*permissions:\s*desktopProductionRouteAuthorityV2\.permissions,[\s\S]*resolveCapability:\s*desktopProductionRouteAuthorityV2\.resolveCapability/u,
+  );
+  assert.doesNotMatch(
+    appSource,
+    /desktopRouteBasePermissionsForAuth|resolveDesktopRouteCapability|create(?:Cloud|Local|VaultBoundCloud)DesktopRoutePermission|deviceApprovalCapability|tenantCreationCapability|invitationAcceptanceCapability/u,
   );
   assert.doesNotMatch(appSource, /getActiveConversationId:\s*\(\)\s*=>/u);
   assert.doesNotMatch(appSource, /getActiveWorkspaceId:\s*\(\)\s*=>/u);
-  assert.match(
-    appSource,
-    /resolveDesktopRouteCapability\(\s*desktopCapabilityState\.snapshot,\s*capability,\s*context,?\s*\)/u,
-  );
-  assert.match(
-    appSource,
-    /resolvePermissionSnapshot=\{\s*resolveProductionRoutePermissionSnapshot\s*\}/u,
-  );
-  assert.match(appSource, /resolveCapability=\{resolveProductionRouteCapability\}/u);
-  assert.match(
-    appSource,
-    /observedRouteRuntimeMode\s*=\s*desktopCapabilityState\.snapshot\?\.runtime_state[\s\S]*observedRouteRuntimeMode\s*&&\s*observedRouteRuntimeMode\s*!==\s*['"]native['"]/u,
-  );
-  assert.match(appSource, /match\.definition\.localPolicy\s*===\s*['"]cloud_only['"]/u);
-  assert.match(appSource, /mode=\{productionRouteRuntimeMode\}/u);
   assert.match(routerSource, /resolvePermissionSnapshot/u);
   assert.match(
     routerSource,
@@ -790,7 +809,7 @@ test('anonymous unknown routes are handled natively before the login gate', () =
   assert.doesNotMatch(authenticationRouterSource, /projectDesktopWorkbenchCompositionV2/u);
   assert.match(
     anonymousSource,
-    /location=\{desktopProductionRouteLocation\}[\s\S]*mode=\{productionRouteRuntimeMode\}[\s\S]*navigation=\{desktopProductionRouteNavigation\}/u,
+    /location=\{desktopProductionRouteLocation\}[\s\S]*mode=\{desktopProductionRouteAuthorityV2\.mode\}[\s\S]*navigation=\{desktopProductionRouteNavigation\}/u,
   );
 });
 

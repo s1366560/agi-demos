@@ -375,6 +375,7 @@
     "src/features/navigation/desktopRouteModule.ts",
     "src/features/navigation/desktopProductionRouteRegistry.ts",
     "src/features/navigation/desktopProductionRouteRuntime.ts",
+    "src/features/navigation/desktopProductionRouteAuthorityProviderV2.ts",
     "src/features/navigation/desktopRoutePermissionAuthority.ts",
     "src/features/navigation/desktopRoutePermissionHttpClient.ts",
     "src/features/navigation/NativeUnavailableRoute.tsx",
