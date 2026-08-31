@@ -197,6 +197,7 @@
     "src/features/session/sessionViewModel.ts",
     "src/features/session/sessionScope.ts",
     "src/features/session/sessionSelectionModel.ts",
+    "src/features/session/desktopConversationConfigClientProviderV2.ts",
     "src/features/session/desktopSessionTimelineClientProviderV2.ts",
     "src/features/session/sessionTimelinePaginationModel.ts",
     "src/features/session/sessionTimelineScrollModel.ts",

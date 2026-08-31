@@ -211,6 +211,9 @@ import {
   createDesktopSessionTimelineClientProviderV2,
 } from './features/session/desktopSessionTimelineClientProviderV2';
 import {
+  createDesktopConversationConfigClientProviderV2,
+} from './features/session/desktopConversationConfigClientProviderV2';
+import {
   failEarlierTimelinePage,
   resolveEarlierTimelinePage,
 } from './features/session/sessionTimelinePaginationModel';
@@ -803,6 +806,10 @@ export function App() {
     () => createDesktopArtifactClientProviderV2(),
     [],
   );
+  const desktopConversationConfigClientProviderV2 = useMemo(
+    () => createDesktopConversationConfigClientProviderV2(),
+    [],
+  );
   const desktopSessionTimelineClientProviderV2 = useMemo(
     () => createDesktopSessionTimelineClientProviderV2(),
     [],
@@ -956,6 +963,10 @@ export function App() {
   const desktopArtifactClientV2 = useMemo(
     () => desktopArtifactClientProviderV2.publish({ config }),
     [config, desktopArtifactClientProviderV2],
+  );
+  const desktopConversationConfigClientV2 = useMemo(
+    () => desktopConversationConfigClientProviderV2.publish({ config }),
+    [config, desktopConversationConfigClientProviderV2],
   );
   const desktopSessionTimelineClientV2 = useMemo(
     () => desktopSessionTimelineClientProviderV2.publish({ config }),
@@ -4859,6 +4870,8 @@ export function App() {
       if (!conversation || !chatModelScopeKey) {
         throw new Error(t('chat.selectedModelUnavailable'));
       }
+      const requestConfig = configRef.current;
+      const client = desktopConversationConfigClientV2.bindOperation(requestConfig);
       const requestId = conversationModelMutationRequestRef.current + 1;
       conversationModelMutationRequestRef.current = requestId;
       const baseEventRevision = conversationModelEvent?.revision ?? null;
@@ -4877,13 +4890,15 @@ export function App() {
         baseEventRevision,
       }));
       try {
-        const updated = await api.updateAgentConversationConfig(
+        const updated = await client.updateAgentConversationConfig(
           conversation.id,
           {
             llm_model_override: overrideModel,
-            ...(config.mode === 'local' ? { llm_route_override: routeOverride ?? null } : {}),
+            ...(requestConfig.mode === 'local'
+              ? { llm_route_override: routeOverride ?? null }
+              : {}),
           },
-          conversation.project_id || config.projectId,
+          conversation.project_id || requestConfig.projectId,
         );
         const activeSession = agentConversationSessionRef.current;
         if (
@@ -4905,7 +4920,7 @@ export function App() {
           return next;
         });
         updateDataset((current) => {
-          const workspaceId = updated.workspace_id?.trim() || config.workspaceId.trim();
+          const workspaceId = updated.workspace_id?.trim() || requestConfig.workspaceId.trim();
           const conversations = current.conversationsByWorkspace[workspaceId];
           if (!conversations?.some((candidate) => candidate.id === updated.id)) return current;
           return {
@@ -4927,7 +4942,7 @@ export function App() {
           baseEventRevision,
         });
       } catch (caught) {
-        const message = formatConnectionError(caught, config.apiBaseUrl);
+        const message = formatConnectionError(caught, requestConfig.apiBaseUrl);
         if (conversationModelMutationRequestRef.current === requestId) {
           setConversationModelMutation({
             scopeKey: chatModelScopeKey,
@@ -4942,12 +4957,9 @@ export function App() {
       }
     },
     [
-      api,
       chatModelScopeKey,
-      config.apiBaseUrl,
-      config.projectId,
-      config.workspaceId,
       conversationModelEvent?.revision,
+      desktopConversationConfigClientV2,
       scopedConversation,
       t,
       updateDataset,
