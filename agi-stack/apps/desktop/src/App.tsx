@@ -148,6 +148,9 @@ import {
   type ArtifactVersionAction,
 } from './features/session/sessionArtifactModel';
 import {
+  createDesktopSessionArtifactActionClientProviderV2,
+} from './features/session/desktopSessionArtifactActionClientProviderV2';
+import {
   chatWorkflowTargetForReviewTab,
   defaultSessionCanvasTab,
   shouldShowSessionCanvas,
@@ -806,6 +809,10 @@ export function App() {
     () => createDesktopArtifactClientProviderV2(),
     [],
   );
+  const desktopSessionArtifactActionClientProviderV2 = useMemo(
+    () => createDesktopSessionArtifactActionClientProviderV2(),
+    [],
+  );
   const desktopConversationConfigClientProviderV2 = useMemo(
     () => createDesktopConversationConfigClientProviderV2(),
     [],
@@ -963,6 +970,10 @@ export function App() {
   const desktopArtifactClientV2 = useMemo(
     () => desktopArtifactClientProviderV2.publish({ config }),
     [config, desktopArtifactClientProviderV2],
+  );
+  const desktopSessionArtifactActionClientV2 = useMemo(
+    () => desktopSessionArtifactActionClientProviderV2.publish({ config }),
+    [config, desktopSessionArtifactActionClientProviderV2],
   );
   const desktopConversationConfigClientV2 = useMemo(
     () => desktopConversationConfigClientProviderV2.publish({ config }),
@@ -4768,17 +4779,19 @@ export function App() {
         setError(t('session.authorityActionUnavailable'));
         return;
       }
+      const requestConfig = configRef.current;
       setArtifactActionPending({ versionId: authoritativeVersion.id, action });
       setError(null);
       try {
+        const client = desktopSessionArtifactActionClientV2.bindOperation(requestConfig);
         if (action === 'deliver') {
-          const outcome = await api.deliverArtifactVersion(
+          const outcome = await client.deliverArtifactVersion(
             authoritativeVersion.id,
             artifactDeliveryRequest(authoritativeVersion),
           );
           if (!outcome.accepted) throw new Error(t('session.authorityActionUnavailable'));
         } else {
-          const outcome = await api.reviewArtifactVersion(
+          const outcome = await client.reviewArtifactVersion(
             authoritativeVersion.id,
             artifactReviewRequest(authoritativeVersion, action, currentArtifactRun, feedback),
           );
@@ -4786,16 +4799,15 @@ export function App() {
         }
         invalidateSessionAuthority();
       } catch (caught) {
-        setError(formatConnectionError(caught, config.apiBaseUrl));
+        setError(formatConnectionError(caught, requestConfig.apiBaseUrl));
       } finally {
         setArtifactActionPending(null);
       }
     },
     [
-      api,
       applyAuthoritativeRun,
-      config.apiBaseUrl,
       currentArtifactRun,
+      desktopSessionArtifactActionClientV2,
       invalidateSessionAuthority,
       selectedConversation,
       sessionProjection?.capabilities,
