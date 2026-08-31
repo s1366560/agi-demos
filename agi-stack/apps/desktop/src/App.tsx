@@ -308,6 +308,9 @@ import {
   createDesktopWorkspaceAgentBindingDialogClientProviderV2,
 } from './features/workspace/desktopWorkspaceAgentBindingDialogClientProviderV2';
 import {
+  createDesktopWorkspaceConversationCatalogClientProviderV2,
+} from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
+import {
   createDesktopWorkspaceLifecycleClientProviderV2,
 } from './features/workspace/desktopWorkspaceLifecycleClientProviderV2';
 import {
@@ -765,6 +768,10 @@ export function App() {
     () => createDesktopWorkspaceAgentBindingDialogClientProviderV2(),
     [],
   );
+  const desktopWorkspaceConversationCatalogClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceConversationCatalogClientProviderV2(),
+    [],
+  );
   const desktopWorkspaceLifecycleClientProviderV2 = useMemo(
     () => createDesktopWorkspaceLifecycleClientProviderV2(),
     [],
@@ -950,6 +957,10 @@ export function App() {
   const desktopWorkspaceAgentBindingDialogClientV2 = useMemo(
     () => desktopWorkspaceAgentBindingDialogClientProviderV2.publish({ config }),
     [config, desktopWorkspaceAgentBindingDialogClientProviderV2],
+  );
+  const desktopWorkspaceConversationCatalogClientV2 = useMemo(
+    () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceConversationCatalogClientProviderV2],
   );
   const desktopWorkspaceLifecycleClientV2 = useMemo(
     () => desktopWorkspaceLifecycleClientProviderV2.publish({ config }),
@@ -3176,7 +3187,7 @@ export function App() {
       }));
 
       try {
-        const client = new DesktopApiClient({
+        const client = desktopWorkspaceConversationCatalogClientV2.bindOperation({
           ...requestConfig,
           workspaceId: isUnboundGroup ? '' : workspaceId,
         });
@@ -3246,7 +3257,11 @@ export function App() {
         });
       }
     },
-    [clearMissingConversationSelection, updateDataset],
+    [
+      clearMissingConversationSelection,
+      desktopWorkspaceConversationCatalogClientV2,
+      updateDataset,
+    ],
   );
 
   const refreshMyWork = useCallback(
