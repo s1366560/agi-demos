@@ -208,6 +208,9 @@ import {
   sessionTimelineRequestIsCurrent,
 } from './features/session/sessionSelectionModel';
 import {
+  createDesktopSessionTimelineClientProviderV2,
+} from './features/session/desktopSessionTimelineClientProviderV2';
+import {
   failEarlierTimelinePage,
   resolveEarlierTimelinePage,
 } from './features/session/sessionTimelinePaginationModel';
@@ -800,6 +803,10 @@ export function App() {
     () => createDesktopArtifactClientProviderV2(),
     [],
   );
+  const desktopSessionTimelineClientProviderV2 = useMemo(
+    () => createDesktopSessionTimelineClientProviderV2(),
+    [],
+  );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
   const desktopProductionRouteLocation = useMemo(
     () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
@@ -949,6 +956,10 @@ export function App() {
   const desktopArtifactClientV2 = useMemo(
     () => desktopArtifactClientProviderV2.publish({ config }),
     [config, desktopArtifactClientProviderV2],
+  );
+  const desktopSessionTimelineClientV2 = useMemo(
+    () => desktopSessionTimelineClientProviderV2.publish({ config }),
+    [config, desktopSessionTimelineClientProviderV2],
   );
   const desktopConversationLifecycleClientV2 = useMemo(
     () => desktopConversationLifecycleClientProviderV2.publish({ config }),
@@ -1596,7 +1607,7 @@ export function App() {
         loading: true,
       });
       try {
-        const client = new DesktopApiClient(requestConfig);
+        const client = desktopSessionTimelineClientV2.bindOperation(requestConfig);
         const response = await client.getConversationMessages(conversation.id, projectId, {
           limit: 50,
         });
@@ -1652,13 +1663,14 @@ export function App() {
         );
       }
     },
-    [],
+    [desktopSessionTimelineClientV2],
   );
 
   const loadEarlierTimeline = useCallback(async () => {
     const conversation = scopedConversation;
     const cursor = conversationTimeline.firstCursor;
     if (!conversation || !cursor || conversationTimeline.loadingEarlier) return;
+    const requestConfig = configRef.current;
     const requestId = timelineRequestRef.current + 1;
     timelineRequestRef.current = requestId;
     const expectedRequest = {
@@ -1676,11 +1688,16 @@ export function App() {
         : current,
     );
     try {
-      const response = await api.getConversationMessages(conversation.id, config.projectId, {
-        limit: 50,
-        beforeTimeUs: cursor.timeUs,
-        beforeCounter: cursor.counter,
-      });
+      const client = desktopSessionTimelineClientV2.bindOperation(requestConfig);
+      const response = await client.getConversationMessages(
+        conversation.id,
+        requestConfig.projectId,
+        {
+          limit: 50,
+          beforeTimeUs: cursor.timeUs,
+          beforeCounter: cursor.counter,
+        },
+      );
       setConversationTimeline((current) => {
         if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
         const items = mergeTimelineItems(response.timeline ?? [], current.items);
@@ -1711,16 +1728,17 @@ export function App() {
     } catch (caught) {
       setConversationTimeline((current) =>
         requestIsCurrent() && current.conversationId === conversation.id
-          ? failEarlierTimelinePage(current, formatConnectionError(caught, config.apiBaseUrl))
+          ? failEarlierTimelinePage(
+              current,
+              formatConnectionError(caught, requestConfig.apiBaseUrl),
+            )
           : current,
       );
     }
   }, [
-    api,
-    config.apiBaseUrl,
-    config.projectId,
     conversationTimeline.firstCursor,
     conversationTimeline.loadingEarlier,
+    desktopSessionTimelineClientV2,
     scopedConversation,
     t,
   ]);
