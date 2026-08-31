@@ -7,6 +7,13 @@ const registrySource = readFileSync(
   new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
   'utf8',
 );
+const projectSearchBindingProviderSource = readFileSync(
+  new URL(
+    '../src/features/search/projectSearchRouteBindingProviderV2.ts',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const rendererAppCompositionSource = readFileSync(
   new URL('../src/plugins/desktopRendererAppCompositionV2.tsx', import.meta.url),
   'utf8',
@@ -37,6 +44,18 @@ const routerSource = readFileSync(
 );
 
 test('V2 route factories retain the latest native route bindings', () => {
+  const projectDiscoveryFactoryStart = registrySource.indexOf(
+    'export function createAppProjectDiscoveryRouteRegistry',
+  );
+  const tenantCoreFactoryStart = registrySource.indexOf(
+    'export function createAppTenantCoreRouteRegistry',
+  );
+  assert.notEqual(projectDiscoveryFactoryStart, -1);
+  assert.notEqual(tenantCoreFactoryStart, -1);
+  const projectDiscoveryFactorySource = registrySource.slice(
+    projectDiscoveryFactoryStart,
+    tenantCoreFactoryStart,
+  );
   assert.match(
     registrySource,
     /createDesktopProductionRouteRegistry\(\{[\s\S]*PROJECT_OVERVIEW_ROUTE_ID[\s\S]*createProjectOverviewRouteModuleLoader\(\{[\s\S]*configRef\.current/u,
@@ -51,11 +70,20 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
   assert.match(
     registrySource,
-    /PROJECT_SEARCH_ROUTE_ID[\s\S]*createProjectSearchRouteModuleLoader\(\{[\s\S]*projectSearchRouteBindingRef\.current/u,
+    /PROJECT_SEARCH_ROUTE_ID[\s\S]*createProjectSearchRouteModuleLoader\(\{[\s\S]*projectSearchRouteBindingProviderV2\.resolve\(context\)/u,
   );
   assert.match(
     appSource,
-    /projectSearchRouteBindingRef\.current\s*=\s*Object\.freeze\(\{[\s\S]*api,[\s\S]*config,[\s\S]*project:[\s\S]*capability:[\s\S]*capabilityLoading:/u,
+    /projectSearchRouteBindingProviderV2\.publish\(\{[\s\S]*api,[\s\S]*scope:[\s\S]*projects:[\s\S]*capabilitySnapshot:[\s\S]*capabilityLoading:/u,
+  );
+  assert.doesNotMatch(appSource, /projectSearchRouteBindingRef|PROJECT_SEARCH_ROUTE_ID/u);
+  assert.doesNotMatch(
+    projectDiscoveryFactorySource,
+    /new DesktopApiClient\(currentConfig\)|desktopCapability\(null,\s*PROJECT_SEARCH_ROUTE_ID\)/u,
+  );
+  assert.match(
+    projectSearchBindingProviderSource,
+    /desktopCapability\(input\.capabilitySnapshot,\s*PROJECT_SEARCH_ROUTE_ID\)/u,
   );
   assert.match(
     registrySource,

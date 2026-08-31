@@ -119,7 +119,12 @@ const appComposition = createDesktopRendererAppCompositionPortV2({
     openPath: () => undefined,
   },
   projectCronJobsRouteBindingRef: { current: null },
-  projectSearchRouteBindingRef: { current: null },
+  projectSearchRouteBindingProviderV2: {
+    publish: () => undefined,
+    resolve: () => {
+      throw new Error("project_search_route_binding_unpublished");
+    },
+  },
   setAuth: () => undefined,
   setInvitationSignInRequested: () => undefined,
   setSettingsInitialSection: () => undefined,
@@ -1015,6 +1020,23 @@ test("route projection always retains only the authentication kernel without V2 
     ["device-approval", "invitation-acceptance", "tenant-tenant-overview"],
   );
   assert.equal(artifactRegistryCalls, 1);
+});
+
+test("disabled project discovery contributions expose neither search route nor navigation", () => {
+  const state = readyState({
+    navigationArtifactIds: [],
+    navigationDiscoveryRouteIds: [],
+    navigationRouteIds: [],
+    routeArtifactIds: [],
+    routeArtifacts: [],
+    routeIds: [],
+  });
+  const routes = projectDesktopRouteRegistryV2(appComposition, state);
+  const navigation = projectDesktopNavigationRegistryV2(routes, state);
+
+  assert.equal(routes.byId.has("project-project-search"), false);
+  assert.equal(navigation.byId.has("project-project-search"), false);
+  assert.equal(isDesktopNavigationRouteEnabledV2(state, "project-project-search"), false);
 });
 
 test("navigation and UI-slot selectors expose only active V2 contributions", () => {

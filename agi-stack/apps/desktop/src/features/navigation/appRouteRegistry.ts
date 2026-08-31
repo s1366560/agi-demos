@@ -205,10 +205,8 @@ import {
   createTenantSettingsRouteBindingForRuntime,
   createTenantWebhooksRouteBindingForRuntime,
 } from '../tenant-admin/tenantRemainingRouteRuntime';
-import {
-  createProjectSearchRouteModuleLoader,
-  type ProjectSearchRouteBinding,
-} from '../search/projectSearchRouteModule';
+import { createProjectSearchRouteModuleLoader } from '../search/projectSearchRouteModule';
+import type { ProjectSearchRouteBindingProviderV2 } from '../search/projectSearchRouteBindingProviderV2';
 import { type SettingsSection } from '../settings/SettingsWindow';
 import type { DesktopRouteModule, DesktopRouteModuleLoader } from './desktopRouteModule';
 import {
@@ -256,14 +254,7 @@ export type AppRouteRegistryRefs = {
     onOpenProjectSettings: () => void;
     onOpenConnection: () => void;
   }> | null>;
-  projectSearchRouteBindingRef: RefObject<Readonly<{
-    api: DesktopApiClient;
-    config: DesktopRuntimeConfig;
-    project: ProjectSummary | null;
-    capability: DesktopCapabilityView;
-    capabilityLoading: boolean;
-    onRetryCapability: () => void;
-  }> | null>;
+  projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
   setInvitationSignInRequested: Dispatch<SetStateAction<boolean>>;
   setSettingsInitialSection: Dispatch<SetStateAction<SettingsSection>>;
@@ -289,7 +280,7 @@ export type AppProjectWorkspaceRouteRegistryRefs = Pick<
 >;
 export type AppProjectDiscoveryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'projectSearchRouteBindingRef'
+  'projectSearchRouteBindingProviderV2'
 >;
 export type AppTenantCoreRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'authRef' | 'configRef'>;
 type AppSettingsRouteContentRefs = Pick<
@@ -853,25 +844,11 @@ export function createAppProjectWorkspaceRouteRegistry(
 }
 
 export function createAppProjectDiscoveryRouteRegistry(refs: AppProjectDiscoveryRouteRegistryRefs) {
-  const { configRef, projectSearchRouteBindingRef } = refs;
+  const { projectSearchRouteBindingProviderV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_SEARCH_ROUTE_ID]: createProjectSearchRouteModuleLoader({
-        createBinding: (_context): ProjectSearchRouteBinding => {
-          const current = projectSearchRouteBindingRef.current;
-          const currentConfig = current?.config ?? configRef.current;
-          return Object.freeze({
-            api: current?.api ?? new DesktopApiClient(currentConfig),
-            scope: Object.freeze({
-              tenantId: currentConfig.tenantId,
-              projectId: currentConfig.projectId,
-            }),
-            projectName: current?.project?.name ?? current?.project?.id ?? null,
-            capability: current?.capability ?? desktopCapability(null, PROJECT_SEARCH_ROUTE_ID),
-            capabilityLoading: current?.capabilityLoading ?? true,
-            onRetryCapability: current?.onRetryCapability,
-          });
-        },
+        createBinding: (context) => projectSearchRouteBindingProviderV2.resolve(context),
       }),
     }),
   });

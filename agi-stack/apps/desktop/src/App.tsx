@@ -223,6 +223,7 @@ import {
 } from './features/runtime/capabilitySnapshot';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
 import { createDesktopWorkbenchCapabilityClient } from './features/runtime/workbenchCapabilityClient';
+import { createProjectSearchRouteBindingProviderV2 } from './features/search/projectSearchRouteBindingProviderV2';
 import {
   countMyWorkGroups,
   myWorkConversationMatchesScope,
@@ -235,7 +236,6 @@ import {
   DEVICE_APPROVAL_ROUTE_ID,
   INVITATION_ACCEPTANCE_ROUTE_ID,
   TENANT_CREATION_ROUTE_ID,
-  PROJECT_SEARCH_ROUTE_ID,
 } from './features/navigation/desktopProductionRouteRegistry';
 import { restoreDesktopRoute } from './features/navigation/desktopRouteRegistry';
 import {
@@ -738,14 +738,10 @@ export function App() {
   const productionRouteRefreshRef = useRef<
     ((nextConfig: DesktopRuntimeConfig, projects: ProjectSummary[]) => Promise<boolean>) | null
   >(null);
-  const projectSearchRouteBindingRef = useRef<Readonly<{
-    api: DesktopApiClient;
-    config: DesktopRuntimeConfig;
-    project: ProjectSummary | null;
-    capability: DesktopCapabilityView;
-    capabilityLoading: boolean;
-    onRetryCapability: () => void;
-  }> | null>(null);
+  const projectSearchRouteBindingProviderV2 = useMemo(
+    () => createProjectSearchRouteBindingProviderV2(),
+    [],
+  );
   const projectCronJobsRouteBindingRef = useRef<Readonly<{
     api: DesktopAutomationApi;
     config: DesktopRuntimeConfig;
@@ -872,7 +868,7 @@ export function App() {
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
       projectCronJobsRouteBindingRef,
-      projectSearchRouteBindingRef,
+      projectSearchRouteBindingProviderV2,
       setAuth,
       setInvitationSignInRequested,
       setSettingsInitialSection,
@@ -1056,17 +1052,14 @@ export function App() {
     },
     [config, desktopCapabilityState.snapshot],
   );
-  const projectSearchCapability = desktopCapability(
-    desktopCapabilityState.snapshot,
-    PROJECT_SEARCH_ROUTE_ID,
-  );
-  projectSearchRouteBindingRef.current = Object.freeze({
+  projectSearchRouteBindingProviderV2.publish({
     api,
-    config,
-    project:
-      auth.projects.find((project) => project.id === config.projectId) ??
-      projectSummaryFromConfig(config),
-    capability: projectSearchCapability,
+    scope: Object.freeze({
+      tenantId: config.tenantId,
+      projectId: config.projectId,
+    }),
+    projects: auth.projects,
+    capabilitySnapshot: desktopCapabilityState.snapshot,
     capabilityLoading: desktopCapabilityState.loading,
     onRetryCapability: desktopCapabilityState.reload,
   });
