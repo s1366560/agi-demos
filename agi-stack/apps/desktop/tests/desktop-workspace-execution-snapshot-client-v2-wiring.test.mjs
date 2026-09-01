@@ -8,81 +8,56 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source(
-  'src/features/workspace/desktopWorkspaceExecutionSnapshotClientProviderV2.ts',
-);
+const authority = source('src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.ts');
 
-test('App publishes one stable V2 workspace execution snapshot Provider', () => {
-  assert.match(app, /createDesktopWorkspaceExecutionSnapshotClientProviderV2/u);
+test('App owns one stable workspace execution snapshot generation operation port', () => {
+  assert.match(app, /createDesktopWorkspaceExecutionSnapshotOperationsV2/u);
   assert.match(
     app,
-    /const desktopWorkspaceExecutionSnapshotClientProviderV2 = useMemo\([\s\S]*?createDesktopWorkspaceExecutionSnapshotClientProviderV2\(\)[\s\S]*?\[\],[\s\S]*?\);/u,
+    /const desktopWorkspaceExecutionSnapshotOperationsV2 = useMemo\([\s\S]*?createDesktopWorkspaceExecutionSnapshotOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u
   );
-  assert.match(
-    app,
-    /desktopWorkspaceExecutionSnapshotClientProviderV2\.publish\(\{ config \}\)/u,
-  );
+  assert.doesNotMatch(app, /createDesktopWorkspaceExecutionSnapshotClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopWorkspaceExecutionSnapshotClientV2/u);
 });
 
-test('runtime refresh pins task and plan hydration to one V2 operation binding', () => {
+test('runtime refresh keeps task and plan reads in their original slots', () => {
   const refresh = refreshRuntimeSource(app);
 
+  assert.doesNotMatch(refresh, /workspaceExecutionSnapshotClient/u);
   assert.match(
     refresh,
-    /const workspaceExecutionSnapshotClient =\s*desktopWorkspaceExecutionSnapshotClientV2\.bindOperation\(resolvedConfig\);/u,
-  );
-  assert.equal(
-    refresh.match(
-      /desktopWorkspaceExecutionSnapshotClientV2\.bindOperation\(resolvedConfig\)/gu,
-    )?.length,
-    1,
+    /workspaceId\s*\?\s*desktopWorkspaceExecutionSnapshotOperationsV2\.listTasks\(\{\s*config: resolvedConfig,?\s*\}\)\s*:\s*Promise\.resolve\(\[\]\)/u
   );
   assert.match(
     refresh,
-    /workspaceId \? workspaceExecutionSnapshotClient\.listTasks\(\) : Promise\.resolve\(\[\]\)/u,
+    /workspaceId\s*\?\s*desktopWorkspaceExecutionSnapshotOperationsV2\s*\.getPlanSnapshot\(\{\s*config: resolvedConfig,?\s*\}\)\s*\.catch\(\(\) => null\)\s*:\s*Promise\.resolve\(null\)/u
   );
   assert.match(
     refresh,
-    /workspaceId\s*\? workspaceExecutionSnapshotClient\.getPlanSnapshot\(\)\.catch\(\(\) => null\)\s*:\s*Promise\.resolve\(null\)/u,
-  );
-  assert.doesNotMatch(refresh, /scopedClient\.(?:listTasks|getPlanSnapshot)\(\)/u);
-  assert.doesNotMatch(refresh, /const scopedClient = new DesktopApiClient\(resolvedConfig\);/u);
-  assert.match(
-    refresh,
-    /desktopWorkspaceConversationCatalogClientV2,[\s\S]*?desktopWorkspaceExecutionSnapshotClientV2,[\s\S]*?desktopWorkspaceMessageCatalogOperationsV2,/u,
-  );
-});
-
-test('execution snapshot migration preserves refresh ordering, failure, and commit policy', () => {
-  const refresh = refreshRuntimeSource(app);
-
-  assert.match(
-    refresh,
-    /const \[\s*messages,\s*tasks,\s*plan,\s*workspaceMembers,\s*workspaceAgents,/u,
-  );
-  assert.match(
-    refresh,
-    /await Promise\.all\(\[\s*workspaceId\s*\? desktopWorkspaceMessageCatalogOperationsV2\.listMessages\(\{\s*config: resolvedConfig,?\s*\}\)\s*:\s*Promise\.resolve\(\[\]\),\s*workspaceId \? workspaceExecutionSnapshotClient\.listTasks\(\) : Promise\.resolve\(\[\]\),\s*workspaceId\s*\? workspaceExecutionSnapshotClient\.getPlanSnapshot\(\)\.catch\(\(\) => null\)\s*:\s*Promise\.resolve\(null\),/u,
+    /const \[\s*messages,\s*tasks,\s*plan,\s*workspaceMembers,\s*workspaceAgents,/u
   );
   assert.doesNotMatch(
     refresh,
-    /workspaceExecutionSnapshotClient\.listTasks\(\)\.catch/u,
+    /desktopWorkspaceExecutionSnapshotOperationsV2\.listTasks\([\s\S]{0,120}?\.catch/u
   );
   assert.match(refresh, /commitRuntimeConfig\(resolvedConfig\);/u);
   assert.match(refresh, /messages,\s*tasks,\s*plan,/u);
+  assert.match(
+    refresh,
+    /desktopWorkspaceConversationCatalogClientV2,[\s\S]*?desktopWorkspaceExecutionSnapshotOperationsV2,[\s\S]*?desktopWorkspaceMessageCatalogOperationsV2,/u
+  );
 });
 
-test('workspace execution snapshot Provider owns only task and plan reads', () => {
-  assert.match(
-    provider,
-    /type DesktopWorkspaceExecutionSnapshotMethod =[\s\S]*?'listTasks'[\s\S]*?'getPlanSnapshot'/u,
-  );
-  assert.match(provider, /listTasks:/u);
-  assert.match(provider, /getPlanSnapshot:/u);
-  assert.match(provider, /bindOperation/u);
+test('authority module owns only task and plan transport, identity and lease policy', () => {
+  assert.match(authority, /DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_SERVICE_V2/u);
+  assert.match(authority, /listTasks/u);
+  assert.match(authority, /getPlanSnapshot/u);
+  assert.match(authority, /acquireServiceOperationLease/u);
+  assert.match(authority, /kind: ['"]project['"]/u);
+  assert.match(authority, /new DesktopApiClient/u);
   assert.doesNotMatch(
-    provider,
-    /listMessages|sendMessage|createTask|updateTask|deleteTask|approvePlan|listWorkspaceMembers|listWorkspaceAgents/u,
+    authority,
+    /listMessages|sendMessage|createTask|updateTask|deleteTask|approvePlan|listWorkspaceMembers|listWorkspaceAgents/u
   );
 });
 

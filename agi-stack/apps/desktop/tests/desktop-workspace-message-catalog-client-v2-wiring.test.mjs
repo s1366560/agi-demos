@@ -52,7 +52,7 @@ test("runtime refresh pins message hydration to one V2 generation operation leas
   );
   assert.match(
     refresh,
-    /desktopWorkspaceExecutionSnapshotClientV2,[\s\S]*?desktopWorkspaceMessageCatalogOperationsV2,[\s\S]*?desktopWorkspaceRosterClientV2,/u,
+    /desktopWorkspaceExecutionSnapshotOperationsV2,[\s\S]*?desktopWorkspaceMessageCatalogOperationsV2,[\s\S]*?desktopWorkspaceRosterClientV2,/u,
   );
 });
 
@@ -65,7 +65,7 @@ test("message catalog migration preserves refresh ordering, failure, commit, and
   );
   assert.match(
     refresh,
-    /await Promise\.all\(\[\s*workspaceId\s*\? desktopWorkspaceMessageCatalogOperationsV2\.listMessages\(\{\s*config: resolvedConfig,?\s*\}\)\s*:\s*Promise\.resolve\(\[\]\),\s*workspaceId \? workspaceExecutionSnapshotClient\.listTasks\(\) : Promise\.resolve\(\[\]\),\s*workspaceId\s*\? workspaceExecutionSnapshotClient\.getPlanSnapshot\(\)\.catch\(\(\) => null\)\s*:\s*Promise\.resolve\(null\),/u,
+    /await Promise\.all\(\[\s*workspaceId\s*\? desktopWorkspaceMessageCatalogOperationsV2\.listMessages\(\{\s*config: resolvedConfig,?\s*\}\)\s*:\s*Promise\.resolve\(\[\]\),\s*workspaceId\s*\? desktopWorkspaceExecutionSnapshotOperationsV2\.listTasks\(\{\s*config: resolvedConfig,?\s*\}\)\s*:\s*Promise\.resolve\(\[\]\),\s*workspaceId\s*\? desktopWorkspaceExecutionSnapshotOperationsV2\s*\.getPlanSnapshot\(\{\s*config: resolvedConfig,?\s*\}\)\s*\.catch\(\(\) => null\)\s*:\s*Promise\.resolve\(null\),/u,
   );
   assert.doesNotMatch(
     refresh,

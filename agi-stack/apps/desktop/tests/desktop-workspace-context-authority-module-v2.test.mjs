@@ -36,6 +36,10 @@ const { desktopHitlResponseAuthorityDefinitionV2 } = require(
 const { desktopSessionTimelineAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js',
 );
+const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT +
+    '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
+);
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js`,
 );
@@ -84,6 +88,7 @@ function rendererDefinitions() {
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,
+    desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
@@ -195,6 +200,7 @@ test('Loader activates one frozen root service and fails closed on missing or wr
       desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
       desktopWorkspaceCatalogAuthorityDefinitionV2,
       desktopSessionTimelineAuthorityDefinitionV2,
+      desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
       ...marketplaceDefinitions(),
     ],
     'desktop-renderer',
@@ -212,6 +218,7 @@ test('Loader activates one frozen root service and fails closed on missing or wr
       desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
       desktopWorkspaceCatalogAuthorityDefinitionV2,
       desktopSessionTimelineAuthorityDefinitionV2,
+      desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
       ...marketplaceDefinitions(),
       {
         ...desktopWorkspaceContextAuthorityDefinitionV2,

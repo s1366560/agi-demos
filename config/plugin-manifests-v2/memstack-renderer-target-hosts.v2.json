@@ -282,6 +282,37 @@
       "contract_digest": "sha256:fc7690fe093a7f1578e3ca7dae268339e67960cf3746197d357b9a97149d2577"
     },
     {
+      "module_ref": "builtin://memstack/desktop/workspace-execution-snapshot-authority",
+      "entrypoint": "applyDesktopWorkspaceExecutionSnapshotAuthorityV2",
+      "artifact": {
+        "digest": "sha256:54c06b2e137d2941b1a4694f99503cbe4ae80f2bcb3e14c6a78b92fdb64c7f3b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-execution-snapshot-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:29e1d038b902b4448658d3739210572703af2c77198d9b49f83381a119de1dda"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/session-timeline-authority",
       "entrypoint": "applyDesktopSessionTimelineAuthorityV2",
       "artifact": {

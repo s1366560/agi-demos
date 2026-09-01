@@ -91,6 +91,9 @@ import {
 import {
   createDesktopWorkspaceCatalogOperationsV2,
 } from './plugins/desktopWorkspaceCatalogAuthorityModuleV2';
+import {
+  createDesktopWorkspaceExecutionSnapshotOperationsV2,
+} from './plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import {
   acquireDesktopTerminalLifecycleAuthorityV2,
@@ -342,9 +345,6 @@ import {
 import {
   createDesktopWorkspaceConversationCatalogClientProviderV2,
 } from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
-import {
-  createDesktopWorkspaceExecutionSnapshotClientProviderV2,
-} from './features/workspace/desktopWorkspaceExecutionSnapshotClientProviderV2';
 import {
   createDesktopWorkspaceRosterClientProviderV2,
 } from './features/workspace/desktopWorkspaceRosterClientProviderV2';
@@ -836,6 +836,13 @@ export function App() {
       ),
     [],
   );
+  const desktopWorkspaceExecutionSnapshotOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceExecutionSnapshotOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -886,10 +893,6 @@ export function App() {
   );
   const desktopWorkspaceConversationCatalogClientProviderV2 = useMemo(
     () => createDesktopWorkspaceConversationCatalogClientProviderV2(),
-    [],
-  );
-  const desktopWorkspaceExecutionSnapshotClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceExecutionSnapshotClientProviderV2(),
     [],
   );
   const desktopWorkspaceRosterClientProviderV2 = useMemo(
@@ -1126,10 +1129,6 @@ export function App() {
   const desktopWorkspaceConversationCatalogClientV2 = useMemo(
     () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
     [config, desktopWorkspaceConversationCatalogClientProviderV2],
-  );
-  const desktopWorkspaceExecutionSnapshotClientV2 = useMemo(
-    () => desktopWorkspaceExecutionSnapshotClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceExecutionSnapshotClientProviderV2],
   );
   const desktopWorkspaceRosterClientV2 = useMemo(
     () => desktopWorkspaceRosterClientProviderV2.publish({ config }),
@@ -2794,8 +2793,6 @@ export function App() {
           projectId: resolvedProjectId,
           workspaceId,
         };
-        const workspaceExecutionSnapshotClient =
-          desktopWorkspaceExecutionSnapshotClientV2.bindOperation(resolvedConfig);
         const workspaceRosterClient =
           desktopWorkspaceRosterClientV2.bindOperation(resolvedConfig);
         const workspaceAutonomyAttentionClient =
@@ -2890,9 +2887,15 @@ export function App() {
                 config: resolvedConfig,
               })
             : Promise.resolve([]),
-          workspaceId ? workspaceExecutionSnapshotClient.listTasks() : Promise.resolve([]),
           workspaceId
-            ? workspaceExecutionSnapshotClient.getPlanSnapshot().catch(() => null)
+            ? desktopWorkspaceExecutionSnapshotOperationsV2.listTasks({
+                config: resolvedConfig,
+              })
+            : Promise.resolve([]),
+          workspaceId
+            ? desktopWorkspaceExecutionSnapshotOperationsV2
+                .getPlanSnapshot({ config: resolvedConfig })
+                .catch(() => null)
             : Promise.resolve(null),
           workspaceId
             ? resolveWorkspaceAuthority(workspaceRosterClient.listWorkspaceMembers())
@@ -3122,7 +3125,7 @@ export function App() {
       desktopWorkspaceAutonomyAttentionClientV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceConversationCatalogClientV2,
-      desktopWorkspaceExecutionSnapshotClientV2,
+      desktopWorkspaceExecutionSnapshotOperationsV2,
       desktopWorkspaceMessageCatalogOperationsV2,
       desktopWorkspaceRosterClientV2,
       listMyWorkForConfig,
