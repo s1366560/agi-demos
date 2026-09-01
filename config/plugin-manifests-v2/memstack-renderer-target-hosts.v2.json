@@ -220,6 +220,37 @@
       "contract_digest": "sha256:b3f6b46fda9d0748e5dc02c6a8b7ebc8cc74fed027dbb738d01b1548aef7c9e0"
     },
     {
+      "module_ref": "builtin://memstack/desktop/session-projection-authority",
+      "entrypoint": "applyDesktopSessionProjectionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:dea849a68f4e87412e0453e2d6066af0fe6f919b4aa4aa128715e9ab77c7ddc9",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-projection-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:3d55ba61108434385bf01d5d9ade9d67e545c7f96314bf8775f257d90e03b940"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/terminal-lifecycle-authority",
       "entrypoint": "applyDesktopTerminalLifecycleAuthorityV2",
       "artifact": {

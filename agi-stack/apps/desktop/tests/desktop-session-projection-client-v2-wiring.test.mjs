@@ -8,65 +8,67 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source(
-  'src/features/session/desktopSessionProjectionClientProviderV2.ts',
+const generationHook = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const authorityModule = source('src/plugins/desktopSessionProjectionAuthorityModuleV2.ts');
+const legacyProviderPath = new URL(
+  '../src/features/session/desktopSessionProjectionClientProviderV2.ts',
+  import.meta.url,
 );
-const testTypeScriptConfig = source('tsconfig.test.json');
+const forbiddenAuthorityPolicyPattern = new RegExp(
+  [
+    'decodeConversationSessionProjection',
+    'signedSessionSnapshotRevision',
+    'sessionProjectionRequestRef',
+    'snapshotRevision',
+    'setSessionProjectionState',
+    'formatConnectionError',
+  ].join('|'),
+  'u',
+);
 
-test('App publishes one stable V2 session projection client Provider', () => {
-  assert.match(app, /createDesktopSessionProjectionClientProviderV2/u);
+test('App creates one stable generation-backed session projection operation port', () => {
+  assert.match(app, /createDesktopSessionProjectionOperationsV2/u);
   assert.match(
     app,
-    /const desktopSessionProjectionClientProviderV2 = useMemo\([\s\S]*?createDesktopSessionProjectionClientProviderV2\(\)[\s\S]*?\[\],[\s\S]*?\);/u,
+    /const desktopSessionProjectionOperationsV2 = useMemo\([\s\S]*?createDesktopSessionProjectionOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u,
   );
-  assert.match(
-    app,
-    /desktopSessionProjectionClientProviderV2\.publish\(\{ config \}\)/u,
-  );
+  assert.doesNotMatch(app, /createDesktopSessionProjectionClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopSessionProjectionClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopSessionProjectionClientV2/u);
+  assert.equal(existsSync(legacyProviderPath), false);
 });
 
-test('session projection loading binds one immutable submitted-scope operation client', () => {
+test('session projection loading enters one session-scoped V2 read operation', () => {
   const loader = sessionProjectionLoader(app);
 
   assert.match(loader, /const requestConfig = configRef\.current;/u);
+  assert.match(loader, /const controller = new AbortController\(\)/u);
   assert.match(
     loader,
-    /const client = desktopSessionProjectionClientV2\.bindOperation\(requestConfig\);/u,
+    /void desktopSessionProjectionOperationsV2\.getConversationSession\(\{[\s\S]*?config: requestConfig,[\s\S]*?conversation: scopedConversation,[\s\S]*?signal: controller\.signal,[\s\S]*?\}\)/u,
   );
-  assert.match(loader, /void client\s*\.getConversationSession\(/u);
-  assert.match(loader, /tenantId: requestConfig\.tenantId/u);
-  assert.match(loader, /projectId: requestConfig\.projectId/u);
-  assert.match(loader, /workspaceId: requestConfig\.workspaceId \|\| null/u);
-  assert.match(loader, /new AbortController\(\)/u);
   assert.match(loader, /sessionProjectionRequestRef\.current !== requestId/u);
   assert.match(loader, /signedSessionSnapshotRevision\(payload\)/u);
   assert.match(loader, /decodeConversationSessionProjection\(payload/u);
   assert.match(loader, /formatConnectionError\(caught, requestConfig\.apiBaseUrl\)/u);
-  assert.match(loader, /desktopSessionProjectionClientV2,/u);
+  assert.match(loader, /return \(\) => controller\.abort\(\)/u);
+  assert.match(loader, /desktopSessionProjectionOperationsV2,/u);
   assert.doesNotMatch(loader, /api\.getConversationSession/u);
+  assert.doesNotMatch(loader, /bindOperation/u);
 });
 
-test('session projection Provider owns one transport read and no projection policy', () => {
-  assert.match(
-    testTypeScriptConfig,
-    /src\/features\/session\/desktopSessionProjectionClientProviderV2\.ts/u,
-  );
-  assert.match(
-    provider,
-    /type DesktopSessionProjectionMethod = 'getConversationSession'/u,
-  );
-  assert.match(provider, /getConversationSession:/u);
-  assert.match(provider, /bindOperation/u);
-  assert.doesNotMatch(
-    provider,
-    /decodeConversationSessionProjection|signedSessionSnapshotRevision|sessionProjectionRequestRef|snapshotRevision|setSessionProjectionState/u,
-  );
+test('renderer runtime registers one generated session projection authority definition', () => {
+  assert.match(generationHook, /desktopSessionProjectionAuthorityDefinitionV2/u);
+  assert.match(authorityModule, /service:desktop-renderer\.session-projection-authority/u);
+  assert.match(authorityModule, /acquireServiceOperationLease/u);
+  assert.match(authorityModule, /kind: 'session'/u);
+  assert.match(authorityModule, /new DesktopApiClient/u);
+  assert.doesNotMatch(authorityModule, forbiddenAuthorityPolicyPattern);
+  assert.doesNotMatch(generationHook, /desktopSessionProjectionClientProviderV2/u);
 });
 
 function sessionProjectionLoader(sourceText) {
-  const anchor = sourceText.indexOf(
-    'const requestId = sessionProjectionRequestRef.current + 1;',
-  );
+  const anchor = sourceText.indexOf('const requestId = sessionProjectionRequestRef.current + 1;');
   assert.notEqual(anchor, -1);
   const start = sourceText.lastIndexOf('useEffect(() => {', anchor);
   const end = sourceText.indexOf('\n  const sessionProjection =', anchor);

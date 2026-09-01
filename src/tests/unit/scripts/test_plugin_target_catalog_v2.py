@@ -43,9 +43,17 @@ _EXPECTED_TARGET_MODULES = {
     ),
     "desktop-renderer": frozenset(
         {
+            "builtin://memstack/desktop/conversation-config-authority",
+            "builtin://memstack/desktop/hitl-response-authority",
+            "builtin://memstack/desktop/plugin-marketplace-catalog-authority",
+            "builtin://memstack/desktop/plugin-marketplace-management-authority",
             "builtin://memstack/desktop/renderer-host",
             "builtin://memstack/desktop/renderer-contribution-registry",
             "builtin://memstack/desktop/renderer-contribution",
+            "builtin://memstack/desktop/session-projection-authority",
+            "builtin://memstack/desktop/tenant-catalog-authority",
+            "builtin://memstack/desktop/terminal-lifecycle-authority",
+            "builtin://memstack/desktop/workspace-context-authority",
         }
     ),
 }
@@ -185,7 +193,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 338
+    assert len(entries) == 346
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",

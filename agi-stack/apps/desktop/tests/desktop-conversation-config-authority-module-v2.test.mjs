@@ -36,6 +36,9 @@ const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
 const { desktopHitlResponseAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js',
 );
+const { desktopSessionProjectionAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js',
+);
 const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
 );
@@ -70,6 +73,7 @@ function rendererDefinitions() {
     desktopPluginMarketplaceManagementDefinitionV2,
     desktopConversationConfigAuthorityDefinitionV2,
     desktopHitlResponseAuthorityDefinitionV2,
+    desktopSessionProjectionAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
   ];

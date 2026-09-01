@@ -80,6 +80,7 @@ import {
 } from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
 import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
+import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import {
@@ -193,9 +194,6 @@ import type {
   ChangeReviewComment,
   ChangeReviewCommentMap,
 } from './features/session/sessionChangesReviewModel';
-import {
-  createDesktopSessionProjectionClientProviderV2,
-} from './features/session/desktopSessionProjectionClientProviderV2';
 import {
   decodeConversationSessionProjection,
   signedSessionSnapshotRevision,
@@ -830,6 +828,13 @@ export function App() {
       ),
     [],
   );
+  const desktopSessionProjectionOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionProjectionOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopAgentAuthorityProviderV2 = useMemo(
     () => createDesktopAgentAuthorityProviderV2(),
     [],
@@ -916,10 +921,6 @@ export function App() {
   );
   const desktopSessionRunInputClientProviderV2 = useMemo(
     () => createDesktopSessionRunInputClientProviderV2(),
-    [],
-  );
-  const desktopSessionProjectionClientProviderV2 = useMemo(
-    () => createDesktopSessionProjectionClientProviderV2(),
     [],
   );
   const desktopSessionTimelineClientProviderV2 = useMemo(
@@ -1108,10 +1109,6 @@ export function App() {
   const desktopSessionRunInputClientV2 = useMemo(
     () => desktopSessionRunInputClientProviderV2.publish({ config }),
     [config, desktopSessionRunInputClientProviderV2],
-  );
-  const desktopSessionProjectionClientV2 = useMemo(
-    () => desktopSessionProjectionClientProviderV2.publish({ config }),
-    [config, desktopSessionProjectionClientProviderV2],
   );
   const desktopSessionTimelineClientV2 = useMemo(
     () => desktopSessionTimelineClientProviderV2.publish({ config }),
@@ -1439,14 +1436,13 @@ export function App() {
     setSessionProjectionRefreshRevision((revision) => revision + 1);
   }, [scopedConversationId]);
   useEffect(() => {
-    if (!scopedConversationId) {
+    if (!scopedConversation) {
       sessionProjectionRequestRef.current += 1;
       setSessionProjectionState(emptySessionProjectionState);
       setSessionDisplayProjection(null);
       return;
     }
     const requestConfig = configRef.current;
-    const client = desktopSessionProjectionClientV2.bindOperation(requestConfig);
     const requestId = sessionProjectionRequestRef.current + 1;
     sessionProjectionRequestRef.current = requestId;
     const controller = new AbortController();
@@ -1459,16 +1455,11 @@ export function App() {
       projection: null,
       error: null,
     });
-    void client
-      .getConversationSession(
-        scopedConversationId,
-        {
-          tenantId: requestConfig.tenantId,
-          projectId: requestConfig.projectId,
-          workspaceId: requestConfig.workspaceId || null,
-        },
-        controller.signal,
-      )
+    void desktopSessionProjectionOperationsV2.getConversationSession({
+      config: requestConfig,
+      conversation: scopedConversation,
+      signal: controller.signal,
+    })
       .then((payload) => {
         if (controller.signal.aborted || sessionProjectionRequestRef.current !== requestId) return;
         // A schema_version 1 snapshot_revision is the canonical digest of the payload,
@@ -1529,7 +1520,8 @@ export function App() {
       });
     return () => controller.abort();
   }, [
-    desktopSessionProjectionClientV2,
+    desktopSessionProjectionOperationsV2,
+    scopedConversation,
     scopedConversationId,
     sessionProjectionRefreshRevision,
   ]);

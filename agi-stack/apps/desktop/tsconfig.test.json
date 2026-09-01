@@ -207,7 +207,7 @@
     "src/features/session/desktopSessionRunControlClientProviderV2.ts",
     "src/features/session/desktopSessionRunChangesClientProviderV2.ts",
     "src/features/session/desktopSessionRunInputClientProviderV2.ts",
-    "src/features/session/desktopSessionProjectionClientProviderV2.ts",
+    "src/plugins/desktopSessionProjectionAuthorityModuleV2.ts",
     "src/features/session/desktopSessionTimelineClientProviderV2.ts",
     "src/features/session/sessionTimelinePaginationModel.ts",
     "src/features/session/sessionTimelineScrollModel.ts",
