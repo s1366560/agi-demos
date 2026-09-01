@@ -154,6 +154,9 @@ import {
   createDesktopSessionRunControlClientProviderV2,
 } from './features/session/desktopSessionRunControlClientProviderV2';
 import {
+  createDesktopSessionRunChangesClientProviderV2,
+} from './features/session/desktopSessionRunChangesClientProviderV2';
+import {
   createDesktopHitlResponseClientProviderV2,
 } from './features/session/desktopHitlResponseClientProviderV2';
 import {
@@ -833,6 +836,10 @@ export function App() {
     () => createDesktopSessionRunControlClientProviderV2(),
     [],
   );
+  const desktopSessionRunChangesClientProviderV2 = useMemo(
+    () => createDesktopSessionRunChangesClientProviderV2(),
+    [],
+  );
   const desktopHitlResponseClientProviderV2 = useMemo(
     () => createDesktopHitlResponseClientProviderV2(),
     [],
@@ -1006,6 +1013,10 @@ export function App() {
   const desktopSessionRunControlClientV2 = useMemo(
     () => desktopSessionRunControlClientProviderV2.publish({ config }),
     [config, desktopSessionRunControlClientProviderV2],
+  );
+  const desktopSessionRunChangesClientV2 = useMemo(
+    () => desktopSessionRunChangesClientProviderV2.publish({ config }),
+    [config, desktopSessionRunChangesClientProviderV2],
   );
   const desktopHitlResponseClientV2 = useMemo(
     () => desktopHitlResponseClientProviderV2.publish({ config }),
@@ -4421,6 +4432,7 @@ export function App() {
     };
   }, [selectedConversation, sessionProjectionState.status, t]);
   const loadRunChanges = useCallback(async () => {
+    const requestConfig = configRef.current;
     if (!currentArtifactRun) {
       setChangeSnapshot(null);
       setChangeSnapshotError(null);
@@ -4431,7 +4443,7 @@ export function App() {
     setChangeSnapshotError(null);
     try {
       const snapshot =
-        config.mode === 'cloud'
+        requestConfig.mode === 'cloud'
           ? activityAuthorityAdapter.client && activityAuthorityScope
             ? desktopChangeSnapshotFromCloud(
                 await activityAuthorityAdapter.client.getRunChanges(
@@ -4448,7 +4460,9 @@ export function App() {
                 throw new Error('cloud_run_changes_authority_scope_unavailable');
               })()
           : changeScope === 'run'
-            ? await api.getRunChanges(currentArtifactRun.id, currentArtifactRun.revision)
+            ? await desktopSessionRunChangesClientV2
+                .bindOperation(requestConfig)
+                .getRunChanges(currentArtifactRun.id, currentArtifactRun.revision)
             : (() => {
                 throw new Error('local_run_changes_scope_unavailable');
               })();
@@ -4461,18 +4475,16 @@ export function App() {
         ),
       );
     } catch (caught) {
-      setChangeSnapshotError(formatConnectionError(caught, config.apiBaseUrl));
+      setChangeSnapshotError(formatConnectionError(caught, requestConfig.apiBaseUrl));
     } finally {
       setChangeSnapshotLoading(false);
     }
   }, [
     activityAuthorityAdapter,
     activityAuthorityScope,
-    api,
-    config.apiBaseUrl,
-    config.mode,
     changeScope,
     currentArtifactRun,
+    desktopSessionRunChangesClientV2,
   ]);
   const availableChangeScopes = useMemo<readonly RunChangeScope[]>(
     () =>
