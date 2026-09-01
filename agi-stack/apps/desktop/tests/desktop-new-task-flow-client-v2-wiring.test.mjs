@@ -53,9 +53,54 @@ test('new-task flow binds every operation config without selecting an implementa
   assert.match(flow, /\.approvePlanAndStart\(/u);
 });
 
+test('session plan approval receives one submitted-scope V2 transport method', () => {
+  const callback = callbackSource(app, 'approveSessionPlan', 'handleSessionRunAction');
+
+  assert.match(callback, /const requestConfig = configRef\.current/u);
+  assert.match(
+    callback,
+    /const \{ approvePlanAndStart \} =\s*desktopNewTaskFlowClientV2\.bindOperation\(requestConfig\)/u,
+  );
+  assert.match(
+    callback,
+    /const client: Pick<DesktopNewTaskFlowClient, 'approvePlanAndStart'> =\s*Object\.freeze\(\{[\s\S]*?approvePlanAndStart,[\s\S]*?\}\)/u,
+  );
+  assert.match(callback, /client\.approvePlanAndStart\(\s*sessionPlanApprovalRequest\(/u);
+  assert.doesNotMatch(callback, /api\.approvePlanAndStart/u);
+
+  for (const policyAnchor of [
+    /planAuthority\.kind !== 'desktop_plan_version'/u,
+    /authoritativePlan\.id !== plan\.id/u,
+    /authoritativePlan\.version !== plan\.version/u,
+    /authoritativePlan\.status !== plan\.status/u,
+    /canApproveSessionPlan\(authoritativePlan, capabilities\)/u,
+    /sessionPlanApprovalIdentity/u,
+    /requestId: globalThis\.crypto\.randomUUID\(\)/u,
+    /projectId: conversation\.project_id/u,
+    /conversationWithAuthoritativeRun/u,
+    /requestConfig\.workspaceId\.trim\(\)/u,
+    /loadConversationTimeline/u,
+    /applyAuthoritativeRun/u,
+    /invalidateSessionAuthority/u,
+    /setSessionPlanApprovalPending\(false\)/u,
+  ]) {
+    assert.match(callback, policyAnchor);
+  }
+  assert.match(callback, /desktopNewTaskFlowClientV2,/u);
+  assert.doesNotMatch(callback, /\[\s*api,/u);
+});
+
 test('standalone QA composition roots supply the same explicit V2 client binding', () => {
   assert.match(standaloneQa, /createDesktopNewTaskFlowClientProviderV2/u);
   assert.match(standaloneQa, /newTaskFlowClientV2=\{newTaskFlowClientV2\}/u);
   assert.match(noProjectQa, /createDesktopNewTaskFlowClientProviderV2/u);
   assert.match(noProjectQa, /newTaskFlowClientV2=\{desktopNewTaskFlowClientV2\}/u);
 });
+
+function callbackSource(sourceText, name, nextName) {
+  const start = sourceText.indexOf(`const ${name} = useCallback(`);
+  assert.notEqual(start, -1);
+  const end = sourceText.indexOf(`\n  const ${nextName}`, start + 1);
+  assert.notEqual(end, -1);
+  return sourceText.slice(start, end);
+}

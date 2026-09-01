@@ -297,7 +297,10 @@ import {
 import {
   createDesktopNewThreadCreationClientProviderV2,
 } from './features/task/desktopNewThreadCreationClientProviderV2';
-import { createDesktopNewTaskFlowClientProviderV2 } from './features/task/desktopNewTaskFlowClientProviderV2';
+import {
+  createDesktopNewTaskFlowClientProviderV2,
+  type DesktopNewTaskFlowClient,
+} from './features/task/desktopNewTaskFlowClientProviderV2';
 import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
@@ -4664,6 +4667,7 @@ export function App() {
   }, []);
   const approveSessionPlan = useCallback(
     async (plan: SessionProjectionPlan, selection: SessionPlanApprovalSelection) => {
+      const requestConfig = configRef.current;
       const authoritativeProjection = sessionProjection;
       const authoritativePlan = authoritativeProjection?.currentPlan ?? null;
       const capabilities = authoritativeProjection?.capabilities ?? null;
@@ -4696,7 +4700,12 @@ export function App() {
       setSessionPlanApprovalPending(true);
       setError(null);
       try {
-        const outcome = await api.approvePlanAndStart(
+        const { approvePlanAndStart } =
+          desktopNewTaskFlowClientV2.bindOperation(requestConfig);
+        const client: Pick<DesktopNewTaskFlowClient, 'approvePlanAndStart'> = Object.freeze({
+          approvePlanAndStart,
+        });
+        const outcome = await client.approvePlanAndStart(
           sessionPlanApprovalRequest({
             conversationId: conversation.id,
             projectId: conversation.project_id,
@@ -4709,7 +4718,7 @@ export function App() {
           outcome.conversation,
           outcome.run,
         );
-        const workspaceId = nextConversation.workspace_id ?? config.workspaceId.trim();
+        const workspaceId = nextConversation.workspace_id ?? requestConfig.workspaceId.trim();
         if (workspaceId) {
           selectConversation(nextConversation.project_id, workspaceId, nextConversation, 'chat');
         } else {
@@ -4724,16 +4733,14 @@ export function App() {
         applyAuthoritativeRun(outcome.run);
         invalidateSessionAuthority();
       } catch (caught) {
-        setError(formatConnectionError(caught, config.apiBaseUrl));
+        setError(formatConnectionError(caught, requestConfig.apiBaseUrl));
       } finally {
         setSessionPlanApprovalPending(false);
       }
     },
     [
-      api,
       applyAuthoritativeRun,
-      config.apiBaseUrl,
-      config.workspaceId,
+      desktopNewTaskFlowClientV2,
       invalidateSessionAuthority,
       sessionProjection,
       t,
