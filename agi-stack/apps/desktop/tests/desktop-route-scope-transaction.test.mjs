@@ -45,6 +45,10 @@ function transactionError(reasonCode) {
   };
 }
 
+function authorityPort(createAuthority) {
+  return async (config, operation) => operation(createAuthority(config));
+}
+
 test('same project route with an omitted workspace is a strict no-op', async () => {
   const current = {
     config: runtimeConfig(),
@@ -55,10 +59,10 @@ test('same project route with an omitted workspace is a strict no-op', async () 
   let refreshes = 0;
   const transaction = createDesktopRouteScopeTransaction({
     getCurrent: () => current,
-    createAuthority: () => {
+    createAuthority: authorityPort(() => {
       authorityCreations += 1;
       throw new Error('authority must not be created for a no-op');
-    },
+    }),
     commit: () => {
       commits += 1;
     },
@@ -91,7 +95,7 @@ test('project scope switch shares one signal and commits only after authority va
   let authorityConfig = null;
   const transaction = createDesktopRouteScopeTransaction({
     getCurrent: () => current,
-    createAuthority: (config) => {
+    createAuthority: authorityPort((config) => {
       authorityConfig = config;
       return {
         async listProjects(tenantId, signal) {
@@ -126,7 +130,7 @@ test('project scope switch shares one signal and commits only after authority va
           };
         },
       };
-    },
+    }),
     commit: (value) => {
       calls.push({ operation: 'commit' });
       commits.push(value);
@@ -179,7 +183,7 @@ test('auth and transport drift make an in-flight authority read stale', async (t
       let commits = 0;
       const transaction = createDesktopRouteScopeTransaction({
         getCurrent: () => current,
-        createAuthority: () => ({
+        createAuthority: authorityPort(() => ({
           async listProjects() {
             current =
               drift === 'auth'
@@ -199,7 +203,7 @@ test('auth and transport drift make an in-flight authority read stale', async (t
           async switchWorkspaceContext() {
             throw new Error('stale request must not mutate authority');
           },
-        }),
+        })),
         commit: () => {
           commits += 1;
         },
@@ -230,7 +234,7 @@ test('a newer no-op transaction supersedes an older pending authority read', asy
   let commits = 0;
   const transaction = createDesktopRouteScopeTransaction({
     getCurrent: () => current,
-    createAuthority: () => ({
+    createAuthority: authorityPort(() => ({
       listProjects: async () => projectsPending,
       getWorkspaceContext: async () => ({
         context: workspaceContext('tenant-1', 'project-1', 1),
@@ -240,7 +244,7 @@ test('a newer no-op transaction supersedes an older pending authority read', asy
         context: workspaceContext('tenant-1', 'project-2', 2),
         changed: true,
       }),
-    }),
+    })),
     commit: () => {
       commits += 1;
     },
@@ -273,7 +277,7 @@ test('scope response mismatch fails closed before commit or refresh', async () =
       config: runtimeConfig(),
       authRevision: 1,
     }),
-    createAuthority: () => ({
+    createAuthority: authorityPort(() => ({
       listProjects: async () => [project('project-2', 'tenant-1')],
       getWorkspaceContext: async () => ({
         context: workspaceContext('tenant-1', 'project-1', 2),
@@ -283,7 +287,7 @@ test('scope response mismatch fails closed before commit or refresh', async () =
         context: workspaceContext('tenant-other', 'project-2', 3),
         changed: true,
       }),
-    }),
+    })),
     commit: () => {
       commits += 1;
     },
@@ -310,10 +314,10 @@ test('a changed workspace-only scope fails with a stable unsupported code', asyn
       config: runtimeConfig(),
       authRevision: 1,
     }),
-    createAuthority: () => {
+    createAuthority: authorityPort(() => {
       authorityCreations += 1;
       throw new Error('unsupported workspace scope must not create authority');
-    },
+    }),
     commit: () => undefined,
     refresh: async () => undefined,
   });
@@ -343,7 +347,7 @@ test('an aborted mutation is reconciled by a fresh authority read on the next at
   };
   const transaction = createDesktopRouteScopeTransaction({
     getCurrent: () => current,
-    createAuthority: () => ({
+    createAuthority: authorityPort(() => ({
       listProjects: async (_tenantId, signal) => {
         assert.equal(signal.aborted, false);
         return [project('project-2', 'tenant-1')];
@@ -365,7 +369,7 @@ test('an aborted mutation is reconciled by a fresh authority read on the next at
         firstController.abort(new DOMException('superseded', 'AbortError'));
         return { context: serverContext, changed: true };
       },
-    }),
+    })),
     commit: (value) => {
       commits.push(value);
     },

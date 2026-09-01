@@ -63,6 +63,37 @@
         }
       },
       "contract_digest": "sha256:eecbc11fe07bb5cf90fe46909601ba112a22db2ad444339f93717d3f37703aa2"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workspace-context-authority",
+      "entrypoint": "applyDesktopWorkspaceContextAuthorityV2",
+      "artifact": {
+        "digest": "sha256:15853d8f67f8de6fc24ded3aab0758a955e9bf11c60f1ad53f44146f6f804baf",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceContextAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-context-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:3981cd7f7216bc938ea2fac66867eabfc7b7f0c8d1a4f3a7e10dad3e02a61f7c"
     }
   ],
   "permissions": [],

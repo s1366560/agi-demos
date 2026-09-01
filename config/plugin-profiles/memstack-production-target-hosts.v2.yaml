@@ -187,6 +187,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-workspace-context-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/workspace-context-authority
+      enabled: true
+      config:
+        strategy: desktop-api-client
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-renderer-contribution-registry
       parent_entry_id: builtin-desktop-renderer-host
       plugin_ref: memstack-renderer-contributions

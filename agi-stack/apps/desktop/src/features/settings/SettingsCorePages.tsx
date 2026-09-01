@@ -13,8 +13,9 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient } from '../../api/client';
 import { useI18n } from '../../i18n';
+import { useDesktopRendererGenerationV2 } from '../../plugins/desktopRendererGenerationContextV2';
+import { withDesktopWorkspaceContextAuthorityOperationV2 } from '../../plugins/desktopWorkspaceContextAuthorityModuleV2';
 import { useThemePreference, type ThemePreference } from '../../theme';
 import type {
   AuthState,
@@ -193,6 +194,8 @@ export function WorkspaceSettingsPage({
   onApplied: () => void;
 }) {
   const { t } = useI18n();
+  const { actions: desktopRendererGenerationActionsV2 } =
+    useDesktopRendererGenerationV2();
   const [tenantId, setTenantId] = useState(config.tenantId);
   const [projectId, setProjectId] = useState(config.projectId);
   const [projects, setProjects] = useState(() =>
@@ -252,7 +255,7 @@ export function WorkspaceSettingsPage({
   useEffect(() => {
     if (!tenantId) return;
     const controller = new AbortController();
-    const client = new DesktopApiClient({
+    const authorityConfig = Object.freeze({
       ...config,
       tenantId,
       projectId: '',
@@ -260,8 +263,11 @@ export function WorkspaceSettingsPage({
     });
     setLoading(true);
     setError(null);
-    void client
-      .listProjects(tenantId, controller.signal)
+    void withDesktopWorkspaceContextAuthorityOperationV2(
+      desktopRendererGenerationActionsV2,
+      authorityConfig,
+      (authority) => authority.listProjects(tenantId, controller.signal),
+    )
       .then((items) => {
         const scopedItems = projectsForTenant(items, tenantId);
         setProjects(scopedItems);
@@ -281,7 +287,7 @@ export function WorkspaceSettingsPage({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [config, tenantId]);
+  }, [config, desktopRendererGenerationActionsV2, tenantId]);
 
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === tenantId) ?? null;
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;

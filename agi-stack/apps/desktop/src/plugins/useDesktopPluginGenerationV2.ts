@@ -16,12 +16,16 @@ import {
 import type { DesktopRuntimeConfig } from '../types';
 
 import { validateDesktopRendererContributionsV2 } from './desktopRendererArtifactCatalogV2';
+import { desktopWorkspaceContextAuthorityDefinitionV2 } from './desktopWorkspaceContextAuthorityModuleV2';
 
 const RENDERER_DISTRIBUTION_COMMAND_V2 = 'platform_plugin_renderer_distribution_current_v2';
 const POLL_INTERVAL_MS = 30_000;
 const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
   'desktop-renderer',
-  createDesktopRendererDefinitionsV2(validateDesktopRendererContributionsV2)
+  Object.freeze([
+    ...createDesktopRendererDefinitionsV2(validateDesktopRendererContributionsV2),
+    desktopWorkspaceContextAuthorityDefinitionV2,
+  ])
 );
 const desktopRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(desktopRendererRuntimeV2);
 const desktopRendererStatusStoreV2 = new RendererGenerationStatusStoreV2();

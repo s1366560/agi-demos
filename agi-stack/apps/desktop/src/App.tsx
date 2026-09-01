@@ -82,6 +82,7 @@ import {
   DesktopRendererGenerationProviderV2,
   useDesktopRendererGenerationHostV2,
 } from './plugins/DesktopRendererGenerationHostV2';
+import { withDesktopWorkspaceContextAuthorityOperationV2 } from './plugins/desktopWorkspaceContextAuthorityModuleV2';
 import type {
   DesktopWorkbenchSurfaceViewModelV2,
   DesktopWorkbenchViewV2,
@@ -3226,28 +3227,12 @@ export function App() {
           config: configRef.current,
           authRevision: authAttemptRevisionRef.current,
         }),
-        createAuthority: (authorityConfig) => {
-          const authority = new DesktopApiClient(authorityConfig);
-          return Object.freeze({
-            listProjects: (tenantId: string, signal: AbortSignal) =>
-              authority.listProjects(tenantId, signal),
-            getWorkspaceContext: (signal: AbortSignal) => authority.getWorkspaceContext(signal),
-            switchWorkspaceContext: (
-              tenantId: string,
-              projectId: string,
-              expectedRevision: number,
-              idempotencyKey: string,
-              signal: AbortSignal,
-            ) =>
-              authority.switchWorkspaceContext(
-                tenantId,
-                projectId,
-                expectedRevision,
-                idempotencyKey,
-                signal,
-              ),
-          });
-        },
+        createAuthority: (authorityConfig, operation) =>
+          withDesktopWorkspaceContextAuthorityOperationV2(
+            desktopRendererGenerationV2.actions,
+            authorityConfig,
+            operation,
+          ),
         commit: ({ config: nextConfig, context, projects }) => {
           contextRevisionRef.current = context.revision;
           commitRuntimeConfig(nextConfig);
@@ -3267,7 +3252,7 @@ export function App() {
           }
         },
       }),
-    [commitRuntimeConfig],
+    [commitRuntimeConfig, desktopRendererGenerationV2.actions],
   );
   const switchProductionRouteScope = useCallback(
     async (
@@ -5926,7 +5911,7 @@ export function App() {
   });
 
   const applySettingsContext = async (tenantId: string, projectId: string) => {
-    const requestConfig = configRef.current;
+    const requestConfig = Object.freeze({ ...configRef.current });
     const authAttemptRevision = authAttemptRevisionRef.current;
     const requestIsCurrent = () =>
       authAttemptRevisionRef.current === authAttemptRevision &&
@@ -5934,57 +5919,67 @@ export function App() {
     if (!auth.tenants.some((tenant) => tenant.id === tenantId)) {
       throw new Error(t('settings.selectedTenantUnavailable'));
     }
-    const contextClient = new DesktopApiClient({
+    const authorityConfig = Object.freeze({
       ...requestConfig,
       tenantId,
       projectId: '',
       workspaceId: '',
     });
-    const listedProjects = await contextClient.listProjects(tenantId);
-    if (!requestIsCurrent()) return;
-    const scopedProjects = listedProjects.filter((project) => project.tenant_id === tenantId);
-    const selectedProject = findWorkspaceProject(scopedProjects, tenantId, projectId);
-    if (!selectedProject) {
-      throw new Error(t('settings.selectedProjectUnavailable'));
-    }
+    const signal = new AbortController().signal;
+    await withDesktopWorkspaceContextAuthorityOperationV2(
+      desktopRendererGenerationV2.actions,
+      authorityConfig,
+      async (contextClient) => {
+        const listedProjects = await contextClient.listProjects(tenantId, signal);
+        if (!requestIsCurrent()) return;
+        const scopedProjects = listedProjects.filter(
+          (project) => project.tenant_id === tenantId,
+        );
+        const selectedProject = findWorkspaceProject(scopedProjects, tenantId, projectId);
+        if (!selectedProject) {
+          throw new Error(t('settings.selectedProjectUnavailable'));
+        }
 
-    let currentContext = auth.context;
-    if (!currentContext) {
-      const currentContextResponse = await contextClient.getWorkspaceContext();
-      if (!requestIsCurrent()) return;
-      currentContext = currentContextResponse.context;
-    }
-    let nextContext = currentContext;
-    if (!workspaceContextMatchesSelection(currentContext, tenantId, projectId)) {
-      const nextContextResponse = await contextClient.switchWorkspaceContext(
-        tenantId,
-        projectId,
-        currentContext.revision,
-        globalThis.crypto.randomUUID(),
-      );
-      if (!requestIsCurrent()) return;
-      nextContext = nextContextResponse.context;
-    }
-    if (!workspaceContextMatchesSelection(nextContext, tenantId, projectId)) {
-      throw new Error(t('settings.contextResponseMismatch'));
-    }
-    if (!requestIsCurrent()) return;
-    const nextConfig = {
-      ...requestConfig,
-      tenantId,
-      projectId,
-      workspaceId: '',
-    };
-    contextRevisionRef.current = nextContext.revision;
-    resetProjectScopedState();
-    commitRuntimeConfig(nextConfig);
-    setAuth((current) => ({
-      ...current,
-      context: nextContext,
-      projects: scopedProjects,
-    }));
-    applySectionSideEffects('workspace');
-    await refreshRuntime(nextConfig, [selectedProject]);
+        let currentContext = auth.context;
+        if (!currentContext) {
+          const currentContextResponse = await contextClient.getWorkspaceContext(signal);
+          if (!requestIsCurrent()) return;
+          currentContext = currentContextResponse.context;
+        }
+        let nextContext = currentContext;
+        if (!workspaceContextMatchesSelection(currentContext, tenantId, projectId)) {
+          const nextContextResponse = await contextClient.switchWorkspaceContext(
+            tenantId,
+            projectId,
+            currentContext.revision,
+            globalThis.crypto.randomUUID(),
+            signal,
+          );
+          if (!requestIsCurrent()) return;
+          nextContext = nextContextResponse.context;
+        }
+        if (!workspaceContextMatchesSelection(nextContext, tenantId, projectId)) {
+          throw new Error(t('settings.contextResponseMismatch'));
+        }
+        if (!requestIsCurrent()) return;
+        const nextConfig = {
+          ...requestConfig,
+          tenantId,
+          projectId,
+          workspaceId: '',
+        };
+        contextRevisionRef.current = nextContext.revision;
+        resetProjectScopedState();
+        commitRuntimeConfig(nextConfig);
+        setAuth((current) => ({
+          ...current,
+          context: nextContext,
+          projects: scopedProjects,
+        }));
+        applySectionSideEffects('workspace');
+        await refreshRuntime(nextConfig, [selectedProject]);
+      },
+    );
   };
 
   const goBackSection = () => {
