@@ -189,6 +189,37 @@
       "contract_digest": "sha256:e3e86feceaf865f1d2575c6ce5fcd2d6ded7b47790a0e2bbea4b8589720b5671"
     },
     {
+      "module_ref": "builtin://memstack/desktop/conversation-lifecycle-authority",
+      "entrypoint": "applyDesktopConversationLifecycleAuthorityV2",
+      "artifact": {
+        "digest": "sha256:d38d6f072a03f1a6873943e53092346e29c827a0e0e8345e047426f7c7895859",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationLifecycleAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.conversation-lifecycle-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b35dd389aa456a5ebc6a460cbb0fa9ebfeeeba17a9bbfc7e288c3d2fc48af2a8"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/hitl-response-authority",
       "entrypoint": "applyDesktopHitlResponseAuthorityV2",
       "artifact": {

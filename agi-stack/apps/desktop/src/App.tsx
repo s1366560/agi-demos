@@ -78,6 +78,7 @@ import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRend
 import {
   createDesktopPluginMarketplaceOperationsV2,
 } from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import { createDesktopConversationLifecycleOperationsV2 } from './plugins/desktopConversationLifecycleAuthorityModuleV2';
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
 import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
@@ -328,9 +329,6 @@ import {
   retainOpenWorkspaceAutonomyAttentionResolveAttempts,
   type WorkspaceAutonomyAttentionResolveAttempt,
 } from './features/workspace/autonomyAttentionResolveAttemptModel';
-import {
-  createDesktopConversationLifecycleClientProviderV2,
-} from './features/workspace/desktopConversationLifecycleClientProviderV2';
 import {
   createDesktopWorkspaceAgentBindingDialogClientProviderV2,
 } from './features/workspace/desktopWorkspaceAgentBindingDialogClientProviderV2';
@@ -819,6 +817,13 @@ export function App() {
       ),
     [],
   );
+  const desktopConversationLifecycleOperationsV2 = useMemo(
+    () =>
+      createDesktopConversationLifecycleOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -850,10 +855,6 @@ export function App() {
   );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
     () => createDesktopProductionRouteAuthorityProviderV2(),
-    [],
-  );
-  const desktopConversationLifecycleClientProviderV2 = useMemo(
-    () => createDesktopConversationLifecycleClientProviderV2(),
     [],
   );
   const desktopWorkspaceAgentBindingDialogClientProviderV2 = useMemo(
@@ -1110,10 +1111,6 @@ export function App() {
   const desktopSessionTimelineClientV2 = useMemo(
     () => desktopSessionTimelineClientProviderV2.publish({ config }),
     [config, desktopSessionTimelineClientProviderV2],
-  );
-  const desktopConversationLifecycleClientV2 = useMemo(
-    () => desktopConversationLifecycleClientProviderV2.publish({ config }),
-    [config, desktopConversationLifecycleClientProviderV2],
   );
   const desktopWorkspaceAgentBindingDialogClientV2 = useMemo(
     () => desktopWorkspaceAgentBindingDialogClientProviderV2.publish({ config }),
@@ -3910,12 +3907,11 @@ export function App() {
         expectedContextRevision === contextRevisionRef.current &&
         isSameDesktopProjectRequestScope(requestConfig, configRef.current);
       const updated =
-        await desktopConversationLifecycleClientV2.client.updateAgentConversationTitle(
-          conversation.id,
+        await desktopConversationLifecycleOperationsV2.updateAgentConversationTitle({
+          config: requestConfig,
+          conversation,
           title,
-          projectId,
-          normalizedWorkspaceId,
-        );
+        });
       if (!mutationScopeIsCurrent()) return;
       updateDataset((current) => {
         const conversationsByWorkspace = replaceConversationInWorkspaceRows(
@@ -3968,11 +3964,10 @@ export function App() {
       throw new Error('Invalid conversation summary scope');
     }
     const updated =
-      await desktopConversationLifecycleClientV2.client.generateAgentConversationSummary(
-        requiredConversationId,
-        requestConfig.projectId,
-        normalizedWorkspaceId,
-      );
+      await desktopConversationLifecycleOperationsV2.generateAgentConversationSummary({
+        config: requestConfig,
+        conversation: currentSession.conversation,
+      });
     const latestSession = agentConversationSessionRef.current;
     if (
       conversationSummaryMutationRequestRef.current !== requestGeneration ||
@@ -4020,10 +4015,10 @@ export function App() {
         expectedScopeEpoch === configScopeEpochRef.current &&
         expectedContextRevision === contextRevisionRef.current &&
         isSameDesktopProjectRequestScope(requestConfig, configRef.current);
-      await desktopConversationLifecycleClientV2.client.deleteAgentConversation(
-        conversation.id,
-        projectId,
-      );
+      await desktopConversationLifecycleOperationsV2.deleteAgentConversation({
+        config: requestConfig,
+        conversation,
+      });
       if (!mutationScopeIsCurrent()) return;
       updateDataset((current) => {
         const conversationsByWorkspace = removeConversationFromWorkspaceRows(

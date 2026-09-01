@@ -374,14 +374,14 @@ test('App coordinates lifecycle responses with current scope and active-session 
   assert.match(appSource, /const renameConversation = async/);
   assert.match(
     appSource,
-    /desktopConversationLifecycleClientV2\.client\.updateAgentConversationTitle/,
+    /desktopConversationLifecycleOperationsV2\.updateAgentConversationTitle/,
   );
   assert.match(appSource, /replaceConversationInWorkspaceRows/);
   assert.match(appSource, /agentConversationSessionRef\.current = nextSession/);
   assert.match(appSource, /const deleteConversation = async/);
   assert.match(
     appSource,
-    /desktopConversationLifecycleClientV2\.client\.deleteAgentConversation/,
+    /desktopConversationLifecycleOperationsV2\.deleteAgentConversation/,
   );
   assert.match(appSource, /removeConversationFromWorkspaceRows/);
   assert.match(appSource, /mutationScopeIsCurrent\(\)/);

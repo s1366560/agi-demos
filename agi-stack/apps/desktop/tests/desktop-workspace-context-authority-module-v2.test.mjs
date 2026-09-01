@@ -27,6 +27,9 @@ const {
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopConversationConfigAuthorityModuleV2.js`,
 );
+const { desktopConversationLifecycleAuthorityDefinitionV2 } = require(
+  `${COMPILED_ROOT}/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js`,
+);
 const { desktopHitlResponseAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopHitlResponseAuthorityModuleV2.js`,
 );
@@ -67,6 +70,7 @@ function rendererDefinitions() {
     ...createDesktopRendererDefinitionsV2(),
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopConversationConfigAuthorityDefinitionV2,
+    desktopConversationLifecycleAuthorityDefinitionV2,
     desktopHitlResponseAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,

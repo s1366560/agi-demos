@@ -29,6 +29,9 @@ const { classifyHitlAuthorityRecovery } = require(
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
 );
+const { desktopConversationLifecycleAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js',
+);
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
@@ -77,6 +80,7 @@ function rendererDefinitions() {
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
     desktopConversationConfigAuthorityDefinitionV2,
+    desktopConversationLifecycleAuthorityDefinitionV2,
     desktopHitlResponseAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
