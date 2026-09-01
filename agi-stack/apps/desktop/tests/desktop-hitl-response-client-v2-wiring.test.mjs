@@ -8,18 +8,13 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source('src/features/session/desktopHitlResponseClientProviderV2.ts');
+const generationHook = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const authorityModule = source('src/plugins/desktopHitlResponseAuthorityModuleV2.ts');
 const socket = source('src/hooks/useAgentSocket.ts');
-const stableProviderPattern = new RegExp(
-  [
-    'const desktopHitlResponseClientProviderV2 = useMemo\\(',
-    '[\\s\\S]*?createDesktopHitlResponseClientProviderV2\\(\\)',
-    '[\\s\\S]*?\\[\\],[\\s\\S]*?\\);',
-  ].join(''),
-  'u',
+const legacyProviderPath = new URL(
+  '../src/features/session/desktopHitlResponseClientProviderV2.ts',
+  import.meta.url,
 );
-const exactMethodOwnershipPattern =
-  /type DesktopHitlResponseMethod = 'respondToHitl';/u;
 const forbiddenProviderOwnershipPattern = new RegExp(
   [
     'respondableHitlRequestIdSet',
@@ -31,40 +26,49 @@ const forbiddenProviderOwnershipPattern = new RegExp(
   'u',
 );
 
-test('App publishes one stable V2 HITL response client Provider', () => {
-  assert.match(app, /createDesktopHitlResponseClientProviderV2/u);
-  assert.match(app, stableProviderPattern);
-  assert.match(app, /desktopHitlResponseClientProviderV2\.publish\(\{ config \}\)/u);
+test('App creates one stable generation-backed HITL response operation port', () => {
+  assert.match(app, /createDesktopHitlResponseOperationsV2/u);
+  assert.match(
+    app,
+    /const desktopHitlResponseOperationsV2 = useMemo\([\s\S]*?createDesktopHitlResponseOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u,
+  );
+  assert.doesNotMatch(app, /createDesktopHitlResponseClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopHitlResponseClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopHitlResponseClientV2/u);
+  assert.equal(existsSync(legacyProviderPath), false);
 });
 
-test('HITL responses bind one submitted-scope V2 client', () => {
+test('HITL responses enter one submitted session-scoped V2 authority', () => {
   const response = callbackSource(app, 'respondToHitl', 'presetAutoApprovalAttemptsRef');
 
   assert.match(response, /const requestConfig = configRef\.current;/u);
   assert.match(
     response,
-    /const client = desktopHitlResponseClientV2\.bindOperation\(requestConfig\);/u,
+    /await desktopHitlResponseOperationsV2\.respond\(\{[\s\S]*?config: requestConfig,[\s\S]*?conversation: scopedConversation,[\s\S]*?submission,[\s\S]*?\}\);/u,
   );
-  assert.match(response, /await client\.respondToHitl\(submission\);/u);
   assert.match(response, /formatConnectionError\(caught, requestConfig\.apiBaseUrl\)/u);
+  assert.match(response, /if \(!scopedConversation\)/u);
   assert.match(response, /request\.status !== 'pending'/u);
   assert.match(response, /request\.kind !== submission\.hitlType/u);
-  assert.match(response, /request\?\.authority_revision === submission\.expectedRevision/u);
+  assert.match(response, /request\.authority_revision !== submission\.expectedRevision/u);
   assert.match(response, /respondableHitlRequestIdSet\.has\(submission\.requestId\)/u);
   assert.match(response, /classifyHitlAuthorityRecovery\(caught\)/u);
   assert.doesNotMatch(response, /api\.respondToHitl/u);
+  assert.doesNotMatch(response, /bindOperation/u);
 });
 
-test('manual and preset approval paths share the Provider-backed response coordinator', () => {
+test('manual and preset approval paths share the V2 response coordinator', () => {
   assert.match(app, /void respondToHitl\(submission\)/u);
   assert.match(app, /await respondToHitl\(submission\);/u);
 });
 
-test('HITL response Provider owns only the response transport', () => {
-  assert.match(provider, exactMethodOwnershipPattern);
-  assert.match(provider, /respondToHitl:/u);
-  assert.match(provider, /bindOperation/u);
-  assert.doesNotMatch(provider, forbiddenProviderOwnershipPattern);
+test('renderer runtime registers one generated HITL response authority definition', () => {
+  assert.match(generationHook, /desktopHitlResponseAuthorityDefinitionV2/u);
+  assert.match(authorityModule, /service:desktop-renderer\.hitl-response-authority/u);
+  assert.match(authorityModule, /acquireServiceOperationLease/u);
+  assert.match(authorityModule, /kind: 'session'/u);
+  assert.doesNotMatch(authorityModule, forbiddenProviderOwnershipPattern);
+  assert.doesNotMatch(generationHook, /desktopHitlResponseClientProviderV2/u);
 });
 
 test('Desktop socket no longer exposes a second HITL response authority', () => {

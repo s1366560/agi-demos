@@ -79,6 +79,7 @@ import {
   createDesktopPluginMarketplaceOperationsV2,
 } from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
+import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import {
@@ -169,9 +170,6 @@ import {
 import {
   createDesktopSessionRunInputClientProviderV2,
 } from './features/session/desktopSessionRunInputClientProviderV2';
-import {
-  createDesktopHitlResponseClientProviderV2,
-} from './features/session/desktopHitlResponseClientProviderV2';
 import {
   chatWorkflowTargetForReviewTab,
   defaultSessionCanvasTab,
@@ -825,6 +823,13 @@ export function App() {
       ),
     [],
   );
+  const desktopHitlResponseOperationsV2 = useMemo(
+    () =>
+      createDesktopHitlResponseOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopAgentAuthorityProviderV2 = useMemo(
     () => createDesktopAgentAuthorityProviderV2(),
     [],
@@ -911,10 +916,6 @@ export function App() {
   );
   const desktopSessionRunInputClientProviderV2 = useMemo(
     () => createDesktopSessionRunInputClientProviderV2(),
-    [],
-  );
-  const desktopHitlResponseClientProviderV2 = useMemo(
-    () => createDesktopHitlResponseClientProviderV2(),
     [],
   );
   const desktopSessionProjectionClientProviderV2 = useMemo(
@@ -1107,10 +1108,6 @@ export function App() {
   const desktopSessionRunInputClientV2 = useMemo(
     () => desktopSessionRunInputClientProviderV2.publish({ config }),
     [config, desktopSessionRunInputClientProviderV2],
-  );
-  const desktopHitlResponseClientV2 = useMemo(
-    () => desktopHitlResponseClientProviderV2.publish({ config }),
-    [config, desktopHitlResponseClientProviderV2],
   );
   const desktopSessionProjectionClientV2 = useMemo(
     () => desktopSessionProjectionClientProviderV2.publish({ config }),
@@ -1947,28 +1944,28 @@ export function App() {
   const respondToHitl = useCallback(
     async (submission: HitlResponseSubmission) => {
       const requestConfig = configRef.current;
-      if (scopedConversation) {
-        const request = sessionProjection?.pendingHitl.find(
-          (candidate) => candidate.id === submission.requestId,
-        );
-        const revisionMatches =
-          submission.expectedRevision === undefined
-            ? request?.authority_revision === undefined || request.authority_revision === null
-            : request?.authority_revision === submission.expectedRevision;
-        if (
-          !request ||
-          request.status !== 'pending' ||
-          request.kind !== submission.hitlType ||
-          !revisionMatches ||
-          !respondableHitlRequestIdSet.has(submission.requestId)
-        ) {
-          throw new Error(t('session.authorityActionUnavailable'));
-        }
+      if (!scopedConversation) {
+        throw new Error(t('session.authorityActionUnavailable'));
+      }
+      const request = sessionProjection?.pendingHitl.find(
+        (candidate) => candidate.id === submission.requestId,
+      );
+      if (
+        !request ||
+        request.status !== 'pending' ||
+        request.kind !== submission.hitlType ||
+        request.authority_revision !== submission.expectedRevision ||
+        !respondableHitlRequestIdSet.has(submission.requestId)
+      ) {
+        throw new Error(t('session.authorityActionUnavailable'));
       }
       setError(null);
       try {
-        const client = desktopHitlResponseClientV2.bindOperation(requestConfig);
-        await client.respondToHitl(submission);
+        await desktopHitlResponseOperationsV2.respond({
+          config: requestConfig,
+          conversation: scopedConversation,
+          submission,
+        });
         invalidateSessionAuthority();
         const conversation = agentConversationSession?.conversation;
         if (conversation) {
@@ -1991,7 +1988,7 @@ export function App() {
     },
     [
       agentConversationSession?.conversation,
-      desktopHitlResponseClientV2,
+      desktopHitlResponseOperationsV2,
       invalidateSessionAuthority,
       loadConversationTimeline,
       respondableHitlRequestIdSet,

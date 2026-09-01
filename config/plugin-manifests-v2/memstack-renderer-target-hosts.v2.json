@@ -189,6 +189,37 @@
       "contract_digest": "sha256:e3e86feceaf865f1d2575c6ce5fcd2d6ded7b47790a0e2bbea4b8589720b5671"
     },
     {
+      "module_ref": "builtin://memstack/desktop/hitl-response-authority",
+      "entrypoint": "applyDesktopHitlResponseAuthorityV2",
+      "artifact": {
+        "digest": "sha256:54320982bebd86091d7cc174517847379441a5627a5327ebf18ec0e429a6d49d",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopHitlResponseAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.hitl-response-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b3f6b46fda9d0748e5dc02c6a8b7ebc8cc74fed027dbb738d01b1548aef7c9e0"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/terminal-lifecycle-authority",
       "entrypoint": "applyDesktopTerminalLifecycleAuthorityV2",
       "artifact": {

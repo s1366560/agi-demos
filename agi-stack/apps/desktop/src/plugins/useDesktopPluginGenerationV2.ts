@@ -17,6 +17,7 @@ import type { DesktopRuntimeConfig } from '../types';
 
 import { validateDesktopRendererContributionsV2 } from './desktopRendererArtifactCatalogV2';
 import { desktopConversationConfigAuthorityDefinitionV2 } from './desktopConversationConfigAuthorityModuleV2';
+import { desktopHitlResponseAuthorityDefinitionV2 } from './desktopHitlResponseAuthorityModuleV2';
 import {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
@@ -34,6 +35,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
     desktopConversationConfigAuthorityDefinitionV2,
+    desktopHitlResponseAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
