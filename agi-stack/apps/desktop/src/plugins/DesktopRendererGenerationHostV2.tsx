@@ -49,11 +49,7 @@ export function useDesktopRendererGenerationHostV2(
   const generationDigest = generation?.snapshot.digest;
   const generationError = generationState.error;
   const generationStatus = generationState.status;
-
-  return useMemo(() => {
-    const authority = resolveDesktopRendererAuthorityStateV2(generationState, enabled);
-    const routeRegistry = projectDesktopRouteRegistryV2(composition, authority);
-    const navigationRegistry = projectDesktopNavigationRegistryV2(routeRegistry, authority);
+  const actions = useMemo<DesktopRendererGenerationActionsV2>(() => {
     const acquireServiceOperationLease = <TService,>(
       request: DesktopRendererServiceOperationLeaseRequestV2,
     ) =>
@@ -62,7 +58,7 @@ export function useDesktopRendererGenerationHostV2(
         request,
         acquireDesktopPluginGenerationLeaseV2,
       );
-    const actions: DesktopRendererGenerationActionsV2 = Object.freeze({
+    return Object.freeze({
       acquireOperationLease: () => {
         if (generation === undefined) return AUTHENTICATION_KERNEL_OPERATION_LEASE_V2;
         const lease = acquireDesktopPluginGenerationLeaseV2(generation);
@@ -74,6 +70,12 @@ export function useDesktopRendererGenerationHostV2(
       },
       acquireServiceOperationLease,
     });
+  }, [generation]);
+
+  return useMemo(() => {
+    const authority = resolveDesktopRendererAuthorityStateV2(generationState, enabled);
+    const routeRegistry = projectDesktopRouteRegistryV2(composition, authority);
+    const navigationRegistry = projectDesktopNavigationRegistryV2(routeRegistry, authority);
     return Object.freeze({
       actions,
       composition,
@@ -86,9 +88,9 @@ export function useDesktopRendererGenerationHostV2(
       state: Object.freeze({ authority, navigationRegistry, routeRegistry }),
     });
   }, [
+    actions,
     composition,
     enabled,
-    generation,
     generationDigest,
     generationError,
     generationState,

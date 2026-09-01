@@ -79,7 +79,10 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   assert.match(context, /DesktopRendererGenerationContextV2/u);
   assert.match(context, /DesktopRendererAuthorityContextV2/u);
   assert.doesNotMatch(context, /@agistack\/plugin-runtime/u);
-  assert.match(host, /const actions:[^=]+?=\s*Object\.freeze/su);
+  assert.match(
+    host,
+    /const actions\s*=\s*useMemo<DesktopRendererGenerationActionsV2>\([\s\S]*?\}, \[generation\]\);/u
+  );
   assert.match(host, /acquireOperationLease/u);
   assert.match(host, /acquireServiceOperationLease/u);
   assert.match(host, /acquireDesktopRendererServiceOperationLeaseV2/u);
