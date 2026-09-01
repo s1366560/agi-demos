@@ -3,6 +3,10 @@ import { createContext, use, type ReactNode } from 'react';
 import type { DesktopRouteModule } from '../features/navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../features/navigation/desktopRouteRegistry';
 import type { DesktopRendererCompositionPortV2 } from './desktopRendererCompositionPortV2';
+import type {
+  DesktopRendererServiceOperationLeaseAdmissionV2,
+  DesktopRendererServiceOperationLeaseRequestV2,
+} from './desktopRendererServiceOperationLeaseV2';
 import {
   DesktopRendererAuthorityContextV2,
   type DesktopRendererAuthorityStateV2,
@@ -38,7 +42,15 @@ export interface DesktopRendererOperationLeaseV2 {
 
 export interface DesktopRendererGenerationActionsV2 {
   readonly acquireOperationLease: () => DesktopRendererOperationLeaseV2;
+  readonly acquireServiceOperationLease: <TService>(
+    request: DesktopRendererServiceOperationLeaseRequestV2,
+  ) => Promise<DesktopRendererServiceOperationLeaseAdmissionV2<TService>>;
 }
+
+export type {
+  DesktopRendererServiceOperationLeaseAdmissionV2,
+  DesktopRendererServiceOperationLeaseRequestV2,
+} from './desktopRendererServiceOperationLeaseV2';
 
 export interface DesktopRendererGenerationContextValueV2 {
   readonly actions: DesktopRendererGenerationActionsV2;

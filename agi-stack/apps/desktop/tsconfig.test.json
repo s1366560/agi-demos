@@ -62,6 +62,7 @@
     "src/plugins/desktopRendererAuthorityStateV2.ts",
     "src/plugins/desktopRendererCompositionPortV2.ts",
     "src/plugins/desktopRendererGenerationContextV2.tsx",
+    "src/plugins/desktopRendererServiceOperationLeaseV2.ts",
     "src/features/settings/usePlatformPluginUiSlots.ts",
     "src/vite-env.d.ts",
     "src/api/client.ts",

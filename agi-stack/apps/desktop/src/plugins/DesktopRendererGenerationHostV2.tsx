@@ -14,6 +14,10 @@ import {
   projectDesktopRouteRegistryV2,
 } from './desktopRendererAuthorityStateV2';
 import {
+  acquireDesktopRendererServiceOperationLeaseV2,
+  type DesktopRendererServiceOperationLeaseRequestV2,
+} from './desktopRendererServiceOperationLeaseV2';
+import {
   acquireDesktopPluginGenerationLeaseV2,
   useDesktopPluginGenerationV2,
 } from './useDesktopPluginGenerationV2';
@@ -50,6 +54,14 @@ export function useDesktopRendererGenerationHostV2(
     const authority = resolveDesktopRendererAuthorityStateV2(generationState, enabled);
     const routeRegistry = projectDesktopRouteRegistryV2(composition, authority);
     const navigationRegistry = projectDesktopNavigationRegistryV2(routeRegistry, authority);
+    const acquireServiceOperationLease = <TService,>(
+      request: DesktopRendererServiceOperationLeaseRequestV2,
+    ) =>
+      acquireDesktopRendererServiceOperationLeaseV2<TService>(
+        generation,
+        request,
+        acquireDesktopPluginGenerationLeaseV2,
+      );
     const actions: DesktopRendererGenerationActionsV2 = Object.freeze({
       acquireOperationLease: () => {
         if (generation === undefined) return AUTHENTICATION_KERNEL_OPERATION_LEASE_V2;
@@ -60,6 +72,7 @@ export function useDesktopRendererGenerationHostV2(
           release: () => lease.release(),
         });
       },
+      acquireServiceOperationLease,
     });
     return Object.freeze({
       actions,

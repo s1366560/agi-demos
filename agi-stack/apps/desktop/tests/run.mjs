@@ -63,6 +63,20 @@ writeFileSync(
   JSON.stringify({ main: 'index.js', type: 'commonjs' }),
 );
 
+const compiledPluginRuntimeRoot = join(
+  testNodeModules,
+  '@agistack',
+  'plugin-runtime',
+);
+mkdirSync(compiledPluginRuntimeRoot, { recursive: true });
+writeFileSync(
+  join(compiledPluginRuntimeRoot, 'package.json'),
+  JSON.stringify({
+    main: '../../../packages/plugin-runtime/src/index.js',
+    type: 'commonjs',
+  }),
+);
+
 for (const project of ['project-agent', 'project-administration', 'project-knowledge']) {
   const projectDistRoot = `/tmp/agistack-${project}-test-dist`;
   rmSync(projectDistRoot, { recursive: true, force: true });

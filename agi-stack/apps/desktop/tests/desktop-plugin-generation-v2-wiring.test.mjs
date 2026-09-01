@@ -10,6 +10,9 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   const hook = source('src/plugins/useDesktopPluginGenerationV2.ts');
   const host = source('src/plugins/DesktopRendererGenerationHostV2.tsx');
   const context = source('src/plugins/desktopRendererGenerationContextV2.tsx');
+  const serviceOperationLease = source(
+    'src/plugins/desktopRendererServiceOperationLeaseV2.ts'
+  );
   const authenticatedShellBoundary = source('src/plugins/DesktopRendererAuthenticatedShellV2.tsx');
   const authenticatedShellSurface = source('src/plugins/DesktopAuthenticatedShellSurfaceV2.tsx');
   const authenticationRouteBoundary = source(
@@ -78,6 +81,17 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   assert.doesNotMatch(context, /@agistack\/plugin-runtime/u);
   assert.match(host, /const actions:[^=]+?=\s*Object\.freeze/su);
   assert.match(host, /acquireOperationLease/u);
+  assert.match(host, /acquireServiceOperationLease/u);
+  assert.match(host, /acquireDesktopRendererServiceOperationLeaseV2/u);
+  assert.match(
+    host,
+    /acquireDesktopRendererServiceOperationLeaseV2<TService>\(\s*generation,\s*request,\s*acquireDesktopPluginGenerationLeaseV2,?\s*\)/u
+  );
+  assert.match(context, /DesktopRendererServiceOperationLeaseRequestV2/u);
+  assert.match(context, /DesktopRendererServiceOperationLeaseAdmissionV2/u);
+  assert.match(serviceOperationLease, /generation\.resolve<TService>/u);
+  assert.match(serviceOperationLease, /error instanceof RuntimeV2Error/u);
+  assert.doesNotMatch(serviceOperationLease, /authentication-kernel/u);
   assert.match(context, /children/u);
   assert.match(routeBoundary, /useDesktopRendererGenerationV2\(\)/u);
   assert.match(routeBoundary, /projectDesktopWorkbenchCompositionV2/u);
