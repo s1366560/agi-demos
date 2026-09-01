@@ -25,6 +25,7 @@ import {
 } from './desktopPluginMarketplaceAuthorityModulesV2';
 import { desktopSessionProjectionAuthorityDefinitionV2 } from './desktopSessionProjectionAuthorityModuleV2';
 import { desktopSessionRunChangesAuthorityDefinitionV2 } from './desktopSessionRunChangesAuthorityModuleV2';
+import { desktopSessionTimelineAuthorityDefinitionV2 } from './desktopSessionTimelineAuthorityModuleV2';
 import { desktopTerminalLifecycleAuthorityDefinitionV2 } from './desktopTerminalLifecycleAuthorityModuleV2';
 import { desktopTenantCatalogAuthorityDefinitionV2 } from './desktopTenantCatalogAuthorityModuleV2';
 import { desktopWorkspaceContextAuthorityDefinitionV2 } from './desktopWorkspaceContextAuthorityModuleV2';
@@ -44,6 +45,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopHitlResponseAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
+    desktopSessionTimelineAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,

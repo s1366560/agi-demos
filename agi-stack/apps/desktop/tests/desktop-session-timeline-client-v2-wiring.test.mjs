@@ -8,26 +8,28 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source('src/features/session/desktopSessionTimelineClientProviderV2.ts');
-const stableProviderPattern = new RegExp(
+const module = source('src/plugins/desktopSessionTimelineAuthorityModuleV2.ts');
+const stableOperationsPattern = new RegExp(
   [
-    'const desktopSessionTimelineClientProviderV2 = useMemo\\(',
-    '[\\s\\S]*?createDesktopSessionTimelineClientProviderV2\\(\\)',
+    'const desktopSessionTimelineOperationsV2 = useMemo\\(',
+    '[\\s\\S]*?createDesktopSessionTimelineOperationsV2\\(',
+    '[\\s\\S]*?desktopPluginMarketplaceGenerationActionsRefV2\\.current,',
     '[\\s\\S]*?\\[\\],[\\s\\S]*?\\);',
   ].join(''),
-  'u',
+  'u'
 );
 const earlierTimelineRequestPattern = new RegExp(
   [
-    'client\\.getConversationMessages\\(',
-    '[\\s\\S]*?conversation\\.id,',
-    '[\\s\\S]*?requestConfig\\.projectId,',
+    'desktopSessionTimelineOperationsV2\\.getConversationMessages\\(\\{',
+    '[\\s\\S]*?config: requestConfig,',
+    '[\\s\\S]*?conversation,',
     '[\\s\\S]*?beforeTimeUs: cursor\\.timeUs,',
     '[\\s\\S]*?beforeCounter: cursor\\.counter,',
+    '[\\s\\S]*?\\}\\)',
   ].join(''),
-  'u',
+  'u'
 );
-const forbiddenProviderPolicyPattern = new RegExp(
+const forbiddenAuthorityPolicyPattern = new RegExp(
   [
     'listConversations',
     'sendMessage',
@@ -36,60 +38,55 @@ const forbiddenProviderPolicyPattern = new RegExp(
     'resolveEarlierTimelinePage',
     'comparison',
   ].join('|'),
-  'u',
+  'u'
 );
 
-test('App publishes one stable V2 session timeline client Provider', () => {
-  assert.match(app, /createDesktopSessionTimelineClientProviderV2/u);
-  assert.match(app, stableProviderPattern);
-  assert.match(app, /desktopSessionTimelineClientProviderV2\.publish\(\{ config \}\)/u);
+test('App owns one stable V2 session timeline generation operation port', () => {
+  assert.match(app, /createDesktopSessionTimelineOperationsV2/u);
+  assert.match(app, stableOperationsPattern);
+  assert.doesNotMatch(app, /createDesktopSessionTimelineClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopSessionTimelineClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopSessionTimelineClientV2/u);
 });
 
-test('initial session timeline loading uses one submitted-scope V2 operation binding', () => {
+test('initial session timeline loading uses one session-scoped generation operation', () => {
   const loader = callbackSource(app, 'loadConversationTimeline', 'loadEarlierTimeline');
 
   assert.match(
     loader,
-    /const client = desktopSessionTimelineClientV2\.bindOperation\(requestConfig\);/u,
-  );
-  assert.match(
-    loader,
-    /client\.getConversationMessages\(conversation\.id, projectId, \{[\s\S]*?limit: 50,/u,
+    /desktopSessionTimelineOperationsV2\.getConversationMessages\(\{[\s\S]*?config: \{[\s\S]*?\.\.\.requestConfig,[\s\S]*?projectId,[\s\S]*?\},[\s\S]*?conversation,[\s\S]*?limit: 50,[\s\S]*?\}\)/u
   );
   assert.match(loader, /sessionTimelineRequestIsCurrent/u);
   assert.match(loader, /scopeEpoch: configScopeEpochRef\.current/u);
   assert.match(loader, /replayArtifactCanvasEvents\(responseItems\)/u);
   assert.match(loader, /mergeTimelineItems\(responseItems, current\.items\)/u);
-  assert.match(loader, /\[desktopSessionTimelineClientV2\]/u);
+  assert.match(loader, /\[desktopSessionTimelineOperationsV2\]/u);
+  assert.doesNotMatch(loader, /bindOperation/u);
   assert.doesNotMatch(loader, /new DesktopApiClient\(/u);
 });
 
-test('earlier-page loading snapshots one V2 operation binding without changing pagination', () => {
+test('earlier-page loading uses an independent generation operation without changing pagination', () => {
   const loader = callbackSource(app, 'loadEarlierTimeline', 'respondToHitl');
 
   assert.match(loader, /const requestConfig = configRef\.current;/u);
-  assert.match(
-    loader,
-    /const client = desktopSessionTimelineClientV2\.bindOperation\(requestConfig\);/u,
-  );
-  assert.match(
-    loader,
-    earlierTimelineRequestPattern,
-  );
+  assert.match(loader, earlierTimelineRequestPattern);
   assert.match(loader, /sessionTimelineRequestIsCurrent/u);
   assert.match(loader, /resolveEarlierTimelinePage\(\{/u);
   assert.match(loader, /pageResolution\.kind === 'stalled'/u);
   assert.match(loader, /mergeTimelineItems\(response\.timeline \?\? \[\], current\.items\)/u);
   assert.match(loader, /formatConnectionError\(caught, requestConfig\.apiBaseUrl\)/u);
-  assert.match(loader, /desktopSessionTimelineClientV2,/u);
+  assert.match(loader, /desktopSessionTimelineOperationsV2,/u);
+  assert.doesNotMatch(loader, /bindOperation/u);
   assert.doesNotMatch(loader, /api\.getConversationMessages/u);
 });
 
-test('session timeline Provider owns only the transport read and no semantic policy', () => {
-  assert.match(provider, /type DesktopSessionTimelineMethod = 'getConversationMessages'/u);
-  assert.match(provider, /getConversationMessages:/u);
-  assert.match(provider, /bindOperation/u);
-  assert.doesNotMatch(provider, forbiddenProviderPolicyPattern);
+test('session timeline authority owns only transport, identity and lease policy', () => {
+  assert.match(module, /DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2/u);
+  assert.match(module, /createDesktopSessionTimelineOperationsV2/u);
+  assert.match(module, /acquireServiceOperationLease/u);
+  assert.match(module, /kind: 'session'/u);
+  assert.match(module, /getConversationMessages:/u);
+  assert.doesNotMatch(module, forbiddenAuthorityPolicyPattern);
 });
 
 function callbackSource(sourceText, name, nextName) {

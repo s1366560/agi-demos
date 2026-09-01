@@ -13,64 +13,64 @@ const {
   RuntimeV2Error,
 } = require('@agistack/plugin-runtime');
 const {
-  DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2,
-  DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
-  DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2,
-  DesktopSessionProjectionAuthorityUnavailableErrorV2,
-  applyDesktopSessionProjectionAuthorityV2,
-  createDesktopSessionProjectionOperationsV2,
-  desktopSessionProjectionAuthorityDefinitionV2,
-  withDesktopSessionProjectionAuthorityOperationV2,
-} = require(COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js');
-const { desktopSessionRunChangesAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js',
-);
+  DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2,
+  DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2,
+  DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2,
+  DesktopSessionTimelineAuthorityUnavailableErrorV2,
+  applyDesktopSessionTimelineAuthorityV2,
+  createDesktopSessionTimelineOperationsV2,
+  desktopSessionTimelineAuthorityDefinitionV2,
+  withDesktopSessionTimelineAuthorityOperationV2,
+} = require(COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js');
 const { DesktopApiError } = require(COMPILED_ROOT + '/src/api/client.js');
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js'
 );
 const { desktopConversationLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js'
 );
 const { desktopHitlResponseAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js'
 );
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js');
-const { desktopSessionTimelineAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js',
+const { desktopSessionProjectionAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js'
+);
+const { desktopSessionRunChangesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js'
 );
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js'
 );
 const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js'
 );
 const { desktopWorkspaceCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js',
-);
-const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js'
 );
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js'
+);
+const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js'
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
 const BOOTSTRAP_PATH = new URL(
   'shared/profiles/memstack-default-bootstrap.v2.json',
-  REPOSITORY_ROOT,
+  REPOSITORY_ROOT
 );
 const MANIFEST_PATH = new URL(
   'config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json',
-  REPOSITORY_ROOT,
+  REPOSITORY_ROOT
 );
 const PROFILE_PATH = new URL(
   'config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
-  REPOSITORY_ROOT,
+  REPOSITORY_ROOT
 );
 
 function loadBootstrap() {
@@ -99,9 +99,9 @@ function rendererDefinitions() {
 function runtimeConfig(overrides = {}) {
   return {
     ...DEFAULT_CONFIG,
-    apiBaseUrl: 'http://127.0.0.1:46421',
-    apiKey: 'projection-session',
-    localApiToken: 'projection-launch',
+    apiBaseUrl: 'http://127.0.0.1:46481',
+    apiKey: 'timeline-session',
+    localApiToken: 'timeline-launch',
     mode: 'local',
     tenantId: 'tenant-1',
     projectId: 'project-1',
@@ -121,17 +121,18 @@ function conversation(overrides = {}) {
     title: 'Conversation one',
     status: 'active',
     message_count: 1,
-    created_at: '2026-09-01T00:00:00Z',
+    created_at: '2026-09-02T00:00:00Z',
     agent_config: {},
     ...overrides,
   };
 }
 
-function projection(overrides = {}) {
+function timelinePayload(overrides = {}) {
   return {
-    schema_version: 2,
-    projection_kind: 'workspace_session',
-    snapshot_revision: 'projection-revision-1',
+    conversationId: 'conversation-1',
+    timeline: [],
+    total: 0,
+    has_more: false,
     ...overrides,
   };
 }
@@ -165,18 +166,18 @@ function acceptedActions(service, digest, lifecycle = []) {
   };
 }
 
-test('generated contract exposes one credential-free root session projection Provider', () => {
+test('generated contract exposes one credential-free root session timeline Provider', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-projection-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-timeline-authority'
   );
 
   assert.ok(module);
@@ -186,8 +187,8 @@ test('generated contract exposes one credential-free root session projection Pro
   assert.deepEqual(module.contract.services, {
     provides: [
       {
-        service: DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
-        version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2,
+        service: DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2,
+        version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2,
       },
     ],
     requires: [],
@@ -197,23 +198,20 @@ test('generated contract exposes one credential-free root session projection Pro
   assert.deepEqual(module.contract.config_schema.required, ['strategy']);
   assert.equal(module.contract.config_schema.properties.strategy.const, 'desktop-api-client');
   assert.equal(module.contract_digest, catalog.contract_digest);
-  assert.equal(
-    module.contract_digest,
-    desktopSessionProjectionAuthorityDefinitionV2.contractDigest,
-  );
-  assert.equal(catalog.entrypoint, 'applyDesktopSessionProjectionAuthorityV2');
+  assert.equal(module.contract_digest, desktopSessionTimelineAuthorityDefinitionV2.contractDigest);
+  assert.equal(catalog.entrypoint, 'applyDesktopSessionTimelineAuthorityV2');
   assert.equal(
     catalog.artifact_source,
     'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
-      'desktopSessionProjectionAuthorityModuleV2.ts',
+      'desktopSessionTimelineAuthorityModuleV2.ts'
   );
-  assert.equal(entry.module_ref, DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2);
+  assert.equal(entry.module_ref, DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
   assert.deepEqual(entry.scope, { kind: 'root' });
   assert.deepEqual(entry.config, { strategy: 'desktop-api-client' });
   assert.deepEqual(entry.inject, {});
   assert.equal(entry.enabled, true);
-  assert.match(profile, /entry_id: builtin-desktop-session-projection-authority/u);
+  assert.match(profile, /entry_id: builtin-desktop-session-timeline-authority/u);
   for (const value of [module, catalog, entry]) {
     assert.doesNotMatch(JSON.stringify(value), /apiKey|localApiToken|Authorization/iu);
   }
@@ -224,9 +222,9 @@ test('Loader activates the exact service and disable removes it without fallback
   const loader = new LoaderV2(rendererDefinitions(), 'desktop-renderer');
   const generation = await loader.stage(bootstrap);
   const service = generation.resolve(
-    DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
+    DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2,
     { kind: 'root' },
-    { version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2 },
+    { version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2 }
   );
 
   assert.equal(Object.isFrozen(service), true);
@@ -235,99 +233,113 @@ test('Loader activates the exact service and disable removes it without fallback
   assert.equal('client' in service, false);
   assert.throws(
     () =>
-      applyDesktopSessionProjectionAuthorityV2(
+      applyDesktopSessionTimelineAuthorityV2(
         {
           provide: () => assert.fail('invalid config must not provide a service'),
         },
-        { strategy: 'legacy-client' },
+        { strategy: 'legacy-client' }
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_session_projection_authority_config_invalid',
+      error.code === 'desktop_session_timeline_authority_config_invalid'
   );
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-projection-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-timeline-authority'
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>
       disabledGeneration.resolve(
-        DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
+        DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2,
         {
           kind: 'session',
           tenant_id: 'tenant-1',
           project_id: 'project-1',
           session_id: 'conversation-1',
         },
-        { version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2 },
+        { version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2 }
       ),
-    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
+    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service'
   );
 
   const manager = new GenerationManagerV2();
   await manager.publish(generation);
   const wrongDefinitionLoader = new LoaderV2(
     rendererDefinitions().map((definition) =>
-      definition.moduleRef === DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2
+      definition.moduleRef === DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2
         ? { ...definition, contractDigest: 'sha256:' + '0'.repeat(64) }
-        : definition,
+        : definition
     ),
-    'desktop-renderer',
+    'desktop-renderer'
   );
   await assert.rejects(
     wrongDefinitionLoader.stage(bootstrap),
-    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch',
+    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch'
   );
   assert.equal(manager.current, generation);
   await disabledGeneration.dispose();
   await manager.close();
 });
 
-test('local transport preserves exact scope, credentials, signal and unknown response', async () => {
+test('local transport performs one exact request for each page and forwards every cursor', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), init });
-    return json(projection({ transport_extension: { retained: true } }));
+    return json(timelinePayload({ page: calls.length }));
   };
 
   try {
-    const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
-      loadBootstrap(),
+    let service;
+    applyDesktopSessionTimelineAuthorityV2(
+      {
+        provide: (_key, provided) => {
+          service = provided;
+        },
+      },
+      { strategy: 'desktop-api-client' }
     );
-    const service = generation.resolve(
-      DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
-      { kind: 'root' },
-      { version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2 },
-    );
+    const authority = service.bindOperation(runtimeConfig());
     const controller = new AbortController();
-    const payload = await service
-      .bindOperation(runtimeConfig())
-      .getConversationSession(conversation(), controller.signal);
+    const initial = await authority.getConversationMessages(
+      conversation(),
+      { limit: 75, fromTimeUs: 1_000, fromCounter: 4 },
+      controller.signal
+    );
+    const earlier = await authority.getConversationMessages(
+      conversation(),
+      { limit: 50, beforeTimeUs: 2_000, beforeCounter: 7 },
+      controller.signal
+    );
 
-    assert.deepEqual(payload, projection({ transport_extension: { retained: true } }));
-    assert.equal(calls.length, 1);
-    const call = calls[0];
-    const url = new URL(call.input);
-    const headers = new Headers(call.init.headers);
-    assert.equal(url.pathname, '/api/v1/agent/conversations/conversation-1/session');
-    assert.equal(url.searchParams.get('tenant_id'), 'tenant-1');
-    assert.equal(url.searchParams.get('project_id'), 'project-1');
-    assert.equal(url.searchParams.get('workspace_id'), 'workspace-1');
-    assert.equal(call.init.signal, controller.signal);
-    assert.equal(headers.get('Authorization'), 'Bearer projection-session');
-    assert.equal(headers.get('X-Agistack-Launch'), 'projection-launch');
-    await generation.dispose();
+    assert.equal(initial.page, 1);
+    assert.equal(earlier.page, 2);
+    assert.equal(calls.length, 2);
+    assertTimelineCall(calls[0], {
+      limit: '75',
+      fromTimeUs: '1000',
+      fromCounter: '4',
+      beforeTimeUs: null,
+      beforeCounter: null,
+      signal: controller.signal,
+    });
+    assertTimelineCall(calls[1], {
+      limit: '50',
+      fromTimeUs: null,
+      fromCounter: null,
+      beforeTimeUs: '2000',
+      beforeCounter: '7',
+      signal: controller.signal,
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('vault-bound cloud transport stays behind DesktopApiClient and forwards AbortSignal', async () => {
+test('vault-bound cloud transport remains behind DesktopApiClient', async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  const controller = new AbortController();
   const calls = [];
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
@@ -338,7 +350,7 @@ test('vault-bound cloud transport stays behind DesktopApiClient and forwards Abo
             calls.push({ command, args });
             return {
               status: 200,
-              body: projection({ transport: 'vault-bound-cloud' }),
+              body: timelinePayload({ transport: 'vault-bound-cloud' }),
             };
           },
         },
@@ -348,72 +360,86 @@ test('vault-bound cloud transport stays behind DesktopApiClient and forwards Abo
 
   try {
     let service;
-    applyDesktopSessionProjectionAuthorityV2(
+    applyDesktopSessionTimelineAuthorityV2(
       {
         provide: (_key, provided) => {
           service = provided;
         },
       },
-      { strategy: 'desktop-api-client' },
+      { strategy: 'desktop-api-client' }
     );
     const payload = await service
       .bindOperation(runtimeConfig({ apiKey: '', localApiToken: '', mode: 'cloud' }))
-      .getConversationSession(conversation(), controller.signal);
+      .getConversationMessages(conversation(), { limit: 25 });
 
-    assert.deepEqual(payload, projection({ transport: 'vault-bound-cloud' }));
+    assert.equal(payload.transport, 'vault-bound-cloud');
     assert.equal(calls.length, 1);
     assert.equal(calls[0].command, 'cloud_request');
     assert.equal(calls[0].args.request.method, 'GET');
     const url = new URL(calls[0].args.request.path, 'https://desktop.invalid');
-    assert.equal(url.pathname, '/api/v1/agent/conversations/conversation-1/session');
-    assert.equal(url.searchParams.get('tenant_id'), 'tenant-1');
+    assert.equal(url.pathname, '/api/v1/agent/conversations/conversation-1/messages');
     assert.equal(url.searchParams.get('project_id'), 'project-1');
-    assert.equal(url.searchParams.get('workspace_id'), 'workspace-1');
+    assert.equal(url.searchParams.get('limit'), '25');
   } finally {
     if (originalWindow === undefined) delete globalThis.window;
     else Object.defineProperty(globalThis, 'window', originalWindow);
   }
 });
 
-test('operation freezes config and identity before the exact session lease', async () => {
+test('operation freezes config, identity and page before the exact session lease', async () => {
   const lifecycle = [];
   const received = [];
   const service = Object.freeze({
     bindOperation(config) {
       received.push({ config });
       return Object.freeze({
-        async getConversationSession(identity, signal) {
-          received.push({ identity, signal });
-          return projection();
+        async getConversationMessages(identity, page, signal) {
+          received.push({ identity, page, signal });
+          return timelinePayload();
         },
       });
     },
   });
-  const operations = createDesktopSessionProjectionOperationsV2(() =>
-    acceptedActions(service, 'sha256:generation-1', lifecycle),
+  const operations = createDesktopSessionTimelineOperationsV2(() =>
+    acceptedActions(service, 'sha256:generation-1', lifecycle)
   );
   const config = runtimeConfig();
   const currentConversation = conversation();
   const controller = new AbortController();
-  const pending = operations.getConversationSession({
+  const input = {
     config,
     conversation: currentConversation,
+    limit: 75,
+    fromTimeUs: 1_000,
+    fromCounter: 4,
+    beforeTimeUs: 2_000,
+    beforeCounter: 7,
     signal: controller.signal,
-  });
+  };
+  const pending = operations.getConversationMessages(input);
   config.apiBaseUrl = 'http://127.0.0.1:49999';
   currentConversation.id = 'mutated-conversation';
+  input.limit = 1;
 
-  assert.deepEqual(await pending, projection());
+  assert.deepEqual(await pending, timelinePayload());
   assert.equal(Object.isFrozen(operations), true);
   assert.equal(Object.isFrozen(received[0].config), true);
-  assert.equal(received[0].config.apiBaseUrl, 'http://127.0.0.1:46421');
+  assert.equal(received[0].config.apiBaseUrl, 'http://127.0.0.1:46481');
   assert.equal(Object.isFrozen(received[1].identity), true);
   assert.equal(received[1].identity.id, 'conversation-1');
   assert.equal(received[1].identity.workspace_id, 'workspace-1');
+  assert.equal(Object.isFrozen(received[1].page), true);
+  assert.deepEqual(received[1].page, {
+    limit: 75,
+    fromTimeUs: 1_000,
+    fromCounter: 4,
+    beforeTimeUs: 2_000,
+    beforeCounter: 7,
+  });
   assert.equal(received[1].signal, controller.signal);
   assert.deepEqual(lifecycle[0].request, {
-    service: DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
-    version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2,
+    service: DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2,
+    version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2,
     scope: {
       kind: 'session',
       tenant_id: 'tenant-1',
@@ -423,13 +449,13 @@ test('operation freezes config and identity before the exact session lease', asy
   });
   assert.deepEqual(
     lifecycle.filter((event) => event.type === 'release').map((event) => event.digest),
-    ['sha256:generation-1'],
+    ['sha256:generation-1']
   );
 });
 
-test('invalid input and scope mismatch fail before acquiring a lease', () => {
+test('invalid identity, scope, page and signal fail before acquiring a lease', async () => {
   let acquireCount = 0;
-  const operations = createDesktopSessionProjectionOperationsV2(() => ({
+  const operations = createDesktopSessionTimelineOperationsV2(() => ({
     acquireServiceOperationLease: async () => {
       acquireCount += 1;
       return {
@@ -439,10 +465,12 @@ test('invalid input and scope mismatch fail before acquiring a lease', () => {
     },
   }));
   const invoke = (overrides = {}) =>
-    operations.getConversationSession({
+    operations.getConversationMessages({
       config: runtimeConfig(overrides.config),
       conversation: conversation(overrides.conversation),
-      signal: overrides.signal ?? new AbortController().signal,
+      limit: overrides.limit ?? 50,
+      ...(overrides.cursor ?? {}),
+      ...(overrides.signal === undefined ? {} : { signal: overrides.signal }),
     });
 
   for (const overrides of [
@@ -454,53 +482,72 @@ test('invalid input and scope mismatch fail before acquiring a lease', () => {
     assert.throws(
       () => invoke(overrides),
       (error) =>
-        error instanceof RuntimeV2Error &&
-        error.code === 'desktop_session_projection_scope_mismatch',
+        error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_scope_mismatch'
     );
   }
   for (const overrides of [
     { conversation: { id: '' } },
     { conversation: { tenant_id: ' tenant-1' } },
     { conversation: { workspace_id: '' } },
+    { config: { workspaceId: ' ' } },
+    { limit: 0 },
+    { limit: 501 },
+    { limit: 1.5 },
+    { cursor: { fromTimeUs: Number.NaN } },
+    { cursor: { fromCounter: Number.POSITIVE_INFINITY } },
+    { cursor: { beforeTimeUs: 1.5 } },
     { signal: {} },
   ]) {
     assert.throws(
       () => invoke(overrides),
       (error) =>
-        error instanceof RuntimeV2Error &&
-        error.code === 'desktop_session_projection_input_invalid',
+        error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_input_invalid'
     );
   }
   assert.equal(acquireCount, 0);
+
+  await assert.rejects(
+    operations.getConversationMessages({
+      config: runtimeConfig({ workspaceId: '' }),
+      conversation: conversation({ workspace_id: null }),
+      limit: 50,
+    }),
+    (error) =>
+      error instanceof DesktopSessionTimelineAuthorityUnavailableErrorV2 &&
+      error.reasonCode === 'desktop_renderer_service_resolve_failed'
+  );
+  assert.equal(acquireCount, 1);
 });
 
-test('non-2xx transport preserves the original DesktopApiError', async () => {
-  const originalFetch = globalThis.fetch;
-  const response = {
-    detail: { reason_code: 'session_projection_unavailable' },
-  };
-  globalThis.fetch = async () => json(response, 503);
-
-  try {
-    let service;
-    applyDesktopSessionProjectionAuthorityV2(
-      {
-        provide: (_key, provided) => {
-          service = provided;
-        },
+test('transport scope is revalidated and non-2xx preserves DesktopApiError', async () => {
+  let service;
+  applyDesktopSessionTimelineAuthorityV2(
+    {
+      provide: (_key, provided) => {
+        service = provided;
       },
-      { strategy: 'desktop-api-client' },
-    );
+    },
+    { strategy: 'desktop-api-client' }
+  );
+  const authority = service.bindOperation(runtimeConfig());
+  assert.throws(
+    () => authority.getConversationMessages(conversation({ project_id: 'project-other' }), {}),
+    (error) =>
+      error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_scope_mismatch'
+  );
+
+  const originalFetch = globalThis.fetch;
+  const response = { detail: { reason_code: 'session_timeline_unavailable' } };
+  globalThis.fetch = async () => json(response, 503);
+  try {
     await assert.rejects(
-      service
-        .bindOperation(runtimeConfig())
-        .getConversationSession(conversation(), new AbortController().signal),
+      authority.getConversationMessages(conversation(), { limit: 50 }),
       (error) => {
         assert.equal(error instanceof DesktopApiError, true);
         assert.equal(error.status, 503);
         assert.deepEqual(error.payload, response);
         return true;
-      },
+      }
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -509,17 +556,17 @@ test('non-2xx transport preserves the original DesktopApiError', async () => {
 
 test('missing service is structured and escaped authority is revoked before release', async () => {
   let currentActions = null;
-  const operations = createDesktopSessionProjectionOperationsV2(() => currentActions);
+  const operations = createDesktopSessionTimelineOperationsV2(() => currentActions);
   const input = {
     config: runtimeConfig(),
     conversation: conversation(),
-    signal: new AbortController().signal,
+    limit: 50,
   };
   assert.throws(
-    () => operations.getConversationSession(input),
+    () => operations.getConversationMessages(input),
     (error) =>
-      error instanceof DesktopSessionProjectionAuthorityUnavailableErrorV2 &&
-      error.reasonCode === 'desktop_renderer_generation_actions_unavailable',
+      error instanceof DesktopSessionTimelineAuthorityUnavailableErrorV2 &&
+      error.reasonCode === 'desktop_renderer_generation_actions_unavailable'
   );
 
   currentActions = {
@@ -530,11 +577,11 @@ test('missing service is structured and escaped authority is revoked before rele
     }),
   };
   await assert.rejects(
-    operations.getConversationSession(input),
+    operations.getConversationMessages(input),
     (error) =>
-      error instanceof DesktopSessionProjectionAuthorityUnavailableErrorV2 &&
+      error instanceof DesktopSessionTimelineAuthorityUnavailableErrorV2 &&
       error.reasonCode === 'desktop_renderer_service_resolve_failed' &&
-      error.runtimeCode === 'missing_service',
+      error.runtimeCode === 'missing_service'
   );
 
   let releaseStartedResolve;
@@ -547,7 +594,7 @@ test('missing service is structured and escaped authority is revoked before rele
   });
   let escapedAuthority = null;
   let transportCalls = 0;
-  const releasing = withDesktopSessionProjectionAuthorityOperationV2(
+  const releasing = withDesktopSessionTimelineAuthorityOperationV2(
     {
       acquireServiceOperationLease: async () => ({
         status: 'accepted',
@@ -556,9 +603,9 @@ test('missing service is structured and escaped authority is revoked before rele
           return operation({
             bindOperation() {
               return Object.freeze({
-                async getConversationSession() {
+                async getConversationMessages() {
                   transportCalls += 1;
-                  return projection();
+                  return timelinePayload();
                 },
               });
             },
@@ -573,15 +620,15 @@ test('missing service is structured and escaped authority is revoked before rele
     input,
     (authority) => {
       escapedAuthority = authority;
-      return projection();
-    },
+      return timelinePayload();
+    }
   );
   await releaseStarted;
   assert.throws(
-    () => escapedAuthority.getConversationSession(conversation(), input.signal),
+    () => escapedAuthority.getConversationMessages(conversation(), { limit: 50 }),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_session_projection_operation_released',
+      error.code === 'desktop_session_timeline_operation_released'
   );
   assert.equal(transportCalls, 0);
   finishRelease();
@@ -594,7 +641,7 @@ test('Abort releases once and primary failures outrank release failures', async 
   const abortService = Object.freeze({
     bindOperation() {
       return Object.freeze({
-        getConversationSession(_identity, signal) {
+        getConversationMessages(_identity, _page, signal) {
           return new Promise((_resolve, reject) => {
             signal.addEventListener('abort', () => reject(signal.reason), {
               once: true,
@@ -604,7 +651,7 @@ test('Abort releases once and primary failures outrank release failures', async 
       });
     },
   });
-  const abortOperations = createDesktopSessionProjectionOperationsV2(() => ({
+  const abortOperations = createDesktopSessionTimelineOperationsV2(() => ({
     acquireServiceOperationLease: async () => ({
       status: 'accepted',
       digest: 'sha256:abort',
@@ -614,9 +661,10 @@ test('Abort releases once and primary failures outrank release failures', async 
       },
     }),
   }));
-  const aborted = abortOperations.getConversationSession({
+  const aborted = abortOperations.getConversationMessages({
     config: runtimeConfig(),
     conversation: conversation(),
+    limit: 50,
     signal: controller.signal,
   });
   await Promise.resolve();
@@ -624,7 +672,7 @@ test('Abort releases once and primary failures outrank release failures', async 
   await assert.rejects(aborted, (error) => error?.name === 'AbortError');
   assert.equal(releaseCount, 1);
 
-  const primary = new Error('projection_primary_failure');
+  const primary = new Error('timeline_primary_failure');
   let failureReleaseCount = 0;
   const releaseFailureActions = {
     acquireServiceOperationLease: async () => ({
@@ -634,8 +682,8 @@ test('Abort releases once and primary failures outrank release failures', async 
         return operation({
           bindOperation() {
             return Object.freeze({
-              async getConversationSession() {
-                return projection();
+              async getConversationMessages() {
+                return timelinePayload();
               },
             });
           },
@@ -643,31 +691,31 @@ test('Abort releases once and primary failures outrank release failures', async 
       },
       async release() {
         failureReleaseCount += 1;
-        throw new Error('projection_release_failure');
+        throw new Error('timeline_release_failure');
       },
     }),
   };
   const input = {
     config: runtimeConfig(),
     conversation: conversation(),
-    signal: new AbortController().signal,
+    limit: 50,
   };
   await assert.rejects(
-    withDesktopSessionProjectionAuthorityOperationV2(releaseFailureActions, input, () => {
+    withDesktopSessionTimelineAuthorityOperationV2(releaseFailureActions, input, () => {
       throw primary;
     }),
-    (error) => error === primary,
+    (error) => error === primary
   );
   await assert.rejects(
-    withDesktopSessionProjectionAuthorityOperationV2(releaseFailureActions, input, () =>
-      projection(),
+    withDesktopSessionTimelineAuthorityOperationV2(releaseFailureActions, input, () =>
+      timelinePayload()
     ),
-    /projection_release_failure/u,
+    /timeline_release_failure/u
   );
   assert.equal(failureReleaseCount, 2);
 });
 
-test('HMR pins an in-flight read to old generation and sends the next to new', async () => {
+test('concurrent pages pin independent generations and release independently', async () => {
   const lifecycle = [];
   let resolveOld;
   const oldPending = new Promise((resolve) => {
@@ -677,25 +725,29 @@ test('HMR pins an in-flight read to old generation and sends the next to new', a
     Object.freeze({
       bindOperation() {
         return Object.freeze({
-          async getConversationSession() {
-            lifecycle.push('read:' + label);
+          async getConversationMessages(_identity, page) {
+            lifecycle.push(`read:${label}:${page.beforeTimeUs ?? 'initial'}`);
             if (label === 'old') await oldPending;
-            return projection({ source: label });
+            return timelinePayload({ source: label });
           },
         });
       },
     });
   let currentActions = acceptedActions(serviceFor('old'), 'sha256:old', lifecycle);
-  const operations = createDesktopSessionProjectionOperationsV2(() => currentActions);
-  const input = {
+  const operations = createDesktopSessionTimelineOperationsV2(() => currentActions);
+  const baseInput = {
     config: runtimeConfig(),
     conversation: conversation(),
-    signal: new AbortController().signal,
+    limit: 50,
   };
-  const oldRead = operations.getConversationSession(input);
+  const oldRead = operations.getConversationMessages(baseInput);
   await Promise.resolve();
   currentActions = acceptedActions(serviceFor('next'), 'sha256:next', lifecycle);
-  const nextRead = await operations.getConversationSession(input);
+  const nextRead = await operations.getConversationMessages({
+    ...baseInput,
+    beforeTimeUs: 2_000,
+    beforeCounter: 7,
+  });
   resolveOld();
   const oldReadResult = await oldRead;
 
@@ -703,10 +755,28 @@ test('HMR pins an in-flight read to old generation and sends the next to new', a
   assert.equal(nextRead.source, 'next');
   assert.deepEqual(
     lifecycle.filter((event) => typeof event === 'string'),
-    ['read:old', 'read:next'],
+    ['read:old:initial', 'read:next:2000']
   );
   assert.deepEqual(
     lifecycle.filter((event) => event.type === 'release').map((event) => event.digest),
-    ['sha256:next', 'sha256:old'],
+    ['sha256:next', 'sha256:old']
   );
 });
+
+function assertTimelineCall(
+  call,
+  { limit, fromTimeUs, fromCounter, beforeTimeUs, beforeCounter, signal }
+) {
+  const url = new URL(call.input);
+  const headers = new Headers(call.init.headers);
+  assert.equal(url.pathname, '/api/v1/agent/conversations/conversation-1/messages');
+  assert.equal(url.searchParams.get('project_id'), 'project-1');
+  assert.equal(url.searchParams.get('limit'), limit);
+  assert.equal(url.searchParams.get('from_time_us'), fromTimeUs);
+  assert.equal(url.searchParams.get('from_counter'), fromCounter);
+  assert.equal(url.searchParams.get('before_time_us'), beforeTimeUs);
+  assert.equal(url.searchParams.get('before_counter'), beforeCounter);
+  assert.equal(call.init.signal, signal);
+  assert.equal(headers.get('Authorization'), 'Bearer timeline-session');
+  assert.equal(headers.get('X-Agistack-Launch'), 'timeline-launch');
+}

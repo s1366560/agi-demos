@@ -83,6 +83,7 @@ import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopCo
 import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
+import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import {
   createDesktopWorkspaceMessageCatalogOperationsV2,
@@ -236,9 +237,6 @@ import {
   sessionSelectionRequiresRuntimeRefresh,
   sessionTimelineRequestIsCurrent,
 } from './features/session/sessionSelectionModel';
-import {
-  createDesktopSessionTimelineClientProviderV2,
-} from './features/session/desktopSessionTimelineClientProviderV2';
 import {
   failEarlierTimelinePage,
   resolveEarlierTimelinePage,
@@ -852,6 +850,13 @@ export function App() {
       ),
     [],
   );
+  const desktopSessionTimelineOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionTimelineOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopSessionRunChangesOperationsV2 = useMemo(
     () =>
       createDesktopSessionRunChangesOperationsV2(
@@ -929,10 +934,6 @@ export function App() {
   );
   const desktopSessionRunInputClientProviderV2 = useMemo(
     () => createDesktopSessionRunInputClientProviderV2(),
-    [],
-  );
-  const desktopSessionTimelineClientProviderV2 = useMemo(
-    () => createDesktopSessionTimelineClientProviderV2(),
     [],
   );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
@@ -1113,10 +1114,6 @@ export function App() {
   const desktopSessionRunInputClientV2 = useMemo(
     () => desktopSessionRunInputClientProviderV2.publish({ config }),
     [config, desktopSessionRunInputClientProviderV2],
-  );
-  const desktopSessionTimelineClientV2 = useMemo(
-    () => desktopSessionTimelineClientProviderV2.publish({ config }),
-    [config, desktopSessionTimelineClientProviderV2],
   );
   const desktopWorkspaceAgentBindingDialogClientV2 = useMemo(
     () => desktopWorkspaceAgentBindingDialogClientProviderV2.publish({ config }),
@@ -1789,8 +1786,12 @@ export function App() {
         loading: true,
       });
       try {
-        const client = desktopSessionTimelineClientV2.bindOperation(requestConfig);
-        const response = await client.getConversationMessages(conversation.id, projectId, {
+        const response = await desktopSessionTimelineOperationsV2.getConversationMessages({
+          config: {
+            ...requestConfig,
+            projectId,
+          },
+          conversation,
           limit: 50,
         });
         if (!requestIsCurrent()) return;
@@ -1845,7 +1846,7 @@ export function App() {
         );
       }
     },
-    [desktopSessionTimelineClientV2],
+    [desktopSessionTimelineOperationsV2],
   );
 
   const loadEarlierTimeline = useCallback(async () => {
@@ -1870,16 +1871,13 @@ export function App() {
         : current,
     );
     try {
-      const client = desktopSessionTimelineClientV2.bindOperation(requestConfig);
-      const response = await client.getConversationMessages(
-        conversation.id,
-        requestConfig.projectId,
-        {
-          limit: 50,
-          beforeTimeUs: cursor.timeUs,
-          beforeCounter: cursor.counter,
-        },
-      );
+      const response = await desktopSessionTimelineOperationsV2.getConversationMessages({
+        config: requestConfig,
+        conversation,
+        limit: 50,
+        beforeTimeUs: cursor.timeUs,
+        beforeCounter: cursor.counter,
+      });
       setConversationTimeline((current) => {
         if (!requestIsCurrent() || current.conversationId !== conversation.id) return current;
         const items = mergeTimelineItems(response.timeline ?? [], current.items);
@@ -1920,7 +1918,7 @@ export function App() {
   }, [
     conversationTimeline.firstCursor,
     conversationTimeline.loadingEarlier,
-    desktopSessionTimelineClientV2,
+    desktopSessionTimelineOperationsV2,
     scopedConversation,
     t,
   ]);

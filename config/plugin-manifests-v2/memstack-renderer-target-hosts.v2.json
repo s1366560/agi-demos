@@ -282,6 +282,37 @@
       "contract_digest": "sha256:fc7690fe093a7f1578e3ca7dae268339e67960cf3746197d357b9a97149d2577"
     },
     {
+      "module_ref": "builtin://memstack/desktop/session-timeline-authority",
+      "entrypoint": "applyDesktopSessionTimelineAuthorityV2",
+      "artifact": {
+        "digest": "sha256:3b6e6200846dd116c870fe283d99a6c326b3e4fbfcccb891c27a58b1e760e172",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionTimelineAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-timeline-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:362a401de727e3e34aaeca460babf23442ee1153d73c61e48717c8c715e5e360"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/hitl-response-authority",
       "entrypoint": "applyDesktopHitlResponseAuthorityV2",
       "artifact": {
