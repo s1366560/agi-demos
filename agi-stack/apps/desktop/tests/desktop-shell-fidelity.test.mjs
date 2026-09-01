@@ -274,22 +274,29 @@ test('tenant and project changes require server-issued workspace context authori
   assert.match(hydrateCloudSession, /context: null/);
   assert.match(hydrateCloudSession, /tenantId: '',[\s\S]*projectId: '',[\s\S]*workspaceId: ''/);
   assert.doesNotMatch(hydrateCloudSession, /isLegacyWorkspaceContextRouteMissing/);
-  assert.match(applySettingsContext, /const requestConfig = configRef\.current/);
+  assert.match(
+    applySettingsContext,
+    /const requestConfig = Object\.freeze\(\{ \.\.\.configRef\.current \}\)/,
+  );
   assert.match(
     applySettingsContext,
     /const requestIsCurrent = \(\) =>[\s\S]*?authAttemptRevisionRef\.current === authAttemptRevision[\s\S]*?isSameDesktopRequestScope\(requestConfig, configRef\.current\)/,
   );
   assert.match(
     applySettingsContext,
-    /await contextClient\.listProjects\(tenantId\);\s*if \(!requestIsCurrent\(\)\) return;/,
+    /await withDesktopWorkspaceContextAuthorityOperationV2\(\s*desktopRendererGenerationV2\.actions,\s*authorityConfig,\s*async \(contextClient\) => \{/,
   );
   assert.match(
     applySettingsContext,
-    /await contextClient\.getWorkspaceContext\(\);\s*if \(!requestIsCurrent\(\)\) return;/,
+    /const listedProjects = await contextClient\.listProjects\(tenantId, signal\);\s*if \(!requestIsCurrent\(\)\) return;/,
   );
   assert.match(
     applySettingsContext,
-    /await contextClient\.switchWorkspaceContext\([\s\S]*?\);\s*if \(!requestIsCurrent\(\)\) return;/,
+    /const currentContextResponse = await contextClient\.getWorkspaceContext\(signal\);\s*if \(!requestIsCurrent\(\)\) return;/,
+  );
+  assert.match(
+    applySettingsContext,
+    /await contextClient\.switchWorkspaceContext\([\s\S]*?signal,\s*\);\s*if \(!requestIsCurrent\(\)\) return;/,
   );
   assert.match(applySettingsContext, /contextClient\.switchWorkspaceContext\(/);
   assert.doesNotMatch(
