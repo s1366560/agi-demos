@@ -344,6 +344,9 @@ import {
   createDesktopWorkspaceAutonomyAttentionClientProviderV2,
 } from './features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2';
 import {
+  createDesktopWorkspaceCatalogClientProviderV2,
+} from './features/workspace/desktopWorkspaceCatalogClientProviderV2';
+import {
   createDesktopWorkspaceConversationCatalogClientProviderV2,
 } from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
 import {
@@ -816,6 +819,10 @@ export function App() {
     () => createDesktopWorkspaceAutonomyAttentionClientProviderV2(),
     [],
   );
+  const desktopWorkspaceCatalogClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceCatalogClientProviderV2(),
+    [],
+  );
   const desktopWorkspaceConversationCatalogClientProviderV2 = useMemo(
     () => createDesktopWorkspaceConversationCatalogClientProviderV2(),
     [],
@@ -1081,6 +1088,10 @@ export function App() {
   const desktopWorkspaceAutonomyAttentionClientV2 = useMemo(
     () => desktopWorkspaceAutonomyAttentionClientProviderV2.publish({ config }),
     [config, desktopWorkspaceAutonomyAttentionClientProviderV2],
+  );
+  const desktopWorkspaceCatalogClientV2 = useMemo(
+    () => desktopWorkspaceCatalogClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceCatalogClientProviderV2],
   );
   const desktopWorkspaceConversationCatalogClientV2 = useMemo(
     () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
@@ -2664,7 +2675,7 @@ export function App() {
         const workspaceResults = await Promise.all(
           projects.map(async (project) => {
             const projectTenantId = project.tenant_id || runtimeConfig.tenantId;
-            const client = new DesktopApiClient({
+            const client = desktopWorkspaceCatalogClientV2.bindOperation({
               ...runtimeConfig,
               tenantId: projectTenantId,
               projectId: project.id,
@@ -3055,6 +3066,7 @@ export function App() {
       commitRuntimeConfig,
       config,
       desktopWorkspaceAutonomyAttentionClientV2,
+      desktopWorkspaceCatalogClientV2,
       desktopWorkspaceConversationCatalogClientV2,
       listMyWorkForConfig,
       syncLocalRuntimeConfig,
