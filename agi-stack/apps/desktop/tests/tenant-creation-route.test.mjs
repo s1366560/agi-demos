@@ -136,7 +136,10 @@ test('tenant creation wiring keeps mode checks out of the page and refreshes aut
   const registrySource = readFileSync(new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(pageSource, /config\.mode|apiBaseUrl|window\.location/u);
   assert.match(registrySource, /upsertCreatedTenant/u);
-  assert.match(registrySource, /listTenants\(signal\)/u);
+  assert.match(
+    registrySource,
+    /tenantCatalogOperationsV2\.listTenants\(\s*currentConfig,\s*signal,?\s*\)/u,
+  );
   assert.doesNotMatch(appSource, /tenantCreationCapability/u);
   assert.match(routeAuthorityProviderSource, /tenantCreationCapability/u);
 });
