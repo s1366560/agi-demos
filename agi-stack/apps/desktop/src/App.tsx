@@ -78,6 +78,7 @@ import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRend
 import {
   createDesktopPluginMarketplaceOperationsV2,
 } from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import {
   acquireDesktopTerminalLifecycleAuthorityV2,
@@ -328,9 +329,6 @@ import {
   type NewTaskAgentTurnOutcome,
 } from './features/task/newTaskPlanModel';
 import { resolveNewTaskWorkspaceAuthority } from './features/task/newTaskSessionModel';
-import {
-  createDesktopTenantCatalogClientProviderV2,
-} from './features/tenant/desktopTenantCatalogClientProviderV2';
 import {
   currentWorkspaceAutonomyAttentionResolveAttempt,
   discardWorkspaceAutonomyAttentionResolveAttempt,
@@ -815,6 +813,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantCatalogOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantCatalogOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopAgentAuthorityProviderV2 = useMemo(
     () => createDesktopAgentAuthorityProviderV2(),
     [],
@@ -825,10 +830,6 @@ export function App() {
   );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
     () => createDesktopProductionRouteAuthorityProviderV2(),
-    [],
-  );
-  const desktopTenantCatalogClientProviderV2 = useMemo(
-    () => createDesktopTenantCatalogClientProviderV2(),
     [],
   );
   const desktopConversationLifecycleClientProviderV2 = useMemo(
@@ -1037,18 +1038,14 @@ export function App() {
     () => desktopMyWorkClientProviderV2.publish({ config }),
     [config, desktopMyWorkClientProviderV2],
   );
-  const desktopTenantCatalogClientV2 = useMemo(
-    () => desktopTenantCatalogClientProviderV2.publish({ config }),
-    [config, desktopTenantCatalogClientProviderV2],
-  );
   const desktopRendererRouteRefsV2 = useMemo(
     () => ({
       authRef,
       configRef,
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
-      desktopTenantCatalogClientProviderV2,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+      tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
       projectCronJobsRouteBindingProviderV2,
       projectSearchRouteBindingProviderV2,
       setAuth,
@@ -1060,8 +1057,7 @@ export function App() {
     }),
     [
       desktopPluginMarketplaceOperationsV2,
-      desktopTenantCatalogClientProviderV2,
-      desktopTenantCatalogClientV2,
+      desktopTenantCatalogOperationsV2,
     ],
   );
   const desktopRendererCompositionV2 = useMemo(

@@ -17,7 +17,6 @@ import { createDeviceApprovalRouteModuleLoader } from '../device-approval/device
 import { createTenantCreationClient } from '../tenant-creation/tenantCreationClient';
 import { upsertCreatedTenant } from '../tenant-creation/tenantCreationModel';
 import { createTenantCreationRouteModuleLoader } from '../tenant-creation/tenantCreationRouteModule';
-import type { DesktopTenantCatalogClientProviderV2 } from '../tenant/desktopTenantCatalogClientProviderV2';
 import {
   createInvitationAcceptanceClient,
   type InvitationAcceptanceClient,
@@ -232,6 +231,7 @@ import {
 import { createSkillsRouteModuleLoader } from '../settings-routes/skillsRouteModule';
 import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRouteModule';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
 
 export type AppRouteRegistryRefs = {
   authRef: RefObject<AuthState>;
@@ -240,7 +240,7 @@ export type AppRouteRegistryRefs = {
     DesktopPluginMarketplaceCatalogOperationsV2,
     'projectMarketplacePlugins'
   >;
-  desktopTenantCatalogClientProviderV2: DesktopTenantCatalogClientProviderV2;
+  tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
   desktopProductionRouteLocation: DesktopHashLocationPort;
   desktopProductionRouteNavigation: Readonly<{
     clearHash: () => void;
@@ -361,7 +361,7 @@ function createInvitationAcceptanceRouteLoader(
     configRef,
     desktopProductionRouteLocation,
     desktopProductionRouteNavigation,
-    desktopTenantCatalogClientProviderV2,
+    tenantCatalogOperationsV2,
     setAuth,
     setInvitationSignInRequested,
     commitRuntimeConfig,
@@ -381,10 +381,10 @@ function createInvitationAcceptanceRouteLoader(
         onRequireSignIn: () => setInvitationSignInRequested(true),
         onAccepted: async (invitation, signal) => {
           try {
-            const tenantCatalogClient = desktopTenantCatalogClientProviderV2
-              .resolve()
-              .bindOperation(configRef.current);
-            const authoritativeTenants = await tenantCatalogClient.listTenants(signal);
+            const authoritativeTenants = await tenantCatalogOperationsV2.listTenants(
+              configRef.current,
+              signal,
+            );
             if (signal.aborted) return;
             setAuth((current) => ({
               ...current,
@@ -1018,7 +1018,7 @@ export function createAppTenantCreationRouteRegistry(refs: AppRouteRegistryRefs)
   const {
     configRef,
     desktopProductionRouteNavigation,
-    desktopTenantCatalogClientProviderV2,
+    tenantCatalogOperationsV2,
     setAuth,
   } = refs;
   return createDesktopProductionRouteRegistry({
@@ -1026,9 +1026,6 @@ export function createAppTenantCreationRouteRegistry(refs: AppRouteRegistryRefs)
       [TENANT_CREATION_ROUTE_ID]: createTenantCreationRouteModuleLoader({
         createBinding: () => {
           const currentConfig = configRef.current;
-          const tenantCatalogClient = desktopTenantCatalogClientProviderV2
-            .resolve()
-            .bindOperation(currentConfig);
           return Object.freeze({
             client: createTenantCreationClient(currentConfig),
             onCreated: async (created, signal) => {
@@ -1037,7 +1034,10 @@ export function createAppTenantCreationRouteRegistry(refs: AppRouteRegistryRefs)
                 tenants: [...upsertCreatedTenant(current.tenants, created)],
               }));
               try {
-                const authoritativeTenants = await tenantCatalogClient.listTenants(signal);
+                const authoritativeTenants = await tenantCatalogOperationsV2.listTenants(
+                  currentConfig,
+                  signal,
+                );
                 if (signal.aborted) {
                   return Object.freeze({
                     catalogRefreshed: false,

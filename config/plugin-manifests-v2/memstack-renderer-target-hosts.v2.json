@@ -187,6 +187,37 @@
         }
       },
       "contract_digest": "sha256:bebf6a96ce68e538693a9b04548fa9fc5b6236eaa4f01774d40db5b3fc3510c6"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-catalog-authority",
+      "entrypoint": "applyDesktopTenantCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:cf607347acf450d0e96ea36647f5abfa7413dd4937bccebd4649c6cc12520d46",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantCatalogAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-catalog-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:89213cec91a23b4f3cbb6050059ce15af96da798eef093ed5b905da6a623d364"
     }
   ],
   "permissions": [],

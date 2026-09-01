@@ -30,7 +30,10 @@ const {
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js`,
 );
-const { DEFAULT_CONFIG } = require(`${COMPILED_ROOT}/src/types.js`);
+const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
+);
+const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
 const BOOTSTRAP_PATH = new URL(
@@ -57,6 +60,7 @@ function rendererDefinitions() {
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
+    desktopTenantCatalogAuthorityDefinitionV2,
   ];
 }
 

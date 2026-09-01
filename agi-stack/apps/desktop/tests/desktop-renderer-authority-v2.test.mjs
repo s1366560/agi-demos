@@ -117,11 +117,8 @@ const appComposition = createDesktopRendererAppCompositionPortV2({
     clearHash: () => undefined,
     openPath: () => undefined,
   },
-  desktopTenantCatalogClientProviderV2: {
-    publish: () => undefined,
-    resolve: () => {
-      throw new Error("desktop_tenant_catalog_client_unpublished");
-    },
+  tenantCatalogOperationsV2: {
+    listTenants: async () => [],
   },
   projectCronJobsRouteBindingProviderV2: {
     publish: () => undefined,
