@@ -350,6 +350,9 @@ import {
   createDesktopWorkspaceConversationCatalogClientProviderV2,
 } from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
 import {
+  createDesktopWorkspaceMessageCatalogClientProviderV2,
+} from './features/workspace/desktopWorkspaceMessageCatalogClientProviderV2';
+import {
   createDesktopWorkspaceRosterClientProviderV2,
 } from './features/workspace/desktopWorkspaceRosterClientProviderV2';
 import {
@@ -830,6 +833,10 @@ export function App() {
     () => createDesktopWorkspaceConversationCatalogClientProviderV2(),
     [],
   );
+  const desktopWorkspaceMessageCatalogClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceMessageCatalogClientProviderV2(),
+    [],
+  );
   const desktopWorkspaceRosterClientProviderV2 = useMemo(
     () => createDesktopWorkspaceRosterClientProviderV2(),
     [],
@@ -1103,6 +1110,10 @@ export function App() {
   const desktopWorkspaceConversationCatalogClientV2 = useMemo(
     () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
     [config, desktopWorkspaceConversationCatalogClientProviderV2],
+  );
+  const desktopWorkspaceMessageCatalogClientV2 = useMemo(
+    () => desktopWorkspaceMessageCatalogClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceMessageCatalogClientProviderV2],
   );
   const desktopWorkspaceRosterClientV2 = useMemo(
     () => desktopWorkspaceRosterClientProviderV2.publish({ config }),
@@ -2761,6 +2772,8 @@ export function App() {
           workspaceId,
         };
         const scopedClient = new DesktopApiClient(resolvedConfig);
+        const workspaceMessageCatalogClient =
+          desktopWorkspaceMessageCatalogClientV2.bindOperation(resolvedConfig);
         const workspaceRosterClient =
           desktopWorkspaceRosterClientV2.bindOperation(resolvedConfig);
         const workspaceAutonomyAttentionClient =
@@ -2850,7 +2863,7 @@ export function App() {
           conversationResults,
           localConversationStatusSummary,
         ] = await Promise.all([
-          workspaceId ? scopedClient.listMessages() : Promise.resolve([]),
+          workspaceId ? workspaceMessageCatalogClient.listMessages() : Promise.resolve([]),
           workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
           workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
           workspaceId
@@ -3081,6 +3094,7 @@ export function App() {
       desktopWorkspaceAutonomyAttentionClientV2,
       desktopWorkspaceCatalogClientV2,
       desktopWorkspaceConversationCatalogClientV2,
+      desktopWorkspaceMessageCatalogClientV2,
       desktopWorkspaceRosterClientV2,
       listMyWorkForConfig,
       syncLocalRuntimeConfig,
