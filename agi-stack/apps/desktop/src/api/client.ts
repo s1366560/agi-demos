@@ -1702,10 +1702,15 @@ export class DesktopApiClient {
     return this.runControl(runId, 'pause', expectedRevision);
   }
 
-  async getRunChanges(runId: string, expectedRevision: number): Promise<ChangeSnapshot> {
+  async getRunChanges(
+    runId: string,
+    expectedRevision: number,
+    signal?: AbortSignal,
+  ): Promise<ChangeSnapshot> {
     const params = new URLSearchParams({ expected_revision: String(expectedRevision) });
     return this.request<ChangeSnapshot>(
       `/api/v1/agent/runs/${encodeURIComponent(runId)}/changes?${params.toString()}`,
+      { signal },
     );
   }
 

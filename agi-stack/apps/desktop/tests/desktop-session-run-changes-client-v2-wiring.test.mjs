@@ -8,23 +8,23 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source(
-  'src/features/session/desktopSessionRunChangesClientProviderV2.ts',
-);
+const retiredProvider = source('src/features/session/desktopSessionRunChangesClientProviderV2.ts');
+const authorityModule = source('src/plugins/desktopSessionRunChangesAuthorityModuleV2.ts');
+const generationHook = source('src/plugins/useDesktopPluginGenerationV2.ts');
 
-test('App publishes one stable V2 session run-changes Provider', () => {
-  assert.match(app, /createDesktopSessionRunChangesClientProviderV2/u);
+test('App creates one generation-backed session run-changes operation port', () => {
+  assert.match(app, /createDesktopSessionRunChangesOperationsV2/u);
   assert.match(
     app,
-    /const desktopSessionRunChangesClientProviderV2 = useMemo\([\s\S]*?createDesktopSessionRunChangesClientProviderV2\(\)[\s\S]*?\[\],[\s\S]*?\);/u,
+    /const desktopSessionRunChangesOperationsV2 = useMemo\([\s\S]*?createDesktopSessionRunChangesOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u,
   );
-  assert.match(
-    app,
-    /desktopSessionRunChangesClientProviderV2\.publish\(\{ config \}\)/u,
-  );
+  assert.doesNotMatch(app, /createDesktopSessionRunChangesClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopSessionRunChangesClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopSessionRunChangesClientV2/u);
+  assert.equal(retiredProvider, '');
 });
 
-test('Local run changes use a submitted-scope V2 client without changing Cloud authority', () => {
+test('Local run changes use a session-scoped generation service without changing Cloud authority', () => {
   const callback = callbackSource(app, 'loadRunChanges');
 
   assert.match(callback, /const requestConfig = configRef\.current/u);
@@ -35,7 +35,7 @@ test('Local run changes use a submitted-scope V2 client without changing Cloud a
   assert.match(callback, /changeScope === 'turn' \? \{ turn_id:/u);
   assert.match(
     callback,
-    /changeScope === 'run'[\s\S]*?desktopSessionRunChangesClientV2[\s\S]*?\.bindOperation\(requestConfig\)[\s\S]*?\.getRunChanges\(currentArtifactRun\.id, currentArtifactRun\.revision\)/u,
+    /changeScope === 'run' && scopedConversation[\s\S]*?desktopSessionRunChangesOperationsV2\.getRunChanges\(\{[\s\S]*?config: requestConfig,[\s\S]*?conversation: scopedConversation,[\s\S]*?runId: currentArtifactRun\.id,[\s\S]*?expectedRevision: currentArtifactRun\.revision,[\s\S]*?signal,[\s\S]*?\}\)/u,
   );
   assert.match(callback, /local_run_changes_scope_unavailable/u);
   assert.match(callback, /cloud_run_changes_authority_scope_unavailable/u);
@@ -43,18 +43,28 @@ test('Local run changes use a submitted-scope V2 client without changing Cloud a
   assert.match(callback, /reference\.environment_id === snapshot\.environment_id/u);
   assert.match(callback, /formatConnectionError\(caught, requestConfig\.apiBaseUrl\)/u);
   assert.match(callback, /setChangeSnapshotLoading\(false\)/u);
-  assert.match(callback, /desktopSessionRunChangesClientV2,/u);
+  assert.match(callback, /desktopSessionRunChangesOperationsV2,/u);
+  assert.match(callback, /scopedConversation,/u);
   assert.doesNotMatch(callback, /api\.getRunChanges/u);
-  assert.doesNotMatch(callback, /\[\s*activityAuthorityAdapter,[\s\S]*?\n\s*api,/u);
+  assert.doesNotMatch(callback, /\.bindOperation\(/u);
 });
 
-test('session run-changes Provider owns exactly one read method', () => {
-  assert.match(provider, /type DesktopSessionRunChangesMethod = 'getRunChanges'/u);
-  assert.match(provider, /getRunChanges:/u);
-  assert.match(provider, /bindOperation/u);
+test('run-changes authority is registered as an exact one-method generation service', () => {
+  assert.match(generationHook, /desktopSessionRunChangesAuthorityDefinitionV2/u);
+  assert.match(authorityModule, /service:desktop-renderer\.session-run-changes-authority/u);
+  assert.match(authorityModule, /getRunChanges/u);
+  assert.match(authorityModule, /acquireServiceOperationLease/u);
   assert.doesNotMatch(
-    provider,
+    authorityModule,
     /pauseRun:|resumeRun:|forkRecoveryRun:|cancelRun:|reviewRun:|listRunInputs:/u,
+  );
+  assert.doesNotMatch(authorityModule, /DesktopSessionRunChangesClientProvider/u);
+});
+
+test('automatic run-changes refresh aborts the operation boundary on cleanup', () => {
+  assert.match(
+    app,
+    /useEffect\(\(\) => \{[\s\S]*?const controller = new AbortController\(\);[\s\S]*?void loadRunChanges\(controller\.signal\);[\s\S]*?return \(\) => controller\.abort\(\);[\s\S]*?\}, \[loadRunChanges\]\);/u,
   );
 });
 

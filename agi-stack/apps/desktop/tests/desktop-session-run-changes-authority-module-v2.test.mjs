@@ -13,18 +13,15 @@ const {
   RuntimeV2Error,
 } = require('@agistack/plugin-runtime');
 const {
-  DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2,
-  DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
-  DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2,
-  DesktopSessionProjectionAuthorityUnavailableErrorV2,
-  applyDesktopSessionProjectionAuthorityV2,
-  createDesktopSessionProjectionOperationsV2,
-  desktopSessionProjectionAuthorityDefinitionV2,
-  withDesktopSessionProjectionAuthorityOperationV2,
-} = require(COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js');
-const { desktopSessionRunChangesAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js',
-);
+  DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_MODULE_REF_V2,
+  DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_SERVICE_V2,
+  DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_VERSION_V2,
+  DesktopSessionRunChangesAuthorityUnavailableErrorV2,
+  applyDesktopSessionRunChangesAuthorityV2,
+  createDesktopSessionRunChangesOperationsV2,
+  desktopSessionRunChangesAuthorityDefinitionV2,
+  withDesktopSessionRunChangesAuthorityOperationV2,
+} = require(COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js');
 const { DesktopApiError } = require(COMPILED_ROOT + '/src/api/client.js');
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
@@ -36,6 +33,9 @@ const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js');
+const { desktopSessionProjectionAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js',
+);
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js',
 );
@@ -83,9 +83,9 @@ function rendererDefinitions() {
 function runtimeConfig(overrides = {}) {
   return {
     ...DEFAULT_CONFIG,
-    apiBaseUrl: 'http://127.0.0.1:46421',
-    apiKey: 'projection-session',
-    localApiToken: 'projection-launch',
+    apiBaseUrl: 'http://127.0.0.1:46431',
+    apiKey: 'run-changes-session',
+    localApiToken: 'run-changes-launch',
     mode: 'local',
     tenantId: 'tenant-1',
     projectId: 'project-1',
@@ -111,11 +111,14 @@ function conversation(overrides = {}) {
   };
 }
 
-function projection(overrides = {}) {
+function changeSnapshot(overrides = {}) {
   return {
-    schema_version: 2,
-    projection_kind: 'workspace_session',
-    snapshot_revision: 'projection-revision-1',
+    id: 'snapshot-1',
+    run_id: 'run / one',
+    run_revision: 7,
+    environment_id: 'environment-1',
+    files: [],
+    created_at: '2026-09-01T00:00:00Z',
     ...overrides,
   };
 }
@@ -149,18 +152,20 @@ function acceptedActions(service, digest, lifecycle = []) {
   };
 }
 
-test('generated contract exposes one credential-free root session projection Provider', () => {
+test('generated contract exposes one credential-free root run-changes Provider', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) =>
+      moduleRef === DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) =>
+      moduleRef === DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-projection-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-run-changes-authority',
   );
 
   assert.ok(module);
@@ -170,8 +175,8 @@ test('generated contract exposes one credential-free root session projection Pro
   assert.deepEqual(module.contract.services, {
     provides: [
       {
-        service: DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
-        version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2,
+        service: DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_SERVICE_V2,
+        version: DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_VERSION_V2,
       },
     ],
     requires: [],
@@ -183,34 +188,34 @@ test('generated contract exposes one credential-free root session projection Pro
   assert.equal(module.contract_digest, catalog.contract_digest);
   assert.equal(
     module.contract_digest,
-    desktopSessionProjectionAuthorityDefinitionV2.contractDigest,
+    desktopSessionRunChangesAuthorityDefinitionV2.contractDigest,
   );
-  assert.equal(catalog.entrypoint, 'applyDesktopSessionProjectionAuthorityV2');
+  assert.equal(catalog.entrypoint, 'applyDesktopSessionRunChangesAuthorityV2');
   assert.equal(
     catalog.artifact_source,
     'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
-      'desktopSessionProjectionAuthorityModuleV2.ts',
+      'desktopSessionRunChangesAuthorityModuleV2.ts',
   );
-  assert.equal(entry.module_ref, DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2);
+  assert.equal(entry.module_ref, DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
   assert.deepEqual(entry.scope, { kind: 'root' });
   assert.deepEqual(entry.config, { strategy: 'desktop-api-client' });
   assert.deepEqual(entry.inject, {});
   assert.equal(entry.enabled, true);
-  assert.match(profile, /entry_id: builtin-desktop-session-projection-authority/u);
+  assert.match(profile, /entry_id: builtin-desktop-session-run-changes-authority/u);
   for (const value of [module, catalog, entry]) {
     assert.doesNotMatch(JSON.stringify(value), /apiKey|localApiToken|Authorization/iu);
   }
 });
 
-test('Loader activates the exact service and disable removes it without fallback', async () => {
+test('Loader activates the exact service and failed candidate preserves last-good', async () => {
   const bootstrap = loadBootstrap();
   const loader = new LoaderV2(rendererDefinitions(), 'desktop-renderer');
   const generation = await loader.stage(bootstrap);
   const service = generation.resolve(
-    DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
+    DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_SERVICE_V2,
     { kind: 'root' },
-    { version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2 },
+    { version: DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
@@ -219,7 +224,7 @@ test('Loader activates the exact service and disable removes it without fallback
   assert.equal('client' in service, false);
   assert.throws(
     () =>
-      applyDesktopSessionProjectionAuthorityV2(
+      applyDesktopSessionRunChangesAuthorityV2(
         {
           provide: () => assert.fail('invalid config must not provide a service'),
         },
@@ -227,25 +232,25 @@ test('Loader activates the exact service and disable removes it without fallback
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_session_projection_authority_config_invalid',
+      error.code === 'desktop_session_run_changes_authority_config_invalid',
   );
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-projection-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-run-changes-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>
       disabledGeneration.resolve(
-        DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
+        DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_SERVICE_V2,
         {
           kind: 'session',
           tenant_id: 'tenant-1',
           project_id: 'project-1',
           session_id: 'conversation-1',
         },
-        { version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2 },
+        { version: DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_VERSION_V2 },
       ),
     (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
@@ -254,7 +259,7 @@ test('Loader activates the exact service and disable removes it without fallback
   await manager.publish(generation);
   const wrongDefinitionLoader = new LoaderV2(
     rendererDefinitions().map((definition) =>
-      definition.moduleRef === DESKTOP_SESSION_PROJECTION_AUTHORITY_MODULE_REF_V2
+      definition.moduleRef === DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_MODULE_REF_V2
         ? { ...definition, contractDigest: 'sha256:' + '0'.repeat(64) }
         : definition,
     ),
@@ -269,12 +274,12 @@ test('Loader activates the exact service and disable removes it without fallback
   await manager.close();
 });
 
-test('local transport preserves exact scope, credentials, signal and unknown response', async () => {
+test('local transport preserves exact request, credentials and AbortSignal', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), init });
-    return json(projection({ transport_extension: { retained: true } }));
+    return json(changeSnapshot({ transport_extension: { retained: true } }));
   };
 
   try {
@@ -282,122 +287,75 @@ test('local transport preserves exact scope, credentials, signal and unknown res
       loadBootstrap(),
     );
     const service = generation.resolve(
-      DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
+      DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_SERVICE_V2,
       { kind: 'root' },
-      { version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2 },
+      { version: DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_VERSION_V2 },
     );
     const controller = new AbortController();
     const payload = await service
       .bindOperation(runtimeConfig())
-      .getConversationSession(conversation(), controller.signal);
+      .getRunChanges(conversation(), 'run / one', 7, controller.signal);
 
-    assert.deepEqual(payload, projection({ transport_extension: { retained: true } }));
+    assert.deepEqual(payload, changeSnapshot({ transport_extension: { retained: true } }));
     assert.equal(calls.length, 1);
     const call = calls[0];
     const url = new URL(call.input);
     const headers = new Headers(call.init.headers);
-    assert.equal(url.pathname, '/api/v1/agent/conversations/conversation-1/session');
-    assert.equal(url.searchParams.get('tenant_id'), 'tenant-1');
-    assert.equal(url.searchParams.get('project_id'), 'project-1');
-    assert.equal(url.searchParams.get('workspace_id'), 'workspace-1');
+    assert.equal(url.pathname, '/api/v1/agent/runs/run%20%2F%20one/changes');
+    assert.equal(url.searchParams.get('expected_revision'), '7');
+    assert.equal(call.init.method, 'GET');
     assert.equal(call.init.signal, controller.signal);
-    assert.equal(headers.get('Authorization'), 'Bearer projection-session');
-    assert.equal(headers.get('X-Agistack-Launch'), 'projection-launch');
+    assert.equal(headers.get('Authorization'), 'Bearer run-changes-session');
+    assert.equal(headers.get('X-Agistack-Launch'), 'run-changes-launch');
     await generation.dispose();
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test('vault-bound cloud transport stays behind DesktopApiClient and forwards AbortSignal', async () => {
-  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  const controller = new AbortController();
-  const calls = [];
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: {
-      __MEMSTACK_DESKTOP__: {
-        core: {
-          async invoke(command, args) {
-            calls.push({ command, args });
-            return {
-              status: 200,
-              body: projection({ transport: 'vault-bound-cloud' }),
-            };
-          },
-        },
-      },
-    },
-  });
-
-  try {
-    let service;
-    applyDesktopSessionProjectionAuthorityV2(
-      {
-        provide: (_key, provided) => {
-          service = provided;
-        },
-      },
-      { strategy: 'desktop-api-client' },
-    );
-    const payload = await service
-      .bindOperation(runtimeConfig({ apiKey: '', localApiToken: '', mode: 'cloud' }))
-      .getConversationSession(conversation(), controller.signal);
-
-    assert.deepEqual(payload, projection({ transport: 'vault-bound-cloud' }));
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].command, 'cloud_request');
-    assert.equal(calls[0].args.request.method, 'GET');
-    const url = new URL(calls[0].args.request.path, 'https://desktop.invalid');
-    assert.equal(url.pathname, '/api/v1/agent/conversations/conversation-1/session');
-    assert.equal(url.searchParams.get('tenant_id'), 'tenant-1');
-    assert.equal(url.searchParams.get('project_id'), 'project-1');
-    assert.equal(url.searchParams.get('workspace_id'), 'workspace-1');
-  } finally {
-    if (originalWindow === undefined) delete globalThis.window;
-    else Object.defineProperty(globalThis, 'window', originalWindow);
-  }
-});
-
-test('operation freezes config and identity before the exact session lease', async () => {
+test('operation freezes config, scope and request before the exact session lease', async () => {
   const lifecycle = [];
   const received = [];
   const service = Object.freeze({
     bindOperation(config) {
       received.push({ config });
       return Object.freeze({
-        async getConversationSession(identity, signal) {
-          received.push({ identity, signal });
-          return projection();
+        async getRunChanges(identity, runId, expectedRevision, signal) {
+          received.push({ identity, runId, expectedRevision, signal });
+          return changeSnapshot();
         },
       });
     },
   });
-  const operations = createDesktopSessionProjectionOperationsV2(() =>
+  const operations = createDesktopSessionRunChangesOperationsV2(() =>
     acceptedActions(service, 'sha256:generation-1', lifecycle),
   );
   const config = runtimeConfig();
   const currentConversation = conversation();
   const controller = new AbortController();
-  const pending = operations.getConversationSession({
+  const pending = operations.getRunChanges({
     config,
     conversation: currentConversation,
+    runId: 'run / one',
+    expectedRevision: 7,
     signal: controller.signal,
   });
   config.apiBaseUrl = 'http://127.0.0.1:49999';
   currentConversation.id = 'mutated-conversation';
 
-  assert.deepEqual(await pending, projection());
+  assert.deepEqual(await pending, changeSnapshot());
   assert.equal(Object.isFrozen(operations), true);
   assert.equal(Object.isFrozen(received[0].config), true);
-  assert.equal(received[0].config.apiBaseUrl, 'http://127.0.0.1:46421');
+  assert.equal(received[0].config.apiBaseUrl, 'http://127.0.0.1:46431');
   assert.equal(Object.isFrozen(received[1].identity), true);
   assert.equal(received[1].identity.id, 'conversation-1');
   assert.equal(received[1].identity.workspace_id, 'workspace-1');
+  assert.equal(received[1].runId, 'run / one');
+  assert.equal(received[1].expectedRevision, 7);
   assert.equal(received[1].signal, controller.signal);
   assert.deepEqual(lifecycle[0].request, {
-    service: DESKTOP_SESSION_PROJECTION_AUTHORITY_SERVICE_V2,
-    version: DESKTOP_SESSION_PROJECTION_AUTHORITY_VERSION_V2,
+    service: DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_SERVICE_V2,
+    version: DESKTOP_SESSION_RUN_CHANGES_AUTHORITY_VERSION_V2,
     scope: {
       kind: 'session',
       tenant_id: 'tenant-1',
@@ -413,7 +371,7 @@ test('operation freezes config and identity before the exact session lease', asy
 
 test('invalid input and scope mismatch fail before acquiring a lease', () => {
   let acquireCount = 0;
-  const operations = createDesktopSessionProjectionOperationsV2(() => ({
+  const operations = createDesktopSessionRunChangesOperationsV2(() => ({
     acquireServiceOperationLease: async () => {
       acquireCount += 1;
       return {
@@ -423,9 +381,11 @@ test('invalid input and scope mismatch fail before acquiring a lease', () => {
     },
   }));
   const invoke = (overrides = {}) =>
-    operations.getConversationSession({
+    operations.getRunChanges({
       config: runtimeConfig(overrides.config),
       conversation: conversation(overrides.conversation),
+      runId: overrides.runId ?? 'run-1',
+      expectedRevision: overrides.expectedRevision ?? 7,
       signal: overrides.signal ?? new AbortController().signal,
     });
 
@@ -439,20 +399,23 @@ test('invalid input and scope mismatch fail before acquiring a lease', () => {
       () => invoke(overrides),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === 'desktop_session_projection_scope_mismatch',
+        error.code === 'desktop_session_run_changes_scope_mismatch',
     );
   }
   for (const overrides of [
     { conversation: { id: '' } },
     { conversation: { tenant_id: ' tenant-1' } },
     { conversation: { workspace_id: '' } },
+    { runId: '' },
+    { expectedRevision: -1 },
+    { expectedRevision: 1.5 },
     { signal: {} },
   ]) {
     assert.throws(
       () => invoke(overrides),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === 'desktop_session_projection_input_invalid',
+        error.code === 'desktop_session_run_changes_input_invalid',
     );
   }
   assert.equal(acquireCount, 0);
@@ -460,14 +423,12 @@ test('invalid input and scope mismatch fail before acquiring a lease', () => {
 
 test('non-2xx transport preserves the original DesktopApiError', async () => {
   const originalFetch = globalThis.fetch;
-  const response = {
-    detail: { reason_code: 'session_projection_unavailable' },
-  };
+  const response = { detail: { reason_code: 'run_changes_unavailable' } };
   globalThis.fetch = async () => json(response, 503);
 
   try {
     let service;
-    applyDesktopSessionProjectionAuthorityV2(
+    applyDesktopSessionRunChangesAuthorityV2(
       {
         provide: (_key, provided) => {
           service = provided;
@@ -478,7 +439,7 @@ test('non-2xx transport preserves the original DesktopApiError', async () => {
     await assert.rejects(
       service
         .bindOperation(runtimeConfig())
-        .getConversationSession(conversation(), new AbortController().signal),
+        .getRunChanges(conversation(), 'run-1', 7, new AbortController().signal),
       (error) => {
         assert.equal(error instanceof DesktopApiError, true);
         assert.equal(error.status, 503);
@@ -493,16 +454,18 @@ test('non-2xx transport preserves the original DesktopApiError', async () => {
 
 test('missing service is structured and escaped authority is revoked before release', async () => {
   let currentActions = null;
-  const operations = createDesktopSessionProjectionOperationsV2(() => currentActions);
+  const operations = createDesktopSessionRunChangesOperationsV2(() => currentActions);
   const input = {
     config: runtimeConfig(),
     conversation: conversation(),
+    runId: 'run-1',
+    expectedRevision: 7,
     signal: new AbortController().signal,
   };
   assert.throws(
-    () => operations.getConversationSession(input),
+    () => operations.getRunChanges(input),
     (error) =>
-      error instanceof DesktopSessionProjectionAuthorityUnavailableErrorV2 &&
+      error instanceof DesktopSessionRunChangesAuthorityUnavailableErrorV2 &&
       error.reasonCode === 'desktop_renderer_generation_actions_unavailable',
   );
 
@@ -514,9 +477,9 @@ test('missing service is structured and escaped authority is revoked before rele
     }),
   };
   await assert.rejects(
-    operations.getConversationSession(input),
+    operations.getRunChanges(input),
     (error) =>
-      error instanceof DesktopSessionProjectionAuthorityUnavailableErrorV2 &&
+      error instanceof DesktopSessionRunChangesAuthorityUnavailableErrorV2 &&
       error.reasonCode === 'desktop_renderer_service_resolve_failed' &&
       error.runtimeCode === 'missing_service',
   );
@@ -531,7 +494,7 @@ test('missing service is structured and escaped authority is revoked before rele
   });
   let escapedAuthority = null;
   let transportCalls = 0;
-  const releasing = withDesktopSessionProjectionAuthorityOperationV2(
+  const releasing = withDesktopSessionRunChangesAuthorityOperationV2(
     {
       acquireServiceOperationLease: async () => ({
         status: 'accepted',
@@ -540,9 +503,9 @@ test('missing service is structured and escaped authority is revoked before rele
           return operation({
             bindOperation() {
               return Object.freeze({
-                async getConversationSession() {
+                async getRunChanges() {
                   transportCalls += 1;
-                  return projection();
+                  return changeSnapshot();
                 },
               });
             },
@@ -557,15 +520,15 @@ test('missing service is structured and escaped authority is revoked before rele
     input,
     (authority) => {
       escapedAuthority = authority;
-      return projection();
+      return changeSnapshot();
     },
   );
   await releaseStarted;
   assert.throws(
-    () => escapedAuthority.getConversationSession(conversation(), input.signal),
+    () => escapedAuthority.getRunChanges(conversation(), 'run-1', 7, input.signal),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_session_projection_operation_released',
+      error.code === 'desktop_session_run_changes_operation_released',
   );
   assert.equal(transportCalls, 0);
   finishRelease();
@@ -578,7 +541,7 @@ test('Abort releases once and primary failures outrank release failures', async 
   const abortService = Object.freeze({
     bindOperation() {
       return Object.freeze({
-        getConversationSession(_identity, signal) {
+        getRunChanges(_identity, _runId, _expectedRevision, signal) {
           return new Promise((_resolve, reject) => {
             signal.addEventListener('abort', () => reject(signal.reason), {
               once: true,
@@ -588,7 +551,7 @@ test('Abort releases once and primary failures outrank release failures', async 
       });
     },
   });
-  const abortOperations = createDesktopSessionProjectionOperationsV2(() => ({
+  const abortOperations = createDesktopSessionRunChangesOperationsV2(() => ({
     acquireServiceOperationLease: async () => ({
       status: 'accepted',
       digest: 'sha256:abort',
@@ -598,9 +561,11 @@ test('Abort releases once and primary failures outrank release failures', async 
       },
     }),
   }));
-  const aborted = abortOperations.getConversationSession({
+  const aborted = abortOperations.getRunChanges({
     config: runtimeConfig(),
     conversation: conversation(),
+    runId: 'run-1',
+    expectedRevision: 7,
     signal: controller.signal,
   });
   await Promise.resolve();
@@ -608,7 +573,7 @@ test('Abort releases once and primary failures outrank release failures', async 
   await assert.rejects(aborted, (error) => error?.name === 'AbortError');
   assert.equal(releaseCount, 1);
 
-  const primary = new Error('projection_primary_failure');
+  const primary = new Error('run_changes_primary_failure');
   let failureReleaseCount = 0;
   const releaseFailureActions = {
     acquireServiceOperationLease: async () => ({
@@ -618,8 +583,8 @@ test('Abort releases once and primary failures outrank release failures', async 
         return operation({
           bindOperation() {
             return Object.freeze({
-              async getConversationSession() {
-                return projection();
+              async getRunChanges() {
+                return changeSnapshot();
               },
             });
           },
@@ -627,26 +592,28 @@ test('Abort releases once and primary failures outrank release failures', async 
       },
       async release() {
         failureReleaseCount += 1;
-        throw new Error('projection_release_failure');
+        throw new Error('run_changes_release_failure');
       },
     }),
   };
   const input = {
     config: runtimeConfig(),
     conversation: conversation(),
+    runId: 'run-1',
+    expectedRevision: 7,
     signal: new AbortController().signal,
   };
   await assert.rejects(
-    withDesktopSessionProjectionAuthorityOperationV2(releaseFailureActions, input, () => {
+    withDesktopSessionRunChangesAuthorityOperationV2(releaseFailureActions, input, () => {
       throw primary;
     }),
     (error) => error === primary,
   );
   await assert.rejects(
-    withDesktopSessionProjectionAuthorityOperationV2(releaseFailureActions, input, () =>
-      projection(),
+    withDesktopSessionRunChangesAuthorityOperationV2(releaseFailureActions, input, () =>
+      changeSnapshot(),
     ),
-    /projection_release_failure/u,
+    /run_changes_release_failure/u,
   );
   assert.equal(failureReleaseCount, 2);
 });
@@ -661,25 +628,27 @@ test('HMR pins an in-flight read to old generation and sends the next to new', a
     Object.freeze({
       bindOperation() {
         return Object.freeze({
-          async getConversationSession() {
+          async getRunChanges() {
             lifecycle.push('read:' + label);
             if (label === 'old') await oldPending;
-            return projection({ source: label });
+            return changeSnapshot({ source: label });
           },
         });
       },
     });
   let currentActions = acceptedActions(serviceFor('old'), 'sha256:old', lifecycle);
-  const operations = createDesktopSessionProjectionOperationsV2(() => currentActions);
+  const operations = createDesktopSessionRunChangesOperationsV2(() => currentActions);
   const input = {
     config: runtimeConfig(),
     conversation: conversation(),
+    runId: 'run-1',
+    expectedRevision: 7,
     signal: new AbortController().signal,
   };
-  const oldRead = operations.getConversationSession(input);
+  const oldRead = operations.getRunChanges(input);
   await Promise.resolve();
   currentActions = acceptedActions(serviceFor('next'), 'sha256:next', lifecycle);
-  const nextRead = await operations.getConversationSession(input);
+  const nextRead = await operations.getRunChanges(input);
   resolveOld();
   const oldReadResult = await oldRead;
 

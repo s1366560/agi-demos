@@ -81,6 +81,7 @@ import {
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
 import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
+import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import {
@@ -165,9 +166,6 @@ import {
 import {
   createDesktopSessionRunControlClientProviderV2,
 } from './features/session/desktopSessionRunControlClientProviderV2';
-import {
-  createDesktopSessionRunChangesClientProviderV2,
-} from './features/session/desktopSessionRunChangesClientProviderV2';
 import {
   createDesktopSessionRunInputClientProviderV2,
 } from './features/session/desktopSessionRunInputClientProviderV2';
@@ -835,6 +833,13 @@ export function App() {
       ),
     [],
   );
+  const desktopSessionRunChangesOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionRunChangesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopAgentAuthorityProviderV2 = useMemo(
     () => createDesktopAgentAuthorityProviderV2(),
     [],
@@ -913,10 +918,6 @@ export function App() {
   );
   const desktopSessionRunControlClientProviderV2 = useMemo(
     () => createDesktopSessionRunControlClientProviderV2(),
-    [],
-  );
-  const desktopSessionRunChangesClientProviderV2 = useMemo(
-    () => createDesktopSessionRunChangesClientProviderV2(),
     [],
   );
   const desktopSessionRunInputClientProviderV2 = useMemo(
@@ -1101,10 +1102,6 @@ export function App() {
   const desktopSessionRunControlClientV2 = useMemo(
     () => desktopSessionRunControlClientProviderV2.publish({ config }),
     [config, desktopSessionRunControlClientProviderV2],
-  );
-  const desktopSessionRunChangesClientV2 = useMemo(
-    () => desktopSessionRunChangesClientProviderV2.publish({ config }),
-    [config, desktopSessionRunChangesClientProviderV2],
   );
   const desktopSessionRunInputClientV2 = useMemo(
     () => desktopSessionRunInputClientProviderV2.publish({ config }),
@@ -4482,7 +4479,7 @@ export function App() {
       actionLabel: t('session.authorityRetry'),
     };
   }, [selectedConversation, sessionProjectionState.status, t]);
-  const loadRunChanges = useCallback(async () => {
+  const loadRunChanges = useCallback(async (signal = new AbortController().signal) => {
     const requestConfig = configRef.current;
     if (!currentArtifactRun) {
       setChangeSnapshot(null);
@@ -4510,10 +4507,14 @@ export function App() {
             : (() => {
                 throw new Error('cloud_run_changes_authority_scope_unavailable');
               })()
-          : changeScope === 'run'
-            ? await desktopSessionRunChangesClientV2
-                .bindOperation(requestConfig)
-                .getRunChanges(currentArtifactRun.id, currentArtifactRun.revision)
+          : changeScope === 'run' && scopedConversation
+            ? await desktopSessionRunChangesOperationsV2.getRunChanges({
+                config: requestConfig,
+                conversation: scopedConversation,
+                runId: currentArtifactRun.id,
+                expectedRevision: currentArtifactRun.revision,
+                signal,
+              })
             : (() => {
                 throw new Error('local_run_changes_scope_unavailable');
               })();
@@ -4535,7 +4536,8 @@ export function App() {
     activityAuthorityScope,
     changeScope,
     currentArtifactRun,
-    desktopSessionRunChangesClientV2,
+    desktopSessionRunChangesOperationsV2,
+    scopedConversation,
   ]);
   const availableChangeScopes = useMemo<readonly RunChangeScope[]>(
     () =>
@@ -4550,7 +4552,9 @@ export function App() {
     if (!availableChangeScopes.includes(changeScope)) setChangeScope('run');
   }, [availableChangeScopes, changeScope]);
   useEffect(() => {
-    void loadRunChanges();
+    const controller = new AbortController();
+    void loadRunChanges(controller.signal);
+    return () => controller.abort();
   }, [loadRunChanges]);
   useEffect(() => {
     let active = true;

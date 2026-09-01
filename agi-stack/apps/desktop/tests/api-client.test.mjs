@@ -2716,7 +2716,8 @@ test('run changes and structured inputs preserve snapshot, revision, and deliver
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
     });
-    await client.getRunChanges('run/1', 7);
+    const runChangesController = new AbortController();
+    await client.getRunChanges('run/1', 7, runChangesController.signal);
     await client.createRunInput('run/1', {
       expectedRunRevision: 7,
       message: 'Keep the API stable',
@@ -2743,6 +2744,7 @@ test('run changes and structured inputs preserve snapshot, revision, and deliver
       String(calls[0].input),
       'http://127.0.0.1:8088/api/v1/agent/runs/run%2F1/changes?expected_revision=7'
     );
+    assert.equal(calls[0].init.signal, runChangesController.signal);
     assert.equal(
       String(calls[1].input),
       'http://127.0.0.1:8088/api/v1/agent/runs/run%2F1/inputs'
