@@ -91,7 +91,6 @@ import type {
   RunControlOutcome,
   RunInputAck,
   DesktopRunInput,
-  RuntimeDataset,
   TenantSummary,
   TerminalServiceResponse,
   WorkspaceMessage,
@@ -104,7 +103,6 @@ import type {
   WorkspaceAutonomyAttention,
   WorkspaceAutonomyAttentionResolveResponse,
   WorkspaceAutonomyAttentionRetryResponse,
-  WorkspaceAuthorityCollection,
   WorkspaceMemberSummary,
   WorkspaceSummary,
   WorkspaceTask,
@@ -2611,61 +2609,6 @@ export class DesktopApiClient {
     );
   }
 
-  async loadRuntime(signal?: AbortSignal): Promise<RuntimeDataset> {
-    const projectId = this.config.projectId.trim();
-    const [
-      workspaces,
-      messages,
-      tasks,
-      plan,
-      workspaceMembers,
-      workspaceAgents,
-      myWorkResult,
-    ] = await Promise.all([
-      this.listWorkspaces(signal),
-      this.config.workspaceId ? this.listMessages(signal) : Promise.resolve([]),
-      this.config.workspaceId ? this.listTasks(signal) : Promise.resolve([]),
-      this.config.workspaceId
-        ? this.getPlanSnapshot(signal).catch(() => null)
-        : Promise.resolve(null),
-      this.config.workspaceId
-        ? loadWorkspaceAuthority(this.listWorkspaceMembers(signal))
-        : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
-      this.config.workspaceId
-        ? loadWorkspaceAuthority(this.listWorkspaceAgents(signal))
-        : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
-      projectId
-        ? this.listMyWork(projectId, signal)
-            .then((response) => ({ items: response.items, error: null }))
-            .catch((error) => ({
-              items: [],
-              error: error instanceof Error ? error.message : String(error),
-            }))
-        : Promise.resolve({ items: [], error: null }),
-    ]);
-    const conversations = await Promise.all(
-      workspaces.map((workspace) =>
-        this.listConversations(projectId, workspace.id, signal)
-          .then((response) => [workspace.id, response.items] as const)
-          .catch(() => [workspace.id, []] as const),
-      ),
-    );
-    return {
-      workspaces,
-      workspacesByProject: projectId ? { [projectId]: workspaces } : {},
-      conversationsByWorkspace: Object.fromEntries(conversations),
-      nodeState: { projects: {}, workspaces: {} },
-      messages,
-      tasks,
-      plan,
-      workspaceMembers,
-      workspaceAgents,
-      sandbox: null,
-      myWork: myWorkResult.items,
-      myWorkError: myWorkResult.error,
-    };
-  }
-
   terminalProxyUrl(sessionId?: string | null, boundProjectId?: string | null): string {
     const projectId = requireValue(boundProjectId ?? this.config.projectId, 'project id');
     const path = `/api/v1/projects/${encodeURIComponent(projectId)}/sandbox/terminal/proxy/ws${
@@ -3827,24 +3770,6 @@ function isOptionalNullableRecord(
   value: unknown,
 ): value is Record<string, unknown> | null | undefined {
   return value === undefined || value === null || isRecord(value);
-}
-
-function unavailableWorkspaceAuthority<T>(): WorkspaceAuthorityCollection<T> {
-  return { status: 'unavailable', items: [], error: null };
-}
-
-async function loadWorkspaceAuthority<T>(
-  request: Promise<T[]>,
-): Promise<WorkspaceAuthorityCollection<T>> {
-  try {
-    return { status: 'ready', items: await request, error: null };
-  } catch (error) {
-    return {
-      status: 'error',
-      items: [],
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
 }
 
 function requireValue(value: string, label: string): string {

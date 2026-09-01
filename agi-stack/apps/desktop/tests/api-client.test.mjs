@@ -2487,6 +2487,12 @@ test('conversation session authority request preserves scoped identity without l
   }
 });
 
+test('desktop API client does not expose the retired cross-domain runtime aggregate', () => {
+  const client = new DesktopApiClient(DEFAULT_CONFIG);
+
+  assert.equal(client.loadRuntime, undefined);
+});
+
 test('plan workflow preflight proves route support without creating server artifacts', async () => {
   const calls = [];
   const originalFetch = globalThis.fetch;
