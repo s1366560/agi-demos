@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:559497192d0e54d5a92896d362b7cbc869490ce9458af01438ec306e7b',
-  'db15d6","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:78d6316abdfe8bfdda9354bb22fe5ee71a95749c876b35d24f7456c929',
+  '4c4f94","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1750,6 +1750,17 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'st":"sha256:eecbc11fe07bb5cf90fe46909601ba112a22db2ad444339f93717d3f37703aa2","entry',
   'point":"applyDesktopRendererHostV2","module_ref":"builtin://memstack/desktop/rendere',
   'r-host","plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.0.0","targe',
+  'ts":["desktop-renderer"]},{"artifact_digest":"sha256:e5c269c879ca84ae3182c906c499b80',
+  'fd97b374eb9d795d9b789422d9ff4db71","artifact_source":"repo+typescript://agi-stack/ap',
+  'ps/desktop/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.ts","contract":{"co',
+  'nfig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPr',
+  'operties":false,"properties":{"strategy":{"const":"desktop-terminal-v2","type":"stri',
+  'ng"}},"required":["strategy"],"type":"object"},"events":{"emits":[],"handles":[]},"s',
+  'ervices":{"provides":[{"service":"service:desktop-renderer.terminal-lifecycle-author',
+  'ity","version":"1.0.0"}],"requires":[]}},"contract_digest":"sha256:bebf6a96ce68e5386',
+  '93a9b04548fa9fc5b6236eaa4f01774d40db5b3fc3510c6","entrypoint":"applyDesktopTerminalL',
+  'ifecycleAuthorityV2","module_ref":"builtin://memstack/desktop/terminal-lifecycle-aut',
+  'hority","plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.0.0","targe',
   'ts":["desktop-renderer"]},{"artifact_digest":"sha256:15853d8f67f8de6fc24ded3aab0758a',
   '955e9bf11c60f1ad53f44146f6f804baf","artifact_source":"repo+typescript://agi-stack/ap',
   'ps/desktop/src/plugins/desktopWorkspaceContextAuthorityModuleV2.ts","contract":{"con',
@@ -3716,4 +3727,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:559497192d0e54d5a92896d362b7cbc869490ce9458af01438ec306e7bdb15d6' as const;
+  'sha256:78d6316abdfe8bfdda9354bb22fe5ee71a95749c876b35d24f7456c9294c4f94' as const;

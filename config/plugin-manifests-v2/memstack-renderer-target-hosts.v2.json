@@ -156,6 +156,37 @@
         }
       },
       "contract_digest": "sha256:be5b632ae6024037f5501a1d5a1942392e3b48183b68ded72561083db54cbd59"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/terminal-lifecycle-authority",
+      "entrypoint": "applyDesktopTerminalLifecycleAuthorityV2",
+      "artifact": {
+        "digest": "sha256:e5c269c879ca84ae3182c906c499b80fd97b374eb9d795d9b789422d9ff4db71",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.terminal-lifecycle-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-terminal-v2", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:bebf6a96ce68e538693a9b04548fa9fc5b6236eaa4f01774d40db5b3fc3510c6"
     }
   ],
   "permissions": [],

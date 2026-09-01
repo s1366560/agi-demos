@@ -8,11 +8,12 @@ const { appendTerminalLinesBounded, openTerminalSocket, terminalFrame } = requir
   '/tmp/agistack-desktop-test-dist/src/hooks/useTerminalProxy.js'
 );
 
-test('Electron Cloud terminal path is delegated to the vault-bound socket bridge', () => {
+test('terminal transport is delegated to the generation-pinned lifecycle authority', () => {
   const source = readFileSync(new URL('../src/hooks/useTerminalProxy.ts', import.meta.url), 'utf8');
-  assert.match(source, /desktopCloudSocketTransport/u);
-  assert.match(source, /createCloudSocketBridge/u);
-  assert.match(source, /kind:\s*'terminal'/u);
+  assert.match(source, /DesktopTerminalLifecycleAuthorityV2/u);
+  assert.match(source, /lifecycle\.openSocket/u);
+  assert.match(source, /lifecycle\.release/u);
+  assert.doesNotMatch(source, /desktopCloudSocketTransport|createCloudSocketBridge/u);
 });
 
 test('terminal WebSocket keeps launch capability and user session in separate subprotocols', () => {

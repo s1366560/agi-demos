@@ -229,6 +229,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-terminal-lifecycle-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/terminal-lifecycle-authority
+      enabled: true
+      config:
+        strategy: desktop-terminal-v2
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-renderer-contribution-registry
       parent_entry_id: builtin-desktop-renderer-host
       plugin_ref: memstack-renderer-contributions

@@ -16,8 +16,6 @@ import {
 } from '@radix-ui/react-icons';
 
 import {
-  desktopApiCredential,
-  desktopLaunchCapability,
   DesktopApiClient,
   DesktopApiError,
 } from './api/client';
@@ -81,6 +79,10 @@ import {
   createDesktopPluginMarketplaceOperationsV2,
 } from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
+import {
+  acquireDesktopTerminalLifecycleAuthorityV2,
+  type DesktopTerminalLifecycleAuthorityV2,
+} from './plugins/desktopTerminalLifecycleAuthorityModuleV2';
 import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
 import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
 import {
@@ -287,10 +289,6 @@ import {
   createSkillsRouteBindingForRuntime,
 } from './features/settings-routes/settingsRouteRuntime';
 import { terminalInteractiveCapability as resolveTerminalInteractiveCapability } from './features/sandbox/sandboxRuntimeClient';
-import {
-  terminalSessionV2SocketUrl,
-  type TerminalSessionV2,
-} from './features/sandbox/terminalSessionV2';
 import { useSandboxRuntimeSurface } from './features/sandbox/useSandboxRuntimeSurface';
 import {
   settingsSectionForEntry,
@@ -675,7 +673,8 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [sandboxBusy, setSandboxBusy] = useState(false);
   const [terminal, setTerminal] = useState<TerminalServiceResponse | null>(null);
-  const [terminalV2, setTerminalV2] = useState<TerminalSessionV2 | null>(null);
+  const [terminalLifecycle, setTerminalLifecycle] =
+    useState<DesktopTerminalLifecycleAuthorityV2 | null>(null);
   const [agentConversationSession, setAgentConversationSession] =
     useState<AgentConversationSession | null>(null);
   const agentConversationSessionRef = useRef(agentConversationSession);
@@ -781,6 +780,7 @@ export function App() {
     requestId: string;
   } | null>(null);
   const terminalStartGenerationRef = useRef(0);
+  const terminalLifecycleRef = useRef<DesktopTerminalLifecycleAuthorityV2 | null>(null);
   const currentArtifactRunRef = useRef<DesktopRun | null>(null);
   const artifactCanvasStateRef = useRef(artifactCanvasState);
   const mcpAppCanvasStateRef = useRef(mcpAppCanvasState);
@@ -2611,6 +2611,8 @@ export function App() {
 
   const resetProjectScopedState = () => {
     runtimeRefreshRequestRef.current += 1;
+    terminalStartGenerationRef.current += 1;
+    terminalLifecycleRef.current = null;
     activeRuntimeConversationRequestsRef.current = new Map();
     workspaceConversationRequestGenerationsRef.current = new Map();
     myWorkAbortRef.current?.abort();
@@ -2643,7 +2645,7 @@ export function App() {
     setReviewTab('overview');
     closeRightCanvasPanel();
     setTerminal(null);
-    setTerminalV2(null);
+    setTerminalLifecycle(null);
     setAgentConversationSession(null);
     setOpenTabs((tabs) => clearConversationTabs(tabs));
     setSessionProjectionState(emptySessionProjectionState);
@@ -4135,70 +4137,61 @@ export function App() {
       if (!sourceRun) {
         throw new Error(t('session.terminalRequiresActiveRun'));
       }
+      if (!sourceRun.environment) {
+        throw new Error(t('session.terminalCanonicalRunAuthorityUnavailable'));
+      }
+      const terminalRunAuthority = {
+        id: sourceRun.id,
+        conversation_id: sourceRun.conversation_id,
+        project_id: sourceRun.project_id,
+        revision: sourceRun.revision,
+        environment: {
+          id: sourceRun.environment.id,
+          workspace_path: sourceRun.environment.workspace_path,
+        },
+      };
       const requestGeneration = terminalStartGenerationRef.current + 1;
       terminalStartGenerationRef.current = requestGeneration;
-      if (config.mode === 'cloud') {
-        const runtimeClient = sandboxRuntime.runtimeClient;
-        if (!runtimeClient) {
-          throw new Error(t('session.terminalCapabilityUnavailable'));
-        }
-        const result = await runtimeClient.createTerminalSession(
-          config.projectId,
-          sourceRun.id,
-          sourceRun.revision,
-        );
-        if (result.status === 'unavailable') {
-          throw new Error(
-            t(
-              result.reason_code === 'terminal_session_v2_canonical_run_authority_unavailable'
-                ? 'session.terminalCanonicalRunAuthorityUnavailable'
-                : 'session.terminalCapabilityUnavailable',
-            ),
-          );
-        }
+      terminalProxy.close();
+      const previousLifecycle = terminalLifecycleRef.current;
+      terminalLifecycleRef.current = null;
+      setTerminalLifecycle(null);
+      setTerminal(null);
+      if (previousLifecycle !== null) await previousLifecycle.release();
+
+      const lifecycle = await acquireDesktopTerminalLifecycleAuthorityV2(
+        desktopPluginMarketplaceGenerationActionsRefV2.current,
+        {
+          config,
+          run: terminalRunAuthority,
+          capabilities: sandboxRuntime.capabilities,
+        },
+      );
+      let retained = false;
+      let primaryError: unknown;
+      try {
+        const started = await lifecycle.start();
         if (terminalStartGenerationRef.current !== requestGeneration) return;
-        const session = result.value;
-        const currentRun = currentArtifactRunRef.current;
-        if (
-          !currentRun ||
-          session.project_id !== currentRun.project_id ||
-          session.conversation_id !== currentRun.conversation_id ||
-          session.run_id !== currentRun.id ||
-          session.run_revision !== currentRun.revision ||
-          session.environment_id !== currentRun.environment?.id ||
-          session.cwd !== currentRun.environment?.workspace_path
-        ) {
+        if (!terminalSessionMatchesRun(started.terminal, currentArtifactRunRef.current)) {
           throw new Error(t('session.terminalAuthorityMismatch'));
         }
-        terminalProxy.clear();
-        setTerminalV2(session);
-        setTerminal({
-          success: true,
-          session_id: session.session_id,
-          run_id: session.run_id,
-          run_revision: session.run_revision,
-          conversation_id: session.conversation_id,
-          project_id: session.project_id,
-          environment_id: session.environment_id,
-          created_at: session.created_at,
-          expires_at: session.expires_at,
-          resumable: true,
-          cwd: session.cwd,
-        });
-        return;
-      }
-      if (config.mode !== 'local') {
-        throw new Error(t('session.terminalCapabilityUnavailable'));
-      }
-      await api.seedProxyAuthCookie();
-      const response = await api.startTerminal(sourceRun.id, sourceRun.revision);
-      if (terminalStartGenerationRef.current !== requestGeneration) return;
-      if (!terminalSessionMatchesRun(response, currentArtifactRunRef.current)) {
-        throw new Error(t('session.terminalAuthorityMismatch'));
+        terminalLifecycleRef.current = lifecycle;
+        setTerminalLifecycle(lifecycle);
+        setTerminal(started.terminal);
+        retained = true;
+      } catch (caught) {
+        primaryError = caught;
+        throw caught;
+      } finally {
+        if (!retained) {
+          try {
+            await lifecycle.release();
+          } catch (releaseError) {
+            if (primaryError === undefined) throw releaseError;
+          }
+        }
       }
       terminalProxy.clear();
-      setTerminalV2(null);
-      setTerminal(response);
     });
   };
 
@@ -4419,68 +4412,12 @@ export function App() {
     if (terminalRunScopeKeyRef.current === currentTerminalRunScopeKey) return;
     terminalRunScopeKeyRef.current = currentTerminalRunScopeKey;
     terminalStartGenerationRef.current += 1;
+    terminalLifecycleRef.current = null;
     setTerminal(null);
-    setTerminalV2(null);
+    setTerminalLifecycle(null);
   }, [currentTerminalRunScopeKey]);
   const terminalMatchesCurrentRun = terminalSessionMatchesRun(terminal, currentArtifactRun);
-  const terminalUrl = useMemo(() => {
-    if (!terminalMatchesCurrentRun || !terminal?.session_id) return null;
-    try {
-      if (config.mode === 'cloud' && terminalV2 && terminalV2.session_id === terminal.session_id) {
-        return terminalSessionV2SocketUrl(config.apiBaseUrl, terminalV2);
-      }
-      return api.terminalProxyUrl(terminal.session_id, terminal.project_id);
-    } catch {
-      return null;
-    }
-  }, [
-    api,
-    config.apiBaseUrl,
-    config.mode,
-    terminal?.project_id,
-    terminal?.session_id,
-    terminalMatchesCurrentRun,
-    terminalV2,
-  ]);
-  const terminalRecovery = useMemo(
-    () =>
-      terminalMatchesCurrentRun && terminalV2
-        ? {
-            session: terminalV2,
-            onRefetchRun: () => invalidateSessionAuthority(),
-          }
-        : undefined,
-    [invalidateSessionAuthority, terminalMatchesCurrentRun, terminalV2],
-  );
-  const terminalCloudSocketAuthority = useMemo(
-    () =>
-      config.mode === 'cloud' && terminalMatchesCurrentRun && terminal
-        ? {
-            tenantId: config.tenantId.trim(),
-            projectId: (terminal.project_id ?? config.projectId).trim(),
-            workspaceId: config.workspaceId.trim() || null,
-            conversationId:
-              terminalV2?.conversation_id.trim() || scopedConversation?.id.trim() || null,
-          }
-        : undefined,
-    [
-      config.mode,
-      config.projectId,
-      config.tenantId,
-      config.workspaceId,
-      scopedConversation?.id,
-      terminal,
-      terminalMatchesCurrentRun,
-      terminalV2?.conversation_id,
-    ],
-  );
-  const terminalProxy = useTerminalProxy(
-    terminalUrl,
-    desktopApiCredential(config),
-    desktopLaunchCapability(config),
-    terminalRecovery,
-    terminalCloudSocketAuthority,
-  );
+  const terminalProxy = useTerminalProxy(terminalLifecycle, invalidateSessionAuthority);
   const terminalBinding = useMemo(
     () => terminalBindingState(terminal, currentArtifactRun, terminalProxy.status),
     [currentArtifactRun, terminal, terminalProxy.status],
