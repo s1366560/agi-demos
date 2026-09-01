@@ -186,6 +186,9 @@ import type {
   ChangeReviewCommentMap,
 } from './features/session/sessionChangesReviewModel';
 import {
+  createDesktopSessionProjectionClientProviderV2,
+} from './features/session/desktopSessionProjectionClientProviderV2';
+import {
   decodeConversationSessionProjection,
   signedSessionSnapshotRevision,
   socketEventInvalidatesSessionProjectionForScope,
@@ -862,6 +865,10 @@ export function App() {
     () => createDesktopConversationConfigClientProviderV2(),
     [],
   );
+  const desktopSessionProjectionClientProviderV2 = useMemo(
+    () => createDesktopSessionProjectionClientProviderV2(),
+    [],
+  );
   const desktopSessionTimelineClientProviderV2 = useMemo(
     () => createDesktopSessionTimelineClientProviderV2(),
     [],
@@ -1047,6 +1054,10 @@ export function App() {
   const desktopConversationConfigClientV2 = useMemo(
     () => desktopConversationConfigClientProviderV2.publish({ config }),
     [config, desktopConversationConfigClientProviderV2],
+  );
+  const desktopSessionProjectionClientV2 = useMemo(
+    () => desktopSessionProjectionClientProviderV2.publish({ config }),
+    [config, desktopSessionProjectionClientProviderV2],
   );
   const desktopSessionTimelineClientV2 = useMemo(
     () => desktopSessionTimelineClientProviderV2.publish({ config }),
@@ -1353,6 +1364,8 @@ export function App() {
       setSessionDisplayProjection(null);
       return;
     }
+    const requestConfig = configRef.current;
+    const client = desktopSessionProjectionClientV2.bindOperation(requestConfig);
     const requestId = sessionProjectionRequestRef.current + 1;
     sessionProjectionRequestRef.current = requestId;
     const controller = new AbortController();
@@ -1365,13 +1378,13 @@ export function App() {
       projection: null,
       error: null,
     });
-    void api
+    void client
       .getConversationSession(
         scopedConversationId,
         {
-          tenantId: config.tenantId,
-          projectId: config.projectId,
-          workspaceId: config.workspaceId || null,
+          tenantId: requestConfig.tenantId,
+          projectId: requestConfig.projectId,
+          workspaceId: requestConfig.workspaceId || null,
         },
         controller.signal,
       )
@@ -1382,9 +1395,9 @@ export function App() {
         // skip the canonicalize + SHA-256 + validate pass entirely in that case.
         const scopeKey = [
           scopedConversationId,
-          config.tenantId,
-          config.projectId,
-          config.workspaceId || '',
+          requestConfig.tenantId,
+          requestConfig.projectId,
+          requestConfig.workspaceId || '',
         ].join('\n');
         const payloadRevision = signedSessionSnapshotRevision(payload);
         const seen = sessionProjectionRevisionRef.current;
@@ -1396,9 +1409,9 @@ export function App() {
             ? seen.projection
             : decodeConversationSessionProjection(payload, {
                 conversationId: scopedConversationId,
-                projectId: config.projectId,
-                tenantId: config.tenantId,
-                workspaceId: config.workspaceId || null,
+                projectId: requestConfig.projectId,
+                tenantId: requestConfig.tenantId,
+                workspaceId: requestConfig.workspaceId || null,
               });
         if (projection) {
           sessionProjectionRevisionRef.current = {
@@ -1430,16 +1443,12 @@ export function App() {
           status: 'error',
           conversationId: scopedConversationId,
           projection: null,
-          error: formatConnectionError(caught, config.apiBaseUrl),
+          error: formatConnectionError(caught, requestConfig.apiBaseUrl),
         });
       });
     return () => controller.abort();
   }, [
-    api,
-    config.apiBaseUrl,
-    config.projectId,
-    config.tenantId,
-    config.workspaceId,
+    desktopSessionProjectionClientV2,
     scopedConversationId,
     sessionProjectionRefreshRevision,
   ]);
