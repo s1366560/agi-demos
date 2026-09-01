@@ -231,10 +231,15 @@ import {
 } from '../settings-routes/settingsRouteRuntime';
 import { createSkillsRouteModuleLoader } from '../settings-routes/skillsRouteModule';
 import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRouteModule';
+import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 
 export type AppRouteRegistryRefs = {
   authRef: RefObject<AuthState>;
   configRef: RefObject<DesktopRuntimeConfig>;
+  pluginMarketplaceOperationsV2: Pick<
+    DesktopPluginMarketplaceCatalogOperationsV2,
+    'projectMarketplacePlugins'
+  >;
   desktopTenantCatalogClientProviderV2: DesktopTenantCatalogClientProviderV2;
   desktopProductionRouteLocation: DesktopHashLocationPort;
   desktopProductionRouteNavigation: Readonly<{
@@ -282,7 +287,7 @@ export type AppTenantAgentBuildingRouteRegistryRefs = Pick<AppRouteRegistryRefs,
   AppSettingsRouteContentRefs;
 export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef'
+  'configRef' | 'pluginMarketplaceOperationsV2'
 > &
   AppSettingsRouteContentRefs;
 export type AppTenantGovernanceRouteRegistryRefs = Pick<
@@ -908,7 +913,7 @@ export function createAppTenantAgentBuildingRouteRegistry(
 export function createAppTenantExtensionsIntegrationsRouteRegistry(
   refs: AppTenantExtensionsIntegrationsRouteRegistryRefs,
 ) {
-  const { configRef } = refs;
+  const { configRef, pluginMarketplaceOperationsV2 } = refs;
   const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
@@ -934,6 +939,7 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
             configRef.current,
             context,
             settingsRouteContent('plugins'),
+            pluginMarketplaceOperationsV2,
           ),
       }),
       [TENANT_MCP_SERVERS_ROUTE_ID]: createMcpServersRouteModuleLoader({

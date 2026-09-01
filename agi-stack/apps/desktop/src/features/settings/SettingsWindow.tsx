@@ -7,7 +7,6 @@ import {
   MagnifyingGlassIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient } from '../../api/client';
 import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import { useI18n } from '../../i18n';
 import type {
@@ -22,6 +21,7 @@ import type {
 } from '../../types';
 import type { DesktopRouteModule } from '../navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../navigation/desktopRouteRegistry';
+import type { DesktopPluginMarketplaceOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
 import { PROFILE_ROUTE_ID } from '../settings-routes/profileRoutePresentationModel';
@@ -88,6 +88,7 @@ type SettingsWindowProps = {
   runtimeDisabledReason: string | null;
   agentDefinitionEvent: AgentWsEvent | null;
   rendererRouteRegistry?: DesktopRouteRegistry<DesktopRouteModule>;
+  pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -107,6 +108,7 @@ export function SettingsWindow({
   runtimeDisabledReason,
   agentDefinitionEvent,
   rendererRouteRegistry,
+  pluginMarketplaceOperationsV2,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -214,7 +216,7 @@ export function SettingsWindow({
           resourceSection === 'skills'
             ? await managedResources.listManagedSkills(signal)
             : resourceSection === 'plugins'
-              ? await new DesktopApiClient(config).listMarketplacePlugins(signal)
+              ? await pluginMarketplaceOperationsV2.listMarketplacePlugins(config, signal)
               : resourceSection === 'agents'
                 ? await managedResources.listManagedAgents(signal)
                 : await managedResources.listManagedSubAgents(signal);
@@ -242,7 +244,7 @@ export function SettingsWindow({
         if (requestId === resourceRequestId.current) setResourceLoading(false);
       }
     },
-    [config, resourceContextKey]
+    [config, pluginMarketplaceOperationsV2, resourceContextKey]
   );
   const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
   const reloadSkillResources = useCallback(() => loadResources('skills'), [loadResources]);
@@ -258,6 +260,7 @@ export function SettingsWindow({
   const pluginManagement = usePluginManagement({
     active: open,
     config,
+    pluginMarketplaceOperationsV2,
     contextKey: resourceContextKey,
     canManage: canManagePluginControlPlane,
     onReload: reloadPluginResources,

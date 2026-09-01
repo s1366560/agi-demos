@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { DesktopApiClient } from '../../api/client';
+import type { DesktopPluginMarketplaceManagementOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopRuntimeConfig, ManagedPlugin } from '../../types';
 
 export type PluginDialogState = {
@@ -12,6 +12,7 @@ export type PluginDialogState = {
 export function usePluginManagement({
   active,
   config,
+  pluginMarketplaceOperationsV2,
   contextKey,
   canManage,
   onReload,
@@ -19,6 +20,7 @@ export function usePluginManagement({
 }: {
   active: boolean;
   config: DesktopRuntimeConfig;
+  pluginMarketplaceOperationsV2: DesktopPluginMarketplaceManagementOperationsV2;
   contextKey: string;
   canManage: boolean;
   onReload: () => Promise<void>;
@@ -28,12 +30,16 @@ export function usePluginManagement({
   const [dialogBusy, setDialogBusy] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const contextKeyRef = useRef(contextKey);
+  const uninstallAbortRef = useRef<AbortController | null>(null);
   contextKeyRef.current = contextKey;
 
   useEffect(() => {
+    uninstallAbortRef.current?.abort();
+    uninstallAbortRef.current = null;
     setDialog(null);
     setDialogBusy(false);
     setDialogError(null);
+    return () => uninstallAbortRef.current?.abort();
   }, [active, contextKey]);
 
   const closeDialog = useCallback(() => {
@@ -56,25 +62,41 @@ export function usePluginManagement({
   const uninstall = useCallback(async () => {
     if (!canManage || dialog?.kind !== 'uninstall') return;
     const requestContextKey = contextKey;
+    const controller = new AbortController();
+    uninstallAbortRef.current?.abort();
+    uninstallAbortRef.current = controller;
     setDialogBusy(true);
     setDialogError(null);
     try {
-      await new DesktopApiClient(config).uninstallMarketplacePlugin(
+      await pluginMarketplaceOperationsV2.uninstallMarketplacePlugin(
+        config,
         dialog.plugin.plugin_id,
         dialog.plugin.version,
+        controller.signal,
       );
       if (contextKeyRef.current !== requestContextKey) return;
       setDialog(null);
       onUninstalled();
       await onReload();
     } catch (caught) {
-      if (contextKeyRef.current === requestContextKey) {
+      if (contextKeyRef.current === requestContextKey && !controller.signal.aborted) {
         setDialogError(errorMessage(caught));
       }
     } finally {
-      if (contextKeyRef.current === requestContextKey) setDialogBusy(false);
+      if (uninstallAbortRef.current === controller) uninstallAbortRef.current = null;
+      if (contextKeyRef.current === requestContextKey && !controller.signal.aborted) {
+        setDialogBusy(false);
+      }
     }
-  }, [canManage, config, contextKey, dialog, onReload, onUninstalled]);
+  }, [
+    canManage,
+    config,
+    contextKey,
+    dialog,
+    onReload,
+    onUninstalled,
+    pluginMarketplaceOperationsV2,
+  ]);
 
   return {
     dialog,

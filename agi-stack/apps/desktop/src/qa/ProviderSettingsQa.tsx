@@ -3,7 +3,9 @@ import React, { useEffect, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { SettingsWindow, type SettingsSection } from '../features/settings/SettingsWindow';
+import { managedPluginFromMarketplaceEntry } from '../api/pluginMarketplaceModel';
 import { I18nProvider } from '../i18n';
+import type { DesktopPluginMarketplaceOperationsV2 } from '../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type {
   AuthState,
   AgentWsEvent,
@@ -323,6 +325,42 @@ let plugins: MarketplacePluginCatalogEntry[] = [
     revocation_reason: null,
   },
 ];
+const qaPluginMarketplaceOperationsV2 = Object.freeze<DesktopPluginMarketplaceOperationsV2>({
+  listMarketplacePlugins: async (config, signal) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    return plugins.map(managedPluginFromMarketplaceEntry);
+  },
+  projectMarketplacePlugins: async (config, signal, project) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    return project(plugins.map(managedPluginFromMarketplaceEntry));
+  },
+  uninstallMarketplacePlugin: async (config, pluginId, version, signal) => {
+    signal?.throwIfAborted();
+    if (config.tenantId !== QA_TENANT_ID) {
+      throw new Error('qa_plugin_marketplace_tenant_mismatch');
+    }
+    const current = plugins.find(
+      (plugin) => plugin.plugin_id === pluginId && plugin.version === version,
+    );
+    if (!current) throw new Error('qa_plugin_marketplace_version_not_found');
+    plugins = plugins.map((plugin) =>
+      plugin === current ? { ...plugin, install_status: 'uninstalled' } : plugin,
+    );
+    return {
+      plugin_id: pluginId,
+      version,
+      status: 'uninstalled',
+      desired_removed: true,
+      revoked_permissions: 0,
+    };
+  },
+});
 const channelCatalog: ManagedChannelPluginCatalogItem[] = [
   {
     channel_type: 'slack',
@@ -1785,6 +1823,7 @@ function ProviderSettingsQa() {
       wsError={null}
       runtimeDisabledReason={null}
       agentDefinitionEvent={agentDefinitionEvent}
+      pluginMarketplaceOperationsV2={qaPluginMarketplaceOperationsV2}
       onClose={() => undefined}
       onConfigChange={setConfig}
       onRuntimeStatusRefresh={async () => undefined}

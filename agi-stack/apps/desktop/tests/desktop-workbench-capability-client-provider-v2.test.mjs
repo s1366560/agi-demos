@@ -49,10 +49,12 @@ test('each publication returns one frozen generation-pinned capability client bi
   const local = provider.publish({
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'local', projectId: 'project-local' },
+    pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
   });
   const cloud = provider.publish({
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-cloud' },
+    pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
   });
 
   assert.equal(Object.isFrozen(local), true);
@@ -69,6 +71,7 @@ test('failed capability client publication keeps the last-good binding', () => {
   const lastGood = provider.publish({
     automationApi: automationApi(),
     config: DEFAULT_CONFIG,
+    pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
   });
   const poisonedConfig = {
     ...DEFAULT_CONFIG,
@@ -82,6 +85,7 @@ test('failed capability client publication keeps the last-good binding', () => {
       provider.publish({
         automationApi: automationApi(),
         config: poisonedConfig,
+        pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
       }),
     /candidate_capability_config_invalid/u,
   );
@@ -98,8 +102,9 @@ test('App consumes the published V2 workbench capability client', () => {
   assert.doesNotMatch(appSource, /createDesktopWorkbenchCapabilityClient\(/u);
   assert.match(
     providerSource,
-    /createDesktopWorkbenchCapabilityClient\(input\.automationApi, config\)/u,
+    /createDesktopWorkbenchCapabilityClient\(input\.automationApi, config, \{/u,
   );
+  assert.match(providerSource, /pluginMarketplaceOperationsV2:\s*input\.pluginMarketplaceOperationsV2/u);
 });
 
 function automationApi() {
@@ -110,5 +115,11 @@ function automationApi() {
       revision: 1,
       supports: { run_now: true, cron_jobs: true },
     }),
+  };
+}
+
+function pluginMarketplaceOperationsV2() {
+  return {
+    projectMarketplacePlugins: async (_config, _signal, project) => project([]),
   };
 }

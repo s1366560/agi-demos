@@ -1,4 +1,5 @@
 import { DesktopApiClient } from '../../api/client';
+import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopRuntimeConfig } from '../../types';
 
 type DesktopNewThreadComposerCatalogMethod =
@@ -28,6 +29,10 @@ export class DesktopNewThreadComposerCatalogClientProviderErrorV2 extends Error 
 
 export type DesktopNewThreadComposerCatalogClientProviderInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
+  pluginMarketplaceOperationsV2: Pick<
+    DesktopPluginMarketplaceCatalogOperationsV2,
+    'listMarketplacePlugins'
+  >;
 }>;
 
 export type DesktopNewThreadComposerCatalogClientBindingV2 = Readonly<{
@@ -80,7 +85,7 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
     ) => authority.listManagedSkills(...args),
     listMarketplacePlugins: (
       ...args: Parameters<DesktopApiClient['listMarketplacePlugins']>
-    ) => authority.listMarketplacePlugins(...args),
+    ) => input.pluginMarketplaceOperationsV2.listMarketplacePlugins(config, ...args),
     listManagedSubAgents: (
       ...args: Parameters<DesktopApiClient['listManagedSubAgents']>
     ) => authority.listManagedSubAgents(...args),

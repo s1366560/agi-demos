@@ -15,6 +15,7 @@ const { loadComposerCatalog } = require(
   '/tmp/agistack-desktop-test-dist/src/features/chat/composerCatalogModel.js',
 );
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const providerSource = readFileSync(
   new URL(
@@ -52,11 +53,15 @@ test(
   async () => {
     const provider = createDesktopNewThreadComposerCatalogClientProviderV2();
     const firstConfig = runtimeConfig('http://127.0.0.1:42001', 'workspace-1');
-    const first = provider.publish({ config: firstConfig });
+    const first = provider.publish({
+      config: firstConfig,
+      pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    });
     firstConfig.apiBaseUrl = 'http://127.0.0.1:49999';
     firstConfig.workspaceId = 'workspace-poisoned';
     const second = provider.publish({
       config: runtimeConfig('http://127.0.0.1:42002', 'workspace-2'),
+      pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     });
     const originalFetch = globalThis.fetch;
     const calls = [];
@@ -92,6 +97,7 @@ test(
     const provider = createDesktopNewThreadComposerCatalogClientProviderV2();
     const publication = provider.publish({
       config: runtimeConfig('http://127.0.0.1:42003', ''),
+      pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     });
     const originalFetch = globalThis.fetch;
     const calls = [];
@@ -153,7 +159,10 @@ test(
 
 test('failed composer catalog publication keeps the last-good binding', () => {
   const provider = createDesktopNewThreadComposerCatalogClientProviderV2();
-  const lastGood = provider.publish({ config: DEFAULT_CONFIG });
+  const lastGood = provider.publish({
+    config: DEFAULT_CONFIG,
+    pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+  });
   const poisonedConfig = {
     ...DEFAULT_CONFIG,
     get workspaceId() {
@@ -162,7 +171,11 @@ test('failed composer catalog publication keeps the last-good binding', () => {
   };
 
   assert.throws(
-    () => provider.publish({ config: poisonedConfig }),
+    () =>
+      provider.publish({
+        config: poisonedConfig,
+        pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+      }),
     /candidate_new_thread_composer_catalog_config_invalid/u,
   );
   assert.equal(provider.resolve(), lastGood);
@@ -178,11 +191,19 @@ test(
     assert.match(appSource, /config: newThreadRuntimeConfig/u);
     assert.match(
       appSource,
+      /pluginMarketplaceOperationsV2:\s*desktopPluginMarketplaceOperationsV2/u,
+    );
+    assert.match(
+      appSource,
       /api:\s*desktopNewThreadComposerCatalogClientV2\.client/u,
     );
     assert.doesNotMatch(appSource, /const newThreadApi =/u);
     assert.doesNotMatch(appSource, /new DesktopApiClient\(newThreadRuntimeConfig\)/u);
     assert.match(providerSource, /new DesktopApiClient\(config\)/u);
+    assert.match(
+      providerSource,
+      /input\.pluginMarketplaceOperationsV2\.listMarketplacePlugins\(config/u,
+    );
     for (const method of [
       'listWorkspaceAgents',
       'listManagedAgents',
@@ -200,6 +221,13 @@ function workspaceAgentsUrl(apiBaseUrl, workspaceId) {
   const scopePath =
     `/api/v1/tenants/tenant-1/projects/project-1/workspaces/${workspaceId}`;
   return `${apiBaseUrl}${scopePath}/agents?active_only=false&limit=500&offset=0`;
+}
+
+function pluginMarketplaceOperationsV2() {
+  return {
+    listMarketplacePlugins: (config, signal) =>
+      new DesktopApiClient(config).listMarketplacePlugins(signal),
+  };
 }
 
 function runtimeConfig(apiBaseUrl, workspaceId) {

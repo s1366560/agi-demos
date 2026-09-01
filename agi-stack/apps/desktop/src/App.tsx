@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -76,6 +77,10 @@ import { isDesktopNavigationRouteEnabledV2 } from './plugins/desktopRendererAuth
 import type { DesktopAuthenticatedShellViewModelV2 } from './plugins/DesktopAuthenticatedShellSurfaceV2';
 import type { DesktopSessionCanvasInputV2 } from './plugins/DesktopSessionCanvasSurfaceV2';
 import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRendererAppCompositionV2';
+import {
+  createDesktopPluginMarketplaceOperationsV2,
+} from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import { DesktopRendererAuthenticationRouterV2 } from './plugins/DesktopRendererAuthenticationRouterV2';
 import { DesktopRendererAuthenticatedShellV2 } from './plugins/DesktopRendererAuthenticatedShellV2';
 import {
@@ -801,6 +806,15 @@ export function App() {
     () => createDesktopWorkbenchCapabilityClientProviderV2(),
     [],
   );
+  const desktopPluginMarketplaceGenerationActionsRefV2 =
+    useRef<DesktopRendererGenerationActionsV2 | null>(null);
+  const desktopPluginMarketplaceOperationsV2 = useMemo(
+    () =>
+      createDesktopPluginMarketplaceOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopAgentAuthorityProviderV2 = useMemo(
     () => createDesktopAgentAuthorityProviderV2(),
     [],
@@ -1034,6 +1048,7 @@ export function App() {
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
       desktopTenantCatalogClientProviderV2,
+      pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       projectCronJobsRouteBindingProviderV2,
       projectSearchRouteBindingProviderV2,
       setAuth,
@@ -1043,7 +1058,11 @@ export function App() {
       commitRuntimeConfig,
       settingsRouteCloseNavigationRef,
     }),
-    [desktopTenantCatalogClientProviderV2, desktopTenantCatalogClientV2],
+    [
+      desktopPluginMarketplaceOperationsV2,
+      desktopTenantCatalogClientProviderV2,
+      desktopTenantCatalogClientV2,
+    ],
   );
   const desktopRendererCompositionV2 = useMemo(
     () => createDesktopRendererAppCompositionPortV2(desktopRendererRouteRefsV2),
@@ -1054,6 +1073,15 @@ export function App() {
     identityAuthenticated,
     desktopRendererCompositionV2,
   );
+  useLayoutEffect(() => {
+    const actions = desktopRendererGenerationV2.actions;
+    desktopPluginMarketplaceGenerationActionsRefV2.current = actions;
+    return () => {
+      if (desktopPluginMarketplaceGenerationActionsRefV2.current === actions) {
+        desktopPluginMarketplaceGenerationActionsRefV2.current = null;
+      }
+    };
+  }, [desktopRendererGenerationV2.actions]);
   const {
     authority: desktopRendererAuthorityV2,
     navigationRegistry: desktopCanonicalNavigationRegistry,
@@ -1152,10 +1180,12 @@ export function App() {
       desktopWorkbenchCapabilityClientProviderV2.publish({
         automationApi: desktopAutomationApiV2.api,
         config,
+        pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       }),
     [
       config,
       desktopAutomationApiV2.api,
+      desktopPluginMarketplaceOperationsV2,
       desktopWorkbenchCapabilityClientProviderV2,
     ],
   );
@@ -1336,8 +1366,13 @@ export function App() {
     () =>
       desktopNewThreadComposerCatalogClientProviderV2.publish({
         config: newThreadRuntimeConfig,
+        pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       }),
-    [newThreadRuntimeConfig, desktopNewThreadComposerCatalogClientProviderV2],
+    [
+      desktopNewThreadComposerCatalogClientProviderV2,
+      desktopPluginMarketplaceOperationsV2,
+      newThreadRuntimeConfig,
+    ],
   );
   const workspaceAgentPolicy = useWorkspaceAgentPolicy(
     newThreadRuntimeConfig,
@@ -7069,6 +7104,7 @@ export function App() {
         runtimeDisabledReason,
         agentDefinitionEvent,
         rendererRouteRegistry: desktopProductionRouteRegistry,
+        pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         onClose: () => {
           const closeRoute = settingsRouteCloseNavigationRef.current;
           settingsRouteCloseNavigationRef.current = null;

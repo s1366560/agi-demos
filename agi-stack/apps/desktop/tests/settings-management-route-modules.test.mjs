@@ -191,9 +191,9 @@ test('each route owns a typed authority adapter and validates its runtime scope'
     ],
     [
       createPluginsRouteClient(config(), {
-        listMarketplacePlugins: async () => {
+        projectMarketplacePlugins: async (_config, _signal, project) => {
           calls.push('plugins');
-          return [{ id: 'plugin-1' }];
+          return project([{ id: 'plugin-1' }]);
         },
       }),
       1,

@@ -2319,6 +2319,7 @@ export class DesktopApiClient {
   async uninstallMarketplacePlugin(
     pluginId: string,
     version: string,
+    signal?: AbortSignal,
   ): Promise<MarketplacePluginUninstallResponse> {
     const tenantId = requireValue(this.config.tenantId, 'tenant id');
     return this.request<MarketplacePluginUninstallResponse>(
@@ -2327,6 +2328,7 @@ export class DesktopApiClient {
       )}/uninstall`,
       {
         method: 'POST',
+        signal,
         body: {
           tenant_id: tenantId,
           version: requireValue(version, 'plugin version'),

@@ -9,6 +9,10 @@ import { NewTaskFlow } from '../features/task/NewTaskFlow';
 import { createDesktopNewTaskFlowClientProviderV2 } from '../features/task/desktopNewTaskFlowClientProviderV2';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { I18nProvider, useI18n } from '../i18n';
+import {
+  DesktopPluginMarketplaceAuthorityUnavailableErrorV2,
+  type DesktopPluginMarketplaceOperationsV2,
+} from '../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type {
   AuthState,
   DesktopRuntimeConfig,
@@ -88,6 +92,17 @@ const initialConfig: DesktopRuntimeConfig = {
   mode: 'cloud',
   workspaceRoot: '',
 };
+
+const noProjectPluginMarketplaceOperationsV2 =
+  Object.freeze<DesktopPluginMarketplaceOperationsV2>({
+    listMarketplacePlugins: async () => [],
+    projectMarketplacePlugins: async (_config, _signal, project) => project([]),
+    uninstallMarketplacePlugin: async () => {
+      throw new DesktopPluginMarketplaceAuthorityUnavailableErrorV2('management', {
+        reasonCode: 'desktop_renderer_generation_actions_unavailable',
+      });
+    },
+  });
 
 const initialAuth: AuthState = {
   status: 'signed_in',
@@ -311,6 +326,7 @@ function NoProjectEntryQa() {
           wsError={null}
           runtimeDisabledReason={newTaskDisabledReason}
           agentDefinitionEvent={null}
+          pluginMarketplaceOperationsV2={noProjectPluginMarketplaceOperationsV2}
           onClose={() => setSettingsOpen(false)}
           onConfigChange={setConfig}
           onRuntimeStatusRefresh={async () => undefined}

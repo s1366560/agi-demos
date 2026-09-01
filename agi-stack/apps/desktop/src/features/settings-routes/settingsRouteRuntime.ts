@@ -12,7 +12,10 @@ import type {
 } from './managementRouteTypes';
 import { managementRouteScopeForRuntime } from './managementRouteTypes';
 import { createMcpServersRouteClient } from './mcpServersRouteClient';
-import { createPluginsRouteClient } from './pluginsRouteClient';
+import {
+  createPluginsRouteClient,
+  type PluginsRouteAuthority,
+} from './pluginsRouteClient';
 import { createProviderRouteClient } from './providerRouteClient';
 import { createSkillsRouteClient } from './skillsRouteClient';
 
@@ -69,14 +72,15 @@ export function createPluginsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  pluginMarketplaceOperationsV2: PluginsRouteAuthority,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-plugins',
     config,
     context,
     Content,
-    dependencies.createClient ?? createPluginsRouteClient,
+    (runtimeConfig) =>
+      createPluginsRouteClient(runtimeConfig, pluginMarketplaceOperationsV2),
   );
 }
 

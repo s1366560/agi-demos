@@ -16,6 +16,10 @@ import {
 import type { DesktopRuntimeConfig } from '../types';
 
 import { validateDesktopRendererContributionsV2 } from './desktopRendererArtifactCatalogV2';
+import {
+  desktopPluginMarketplaceCatalogDefinitionV2,
+  desktopPluginMarketplaceManagementDefinitionV2,
+} from './desktopPluginMarketplaceAuthorityModulesV2';
 import { desktopWorkspaceContextAuthorityDefinitionV2 } from './desktopWorkspaceContextAuthorityModuleV2';
 
 const RENDERER_DISTRIBUTION_COMMAND_V2 = 'platform_plugin_renderer_distribution_current_v2';
@@ -24,6 +28,8 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
   'desktop-renderer',
   Object.freeze([
     ...createDesktopRendererDefinitionsV2(validateDesktopRendererContributionsV2),
+    desktopPluginMarketplaceCatalogDefinitionV2,
+    desktopPluginMarketplaceManagementDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
   ])
 );

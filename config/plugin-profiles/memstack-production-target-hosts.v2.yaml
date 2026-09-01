@@ -201,6 +201,34 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-plugin-marketplace-catalog-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/plugin-marketplace-catalog-authority
+      enabled: true
+      config:
+        strategy: desktop-api-client
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-desktop-plugin-marketplace-management-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/plugin-marketplace-management-authority
+      enabled: true
+      config:
+        strategy: desktop-api-client
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-renderer-contribution-registry
       parent_entry_id: builtin-desktop-renderer-host
       plugin_ref: memstack-renderer-contributions

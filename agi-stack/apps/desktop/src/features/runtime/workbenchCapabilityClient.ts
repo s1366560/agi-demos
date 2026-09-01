@@ -112,6 +112,10 @@ import {
 import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
+  createDesktopPluginMarketplaceOperationsV2,
+  type DesktopPluginMarketplaceCatalogOperationsV2,
+} from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_MINIMUM_CONTRACT_VERSION,
   parseDesktopCapabilitySnapshot,
@@ -142,6 +146,10 @@ type ManagementRouteCapabilityClients = Readonly<
 
 export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   managementRouteClients?: ManagementRouteCapabilityClients;
+  pluginMarketplaceOperationsV2?: Pick<
+    DesktopPluginMarketplaceCatalogOperationsV2,
+    'projectMarketplacePlugins'
+  >;
   agentWorkspaceClient?: AgentWorkspaceAuthorityClient;
   agentWorkspaceJourneyClient?: AgentWorkspaceJourneyAuthorityClient;
   projectWorkspacesClient?: Pick<ProjectWorkspacesClient, 'list'>;
@@ -192,6 +200,8 @@ const MANAGEMENT_ROUTE_CAPABILITY_NAMES = Object.freeze([
 ] as const satisfies readonly ManagementRouteCapability[]);
 const MANAGEMENT_ROUTE_SERVICE_VERSION = '0.1.0';
 const MANAGEMENT_ROUTE_CONTRACT_VERSION = '4.0.0';
+const UNAVAILABLE_PLUGIN_MARKETPLACE_OPERATIONS_V2 =
+  createDesktopPluginMarketplaceOperationsV2(() => null);
 const PROJECT_WORKSPACES_SERVICE_VERSION = '0.1.0';
 const PROJECT_WORKSPACES_CONTRACT_VERSION = '4.0.0';
 const PROJECT_BLACKBOARD_SERVICE_VERSION = '0.1.0';
@@ -237,7 +247,11 @@ export function createDesktopWorkbenchCapabilityClient(
   options: DesktopWorkbenchCapabilityClientOptions = {},
 ): DesktopWorkbenchCapabilityClient {
   const managementRouteClients =
-    options.managementRouteClients ?? createManagementRouteClients(config);
+    options.managementRouteClients ??
+    createManagementRouteClients(
+      config,
+      options.pluginMarketplaceOperationsV2 ?? UNAVAILABLE_PLUGIN_MARKETPLACE_OPERATIONS_V2,
+    );
   const injectedAgentWorkspaceClient = options.agentWorkspaceClient ?? null;
   const agentWorkspaceJourneyClient =
     options.agentWorkspaceJourneyClient ??
@@ -1001,12 +1015,19 @@ function blackboardScope(scope: ProjectBlackboardScope): DesktopCapabilityScope 
 
 function createManagementRouteClients(
   config: DesktopRuntimeConfig,
+  pluginMarketplaceOperationsV2: Pick<
+    DesktopPluginMarketplaceCatalogOperationsV2,
+    'projectMarketplacePlugins'
+  >,
 ): ManagementRouteCapabilityClients {
   return Object.freeze({
     'tenant-tenant-providers': createProviderRouteClient(config),
     'tenant-tenant-agent-definitions': createAgentDefinitionsRouteClient(config),
     'tenant-tenant-skills': createSkillsRouteClient(config),
-    'tenant-tenant-plugins': createPluginsRouteClient(config),
+    'tenant-tenant-plugins': createPluginsRouteClient(
+      config,
+      pluginMarketplaceOperationsV2,
+    ),
     'tenant-tenant-mcp-servers': createMcpServersRouteClient(config),
   });
 }

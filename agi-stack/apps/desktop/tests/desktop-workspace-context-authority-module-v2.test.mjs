@@ -20,6 +20,10 @@ const {
   desktopWorkspaceContextAuthorityDefinitionV2,
   withDesktopWorkspaceContextAuthorityOperationV2,
 } = require(`${COMPILED_ROOT}/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js`);
+const {
+  desktopPluginMarketplaceCatalogDefinitionV2,
+  desktopPluginMarketplaceManagementDefinitionV2,
+} = require(`${COMPILED_ROOT}/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js`);
 const { DEFAULT_CONFIG } = require(`${COMPILED_ROOT}/src/types.js`);
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
@@ -41,7 +45,19 @@ function loadBootstrap() {
 }
 
 function rendererDefinitions() {
-  return [...createDesktopRendererDefinitionsV2(), desktopWorkspaceContextAuthorityDefinitionV2];
+  return [
+    ...createDesktopRendererDefinitionsV2(),
+    desktopWorkspaceContextAuthorityDefinitionV2,
+    desktopPluginMarketplaceCatalogDefinitionV2,
+    desktopPluginMarketplaceManagementDefinitionV2,
+  ];
+}
+
+function marketplaceDefinitions() {
+  return [
+    desktopPluginMarketplaceCatalogDefinitionV2,
+    desktopPluginMarketplaceManagementDefinitionV2,
+  ];
 }
 
 function runtimeConfig(overrides = {}) {
@@ -132,7 +148,7 @@ test('Loader activates one frozen root service and fails closed on missing or wr
   assert.equal('client' in service, false);
 
   const missingDefinitionLoader = new LoaderV2(
-    createDesktopRendererDefinitionsV2(),
+    [...createDesktopRendererDefinitionsV2(), ...marketplaceDefinitions()],
     'desktop-renderer',
   );
   await assert.rejects(
@@ -143,6 +159,7 @@ test('Loader activates one frozen root service and fails closed on missing or wr
   const wrongDefinitionLoader = new LoaderV2(
     [
       ...createDesktopRendererDefinitionsV2(),
+      ...marketplaceDefinitions(),
       {
         ...desktopWorkspaceContextAuthorityDefinitionV2,
         contractDigest: `sha256:${'0'.repeat(64)}`,
