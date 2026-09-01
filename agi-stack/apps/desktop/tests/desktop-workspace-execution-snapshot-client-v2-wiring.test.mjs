@@ -49,7 +49,7 @@ test('runtime refresh pins task and plan hydration to one V2 operation binding',
   assert.doesNotMatch(refresh, /const scopedClient = new DesktopApiClient\(resolvedConfig\);/u);
   assert.match(
     refresh,
-    /desktopWorkspaceConversationCatalogClientV2,[\s\S]*?desktopWorkspaceExecutionSnapshotClientV2,[\s\S]*?desktopWorkspaceMessageCatalogClientV2,/u,
+    /desktopWorkspaceConversationCatalogClientV2,[\s\S]*?desktopWorkspaceExecutionSnapshotClientV2,[\s\S]*?desktopWorkspaceMessageCatalogOperationsV2,/u,
   );
 });
 
@@ -62,7 +62,7 @@ test('execution snapshot migration preserves refresh ordering, failure, and comm
   );
   assert.match(
     refresh,
-    /await Promise\.all\(\[\s*workspaceId \? workspaceMessageCatalogClient\.listMessages\(\) : Promise\.resolve\(\[\]\),\s*workspaceId \? workspaceExecutionSnapshotClient\.listTasks\(\) : Promise\.resolve\(\[\]\),\s*workspaceId\s*\? workspaceExecutionSnapshotClient\.getPlanSnapshot\(\)\.catch\(\(\) => null\)\s*:\s*Promise\.resolve\(null\),/u,
+    /await Promise\.all\(\[\s*workspaceId\s*\? desktopWorkspaceMessageCatalogOperationsV2\.listMessages\(\{\s*config: resolvedConfig,?\s*\}\)\s*:\s*Promise\.resolve\(\[\]\),\s*workspaceId \? workspaceExecutionSnapshotClient\.listTasks\(\) : Promise\.resolve\(\[\]\),\s*workspaceId\s*\? workspaceExecutionSnapshotClient\.getPlanSnapshot\(\)\.catch\(\(\) => null\)\s*:\s*Promise\.resolve\(null\),/u,
   );
   assert.doesNotMatch(
     refresh,

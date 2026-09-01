@@ -48,6 +48,9 @@ const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
 const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
 );
+const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
+);
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
@@ -81,6 +84,7 @@ function rendererDefinitions() {
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
+    desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
   ];
 }
 

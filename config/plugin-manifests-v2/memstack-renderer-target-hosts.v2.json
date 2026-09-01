@@ -220,6 +220,37 @@
       "contract_digest": "sha256:b35dd389aa456a5ebc6a460cbb0fa9ebfeeeba17a9bbfc7e288c3d2fc48af2a8"
     },
     {
+      "module_ref": "builtin://memstack/desktop/workspace-message-catalog-authority",
+      "entrypoint": "applyDesktopWorkspaceMessageCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ba34971b39310f94080e4ca1f3f3a46b49d4c918d6e89bd07222704577096d53",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-message-catalog-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:055c0926e9291761ed9648c291b6bcc86eb4923716cf87678bd7113ad8d4914c"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/hitl-response-authority",
       "entrypoint": "applyDesktopHitlResponseAuthorityV2",
       "artifact": {

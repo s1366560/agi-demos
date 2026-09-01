@@ -84,6 +84,9 @@ import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResp
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
+import {
+  createDesktopWorkspaceMessageCatalogOperationsV2,
+} from './plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import {
   acquireDesktopTerminalLifecycleAuthorityV2,
@@ -344,9 +347,6 @@ import {
 import {
   createDesktopWorkspaceExecutionSnapshotClientProviderV2,
 } from './features/workspace/desktopWorkspaceExecutionSnapshotClientProviderV2';
-import {
-  createDesktopWorkspaceMessageCatalogClientProviderV2,
-} from './features/workspace/desktopWorkspaceMessageCatalogClientProviderV2';
 import {
   createDesktopWorkspaceRosterClientProviderV2,
 } from './features/workspace/desktopWorkspaceRosterClientProviderV2';
@@ -824,6 +824,13 @@ export function App() {
       ),
     [],
   );
+  const desktopWorkspaceMessageCatalogOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceMessageCatalogOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -875,10 +882,6 @@ export function App() {
   );
   const desktopWorkspaceExecutionSnapshotClientProviderV2 = useMemo(
     () => createDesktopWorkspaceExecutionSnapshotClientProviderV2(),
-    [],
-  );
-  const desktopWorkspaceMessageCatalogClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceMessageCatalogClientProviderV2(),
     [],
   );
   const desktopWorkspaceRosterClientProviderV2 = useMemo(
@@ -1131,10 +1134,6 @@ export function App() {
   const desktopWorkspaceExecutionSnapshotClientV2 = useMemo(
     () => desktopWorkspaceExecutionSnapshotClientProviderV2.publish({ config }),
     [config, desktopWorkspaceExecutionSnapshotClientProviderV2],
-  );
-  const desktopWorkspaceMessageCatalogClientV2 = useMemo(
-    () => desktopWorkspaceMessageCatalogClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceMessageCatalogClientProviderV2],
   );
   const desktopWorkspaceRosterClientV2 = useMemo(
     () => desktopWorkspaceRosterClientProviderV2.publish({ config }),
@@ -2798,8 +2797,6 @@ export function App() {
         };
         const workspaceExecutionSnapshotClient =
           desktopWorkspaceExecutionSnapshotClientV2.bindOperation(resolvedConfig);
-        const workspaceMessageCatalogClient =
-          desktopWorkspaceMessageCatalogClientV2.bindOperation(resolvedConfig);
         const workspaceRosterClient =
           desktopWorkspaceRosterClientV2.bindOperation(resolvedConfig);
         const workspaceAutonomyAttentionClient =
@@ -2889,7 +2886,11 @@ export function App() {
           conversationResults,
           localConversationStatusSummary,
         ] = await Promise.all([
-          workspaceId ? workspaceMessageCatalogClient.listMessages() : Promise.resolve([]),
+          workspaceId
+            ? desktopWorkspaceMessageCatalogOperationsV2.listMessages({
+                config: resolvedConfig,
+              })
+            : Promise.resolve([]),
           workspaceId ? workspaceExecutionSnapshotClient.listTasks() : Promise.resolve([]),
           workspaceId
             ? workspaceExecutionSnapshotClient.getPlanSnapshot().catch(() => null)
@@ -3123,7 +3124,7 @@ export function App() {
       desktopWorkspaceCatalogClientV2,
       desktopWorkspaceConversationCatalogClientV2,
       desktopWorkspaceExecutionSnapshotClientV2,
-      desktopWorkspaceMessageCatalogClientV2,
+      desktopWorkspaceMessageCatalogOperationsV2,
       desktopWorkspaceRosterClientV2,
       listMyWorkForConfig,
       syncLocalRuntimeConfig,

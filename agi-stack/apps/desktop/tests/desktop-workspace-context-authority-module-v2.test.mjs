@@ -45,6 +45,9 @@ const { desktopSessionRunChangesAuthorityDefinitionV2 } = require(
 const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
 );
+const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
+);
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
@@ -76,6 +79,7 @@ function rendererDefinitions() {
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
+    desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
   ];
@@ -180,6 +184,7 @@ test('Loader activates one frozen root service and fails closed on missing or wr
       ...createDesktopRendererDefinitionsV2(),
       desktopTerminalLifecycleAuthorityDefinitionV2,
       desktopTenantCatalogAuthorityDefinitionV2,
+      desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
       ...marketplaceDefinitions(),
     ],
     'desktop-renderer',
@@ -194,6 +199,7 @@ test('Loader activates one frozen root service and fails closed on missing or wr
       ...createDesktopRendererDefinitionsV2(),
       desktopTerminalLifecycleAuthorityDefinitionV2,
       desktopTenantCatalogAuthorityDefinitionV2,
+      desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
       ...marketplaceDefinitions(),
       {
         ...desktopWorkspaceContextAuthorityDefinitionV2,
