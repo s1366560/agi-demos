@@ -16,7 +16,10 @@
       "contract": {
         "services": {
           "provides": [
-            { "service": "service:web.renderer-contributions", "version": "1.0.0" }
+            {
+              "service": "service:web.renderer-contributions",
+              "version": "1.0.0"
+            }
           ],
           "requires": []
         },
@@ -27,7 +30,10 @@
           "additionalProperties": false,
           "required": ["strategy"],
           "properties": {
-            "strategy": { "const": "generation-renderer-host", "type": "string" }
+            "strategy": {
+              "const": "generation-renderer-host",
+              "type": "string"
+            }
           }
         }
       },
@@ -58,7 +64,10 @@
           "additionalProperties": false,
           "required": ["strategy"],
           "properties": {
-            "strategy": { "const": "native-generation-renderer-host", "type": "string" }
+            "strategy": {
+              "const": "native-generation-renderer-host",
+              "type": "string"
+            }
           }
         }
       },
@@ -311,6 +320,37 @@
         }
       },
       "contract_digest": "sha256:29e1d038b902b4448658d3739210572703af2c77198d9b49f83381a119de1dda"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/my-work-authority",
+      "entrypoint": "applyDesktopMyWorkAuthorityV2",
+      "artifact": {
+        "digest": "sha256:8abadbe33b5ea852ea8973a204e2af7fa0dc40953e2cfc5fc55a1af290899ebe",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopMyWorkAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.my-work-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8cd9cc69888c0cc154907f29553b17810bafd13ca441fb7974b11f90380ac536"
     },
     {
       "module_ref": "builtin://memstack/desktop/session-timeline-authority",

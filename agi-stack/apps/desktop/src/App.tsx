@@ -81,6 +81,7 @@ import {
 import { createDesktopConversationLifecycleOperationsV2 } from './plugins/desktopConversationLifecycleAuthorityModuleV2';
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
 import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
+import { createDesktopMyWorkOperationsV2 } from './plugins/desktopMyWorkAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
@@ -258,9 +259,6 @@ import {
   socketEventInvalidatesMyWork,
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
-import {
-  createDesktopMyWorkClientProviderV2,
-} from './features/my-work/desktopMyWorkClientProviderV2';
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
 import { DEVICE_APPROVAL_ROUTE_ID } from './features/navigation/desktopProductionRouteRegistry';
 import { restoreDesktopRoute } from './features/navigation/desktopRouteRegistry';
@@ -843,6 +841,13 @@ export function App() {
       ),
     [],
   );
+  const desktopMyWorkOperationsV2 = useMemo(
+    () =>
+      createDesktopMyWorkOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -873,10 +878,6 @@ export function App() {
   );
   const desktopAgentAuthorityProviderV2 = useMemo(
     () => createDesktopAgentAuthorityProviderV2(),
-    [],
-  );
-  const desktopMyWorkClientProviderV2 = useMemo(
-    () => createDesktopMyWorkClientProviderV2(),
     [],
   );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
@@ -1049,10 +1050,6 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
-  const desktopMyWorkClientV2 = useMemo(
-    () => desktopMyWorkClientProviderV2.publish({ config }),
-    [config, desktopMyWorkClientProviderV2],
-  );
   const desktopRendererRouteRefsV2 = useMemo(
     () => ({
       authRef,
@@ -1240,21 +1237,13 @@ export function App() {
     cloudScope: activityAuthorityScope,
   } = desktopAgentAuthorityV2;
   const listMyWorkForConfig = useCallback(
-    (requestConfig: DesktopRuntimeConfig, signal?: AbortSignal) => {
-      const projectId = requestConfig.projectId.trim();
-      if (requestConfig.mode === 'cloud') {
-        const operation = desktopAgentAuthorityV2.bindOperation({
-          config: requestConfig,
-          principalId: authRef.current.user?.user_id,
-        });
-        if (!operation.adapter.client || !operation.cloudScope) {
-          throw new Error('cloud_my_work_authority_scope_unavailable');
-        }
-        return operation.adapter.client.listMyWork(operation.cloudScope, { signal });
-      }
-      return desktopMyWorkClientV2.bindOperation(requestConfig).listMyWork(projectId, signal);
-    },
-    [desktopAgentAuthorityV2, desktopMyWorkClientV2],
+    (requestConfig: DesktopRuntimeConfig, signal?: AbortSignal) =>
+      desktopMyWorkOperationsV2.listMyWork({
+        config: requestConfig,
+        principalId: authRef.current.user?.user_id,
+        signal,
+      }),
+    [desktopMyWorkOperationsV2],
   );
   const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
     config,

@@ -19,6 +19,7 @@ import { desktopConversationLifecycleAuthorityDefinitionV2 } from './desktopConv
 import { validateDesktopRendererContributionsV2 } from './desktopRendererArtifactCatalogV2';
 import { desktopConversationConfigAuthorityDefinitionV2 } from './desktopConversationConfigAuthorityModuleV2';
 import { desktopHitlResponseAuthorityDefinitionV2 } from './desktopHitlResponseAuthorityModuleV2';
+import { desktopMyWorkAuthorityDefinitionV2 } from './desktopMyWorkAuthorityModuleV2';
 import {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
@@ -44,6 +45,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopConversationConfigAuthorityDefinitionV2,
     desktopConversationLifecycleAuthorityDefinitionV2,
     desktopHitlResponseAuthorityDefinitionV2,
+    desktopMyWorkAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,
