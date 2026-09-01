@@ -251,6 +251,37 @@
       "contract_digest": "sha256:055c0926e9291761ed9648c291b6bcc86eb4923716cf87678bd7113ad8d4914c"
     },
     {
+      "module_ref": "builtin://memstack/desktop/workspace-catalog-authority",
+      "entrypoint": "applyDesktopWorkspaceCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ffa34611be57332dcb12c02ec2043fa91e79518f346b2c0886ed681f9361680f",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-catalog-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:fc7690fe093a7f1578e3ca7dae268339e67960cf3746197d357b9a97149d2577"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/hitl-response-authority",
       "entrypoint": "applyDesktopHitlResponseAuthorityV2",
       "artifact": {

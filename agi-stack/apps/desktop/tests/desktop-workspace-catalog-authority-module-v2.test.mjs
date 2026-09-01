@@ -13,21 +13,16 @@ const {
   RuntimeV2Error,
 } = require("@agistack/plugin-runtime");
 const {
-  DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_MODULE_REF_V2,
-  DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_SERVICE_V2,
-  DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_VERSION_V2,
-  DesktopWorkspaceMessageCatalogAuthorityUnavailableErrorV2,
-  applyDesktopWorkspaceMessageCatalogAuthorityV2,
-  createDesktopWorkspaceMessageCatalogOperationsV2,
-  desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
-  withDesktopWorkspaceMessageCatalogAuthorityOperationV2,
+  DESKTOP_WORKSPACE_CATALOG_AUTHORITY_MODULE_REF_V2,
+  DESKTOP_WORKSPACE_CATALOG_AUTHORITY_SERVICE_V2,
+  DESKTOP_WORKSPACE_CATALOG_AUTHORITY_VERSION_V2,
+  DesktopWorkspaceCatalogAuthorityUnavailableErrorV2,
+  applyDesktopWorkspaceCatalogAuthorityV2,
+  createDesktopWorkspaceCatalogOperationsV2,
+  desktopWorkspaceCatalogAuthorityDefinitionV2,
+  withDesktopWorkspaceCatalogAuthorityOperationV2,
 } = require(
-  COMPILED_ROOT +
-    "/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js",
-);
-const { desktopWorkspaceCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    "/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js",
+  COMPILED_ROOT + "/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js",
 );
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
@@ -59,6 +54,10 @@ const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
 );
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + "/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js",
+);
+const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT +
+    "/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js",
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + "/src/types.js");
 
@@ -102,12 +101,12 @@ function runtimeConfig(overrides = {}) {
   return {
     ...DEFAULT_CONFIG,
     apiBaseUrl: "http://127.0.0.1:46501",
-    apiKey: "workspace-message-session",
-    localApiToken: "workspace-message-launch",
+    apiKey: "workspace-catalog-session",
+    localApiToken: "workspace-catalog-launch",
     mode: "local",
     tenantId: "tenant / one",
     projectId: "project / one",
-    workspaceId: "workspace / one",
+    workspaceId: "",
     workspaceRoot: "/workspace",
     ...overrides,
   };
@@ -118,6 +117,23 @@ function json(payload) {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+}
+
+function workspaceRecord(id, tenantId, projectId) {
+  return {
+    id,
+    tenant_id: tenantId,
+    project_id: projectId,
+    name: `Workspace ${id}`,
+    created_by: "user-1",
+    description: null,
+    is_archived: false,
+    metadata: {},
+    office_status: "idle",
+    hex_layout_config: {},
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: null,
+  };
 }
 
 function acceptedActions(service, digest, lifecycle = []) {
@@ -148,15 +164,15 @@ test("generated manifest, catalog and Profile expose one credential-free root Pr
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
     ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_MODULE_REF_V2,
+      moduleRef === DESKTOP_WORKSPACE_CATALOG_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
     ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_MODULE_REF_V2,
+      moduleRef === DESKTOP_WORKSPACE_CATALOG_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
     ({ entry_id: entryId }) =>
-      entryId === "builtin-desktop-workspace-message-catalog-authority",
+      entryId === "builtin-desktop-workspace-catalog-authority",
   );
 
   assert.ok(module);
@@ -166,8 +182,8 @@ test("generated manifest, catalog and Profile expose one credential-free root Pr
   assert.deepEqual(module.contract.services, {
     provides: [
       {
-        service: DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_SERVICE_V2,
-        version: DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_VERSION_V2,
+        service: DESKTOP_WORKSPACE_CATALOG_AUTHORITY_SERVICE_V2,
+        version: DESKTOP_WORKSPACE_CATALOG_AUTHORITY_VERSION_V2,
       },
     ],
     requires: [],
@@ -182,20 +198,17 @@ test("generated manifest, catalog and Profile expose one credential-free root Pr
   assert.equal(module.contract_digest, catalog.contract_digest);
   assert.equal(
     module.contract_digest,
-    desktopWorkspaceMessageCatalogAuthorityDefinitionV2.contractDigest,
+    desktopWorkspaceCatalogAuthorityDefinitionV2.contractDigest,
   );
-  assert.equal(
-    catalog.entrypoint,
-    "applyDesktopWorkspaceMessageCatalogAuthorityV2",
-  );
+  assert.equal(catalog.entrypoint, "applyDesktopWorkspaceCatalogAuthorityV2");
   assert.equal(
     catalog.artifact_source,
     "repo+typescript://agi-stack/apps/desktop/src/plugins/" +
-      "desktopWorkspaceMessageCatalogAuthorityModuleV2.ts",
+      "desktopWorkspaceCatalogAuthorityModuleV2.ts",
   );
   assert.equal(
     entry.module_ref,
-    DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_MODULE_REF_V2,
+    DESKTOP_WORKSPACE_CATALOG_AUTHORITY_MODULE_REF_V2,
   );
   assert.equal(entry.parent_entry_id, "builtin-desktop-renderer-host");
   assert.deepEqual(entry.scope, { kind: "root" });
@@ -204,12 +217,12 @@ test("generated manifest, catalog and Profile expose one credential-free root Pr
   assert.equal(entry.enabled, true);
   assert.match(
     profile,
-    /entry_id: builtin-desktop-workspace-message-catalog-authority/u,
+    /entry_id: builtin-desktop-workspace-catalog-authority/u,
   );
   for (const value of [module, catalog, entry]) {
     assert.doesNotMatch(
       JSON.stringify(value),
-      /apiKey|localApiToken|Authorization|workspace-message-session/iu,
+      /apiKey|localApiToken|Authorization|workspace-catalog-session/iu,
     );
   }
 });
@@ -219,9 +232,9 @@ test("Loader activates the exact service and Profile disable removes it without 
   const loader = new LoaderV2(rendererDefinitions(), "desktop-renderer");
   const generation = await loader.stage(bootstrap);
   const service = generation.resolve(
-    DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_SERVICE_V2,
+    DESKTOP_WORKSPACE_CATALOG_AUTHORITY_SERVICE_V2,
     { kind: "project", tenant_id: "tenant / one", project_id: "project / one" },
-    { version: DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_VERSION_V2 },
+    { version: DESKTOP_WORKSPACE_CATALOG_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
@@ -230,7 +243,7 @@ test("Loader activates the exact service and Profile disable removes it without 
   assert.equal("client" in service, false);
   assert.throws(
     () =>
-      applyDesktopWorkspaceMessageCatalogAuthorityV2(
+      applyDesktopWorkspaceCatalogAuthorityV2(
         {
           provide: () =>
             assert.fail("invalid config must not provide a service"),
@@ -239,14 +252,13 @@ test("Loader activates the exact service and Profile disable removes it without 
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code ===
-        "desktop_workspace_message_catalog_authority_config_invalid",
+      error.code === "desktop_workspace_catalog_authority_config_invalid",
   );
 
   const invalid = structuredClone(bootstrap);
   invalid.entries.find(
     ({ entry_id: entryId }) =>
-      entryId === "builtin-desktop-workspace-message-catalog-authority",
+      entryId === "builtin-desktop-workspace-catalog-authority",
   ).config.strategy = "legacy-client";
   await assert.rejects(
     loader.stage(invalid),
@@ -257,19 +269,19 @@ test("Loader activates the exact service and Profile disable removes it without 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
     ({ entry_id: entryId }) =>
-      entryId === "builtin-desktop-workspace-message-catalog-authority",
+      entryId === "builtin-desktop-workspace-catalog-authority",
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>
       disabledGeneration.resolve(
-        DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_SERVICE_V2,
+        DESKTOP_WORKSPACE_CATALOG_AUTHORITY_SERVICE_V2,
         {
           kind: "project",
           tenant_id: "tenant / one",
           project_id: "project / one",
         },
-        { version: DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_VERSION_V2 },
+        { version: DESKTOP_WORKSPACE_CATALOG_AUTHORITY_VERSION_V2 },
       ),
     (error) =>
       error instanceof RuntimeV2Error && error.code === "missing_service",
@@ -279,8 +291,7 @@ test("Loader activates the exact service and Profile disable removes it without 
   await manager.publish(generation);
   const wrongDefinitionLoader = new LoaderV2(
     rendererDefinitions().map((definition) =>
-      definition.moduleRef ===
-      DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_MODULE_REF_V2
+      definition.moduleRef === DESKTOP_WORKSPACE_CATALOG_AUTHORITY_MODULE_REF_V2
         ? { ...definition, contractDigest: "sha256:" + "0".repeat(64) }
         : definition,
     ),
@@ -304,9 +315,9 @@ test("local and cloud operations freeze config and forward AbortSignal through e
   const cloudCommands = [];
   globalThis.fetch = async (input, init) => {
     fetchCalls.push({ input: String(input), init });
-    return json({
-      messages: [{ id: "local-message", content: "Local message" }],
-    });
+    return json([
+      workspaceRecord("local-workspace", "tenant / one", "project / one"),
+    ]);
   };
   globalThis.window = {
     __MEMSTACK_DESKTOP__: {
@@ -315,9 +326,13 @@ test("local and cloud operations freeze config and forward AbortSignal through e
           cloudCommands.push({ command, args });
           return {
             status: 200,
-            body: {
-              messages: [{ id: "cloud-message", content: "Cloud message" }],
-            },
+            body: [
+              workspaceRecord(
+                "cloud-workspace",
+                "tenant / one",
+                "project / one",
+              ),
+            ],
           };
         },
       },
@@ -330,20 +345,20 @@ test("local and cloud operations freeze config and forward AbortSignal through e
       "desktop-renderer",
     ).stage(loadBootstrap());
     const service = generation.resolve(
-      DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_SERVICE_V2,
+      DESKTOP_WORKSPACE_CATALOG_AUTHORITY_SERVICE_V2,
       {
         kind: "project",
         tenant_id: "tenant / one",
         project_id: "project / one",
       },
-      { version: DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_VERSION_V2 },
+      { version: DESKTOP_WORKSPACE_CATALOG_AUTHORITY_VERSION_V2 },
     );
     const controller = new AbortController();
     const localConfig = runtimeConfig();
     const local = service.bindOperation(localConfig);
     localConfig.apiBaseUrl = "http://127.0.0.1:46999";
     localConfig.apiKey = "mutated-session";
-    localConfig.workspaceId = "mutated-workspace";
+    localConfig.projectId = "mutated-project";
     const cloud = service.bindOperation(
       runtimeConfig({
         apiBaseUrl: "https://cloud.example.test",
@@ -353,36 +368,35 @@ test("local and cloud operations freeze config and forward AbortSignal through e
       }),
     );
 
-    assert.deepEqual(await local.listMessages(controller.signal), [
-      { id: "local-message", content: "Local message" },
-    ]);
-    assert.deepEqual(await cloud.listMessages(controller.signal), [
-      { id: "cloud-message", content: "Cloud message" },
-    ]);
+    const localResult = await local.listWorkspacesForProject(controller.signal);
+    const cloudResult = await cloud.listWorkspacesForProject(controller.signal);
+    assert.equal(localResult[0].id, "local-workspace");
+    assert.equal(cloudResult[0].id, "cloud-workspace");
     assert.equal(Object.isFrozen(local), true);
     assert.equal(Object.isFrozen(cloud), true);
-    assert.deepEqual(Object.keys(local), ["listMessages"]);
+    assert.deepEqual(Object.keys(local), ["listWorkspacesForProject"]);
     assert.equal(fetchCalls.length, 1);
     const localUrl = new URL(fetchCalls[0].input);
     assert.equal(localUrl.origin, "http://127.0.0.1:46501");
     assert.equal(
       localUrl.pathname,
-      "/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/" +
-        "workspaces/workspace%20%2F%20one/messages",
+      "/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/workspaces",
     );
+    assert.equal(localUrl.searchParams.get("limit"), "500");
+    assert.equal(localUrl.searchParams.get("offset"), "0");
     assert.equal(fetchCalls[0].init.signal, controller.signal);
     const headers = new Headers(fetchCalls[0].init.headers);
     assert.equal(
       headers.get("Authorization"),
-      "Bearer workspace-message-session",
+      "Bearer workspace-catalog-session",
     );
-    assert.equal(headers.get("X-Agistack-Launch"), "workspace-message-launch");
+    assert.equal(headers.get("X-Agistack-Launch"), "workspace-catalog-launch");
     assert.equal(cloudCommands.length, 1);
     assert.equal(cloudCommands[0].command, "cloud_request");
     assert.equal(
       cloudCommands[0].args.request.path,
       "/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/" +
-        "workspaces/workspace%20%2F%20one/messages",
+        "workspaces?limit=500&offset=0",
     );
     assert.equal(cloudCommands[0].args.request.method, "GET");
     assert.equal(JSON.stringify(cloudCommands).includes("Bearer"), false);
@@ -394,6 +408,79 @@ test("local and cloud operations freeze config and forward AbortSignal through e
   }
 });
 
+test("one project lease stays pinned through the complete paginated catalog read", async () => {
+  const originalFetch = globalThis.fetch;
+  const lifecycle = [];
+  const offsets = [];
+  let resolveLastPage;
+  const lastPageReady = new Promise((resolve) => {
+    resolveLastPage = resolve;
+  });
+  let generation;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    const offset = Number(url.searchParams.get("offset"));
+    offsets.push(offset);
+    if (offset === 0) {
+      return json(
+        Array.from({ length: 500 }, (_, index) =>
+          workspaceRecord(
+            `workspace-${index}`,
+            "tenant / one",
+            "project / one",
+          ),
+        ),
+      );
+    }
+    await lastPageReady;
+    return json([
+      workspaceRecord("workspace-500", "tenant / one", "project / one"),
+    ]);
+  };
+
+  try {
+    generation = await new LoaderV2(
+      rendererDefinitions(),
+      "desktop-renderer",
+    ).stage(loadBootstrap());
+    const service = generation.resolve(
+      DESKTOP_WORKSPACE_CATALOG_AUTHORITY_SERVICE_V2,
+      {
+        kind: "project",
+        tenant_id: "tenant / one",
+        project_id: "project / one",
+      },
+      { version: DESKTOP_WORKSPACE_CATALOG_AUTHORITY_VERSION_V2 },
+    );
+    const operations = createDesktopWorkspaceCatalogOperationsV2(() =>
+      acceptedActions(service, "sha256:pagination", lifecycle),
+    );
+    const pending = operations.listWorkspacesForProject({
+      config: runtimeConfig(),
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(offsets, [0, 500]);
+    assert.equal(
+      lifecycle.some((event) => event.type === "release"),
+      false,
+    );
+    resolveLastPage();
+    const result = await pending;
+    assert.equal(result.length, 501);
+    assert.deepEqual(
+      lifecycle
+        .filter((event) => event.type === "release")
+        .map((event) => event.digest),
+      ["sha256:pagination"],
+    );
+  } finally {
+    resolveLastPage?.();
+    await generation?.dispose();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("operations acquire the current project generation lease and release after refresh", async () => {
   const lifecycle = [];
   const signals = [];
@@ -402,10 +489,12 @@ test("operations acquire the current project generation lease and release after 
     bindOperation(config) {
       boundConfigs.push(config);
       return Object.freeze({
-        async listMessages(signal) {
+        async listWorkspacesForProject(signal) {
           signals.push(signal);
           lifecycle.push("list");
-          return [{ id: "message-1", content: "Pinned message" }];
+          return [
+            workspaceRecord("workspace-1", config.tenantId, config.projectId),
+          ];
         },
       });
     },
@@ -415,12 +504,12 @@ test("operations acquire the current project generation lease and release after 
     "sha256:generation-1",
     lifecycle,
   );
-  const operations = createDesktopWorkspaceMessageCatalogOperationsV2(
+  const operations = createDesktopWorkspaceCatalogOperationsV2(
     () => currentActions,
   );
   const controller = new AbortController();
   const config = runtimeConfig();
-  const pending = operations.listMessages({
+  const pending = operations.listWorkspacesForProject({
     config,
     signal: controller.signal,
   });
@@ -428,17 +517,15 @@ test("operations acquire the current project generation lease and release after 
   config.apiKey = "mutated-session";
   currentActions = null;
 
-  assert.deepEqual(await pending, [
-    { id: "message-1", content: "Pinned message" },
-  ]);
+  assert.equal((await pending)[0].id, "workspace-1");
   assert.equal(Object.isFrozen(operations), true);
   assert.equal(Object.isFrozen(boundConfigs[0]), true);
   assert.equal(boundConfigs[0].apiBaseUrl, "http://127.0.0.1:46501");
-  assert.equal(boundConfigs[0].apiKey, "workspace-message-session");
+  assert.equal(boundConfigs[0].apiKey, "workspace-catalog-session");
   assert.equal(signals[0], controller.signal);
   assert.deepEqual(lifecycle[0].request, {
-    service: DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_SERVICE_V2,
-    version: DESKTOP_WORKSPACE_MESSAGE_CATALOG_AUTHORITY_VERSION_V2,
+    service: DESKTOP_WORKSPACE_CATALOG_AUTHORITY_SERVICE_V2,
+    version: DESKTOP_WORKSPACE_CATALOG_AUTHORITY_VERSION_V2,
     scope: {
       kind: "project",
       tenant_id: "tenant / one",
@@ -456,10 +543,9 @@ test("operations acquire the current project generation lease and release after 
     ["sha256:generation-1"],
   );
   assert.throws(
-    () => operations.listMessages({ config: runtimeConfig() }),
+    () => operations.listWorkspacesForProject({ config: runtimeConfig() }),
     (error) =>
-      error instanceof
-        DesktopWorkspaceMessageCatalogAuthorityUnavailableErrorV2 &&
+      error instanceof DesktopWorkspaceCatalogAuthorityUnavailableErrorV2 &&
       error.reasonCode === "desktop_renderer_generation_actions_unavailable",
   );
 
@@ -471,10 +557,9 @@ test("operations acquire the current project generation lease and release after 
     }),
   };
   await assert.rejects(
-    operations.listMessages({ config: runtimeConfig() }),
+    operations.listWorkspacesForProject({ config: runtimeConfig() }),
     (error) =>
-      error instanceof
-        DesktopWorkspaceMessageCatalogAuthorityUnavailableErrorV2 &&
+      error instanceof DesktopWorkspaceCatalogAuthorityUnavailableErrorV2 &&
       error.reasonCode === "desktop_renderer_service_resolve_failed" &&
       error.runtimeCode === "missing_service",
   );
@@ -482,7 +567,7 @@ test("operations acquire the current project generation lease and release after 
 
 test("invalid workspace scope fails before lease admission", () => {
   let acquisitions = 0;
-  const operations = createDesktopWorkspaceMessageCatalogOperationsV2(() => ({
+  const operations = createDesktopWorkspaceCatalogOperationsV2(() => ({
     acquireServiceOperationLease: async () => {
       acquisitions += 1;
       throw new Error("must_not_acquire");
@@ -492,20 +577,20 @@ test("invalid workspace scope fails before lease admission", () => {
   for (const config of [
     runtimeConfig({ tenantId: "" }),
     runtimeConfig({ projectId: " project-1" }),
-    runtimeConfig({ workspaceId: "" }),
+    runtimeConfig({ workspaceId: "workspace-1" }),
   ]) {
     assert.throws(
-      () => operations.listMessages({ config }),
+      () => operations.listWorkspacesForProject({ config }),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === "desktop_workspace_message_catalog_input_invalid",
+        error.code === "desktop_workspace_catalog_input_invalid",
     );
   }
   assert.equal(acquisitions, 0);
 });
 
 test("escaped authority is revoked and primary operation failure wins over release failure", async () => {
-  const primary = new Error("workspace_message_catalog_primary_failure");
+  const primary = new Error("workspace_catalog_primary_failure");
   let escapedAuthority = null;
   let releaseCount = 0;
   const actions = {
@@ -516,7 +601,7 @@ test("escaped authority is revoked and primary operation failure wins over relea
         return operation({
           bindOperation() {
             return Object.freeze({
-              async listMessages() {
+              async listWorkspacesForProject() {
                 return [];
               },
             });
@@ -525,13 +610,13 @@ test("escaped authority is revoked and primary operation failure wins over relea
       },
       async release() {
         releaseCount += 1;
-        throw new Error("workspace_message_catalog_release_failure");
+        throw new Error("workspace_catalog_release_failure");
       },
     }),
   };
 
   await assert.rejects(
-    withDesktopWorkspaceMessageCatalogAuthorityOperationV2(
+    withDesktopWorkspaceCatalogAuthorityOperationV2(
       actions,
       { config: runtimeConfig() },
       (authority) => {
@@ -542,22 +627,86 @@ test("escaped authority is revoked and primary operation failure wins over relea
     (error) => error === primary,
   );
   assert.throws(
-    () => escapedAuthority.listMessages(),
+    () => escapedAuthority.listWorkspacesForProject(),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === "desktop_workspace_message_catalog_operation_released",
+      error.code === "desktop_workspace_catalog_operation_released",
   );
   assert.equal(releaseCount, 1);
 
   await assert.rejects(
-    withDesktopWorkspaceMessageCatalogAuthorityOperationV2(
+    withDesktopWorkspaceCatalogAuthorityOperationV2(
       actions,
       { config: runtimeConfig() },
       () => [],
     ),
-    /workspace_message_catalog_release_failure/u,
+    /workspace_catalog_release_failure/u,
   );
   assert.equal(releaseCount, 2);
+});
+
+test("concurrent project reads acquire and release independent exact leases", async () => {
+  const requests = [];
+  const releases = [];
+  const resolvers = new Map();
+  const actions = {
+    async acquireServiceOperationLease(request) {
+      requests.push(request);
+      const projectId = request.scope.project_id;
+      let resolveRead;
+      const pending = new Promise((resolve) => {
+        resolveRead = resolve;
+      });
+      resolvers.set(projectId, resolveRead);
+      return {
+        status: "accepted",
+        digest: `sha256:${projectId}`,
+        useService(operation) {
+          return operation({
+            bindOperation(config) {
+              return Object.freeze({
+                async listWorkspacesForProject() {
+                  await pending;
+                  return [
+                    workspaceRecord(
+                      projectId,
+                      config.tenantId,
+                      config.projectId,
+                    ),
+                  ];
+                },
+              });
+            },
+          });
+        },
+        async release() {
+          releases.push(projectId);
+        },
+      };
+    },
+  };
+  const operations = createDesktopWorkspaceCatalogOperationsV2(() => actions);
+  const first = operations.listWorkspacesForProject({
+    config: runtimeConfig({ tenantId: "tenant-1", projectId: "project-1" }),
+  });
+  const second = operations.listWorkspacesForProject({
+    config: runtimeConfig({ tenantId: "tenant-2", projectId: "project-2" }),
+  });
+  await Promise.resolve();
+
+  assert.deepEqual(
+    requests.map((request) => request.scope),
+    [
+      { kind: "project", tenant_id: "tenant-1", project_id: "project-1" },
+      { kind: "project", tenant_id: "tenant-2", project_id: "project-2" },
+    ],
+  );
+  resolvers.get("project-2")();
+  assert.equal((await second)[0].id, "project-2");
+  assert.deepEqual(releases, ["project-2"]);
+  resolvers.get("project-1")();
+  assert.equal((await first)[0].id, "project-1");
+  assert.deepEqual(releases, ["project-2", "project-1"]);
 });
 
 test("HMR lets an in-flight read finish on old generation and sends the next to new", async () => {
@@ -570,10 +719,16 @@ test("HMR lets an in-flight read finish on old generation and sends the next to 
     Object.freeze({
       bindOperation() {
         return Object.freeze({
-          async listMessages() {
+          async listWorkspacesForProject() {
             lifecycle.push("list:" + label);
             if (label === "old") await oldPending;
-            return [{ id: "message-" + label, content: label }];
+            return [
+              workspaceRecord(
+                "workspace-" + label,
+                "tenant / one",
+                "project / one",
+              ),
+            ];
           },
         });
       },
@@ -583,22 +738,26 @@ test("HMR lets an in-flight read finish on old generation and sends the next to 
     "sha256:old",
     lifecycle,
   );
-  const operations = createDesktopWorkspaceMessageCatalogOperationsV2(
+  const operations = createDesktopWorkspaceCatalogOperationsV2(
     () => currentActions,
   );
-  const oldRead = operations.listMessages({ config: runtimeConfig() });
+  const oldRead = operations.listWorkspacesForProject({
+    config: runtimeConfig(),
+  });
   await Promise.resolve();
   currentActions = acceptedActions(
     serviceFor("next"),
     "sha256:next",
     lifecycle,
   );
-  const nextRead = await operations.listMessages({ config: runtimeConfig() });
+  const nextRead = await operations.listWorkspacesForProject({
+    config: runtimeConfig(),
+  });
   resolveOld();
   const oldReadResult = await oldRead;
 
-  assert.equal(oldReadResult[0].id, "message-old");
-  assert.equal(nextRead[0].id, "message-next");
+  assert.equal(oldReadResult[0].id, "workspace-old");
+  assert.equal(nextRead[0].id, "workspace-next");
   assert.deepEqual(
     lifecycle.filter((event) => typeof event === "string"),
     ["list:old", "list:next"],

@@ -465,7 +465,7 @@
     "src/features/workspace/httpWorkspaceCollaborationClient.ts",
     "src/features/workspace/desktopWorkspaceAgentBindingDialogClientProviderV2.ts",
     "src/features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2.ts",
-    "src/features/workspace/desktopWorkspaceCatalogClientProviderV2.ts",
+    "src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.ts",
     "src/features/workspace/desktopWorkspaceConversationCatalogClientProviderV2.ts",
     "src/features/workspace/desktopWorkspaceExecutionSnapshotClientProviderV2.ts",
     "src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.ts",

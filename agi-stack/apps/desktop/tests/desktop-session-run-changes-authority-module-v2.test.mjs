@@ -45,6 +45,9 @@ const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
 const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
 );
+const { desktopWorkspaceCatalogAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js',
+);
 const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
 );
@@ -85,6 +88,7 @@ function rendererDefinitions() {
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
+    desktopWorkspaceCatalogAuthorityDefinitionV2,
   ];
 }
 

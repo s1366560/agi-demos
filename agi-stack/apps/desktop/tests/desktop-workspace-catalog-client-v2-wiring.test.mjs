@@ -1,61 +1,74 @@
-import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { test } from "node:test";
 
 function source(relativePath) {
   const url = new URL(`../${relativePath}`, import.meta.url);
-  return existsSync(url) ? readFileSync(url, 'utf8') : '';
+  return existsSync(url) ? readFileSync(url, "utf8") : "";
 }
 
-const app = source('src/App.tsx');
-const provider = source('src/features/workspace/desktopWorkspaceCatalogClientProviderV2.ts');
+const app = source("src/App.tsx");
+const provider = source(
+  "src/features/workspace/desktopWorkspaceCatalogClientProviderV2.ts",
+);
+const authority = source(
+  "src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.ts",
+);
+const generation = source("src/plugins/useDesktopPluginGenerationV2.ts");
 
-test('App publishes one stable V2 workspace catalog Provider', () => {
-  assert.match(app, /createDesktopWorkspaceCatalogClientProviderV2/u);
+test("App creates one stable generation-backed workspace catalog operation port", () => {
+  assert.match(app, /createDesktopWorkspaceCatalogOperationsV2/u);
   assert.match(
     app,
-    /const desktopWorkspaceCatalogClientProviderV2 = useMemo\([\s\S]*?createDesktopWorkspaceCatalogClientProviderV2\(\)[\s\S]*?\[\],[\s\S]*?\);/u,
+    /const desktopWorkspaceCatalogOperationsV2 = useMemo\([\s\S]*?createDesktopWorkspaceCatalogOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\);/u,
   );
-  assert.match(app, /desktopWorkspaceCatalogClientProviderV2\.publish\(\{ config \}\)/u);
+  assert.doesNotMatch(app, /createDesktopWorkspaceCatalogClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopWorkspaceCatalogClientProviderV2\.publish/u);
+  assert.equal(provider, "");
 });
 
-test('runtime refresh pins each project workspace catalog read to one V2 operation binding', () => {
+test("runtime refresh pins each project workspace catalog read to one generation operation", () => {
   const refresh = refreshRuntimeSource(app);
-  const catalogStart = refresh.indexOf('const workspaceResults = await Promise.all');
-  const catalogEnd = refresh.indexOf('\n        if (!contextIsCurrent())', catalogStart);
+  const catalogStart = refresh.indexOf(
+    "const workspaceResults = await Promise.all",
+  );
+  const catalogEnd = refresh.indexOf(
+    "\n        if (!contextIsCurrent())",
+    catalogStart,
+  );
   assert.notEqual(catalogStart, -1);
   assert.notEqual(catalogEnd, -1);
   const catalogLoader = refresh.slice(catalogStart, catalogEnd);
 
   assert.match(
     catalogLoader,
-    /desktopWorkspaceCatalogClientV2\.bindOperation\(\{[\s\S]*?\.\.\.runtimeConfig,[\s\S]*?tenantId: projectTenantId,[\s\S]*?projectId: project\.id,[\s\S]*?workspaceId: '',[\s\S]*?\}\)/u,
+    /desktopWorkspaceCatalogOperationsV2\.listWorkspacesForProject\(\s*\{[\s\S]*?config:\s*\{[\s\S]*?\.\.\.runtimeConfig,[\s\S]*?tenantId: projectTenantId,[\s\S]*?projectId: project\.id,[\s\S]*?workspaceId:\s*["']{2},[\s\S]*?\},[\s\S]*?\}\s*,?\s*\)/u,
   );
-  assert.match(
-    catalogLoader,
-    /client\.listWorkspacesForProject\(project\.id, projectTenantId\)/u,
-  );
+  assert.doesNotMatch(catalogLoader, /\.bindOperation\(/u);
   assert.doesNotMatch(catalogLoader, /new DesktopApiClient\(/u);
   assert.match(
     refresh,
-    /desktopWorkspaceAutonomyAttentionClientV2,[\s\S]*?desktopWorkspaceCatalogClientV2,[\s\S]*?desktopWorkspaceConversationCatalogClientV2,/u,
+    /desktopWorkspaceAutonomyAttentionClientV2,[\s\S]*?desktopWorkspaceCatalogOperationsV2,[\s\S]*?desktopWorkspaceConversationCatalogClientV2,/u,
   );
 });
 
-test('workspace catalog Provider owns exactly one read method', () => {
-  assert.match(provider, /type DesktopWorkspaceCatalogMethod = 'listWorkspacesForProject'/u);
-  assert.match(provider, /listWorkspacesForProject:/u);
-  assert.match(provider, /bindOperation/u);
+test("workspace catalog authority owns one project-scoped generated service", () => {
+  assert.match(authority, /DESKTOP_WORKSPACE_CATALOG_AUTHORITY_SERVICE_V2/u);
+  assert.match(authority, /createDesktopWorkspaceCatalogOperationsV2/u);
+  assert.match(authority, /listWorkspacesForProject:/u);
+  assert.match(authority, /kind:\s*["']project["']/u);
+  assert.match(authority, /workspaceId\s*!==\s*["']/u);
   assert.doesNotMatch(
-    provider,
+    authority,
     /listWorkspaces\b|createWorkspace|updateWorkspace|listWorkspaceMembers|listWorkspaceAgents|listConversations/u,
   );
+  assert.match(generation, /desktopWorkspaceCatalogAuthorityDefinitionV2/u);
 });
 
 function refreshRuntimeSource(sourceText) {
-  const start = sourceText.indexOf('const refreshRuntime = useCallback(');
+  const start = sourceText.indexOf("const refreshRuntime = useCallback(");
   assert.notEqual(start, -1);
-  const end = sourceText.indexOf('\n  useEffect(() => {', start + 1);
+  const end = sourceText.indexOf("\n  useEffect(() => {", start + 1);
   assert.notEqual(end, -1);
   return sourceText.slice(start, end);
 }

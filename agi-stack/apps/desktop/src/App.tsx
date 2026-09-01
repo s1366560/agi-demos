@@ -87,6 +87,9 @@ import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantC
 import {
   createDesktopWorkspaceMessageCatalogOperationsV2,
 } from './plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2';
+import {
+  createDesktopWorkspaceCatalogOperationsV2,
+} from './plugins/desktopWorkspaceCatalogAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import {
   acquireDesktopTerminalLifecycleAuthorityV2,
@@ -338,9 +341,6 @@ import {
 import {
   createDesktopWorkspaceAutonomyAttentionClientProviderV2,
 } from './features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2';
-import {
-  createDesktopWorkspaceCatalogClientProviderV2,
-} from './features/workspace/desktopWorkspaceCatalogClientProviderV2';
 import {
   createDesktopWorkspaceConversationCatalogClientProviderV2,
 } from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
@@ -831,6 +831,13 @@ export function App() {
       ),
     [],
   );
+  const desktopWorkspaceCatalogOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceCatalogOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -870,10 +877,6 @@ export function App() {
   );
   const desktopWorkspaceAutonomyAttentionClientProviderV2 = useMemo(
     () => createDesktopWorkspaceAutonomyAttentionClientProviderV2(),
-    [],
-  );
-  const desktopWorkspaceCatalogClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceCatalogClientProviderV2(),
     [],
   );
   const desktopWorkspaceConversationCatalogClientProviderV2 = useMemo(
@@ -1122,10 +1125,6 @@ export function App() {
   const desktopWorkspaceAutonomyAttentionClientV2 = useMemo(
     () => desktopWorkspaceAutonomyAttentionClientProviderV2.publish({ config }),
     [config, desktopWorkspaceAutonomyAttentionClientProviderV2],
-  );
-  const desktopWorkspaceCatalogClientV2 = useMemo(
-    () => desktopWorkspaceCatalogClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceCatalogClientProviderV2],
   );
   const desktopWorkspaceConversationCatalogClientV2 = useMemo(
     () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
@@ -2721,14 +2720,16 @@ export function App() {
         const workspaceResults = await Promise.all(
           projects.map(async (project) => {
             const projectTenantId = project.tenant_id || runtimeConfig.tenantId;
-            const client = desktopWorkspaceCatalogClientV2.bindOperation({
-              ...runtimeConfig,
-              tenantId: projectTenantId,
-              projectId: project.id,
-              workspaceId: '',
-            });
             try {
-              const workspaces = await client.listWorkspacesForProject(project.id, projectTenantId);
+              const workspaces =
+                await desktopWorkspaceCatalogOperationsV2.listWorkspacesForProject({
+                  config: {
+                    ...runtimeConfig,
+                    tenantId: projectTenantId,
+                    projectId: project.id,
+                    workspaceId: '',
+                  },
+                });
               return { project, workspaces, error: null };
             } catch (caught) {
               return {
@@ -3121,7 +3122,7 @@ export function App() {
       commitRuntimeConfig,
       config,
       desktopWorkspaceAutonomyAttentionClientV2,
-      desktopWorkspaceCatalogClientV2,
+      desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceConversationCatalogClientV2,
       desktopWorkspaceExecutionSnapshotClientV2,
       desktopWorkspaceMessageCatalogOperationsV2,

@@ -28,6 +28,7 @@ import { desktopSessionRunChangesAuthorityDefinitionV2 } from './desktopSessionR
 import { desktopTerminalLifecycleAuthorityDefinitionV2 } from './desktopTerminalLifecycleAuthorityModuleV2';
 import { desktopTenantCatalogAuthorityDefinitionV2 } from './desktopTenantCatalogAuthorityModuleV2';
 import { desktopWorkspaceContextAuthorityDefinitionV2 } from './desktopWorkspaceContextAuthorityModuleV2';
+import { desktopWorkspaceCatalogAuthorityDefinitionV2 } from './desktopWorkspaceCatalogAuthorityModuleV2';
 import { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } from './desktopWorkspaceMessageCatalogAuthorityModuleV2';
 
 const RENDERER_DISTRIBUTION_COMMAND_V2 = 'platform_plugin_renderer_distribution_current_v2';
@@ -46,6 +47,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
+    desktopWorkspaceCatalogAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
   ])
 );
