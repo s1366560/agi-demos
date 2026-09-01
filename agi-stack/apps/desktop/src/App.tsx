@@ -157,6 +157,9 @@ import {
   createDesktopSessionRunChangesClientProviderV2,
 } from './features/session/desktopSessionRunChangesClientProviderV2';
 import {
+  createDesktopSessionRunInputClientProviderV2,
+} from './features/session/desktopSessionRunInputClientProviderV2';
+import {
   createDesktopHitlResponseClientProviderV2,
 } from './features/session/desktopHitlResponseClientProviderV2';
 import {
@@ -840,6 +843,10 @@ export function App() {
     () => createDesktopSessionRunChangesClientProviderV2(),
     [],
   );
+  const desktopSessionRunInputClientProviderV2 = useMemo(
+    () => createDesktopSessionRunInputClientProviderV2(),
+    [],
+  );
   const desktopHitlResponseClientProviderV2 = useMemo(
     () => createDesktopHitlResponseClientProviderV2(),
     [],
@@ -1017,6 +1024,10 @@ export function App() {
   const desktopSessionRunChangesClientV2 = useMemo(
     () => desktopSessionRunChangesClientProviderV2.publish({ config }),
     [config, desktopSessionRunChangesClientProviderV2],
+  );
+  const desktopSessionRunInputClientV2 = useMemo(
+    () => desktopSessionRunInputClientProviderV2.publish({ config }),
+    [config, desktopSessionRunInputClientProviderV2],
   );
   const desktopHitlResponseClientV2 = useMemo(
     () => desktopHitlResponseClientProviderV2.publish({ config }),
@@ -4503,10 +4514,12 @@ export function App() {
   }, [loadRunChanges]);
   useEffect(() => {
     let active = true;
+    const requestConfig = configRef.current;
     if (
       !currentArtifactRun ||
-      (config.mode === 'local' && !localRuntimeMode) ||
-      (config.mode === 'cloud' && (!activityAuthorityAdapter.client || !activityAuthorityScope))
+      (requestConfig.mode === 'local' && !localRuntimeMode) ||
+      (requestConfig.mode === 'cloud' &&
+        (!activityAuthorityAdapter.client || !activityAuthorityScope))
     ) {
       setRunInputs([]);
       setRunInputsLoading(false);
@@ -4518,14 +4531,20 @@ export function App() {
     setRunInputsLoading(true);
     setRunInputsError(null);
     const requestRunInputs = async (): Promise<DesktopRunInput[]> => {
-      if (config.mode === 'cloud' && activityAuthorityAdapter.client && activityAuthorityScope) {
+      if (
+        requestConfig.mode === 'cloud' &&
+        activityAuthorityAdapter.client &&
+        activityAuthorityScope
+      ) {
         const response = await activityAuthorityAdapter.client.listRunInputs(
           activityAuthorityScope,
           currentArtifactRun.id,
         );
         return response.inputs.map(desktopRunInputFromCloud);
       }
-      const response = await api.listRunInputs(currentArtifactRun.id);
+      const response = await desktopSessionRunInputClientV2
+        .bindOperation(requestConfig)
+        .listRunInputs(currentArtifactRun.id);
       return response.inputs;
     };
     void requestRunInputs()
@@ -4533,7 +4552,9 @@ export function App() {
         if (active) setRunInputs(inputs);
       })
       .catch((caught) => {
-        if (active) setRunInputsError(formatConnectionError(caught, config.apiBaseUrl));
+        if (active) {
+          setRunInputsError(formatConnectionError(caught, requestConfig.apiBaseUrl));
+        }
       })
       .finally(() => {
         if (active) setRunInputsLoading(false);
@@ -4544,10 +4565,10 @@ export function App() {
   }, [
     activityAuthorityAdapter,
     activityAuthorityScope,
-    api,
     config.apiBaseUrl,
     config.mode,
     currentArtifactRun,
+    desktopSessionRunInputClientV2,
     localRuntimeMode,
   ]);
   useEffect(() => {
@@ -4566,6 +4587,7 @@ export function App() {
   }, [changeSnapshot, currentArtifactRun?.id, currentArtifactRun?.revision]);
   const promoteQueuedRunInput = useCallback(
     async (input: DesktopRunInput) => {
+      const requestConfig = configRef.current;
       if (!currentArtifactRun || currentArtifactRun.id !== input.run_id) {
         setError(t('session.queueSourceRunUnavailable'));
         return;
@@ -4573,7 +4595,7 @@ export function App() {
       setPromotingRunInputId(input.id);
       setError(null);
       try {
-        if (config.mode === 'cloud') {
+        if (requestConfig.mode === 'cloud') {
           if (!activityAuthorityAdapter.client || !activityAuthorityScope) {
             throw new Error('cloud_run_input_authority_scope_unavailable');
           }
@@ -4596,15 +4618,17 @@ export function App() {
           invalidateSessionAuthority();
           setReviewTab('plan');
           if (selectedConversation) {
-            await loadConversationTimeline(selectedConversation, config.projectId);
+            await loadConversationTimeline(selectedConversation, requestConfig.projectId);
           }
           return;
         }
-        const outcome = await api.promoteRunInput(
-          input.id,
-          currentArtifactRun.revision,
-          `desktop-run-input-promotion:${input.id}`,
-        );
+        const outcome = await desktopSessionRunInputClientV2
+          .bindOperation(requestConfig)
+          .promoteRunInput(
+            input.id,
+            currentArtifactRun.revision,
+            `desktop-run-input-promotion:${input.id}`,
+          );
         invalidateSessionAuthority();
         setRunInputs((current) =>
           current.map((candidate) =>
@@ -4628,21 +4652,18 @@ export function App() {
           ),
         }));
         setReviewTab('plan');
-        await loadConversationTimeline(outcome.conversation, config.projectId);
+        await loadConversationTimeline(outcome.conversation, requestConfig.projectId);
       } catch (caught) {
-        setError(formatConnectionError(caught, config.apiBaseUrl));
+        setError(formatConnectionError(caught, requestConfig.apiBaseUrl));
       } finally {
         setPromotingRunInputId(null);
       }
     },
     [
-      api,
       activityAuthorityAdapter,
       activityAuthorityScope,
-      config.apiBaseUrl,
-      config.mode,
-      config.projectId,
       currentArtifactRun,
+      desktopSessionRunInputClientV2,
       invalidateSessionAuthority,
       loadConversationTimeline,
       selectedConversation,
@@ -5576,6 +5597,7 @@ export function App() {
     localRuntimeMode,
     newThreadWorkspaces,
     newThreadCreationClientV2: desktopNewThreadCreationClientV2,
+    sessionRunInputClientV2: desktopSessionRunInputClientV2,
     pendingNewTaskAgentTurnsRef,
     permissionPreset,
     resetConversationTimeline,

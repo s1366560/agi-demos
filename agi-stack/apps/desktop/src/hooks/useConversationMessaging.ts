@@ -50,6 +50,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
     sessionChatDisabledReason,
     localRuntimeMode,
     api,
+    sessionRunInputClientV2,
     socket,
     activityAuthorityAdapter,
     activityAuthorityScope,
@@ -61,6 +62,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
     setAgentConversationSession,
     setConversationTimeline,
     runInputRequestRef,
+    configRef,
     invalidateSessionAuthority,
     upsertAgentTaskSignal,
     loadConversationTimeline,
@@ -282,12 +284,13 @@ export function useConversationMessaging(params: AgentConversationParams) {
           };
         }
         const request = runInputRequestRef.current;
+        const requestConfig = configRef.current;
         let acknowledgementInput: DesktopRunInput;
         let acknowledgementConversationId: string;
         let acknowledgementMessageId: string;
         let acknowledgementDeliveryMode: RunInputDelivery;
         let acknowledgementQueuePosition: number | null | undefined;
-        if (config.mode === 'cloud') {
+        if (requestConfig.mode === 'cloud') {
           if (!activityAuthorityAdapter.client || !activityAuthorityScope) {
             throw new Error('cloud_run_input_authority_scope_unavailable');
           }
@@ -318,9 +321,9 @@ export function useConversationMessaging(params: AgentConversationParams) {
           acknowledgementDeliveryMode = acknowledgement.delivery_mode;
           acknowledgementQueuePosition = acknowledgement.queue_position;
         } else {
-          const acknowledgement = await api.createRunInput(
-            currentArtifactRun.id,
-            {
+          const acknowledgement = await sessionRunInputClientV2
+            .bindOperation(requestConfig)
+            .createRunInput(currentArtifactRun.id, {
               expectedRunRevision: currentArtifactRun.revision,
               message: content,
               messageId: request.messageId,
@@ -328,8 +331,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
               delivery: requestedDelivery,
               references: outgoingReferences,
               contextItems,
-            },
-          );
+            });
           acknowledgementInput = acknowledgement.input;
           acknowledgementConversationId = acknowledgement.conversation_id;
           acknowledgementMessageId = acknowledgement.message_id;
@@ -361,7 +363,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
         if (selectedConversation) {
           await loadConversationTimeline(
             selectedConversation,
-            config.projectId,
+            requestConfig.projectId,
           );
         }
         return;

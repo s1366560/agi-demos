@@ -9,6 +9,7 @@ import { createDesktopAgentAuthorityAdapter } from '../features/agent-authority/
 import type { CloudAgentAuthorityScope } from '../features/agent-authority/agentAuthorityTypes';
 import type { ConversationSessionProjection } from '../features/session/sessionProjectionTypes';
 import { normalizeSessionTaskListPlan } from '../features/session/sessionPlanApprovalModel';
+import type { DesktopSessionRunInputClientBindingV2 } from '../features/session/desktopSessionRunInputClientProviderV2';
 import { useWorkspaceAgentPolicy } from '../features/settings/useWorkspaceAgentPolicy';
 import {
   DesktopApiClient,
@@ -72,6 +73,7 @@ export type AgentConversationParams = {
   canManageWorkspacePolicy: boolean;
   api: DesktopApiClient;
   newThreadCreationClientV2: DesktopNewThreadCreationClientBindingV2;
+  sessionRunInputClientV2: DesktopSessionRunInputClientBindingV2;
   socket: ReturnType<typeof useAgentSocket>;
   activityAuthorityAdapter: ReturnType<typeof createDesktopAgentAuthorityAdapter>;
   activityAuthorityScope: CloudAgentAuthorityScope | undefined;
