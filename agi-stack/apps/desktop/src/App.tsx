@@ -350,6 +350,9 @@ import {
   createDesktopWorkspaceConversationCatalogClientProviderV2,
 } from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
 import {
+  createDesktopWorkspaceRosterClientProviderV2,
+} from './features/workspace/desktopWorkspaceRosterClientProviderV2';
+import {
   createDesktopWorkspaceLifecycleClientProviderV2,
 } from './features/workspace/desktopWorkspaceLifecycleClientProviderV2';
 import {
@@ -827,6 +830,10 @@ export function App() {
     () => createDesktopWorkspaceConversationCatalogClientProviderV2(),
     [],
   );
+  const desktopWorkspaceRosterClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceRosterClientProviderV2(),
+    [],
+  );
   const desktopWorkspaceLifecycleClientProviderV2 = useMemo(
     () => createDesktopWorkspaceLifecycleClientProviderV2(),
     [],
@@ -1096,6 +1103,10 @@ export function App() {
   const desktopWorkspaceConversationCatalogClientV2 = useMemo(
     () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
     [config, desktopWorkspaceConversationCatalogClientProviderV2],
+  );
+  const desktopWorkspaceRosterClientV2 = useMemo(
+    () => desktopWorkspaceRosterClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceRosterClientProviderV2],
   );
   const desktopWorkspaceLifecycleClientV2 = useMemo(
     () => desktopWorkspaceLifecycleClientProviderV2.publish({ config }),
@@ -2750,6 +2761,8 @@ export function App() {
           workspaceId,
         };
         const scopedClient = new DesktopApiClient(resolvedConfig);
+        const workspaceRosterClient =
+          desktopWorkspaceRosterClientV2.bindOperation(resolvedConfig);
         const workspaceAutonomyAttentionClient =
           desktopWorkspaceAutonomyAttentionClientV2.bindOperation(resolvedConfig);
         if (!contextIsCurrent()) return false;
@@ -2841,10 +2854,10 @@ export function App() {
           workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
           workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
           workspaceId
-            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceMembers())
+            ? resolveWorkspaceAuthority(workspaceRosterClient.listWorkspaceMembers())
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
           workspaceId
-            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAgents())
+            ? resolveWorkspaceAuthority(workspaceRosterClient.listWorkspaceAgents())
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
           workspaceId
             ? resolveWorkspaceAuthority(
@@ -3068,6 +3081,7 @@ export function App() {
       desktopWorkspaceAutonomyAttentionClientV2,
       desktopWorkspaceCatalogClientV2,
       desktopWorkspaceConversationCatalogClientV2,
+      desktopWorkspaceRosterClientV2,
       listMyWorkForConfig,
       syncLocalRuntimeConfig,
       t,

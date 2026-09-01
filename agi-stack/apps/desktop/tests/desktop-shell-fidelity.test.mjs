@@ -514,11 +514,11 @@ test('workspace roster hydration isolates authority failures from the runtime co
   assert.match(refreshRuntime, /loadingWorkspaceAuthority\(\)/);
   assert.match(
     refreshRuntime,
-    /resolveWorkspaceAuthority\(scopedClient\.listWorkspaceMembers\(\)\)/,
+    /resolveWorkspaceAuthority\(workspaceRosterClient\.listWorkspaceMembers\(\)\)/,
   );
   assert.match(
     refreshRuntime,
-    /resolveWorkspaceAuthority\(scopedClient\.listWorkspaceAgents\(\)\)/,
+    /resolveWorkspaceAuthority\(workspaceRosterClient\.listWorkspaceAgents\(\)\)/,
   );
   assert.match(
     refreshRuntime,
