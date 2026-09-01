@@ -30,6 +30,9 @@ const {
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js`,
 );
+const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
+  `${COMPILED_ROOT}/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js`,
+);
 const { DEFAULT_CONFIG } = require(`${COMPILED_ROOT}/src/types.js`);
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
@@ -54,6 +57,7 @@ function rendererDefinitions() {
   return [
     ...createDesktopRendererDefinitionsV2(),
     desktopWorkspaceContextAuthorityDefinitionV2,
+    desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
   ];
@@ -235,6 +239,7 @@ test('Loader activates frozen services and each Profile entry disables independe
     [
       ...createDesktopRendererDefinitionsV2(),
       desktopWorkspaceContextAuthorityDefinitionV2,
+      desktopTerminalLifecycleAuthorityDefinitionV2,
       desktopPluginMarketplaceCatalogDefinitionV2,
     ],
     'desktop-renderer',
@@ -248,6 +253,7 @@ test('Loader activates frozen services and each Profile entry disables independe
     [
       ...createDesktopRendererDefinitionsV2(),
       desktopWorkspaceContextAuthorityDefinitionV2,
+      desktopTerminalLifecycleAuthorityDefinitionV2,
       desktopPluginMarketplaceCatalogDefinitionV2,
       {
         ...desktopPluginMarketplaceManagementDefinitionV2,
