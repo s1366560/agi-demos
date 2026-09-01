@@ -2790,7 +2790,7 @@ export function App() {
           conversationLoadTargets.map(async (targetWorkspaceId) => {
             const requestGeneration = conversationRequestGenerations.get(targetWorkspaceId);
             const isUnboundGroup = targetWorkspaceId === UNBOUND_CONVERSATIONS_KEY;
-            const client = new DesktopApiClient({
+            const client = desktopWorkspaceConversationCatalogClientV2.bindOperation({
               ...resolvedConfig,
               workspaceId: isUnboundGroup ? '' : targetWorkspaceId,
             });
@@ -3055,6 +3055,7 @@ export function App() {
       commitRuntimeConfig,
       config,
       desktopWorkspaceAutonomyAttentionClientV2,
+      desktopWorkspaceConversationCatalogClientV2,
       listMyWorkForConfig,
       syncLocalRuntimeConfig,
       t,

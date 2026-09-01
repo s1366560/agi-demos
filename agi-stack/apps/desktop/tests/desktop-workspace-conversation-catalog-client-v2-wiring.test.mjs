@@ -41,6 +41,29 @@ test('workspace conversation hydration pins one submitted-scope V2 operation bin
   assert.doesNotMatch(loader, /new DesktopApiClient\(/u);
 });
 
+test('runtime refresh pins each conversation catalog target to one V2 operation binding', () => {
+  const refresh = refreshRuntimeSource(app);
+  const conversationLoaderStart = refresh.indexOf('const conversationResultsPromise');
+  const conversationLoaderEnd = refresh.indexOf('\n        const [', conversationLoaderStart);
+  assert.notEqual(conversationLoaderStart, -1);
+  assert.notEqual(conversationLoaderEnd, -1);
+  const conversationLoader = refresh.slice(conversationLoaderStart, conversationLoaderEnd);
+
+  assert.match(
+    conversationLoader,
+    /desktopWorkspaceConversationCatalogClientV2\.bindOperation\(\{[\s\S]*?\.\.\.resolvedConfig,[\s\S]*?workspaceId: isUnboundGroup \? '' : targetWorkspaceId,[\s\S]*?\}\)/u,
+  );
+  assert.match(
+    conversationLoader,
+    /client\.listConversations\(resolvedProjectId, \{[\s\S]*?workspaceId: isUnboundGroup \? null : targetWorkspaceId,[\s\S]*?unboundOnly: isUnboundGroup,/u,
+  );
+  assert.doesNotMatch(conversationLoader, /new DesktopApiClient\(/u);
+  assert.match(
+    refresh,
+    /desktopWorkspaceAutonomyAttentionClientV2,[\s\S]*?desktopWorkspaceConversationCatalogClientV2,[\s\S]*?listMyWorkForConfig,/u,
+  );
+});
+
 test('session fallback lookups pin submitted-scope V2 conversation catalog operations', () => {
   const myWorkLoader = functionSource(app, 'openMyWorkSession', 'openAgentSession');
   assert.match(
@@ -79,6 +102,15 @@ test('workspace conversation catalog Provider owns exactly one read method', () 
   );
 });
 
+test('every App conversation catalog read is covered by one V2 operation binding', () => {
+  assert.equal(app.match(/client\.listConversations\(/gu)?.length, 4);
+  assert.equal(
+    app.match(/desktopWorkspaceConversationCatalogClientV2\.bindOperation\(/gu)?.length,
+    4,
+  );
+  assert.doesNotMatch(app, /(?:api|scopedClient)\.listConversations\(/u);
+});
+
 function callbackSource(sourceText, name, nextName) {
   const start = sourceText.indexOf(`const ${name} = useCallback(`);
   assert.notEqual(start, -1);
@@ -91,6 +123,14 @@ function functionSource(sourceText, name, nextName) {
   const start = sourceText.indexOf(`const ${name} = async`);
   assert.notEqual(start, -1);
   const end = sourceText.indexOf(`\n\n  const ${nextName}`, start + 1);
+  assert.notEqual(end, -1);
+  return sourceText.slice(start, end);
+}
+
+function refreshRuntimeSource(sourceText) {
+  const start = sourceText.indexOf('const refreshRuntime = useCallback(');
+  assert.notEqual(start, -1);
+  const end = sourceText.indexOf('\n  useEffect(() => {', start + 1);
   assert.notEqual(end, -1);
   return sourceText.slice(start, end);
 }
