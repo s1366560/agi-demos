@@ -34,7 +34,7 @@ test('App publishes one stable V2 session run-input Provider', () => {
 test('Local run-input listing binds the submitted config while Cloud keeps Agent authority', () => {
   const effect = sourceSlice(
     app,
-    'useEffect(() => {\n    void loadRunChanges();\n  }, [loadRunChanges]);',
+    'useEffect(() => {\n    let active = true;\n    const requestConfig = configRef.current;',
     'useEffect(() => {\n    setRunInputDelivery',
   );
 
