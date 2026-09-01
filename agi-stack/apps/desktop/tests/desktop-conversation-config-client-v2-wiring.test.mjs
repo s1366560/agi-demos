@@ -8,23 +8,26 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source('src/features/session/desktopConversationConfigClientProviderV2.ts');
-const stableProviderPattern = new RegExp(
-  [
-    'const desktopConversationConfigClientProviderV2 = useMemo\\(',
-    '[\\s\\S]*?createDesktopConversationConfigClientProviderV2\\(\\)',
-    '[\\s\\S]*?\\[\\],[\\s\\S]*?\\);',
-  ].join(''),
-  'u',
+const generationHook = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const authorityModule = source('src/plugins/desktopConversationConfigAuthorityModuleV2.ts');
+const legacyProviderPath = new URL(
+  '../src/features/session/desktopConversationConfigClientProviderV2.ts',
+  import.meta.url,
 );
 
-test('App publishes one stable V2 conversation config client Provider', () => {
-  assert.match(app, /createDesktopConversationConfigClientProviderV2/u);
-  assert.match(app, stableProviderPattern);
-  assert.match(app, /desktopConversationConfigClientProviderV2\.publish\(\{ config \}\)/u);
+test('App creates one stable generation-backed conversation config operation port', () => {
+  assert.match(app, /createDesktopConversationConfigOperationsV2/u);
+  assert.match(
+    app,
+    /const desktopConversationConfigOperationsV2 = useMemo\([\s\S]*?createDesktopConversationConfigOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u,
+  );
+  assert.doesNotMatch(app, /createDesktopConversationConfigClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopConversationConfigClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopConversationConfigClientV2/u);
+  assert.equal(existsSync(legacyProviderPath), false);
 });
 
-test('conversation model mutations bind one submitted-scope V2 client', () => {
+test('conversation model mutations enter the session-scoped V2 authority once', () => {
   const mutation = callbackSource(
     app,
     'persistChatRuntimeModelOverride',
@@ -34,28 +37,21 @@ test('conversation model mutations bind one submitted-scope V2 client', () => {
   assert.match(mutation, /const requestConfig = configRef\.current;/u);
   assert.match(
     mutation,
-    /const client = desktopConversationConfigClientV2\.bindOperation\(requestConfig\);/u,
-  );
-  assert.match(
-    mutation,
-    /await client\.updateAgentConversationConfig\([\s\S]*?conversation\.id,[\s\S]*?llm_model_override: overrideModel,[\s\S]*?requestConfig\.mode === 'local'[\s\S]*?llm_route_override: routeOverride \?\? null[\s\S]*?conversation\.project_id \|\| requestConfig\.projectId,/u,
+    /await desktopConversationConfigOperationsV2\.updateModelOverride\(\{[\s\S]*?config: requestConfig,[\s\S]*?conversation,[\s\S]*?llmModelOverride: overrideModel,[\s\S]*?llmRouteOverride: routeOverride \?\? null,[\s\S]*?\}\);/u,
   );
   assert.match(mutation, /formatConnectionError\(caught, requestConfig\.apiBaseUrl\)/u);
-  assert.match(mutation, /desktopConversationConfigClientV2/u);
-  assert.doesNotMatch(mutation, /api\.updateAgentConversationConfig/u);
+  assert.doesNotMatch(mutation, /updateAgentConversationConfig/u);
+  assert.doesNotMatch(mutation, /new DesktopApiClient/u);
 });
 
-test('conversation model mutation responses fail closed after request or scope drift', () => {
+test('response freshness guards remain outside the transport authority', () => {
   const mutation = callbackSource(
     app,
     'persistChatRuntimeModelOverride',
     'selectChatRuntimeModel',
   );
 
-  assert.match(
-    mutation,
-    /conversationModelMutationRequestRef\.current !== requestId/u,
-  );
+  assert.match(mutation, /conversationModelMutationRequestRef\.current !== requestId/u);
   assert.match(
     mutation,
     /activeSession\?\.scopeKey !== agentConversationScopeKey\(configRef\.current\)/u,
@@ -65,19 +61,23 @@ test('conversation model mutation responses fail closed after request or scope d
     mutation,
     /current\?\.scopeKey !== activeSession\.scopeKey[\s\S]*?current\.conversation\.id !== conversation\.id/u,
   );
-});
-
-test('conversation config Provider owns only the transport mutation', () => {
-  assert.match(
-    provider,
-    /type DesktopConversationConfigMethod = 'updateAgentConversationConfig'/u,
-  );
-  assert.match(provider, /updateAgentConversationConfig:/u);
-  assert.match(provider, /bindOperation/u);
   assert.doesNotMatch(
-    provider,
+    authorityModule,
     /conversationModelMutationRequestRef|agentConversationScopeKey|setConversationModelMutation|conversationRuntimeModelSelection/u,
   );
+});
+
+test('desktop renderer runtime registers only the generated V2 authority definition', () => {
+  assert.match(generationHook, /desktopConversationConfigAuthorityDefinitionV2/u);
+  assert.match(
+    generationHook,
+    /desktopConversationConfigAuthorityDefinitionV2,[\s\S]*desktopTerminalLifecycleAuthorityDefinitionV2/u,
+  );
+  assert.match(
+    authorityModule,
+    /service:desktop-renderer\.conversation-config-authority/u,
+  );
+  assert.doesNotMatch(generationHook, /desktopConversationConfigClientProviderV2/u);
 });
 
 function callbackSource(sourceText, name, nextName) {

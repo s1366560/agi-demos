@@ -272,7 +272,10 @@ test('unbound chat uses project model options and a scope-aware catalog client',
   assert.match(appSource, /const chatComposerApi = useMemo/);
   assert.match(appSource, /api:\s*chatComposerApi/u);
   assert.match(appSource, /unboundComposerCatalogClient\(/);
-  assert.match(appSource, /updateAgentConversationConfig\([\s\S]*llm_model_override/);
+  assert.match(
+    appSource,
+    /desktopConversationConfigOperationsV2\.updateModelOverride\([\s\S]*llmModelOverride/,
+  );
 });
 
 test('unbound creation sends the selected model atomically with conversation creation', () => {

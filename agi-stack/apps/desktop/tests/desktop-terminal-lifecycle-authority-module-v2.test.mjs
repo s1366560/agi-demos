@@ -27,6 +27,9 @@ const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
 } = require(`${COMPILED_ROOT}/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js`);
+const { desktopConversationConfigAuthorityDefinitionV2 } = require(
+  `${COMPILED_ROOT}/src/plugins/desktopConversationConfigAuthorityModuleV2.js`,
+);
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js`,
 );
@@ -59,6 +62,7 @@ function rendererDefinitions() {
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
+    desktopConversationConfigAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
   ];

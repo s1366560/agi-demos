@@ -158,6 +158,37 @@
       "contract_digest": "sha256:be5b632ae6024037f5501a1d5a1942392e3b48183b68ded72561083db54cbd59"
     },
     {
+      "module_ref": "builtin://memstack/desktop/conversation-config-authority",
+      "entrypoint": "applyDesktopConversationConfigAuthorityV2",
+      "artifact": {
+        "digest": "sha256:914cfcfbd28a49d330b7f7d46b5c13c3e65880b5df34052d7955d7a3a2fee4b2",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationConfigAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.conversation-config-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:e3e86feceaf865f1d2575c6ce5fcd2d6ded7b47790a0e2bbea4b8589720b5671"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/terminal-lifecycle-authority",
       "entrypoint": "applyDesktopTerminalLifecycleAuthorityV2",
       "artifact": {

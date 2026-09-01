@@ -78,6 +78,7 @@ import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRend
 import {
   createDesktopPluginMarketplaceOperationsV2,
 } from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
 import {
@@ -237,9 +238,6 @@ import {
 import {
   createDesktopSessionTimelineClientProviderV2,
 } from './features/session/desktopSessionTimelineClientProviderV2';
-import {
-  createDesktopConversationConfigClientProviderV2,
-} from './features/session/desktopConversationConfigClientProviderV2';
 import {
   failEarlierTimelinePage,
   resolveEarlierTimelinePage,
@@ -820,6 +818,13 @@ export function App() {
       ),
     [],
   );
+  const desktopConversationConfigOperationsV2 = useMemo(
+    () =>
+      createDesktopConversationConfigOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopAgentAuthorityProviderV2 = useMemo(
     () => createDesktopAgentAuthorityProviderV2(),
     [],
@@ -910,10 +915,6 @@ export function App() {
   );
   const desktopHitlResponseClientProviderV2 = useMemo(
     () => createDesktopHitlResponseClientProviderV2(),
-    [],
-  );
-  const desktopConversationConfigClientProviderV2 = useMemo(
-    () => createDesktopConversationConfigClientProviderV2(),
     [],
   );
   const desktopSessionProjectionClientProviderV2 = useMemo(
@@ -1110,10 +1111,6 @@ export function App() {
   const desktopHitlResponseClientV2 = useMemo(
     () => desktopHitlResponseClientProviderV2.publish({ config }),
     [config, desktopHitlResponseClientProviderV2],
-  );
-  const desktopConversationConfigClientV2 = useMemo(
-    () => desktopConversationConfigClientProviderV2.publish({ config }),
-    [config, desktopConversationConfigClientProviderV2],
   );
   const desktopSessionProjectionClientV2 = useMemo(
     () => desktopSessionProjectionClientProviderV2.publish({ config }),
@@ -5019,7 +5016,6 @@ export function App() {
         throw new Error(t('chat.selectedModelUnavailable'));
       }
       const requestConfig = configRef.current;
-      const client = desktopConversationConfigClientV2.bindOperation(requestConfig);
       const requestId = conversationModelMutationRequestRef.current + 1;
       conversationModelMutationRequestRef.current = requestId;
       const baseEventRevision = conversationModelEvent?.revision ?? null;
@@ -5038,16 +5034,12 @@ export function App() {
         baseEventRevision,
       }));
       try {
-        const updated = await client.updateAgentConversationConfig(
-          conversation.id,
-          {
-            llm_model_override: overrideModel,
-            ...(requestConfig.mode === 'local'
-              ? { llm_route_override: routeOverride ?? null }
-              : {}),
-          },
-          conversation.project_id || requestConfig.projectId,
-        );
+        const updated = await desktopConversationConfigOperationsV2.updateModelOverride({
+          config: requestConfig,
+          conversation,
+          llmModelOverride: overrideModel,
+          llmRouteOverride: routeOverride ?? null,
+        });
         const activeSession = agentConversationSessionRef.current;
         if (
           conversationModelMutationRequestRef.current !== requestId ||
@@ -5107,7 +5099,7 @@ export function App() {
     [
       chatModelScopeKey,
       conversationModelEvent?.revision,
-      desktopConversationConfigClientV2,
+      desktopConversationConfigOperationsV2,
       scopedConversation,
       t,
       updateDataset,

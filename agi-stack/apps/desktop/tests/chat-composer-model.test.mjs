@@ -96,7 +96,7 @@ test('session and workspace composers expose a controlled model switch backed by
   );
   assert.match(composerControlsSource, /chat\.resetModelOverride/);
   assert.match(composerControlsSource, /onReset/);
-  assert.match(appSource, /updateAgentConversationConfig/);
+  assert.match(appSource, /desktopConversationConfigOperationsV2\.updateModelOverride/);
   assert.match(appSource, /conversationRuntimeModelSelection/);
   assert.match(appSource, /onModelReset:\s*[\s\S]{0,180}resetChatRuntimeModel/);
   assert.match(composerControlsSource, /role="listbox"/);
