@@ -341,6 +341,9 @@ import {
   createDesktopWorkspaceAgentBindingDialogClientProviderV2,
 } from './features/workspace/desktopWorkspaceAgentBindingDialogClientProviderV2';
 import {
+  createDesktopWorkspaceAutonomyAttentionClientProviderV2,
+} from './features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2';
+import {
   createDesktopWorkspaceConversationCatalogClientProviderV2,
 } from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
 import {
@@ -809,6 +812,10 @@ export function App() {
     () => createDesktopWorkspaceAgentBindingDialogClientProviderV2(),
     [],
   );
+  const desktopWorkspaceAutonomyAttentionClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceAutonomyAttentionClientProviderV2(),
+    [],
+  );
   const desktopWorkspaceConversationCatalogClientProviderV2 = useMemo(
     () => createDesktopWorkspaceConversationCatalogClientProviderV2(),
     [],
@@ -1070,6 +1077,10 @@ export function App() {
   const desktopWorkspaceAgentBindingDialogClientV2 = useMemo(
     () => desktopWorkspaceAgentBindingDialogClientProviderV2.publish({ config }),
     [config, desktopWorkspaceAgentBindingDialogClientProviderV2],
+  );
+  const desktopWorkspaceAutonomyAttentionClientV2 = useMemo(
+    () => desktopWorkspaceAutonomyAttentionClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceAutonomyAttentionClientProviderV2],
   );
   const desktopWorkspaceConversationCatalogClientV2 = useMemo(
     () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
@@ -2728,6 +2739,8 @@ export function App() {
           workspaceId,
         };
         const scopedClient = new DesktopApiClient(resolvedConfig);
+        const workspaceAutonomyAttentionClient =
+          desktopWorkspaceAutonomyAttentionClientV2.bindOperation(resolvedConfig);
         if (!contextIsCurrent()) return false;
         const autonomyAttentionScopeKey = workspaceAutonomyAttentionScopeKey(resolvedConfig);
         setWorkspaceAutonomyAttentionState({
@@ -2823,7 +2836,9 @@ export function App() {
             ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAgents())
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
           workspaceId
-            ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAutonomyAttentions())
+            ? resolveWorkspaceAuthority(
+                workspaceAutonomyAttentionClient.listWorkspaceAutonomyAttentions(),
+              )
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>()),
           resolvedProjectId
             ? listMyWorkForConfig(resolvedConfig)
@@ -3039,6 +3054,7 @@ export function App() {
       clearMissingConversationSelection,
       commitRuntimeConfig,
       config,
+      desktopWorkspaceAutonomyAttentionClientV2,
       listMyWorkForConfig,
       syncLocalRuntimeConfig,
       t,
@@ -5687,6 +5703,7 @@ export function App() {
     const requestConfig = configRef.current;
     const requestScopeKey = workspaceAutonomyAttentionScopeKey(requestConfig);
     if (!requestConfig.workspaceId.trim()) return;
+    const client = desktopWorkspaceAutonomyAttentionClientV2.bindOperation(requestConfig);
     const requestIsCurrent = () =>
       isSameDesktopRequestScope(requestConfig, configRef.current) &&
       requestScopeKey === workspaceAutonomyAttentionScopeKey(configRef.current);
@@ -5697,7 +5714,6 @@ export function App() {
         : current,
     );
     try {
-      const client = new DesktopApiClient(requestConfig);
       await client.retryWorkspaceAutonomyAttention(attentionId);
       const attentions = await client.listWorkspaceAutonomyAttentions();
       if (!requestIsCurrent()) return;
@@ -5723,12 +5739,13 @@ export function App() {
         );
       }
     }
-  }, []);
+  }, [desktopWorkspaceAutonomyAttentionClientV2]);
   const resolveWorkspaceAutonomyAttention = useCallback(async (attentionId: string) => {
     const requestConfig = configRef.current;
     const requestScopeKey = workspaceAutonomyAttentionScopeKey(requestConfig);
     const requestActorId = authRef.current.user?.user_id.trim() ?? '';
     if (!requestConfig.workspaceId.trim() || !requestActorId) return;
+    const client = desktopWorkspaceAutonomyAttentionClientV2.bindOperation(requestConfig);
     const requestIsCurrent = () =>
       isSameDesktopRequestScope(requestConfig, configRef.current) &&
       requestScopeKey === workspaceAutonomyAttentionScopeKey(configRef.current) &&
@@ -5763,7 +5780,6 @@ export function App() {
         : current,
     );
     try {
-      const client = new DesktopApiClient(requestConfig);
       let attempt = currentWorkspaceAutonomyAttentionResolveAttempt(
         workspaceAutonomyAttentionResolveAttemptsRef.current,
         requestScopeKey,
@@ -5796,7 +5812,6 @@ export function App() {
       if (!requestIsCurrent()) return;
       const resolveError = formatConnectionError(caught, requestConfig.apiBaseUrl);
       try {
-        const client = new DesktopApiClient(requestConfig);
         const attentions = await client.listWorkspaceAutonomyAttentions();
         if (!requestIsCurrent()) return;
         const attentionRemainsOpen = attentions.some(
@@ -5833,7 +5848,7 @@ export function App() {
         );
       }
     }
-  }, []);
+  }, [desktopWorkspaceAutonomyAttentionClientV2]);
   const openProfileWorkspaceSettings = () => openSettingsEntry('profile_workspace_switch');
 
   const openConnectionSettings = () => {
