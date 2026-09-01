@@ -45,6 +45,9 @@ const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
 const { desktopHitlResponseAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js',
 );
+const { desktopMyWorkAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopMyWorkAuthorityModuleV2.js',
+);
 const { desktopSessionTimelineAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js',
 );
@@ -93,6 +96,7 @@ function rendererDefinitions() {
     desktopConversationConfigAuthorityDefinitionV2,
     desktopConversationLifecycleAuthorityDefinitionV2,
     desktopHitlResponseAuthorityDefinitionV2,
+    desktopMyWorkAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,
