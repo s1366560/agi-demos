@@ -350,6 +350,9 @@ import {
   createDesktopWorkspaceConversationCatalogClientProviderV2,
 } from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
 import {
+  createDesktopWorkspaceExecutionSnapshotClientProviderV2,
+} from './features/workspace/desktopWorkspaceExecutionSnapshotClientProviderV2';
+import {
   createDesktopWorkspaceMessageCatalogClientProviderV2,
 } from './features/workspace/desktopWorkspaceMessageCatalogClientProviderV2';
 import {
@@ -833,6 +836,10 @@ export function App() {
     () => createDesktopWorkspaceConversationCatalogClientProviderV2(),
     [],
   );
+  const desktopWorkspaceExecutionSnapshotClientProviderV2 = useMemo(
+    () => createDesktopWorkspaceExecutionSnapshotClientProviderV2(),
+    [],
+  );
   const desktopWorkspaceMessageCatalogClientProviderV2 = useMemo(
     () => createDesktopWorkspaceMessageCatalogClientProviderV2(),
     [],
@@ -1110,6 +1117,10 @@ export function App() {
   const desktopWorkspaceConversationCatalogClientV2 = useMemo(
     () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
     [config, desktopWorkspaceConversationCatalogClientProviderV2],
+  );
+  const desktopWorkspaceExecutionSnapshotClientV2 = useMemo(
+    () => desktopWorkspaceExecutionSnapshotClientProviderV2.publish({ config }),
+    [config, desktopWorkspaceExecutionSnapshotClientProviderV2],
   );
   const desktopWorkspaceMessageCatalogClientV2 = useMemo(
     () => desktopWorkspaceMessageCatalogClientProviderV2.publish({ config }),
@@ -2771,7 +2782,8 @@ export function App() {
           projectId: resolvedProjectId,
           workspaceId,
         };
-        const scopedClient = new DesktopApiClient(resolvedConfig);
+        const workspaceExecutionSnapshotClient =
+          desktopWorkspaceExecutionSnapshotClientV2.bindOperation(resolvedConfig);
         const workspaceMessageCatalogClient =
           desktopWorkspaceMessageCatalogClientV2.bindOperation(resolvedConfig);
         const workspaceRosterClient =
@@ -2864,8 +2876,10 @@ export function App() {
           localConversationStatusSummary,
         ] = await Promise.all([
           workspaceId ? workspaceMessageCatalogClient.listMessages() : Promise.resolve([]),
-          workspaceId ? scopedClient.listTasks() : Promise.resolve([]),
-          workspaceId ? scopedClient.getPlanSnapshot().catch(() => null) : Promise.resolve(null),
+          workspaceId ? workspaceExecutionSnapshotClient.listTasks() : Promise.resolve([]),
+          workspaceId
+            ? workspaceExecutionSnapshotClient.getPlanSnapshot().catch(() => null)
+            : Promise.resolve(null),
           workspaceId
             ? resolveWorkspaceAuthority(workspaceRosterClient.listWorkspaceMembers())
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
@@ -3094,6 +3108,7 @@ export function App() {
       desktopWorkspaceAutonomyAttentionClientV2,
       desktopWorkspaceCatalogClientV2,
       desktopWorkspaceConversationCatalogClientV2,
+      desktopWorkspaceExecutionSnapshotClientV2,
       desktopWorkspaceMessageCatalogClientV2,
       desktopWorkspaceRosterClientV2,
       listMyWorkForConfig,
