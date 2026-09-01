@@ -23,10 +23,17 @@ export type DesktopAgentAuthorityProviderInputV2 = Readonly<{
   principalId: string | null | undefined;
 }>;
 
-export type DesktopAgentAuthorityBindingV2 = Readonly<{
+export type DesktopAgentAuthorityOperationBindingV2 = Readonly<{
   adapter: DesktopAgentAuthorityAdapter;
   cloudScope: CloudAgentAuthorityScope | undefined;
 }>;
+
+export type DesktopAgentAuthorityBindingV2 = DesktopAgentAuthorityOperationBindingV2 &
+  Readonly<{
+    bindOperation: (
+      input: DesktopAgentAuthorityProviderInputV2,
+    ) => DesktopAgentAuthorityOperationBindingV2;
+  }>;
 
 export type DesktopAgentAuthorityProviderV2 = Readonly<{
   publish: (input: DesktopAgentAuthorityProviderInputV2) => DesktopAgentAuthorityBindingV2;
@@ -56,6 +63,17 @@ export function createDesktopAgentAuthorityProviderV2(): DesktopAgentAuthorityPr
 function createDesktopAgentAuthorityBindingV2(
   input: DesktopAgentAuthorityProviderInputV2,
 ): DesktopAgentAuthorityBindingV2 {
+  const operation = createDesktopAgentAuthorityOperationBindingV2(input);
+  return Object.freeze({
+    ...operation,
+    bindOperation: (operationInput) =>
+      createDesktopAgentAuthorityOperationBindingV2(operationInput),
+  });
+}
+
+function createDesktopAgentAuthorityOperationBindingV2(
+  input: DesktopAgentAuthorityProviderInputV2,
+): DesktopAgentAuthorityOperationBindingV2 {
   const config = Object.freeze({ ...input.config });
   const adapter = createDesktopAgentAuthorityAdapter(config);
   const cloudScope = createCloudAgentAuthorityScope(config, input.principalId);

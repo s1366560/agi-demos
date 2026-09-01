@@ -100,6 +100,54 @@ test('cloud authority stays unscoped until principal and project scope are compl
   assert.equal(binding.cloudScope, undefined);
 });
 
+test('operation binding pins candidate Cloud scope without replacing the publication', () => {
+  const provider = createDesktopAgentAuthorityProviderV2();
+  const publication = provider.publish({
+    config: {
+      ...DEFAULT_CONFIG,
+      mode: 'cloud',
+      tenantId: 'tenant-publication',
+      projectId: 'project-publication',
+    },
+    principalId: 'user-publication',
+  });
+  const operationConfig = {
+    ...DEFAULT_CONFIG,
+    mode: 'cloud',
+    tenantId: 'tenant-operation',
+    projectId: 'project-operation',
+  };
+  const operation = publication.bindOperation({
+    config: operationConfig,
+    principalId: 'user-operation',
+  });
+  operationConfig.projectId = 'project-mutated';
+
+  assert.equal(Object.isFrozen(operation), true);
+  assert.equal(operation.adapter.authority, 'cloud');
+  assert.deepEqual(operation.cloudScope, {
+    authority: 'cloud',
+    principalId: 'user-operation',
+    tenantId: 'tenant-operation',
+    projectId: 'project-operation',
+  });
+  assert.equal(provider.resolve(), publication);
+  assert.throws(
+    () =>
+      publication.bindOperation({
+        config: {
+          ...DEFAULT_CONFIG,
+          get projectId() {
+            throw new Error('candidate_agent_authority_operation_invalid');
+          },
+        },
+        principalId: 'user-candidate',
+      }),
+    /candidate_agent_authority_operation_invalid/u,
+  );
+  assert.equal(provider.resolve(), publication);
+});
+
 test('failed agent authority publication keeps the last-good binding', () => {
   const provider = createDesktopAgentAuthorityProviderV2();
   const lastGood = provider.publish({ config: DEFAULT_CONFIG, principalId: null });

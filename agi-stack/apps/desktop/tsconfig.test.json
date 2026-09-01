@@ -339,6 +339,7 @@
     "src/features/tenant/useTenantAgentDashboardController.ts",
     "src/features/tenant/locales/tenantAgentDashboardMessages.ts",
     "src/features/my-work/MyWorkQueue.tsx",
+    "src/features/my-work/desktopMyWorkClientProviderV2.ts",
     "src/features/my-work/myWorkModel.ts",
     "src/features/activity/activityInboxModel.ts",
     "src/features/activity/activityReadState.ts",

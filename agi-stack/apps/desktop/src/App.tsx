@@ -246,6 +246,9 @@ import {
   socketEventInvalidatesMyWork,
   type MyWorkRefreshScope,
 } from './features/my-work/myWorkModel';
+import {
+  createDesktopMyWorkClientProviderV2,
+} from './features/my-work/desktopMyWorkClientProviderV2';
 import { createBrowserDesktopHashLocationPort } from './features/navigation/desktopHashRouteHost';
 import { DEVICE_APPROVAL_ROUTE_ID } from './features/navigation/desktopProductionRouteRegistry';
 import { restoreDesktopRoute } from './features/navigation/desktopRouteRegistry';
@@ -783,6 +786,10 @@ export function App() {
     () => createDesktopAgentAuthorityProviderV2(),
     [],
   );
+  const desktopMyWorkClientProviderV2 = useMemo(
+    () => createDesktopMyWorkClientProviderV2(),
+    [],
+  );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
     () => createDesktopProductionRouteAuthorityProviderV2(),
     [],
@@ -969,6 +976,10 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
+  const desktopMyWorkClientV2 = useMemo(
+    () => desktopMyWorkClientProviderV2.publish({ config }),
+    [config, desktopMyWorkClientProviderV2],
+  );
   const desktopTenantCatalogClientV2 = useMemo(
     () => desktopTenantCatalogClientProviderV2.publish({ config }),
     [config, desktopTenantCatalogClientProviderV2],
@@ -1156,6 +1167,23 @@ export function App() {
     adapter: activityAuthorityAdapter,
     cloudScope: activityAuthorityScope,
   } = desktopAgentAuthorityV2;
+  const listMyWorkForConfig = useCallback(
+    (requestConfig: DesktopRuntimeConfig, signal?: AbortSignal) => {
+      const projectId = requestConfig.projectId.trim();
+      if (requestConfig.mode === 'cloud') {
+        const operation = desktopAgentAuthorityV2.bindOperation({
+          config: requestConfig,
+          principalId: authRef.current.user?.user_id,
+        });
+        if (!operation.adapter.client || !operation.cloudScope) {
+          throw new Error('cloud_my_work_authority_scope_unavailable');
+        }
+        return operation.adapter.client.listMyWork(operation.cloudScope, { signal });
+      }
+      return desktopMyWorkClientV2.bindOperation(requestConfig).listMyWork(projectId, signal);
+    },
+    [desktopAgentAuthorityV2, desktopMyWorkClientV2],
+  );
   const localRuntimeAuthorityReady = isCurrentLocalRuntimeAuthority(
     config,
     localRuntimeStatus,
@@ -2789,8 +2817,7 @@ export function App() {
             ? resolveWorkspaceAuthority(scopedClient.listWorkspaceAutonomyAttentions())
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>()),
           resolvedProjectId
-            ? scopedClient
-                .listMyWork(resolvedProjectId)
+            ? listMyWorkForConfig(resolvedConfig)
                 .then((response) => ({ items: response.items, error: null }))
                 .catch((caught) => ({
                   items: [] as ProjectWorkItem[],
@@ -3003,6 +3030,7 @@ export function App() {
       clearMissingConversationSelection,
       commitRuntimeConfig,
       config,
+      listMyWorkForConfig,
       syncLocalRuntimeConfig,
       t,
       updateDataset,
@@ -3364,7 +3392,8 @@ export function App() {
 
   const refreshMyWork = useCallback(
     async (scheduledScope?: MyWorkRefreshScope) => {
-      const projectId = config.projectId.trim();
+      const requestConfig = configRef.current;
+      const projectId = requestConfig.projectId.trim();
       if (!projectId) return;
       const expectedScope = scheduledScope ?? {
         contextRevision: contextRevisionRef.current,
@@ -3383,16 +3412,7 @@ export function App() {
       myWorkAbortRef.current = controller;
       setMyWorkRefreshing(true);
       try {
-        const response =
-          config.mode === 'cloud'
-            ? activityAuthorityAdapter.client && activityAuthorityScope
-              ? await activityAuthorityAdapter.client.listMyWork(activityAuthorityScope, {
-                  signal: controller.signal,
-                })
-              : (() => {
-                  throw new Error('cloud_my_work_authority_scope_unavailable');
-                })()
-            : await api.listMyWork(projectId, controller.signal);
+        const response = await listMyWorkForConfig(requestConfig, controller.signal);
         if (
           controller.signal.aborted ||
           myWorkRequestRef.current !== requestId ||
@@ -3424,7 +3444,7 @@ export function App() {
         }
       }
     },
-    [activityAuthorityAdapter, activityAuthorityScope, api, config.mode, config.projectId],
+    [listMyWorkForConfig],
   );
 
   useEffect(() => {

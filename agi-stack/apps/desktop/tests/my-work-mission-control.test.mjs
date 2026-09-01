@@ -204,10 +204,12 @@ test("My Work search owns Command-K while the global palette remains the fallbac
   );
 });
 
-test("Cloud My Work production loading uses the narrow scoped authority client", () => {
-  assert.match(appSource, /activityAuthorityAdapter\.client\.listMyWork/);
-  assert.match(appSource, /activityAuthorityScope/);
-  assert.match(appSource, /signal: controller\.signal/);
+test("My Work production loading binds Cloud and Local V2 authorities per operation", () => {
+  assert.match(appSource, /desktopAgentAuthorityV2\.bindOperation/);
+  assert.match(appSource, /operation\.adapter\.client\.listMyWork/);
+  assert.match(appSource, /desktopMyWorkClientV2\.bindOperation/);
+  assert.match(appSource, /listMyWorkForConfig\(requestConfig, controller\.signal\)/);
+  assert.doesNotMatch(appSource, /api\.listMyWork|scopedClient\.listMyWork/);
 });
 
 test("My Work routes unbound Agent Workspace items through the unbound conversation catalog", () => {
