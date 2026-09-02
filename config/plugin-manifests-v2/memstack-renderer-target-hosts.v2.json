@@ -514,6 +514,37 @@
       "contract_digest": "sha256:ca7cef1df427814b6e85f2b2f753533f4fc5ee31a0afb624589e108edccd18db"
     },
     {
+      "module_ref": "builtin://memstack/desktop/session-run-control-authority",
+      "entrypoint": "applyDesktopSessionRunControlAuthorityV2",
+      "artifact": {
+        "digest": "sha256:7850efff1b6d3abe92a125d0ad0ee070f04e4443ea193f5d8b8603eb840d6f99",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionRunControlAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-run-control-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:834c4bfb309e2947ca6ab97dc02ad609a8216c71a94c111fd1d5f9e7e1d50682"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/my-work-authority",
       "entrypoint": "applyDesktopMyWorkAuthorityV2",
       "artifact": {

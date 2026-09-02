@@ -99,6 +99,7 @@ import {
   createDesktopSessionArtifactActionOperationsV2,
 } from './plugins/desktopSessionArtifactActionAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
+import { createDesktopSessionRunControlOperationsV2 } from './plugins/desktopSessionRunControlAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
@@ -187,9 +188,6 @@ import {
   artifactVersionActions,
   type ArtifactVersionAction,
 } from './features/session/sessionArtifactModel';
-import {
-  createDesktopSessionRunControlClientProviderV2,
-} from './features/session/desktopSessionRunControlClientProviderV2';
 import {
   createDesktopSessionRunInputClientProviderV2,
 } from './features/session/desktopSessionRunInputClientProviderV2';
@@ -894,6 +892,13 @@ export function App() {
       ),
     [],
   );
+  const desktopSessionRunControlOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionRunControlOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -960,10 +965,6 @@ export function App() {
   );
   const workspaceCollaborationClientProviderV2 = useMemo(
     () => createWorkspaceCollaborationClientProviderV2(),
-    [],
-  );
-  const desktopSessionRunControlClientProviderV2 = useMemo(
-    () => createDesktopSessionRunControlClientProviderV2(),
     [],
   );
   const desktopSessionRunInputClientProviderV2 = useMemo(
@@ -1127,10 +1128,6 @@ export function App() {
     navigationRegistry: desktopCanonicalNavigationRegistry,
     routeRegistry: desktopProductionRouteRegistry,
   } = desktopRendererGenerationV2.state;
-  const desktopSessionRunControlClientV2 = useMemo(
-    () => desktopSessionRunControlClientProviderV2.publish({ config }),
-    [config, desktopSessionRunControlClientProviderV2],
-  );
   const desktopSessionRunInputClientV2 = useMemo(
     () => desktopSessionRunInputClientProviderV2.publish({ config }),
     [config, desktopSessionRunInputClientProviderV2],
@@ -4823,9 +4820,17 @@ export function App() {
   );
   const handleSessionRunAction = useCallback(
     async (action: SessionRunAction, feedback?: string) => {
+      const authoritativeRun = sessionProjection?.currentRun;
       const runId = sessionDetailViewModel?.runId;
       const revision = sessionDetailViewModel?.runRevision;
-      if (!runId || revision === null || revision === undefined) {
+      if (
+        !runId ||
+        revision === null ||
+        revision === undefined ||
+        !authoritativeRun ||
+        authoritativeRun.id !== runId ||
+        authoritativeRun.revision !== revision
+      ) {
         setError(t('session.runControlUnavailable'));
         return;
       }
@@ -4837,7 +4842,10 @@ export function App() {
       setSessionRunActionPending(action);
       setError(null);
       try {
-        const client = desktopSessionRunControlClientV2.bindOperation(requestConfig);
+        const client = desktopSessionRunControlOperationsV2.bindOperation(
+          requestConfig,
+          authoritativeRun.conversation_id,
+        );
         const outcome =
           action === 'pause'
             ? await client.pauseRun(runId, revision)
@@ -4872,8 +4880,9 @@ export function App() {
     },
     [
       applyAuthoritativeRun,
-      desktopSessionRunControlClientV2,
+      desktopSessionRunControlOperationsV2,
       invalidateSessionAuthority,
+      sessionProjection,
       sessionDetailViewModel,
       showToast,
       t,

@@ -30,6 +30,9 @@ const { desktopProjectSearchAuthorityDefinitionV2 } = require(
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
+const { desktopSessionRunControlAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopSessionRunControlAuthorityModuleV2.js',
+);
 const { desktopArtifactContentAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopArtifactContentAuthorityModuleV2.js',
 );
@@ -130,6 +133,7 @@ function rendererDefinitions() {
     desktopNewThreadCreationAuthorityDefinitionV2,
     desktopProjectSearchAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
+    desktopSessionRunControlAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,

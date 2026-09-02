@@ -12,12 +12,12 @@ const {
   RuntimeV2Error,
 } = require('@agistack/plugin-runtime');
 const {
-  DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_MODULE_REF_V2,
-  DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_SERVICE_V2,
-  DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_VERSION_V2,
-  applyDesktopSessionArtifactActionAuthorityV2,
-  desktopSessionArtifactActionAuthorityDefinitionV2,
-} = require(COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js');
+  DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_MODULE_REF_V2,
+  DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_SERVICE_V2,
+  DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_VERSION_V2,
+  applyDesktopSessionRunControlAuthorityV2,
+  desktopSessionRunControlAuthorityDefinitionV2,
+} = require(COMPILED_ROOT + '/src/plugins/desktopSessionRunControlAuthorityModuleV2.js');
 const authorityModules = [
   'desktopArtifactContentAuthorityModuleV2',
   'desktopAutomationAuthorityModuleV2',
@@ -28,8 +28,8 @@ const authorityModules = [
   'desktopNewTaskFlowAuthorityModuleV2',
   'desktopNewThreadCreationAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
+  'desktopSessionArtifactActionAuthorityModuleV2',
   'desktopSessionProjectionAuthorityModuleV2',
-  'desktopSessionRunControlAuthorityModuleV2',
   'desktopSessionRunChangesAuthorityModuleV2',
   'desktopSessionTimelineAuthorityModuleV2',
   'desktopTenantCatalogAuthorityModuleV2',
@@ -72,16 +72,16 @@ function rendererDefinitions() {
     ...authorityModules,
     marketplace.desktopPluginMarketplaceCatalogDefinitionV2,
     marketplace.desktopPluginMarketplaceManagementDefinitionV2,
-    desktopSessionArtifactActionAuthorityDefinitionV2,
+    desktopSessionRunControlAuthorityDefinitionV2,
   ];
 }
 
 function runtimeConfig(overrides = {}) {
   return {
     ...DEFAULT_CONFIG,
-    apiBaseUrl: 'http://127.0.0.1:46852',
-    apiKey: 'artifact-action-session',
-    localApiToken: 'artifact-action-launch',
+    apiBaseUrl: 'http://127.0.0.1:46853',
+    apiKey: 'run-control-session',
+    localApiToken: 'run-control-launch',
     mode: 'local',
     tenantId: 'tenant-1',
     projectId: 'project-1',
@@ -100,63 +100,54 @@ function identity(overrides = {}) {
   };
 }
 
-function artifactVersion(overrides = {}) {
+function run(overrides = {}) {
   return {
-    id: 'artifact-version-2',
-    artifact_id: 'artifact-1',
-    source_artifact_id: 'source-artifact-1',
+    id: 'run-1',
     conversation_id: 'conversation-1',
-    run_id: 'run-1',
-    version: 2,
-    status: 'approved',
-    revision: 4,
-    filename: 'report.md',
-    mime_type: 'text/markdown',
-    path: '/workspace/project-1/report.md',
-    relative_path: 'report.md',
-    bytes: 128,
-    sources: [{ kind: 'file', path: 'source.md' }],
-    checks: [{ kind: 'hash', status: 'passed' }],
+    project_id: 'project-1',
+    plan_version_id: 'plan-1',
+    idempotency_key: 'run-idempotency-1',
+    message_id: 'message-1',
+    request_message: 'Build the report',
+    status: 'running',
+    revision: 8,
     created_at: '2026-09-02T00:00:00Z',
     updated_at: '2026-09-02T00:01:00Z',
-    approved_at: '2026-09-02T00:01:00Z',
-    delivered_at: null,
-    superseded_at: null,
-    feedback: null,
+    authorization_snapshot: {},
     ...overrides,
   };
 }
 
-function reviewOutcome(overrides = {}) {
+function controlOutcome(status, expectedRevision, overrides = {}) {
   return {
     accepted: true,
-    status: 'approved',
-    artifact_version: artifactVersion(),
-    run: null,
+    status,
+    run: run({ status, revision: expectedRevision + 1 }),
     ...overrides,
   };
 }
 
-function deliveryOutcome(overrides = {}) {
+function requestedOutcome(status, expectedRevision, overrides = {}) {
   return {
     accepted: true,
-    status: 'delivered',
-    artifact_version: artifactVersion({
-      status: 'delivered',
-      revision: 5,
-      delivered_at: '2026-09-02T00:02:00Z',
+    status,
+    run: run({ status: 'running', revision: expectedRevision }),
+    ...overrides,
+  };
+}
+
+function forkOutcome(overrides = {}) {
+  return {
+    accepted: true,
+    created: true,
+    status: 'running',
+    source_run: run({ status: 'disconnected', revision: 9 }),
+    run: run({
+      id: 'recovery-run-1',
+      status: 'running',
+      revision: 0,
+      idempotency_key: 'desktop-recovery-fork:run-1:9',
     }),
-    delivery: {
-      id: 'delivery-1',
-      artifact_version_id: 'artifact-version-2',
-      artifact_id: 'artifact-1',
-      conversation_id: 'conversation-1',
-      run_id: 'run-1',
-      destination: 'local_workspace',
-      receipt: { artifact_version_id: 'artifact-version-2', bytes: 128 },
-      idempotency_key: 'artifact-version-2:4:deliver',
-      created_at: '2026-09-02T00:02:00Z',
-    },
     ...overrides,
   };
 }
@@ -168,20 +159,20 @@ function json(payload, status = 200) {
   });
 }
 
-test('generated contract declares one credential-free root Artifact Action Provider', () => {
+test('generated contract declares one credential-free root run-control Provider', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
     ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_MODULE_REF_V2,
+      moduleRef === DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
     ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_MODULE_REF_V2,
+      moduleRef === DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-artifact-action-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-run-control-authority',
   );
 
   assert.ok(module);
@@ -191,8 +182,8 @@ test('generated contract declares one credential-free root Artifact Action Provi
   assert.deepEqual(module.contract.services, {
     provides: [
       {
-        service: DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_SERVICE_V2,
-        version: DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_VERSION_V2,
+        service: DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_SERVICE_V2,
+        version: DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_VERSION_V2,
       },
     ],
     requires: [],
@@ -204,75 +195,73 @@ test('generated contract declares one credential-free root Artifact Action Provi
   assert.equal(module.contract_digest, catalog.contract_digest);
   assert.equal(
     module.contract_digest,
-    desktopSessionArtifactActionAuthorityDefinitionV2.contractDigest,
+    desktopSessionRunControlAuthorityDefinitionV2.contractDigest,
   );
-  assert.equal(catalog.entrypoint, 'applyDesktopSessionArtifactActionAuthorityV2');
+  assert.equal(catalog.entrypoint, 'applyDesktopSessionRunControlAuthorityV2');
   assert.equal(
     catalog.artifact_source,
     'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
-      'desktopSessionArtifactActionAuthorityModuleV2.ts',
+      'desktopSessionRunControlAuthorityModuleV2.ts',
   );
-  assert.equal(entry.module_ref, DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_MODULE_REF_V2);
+  assert.equal(entry.module_ref, DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
   assert.deepEqual(entry.scope, { kind: 'root' });
   assert.deepEqual(entry.config, { strategy: 'desktop-api-client' });
   assert.deepEqual(entry.inject, {});
   assert.equal(entry.enabled, true);
-  assert.match(profile, /entry_id: builtin-desktop-session-artifact-action-authority/u);
+  assert.match(profile, /entry_id: builtin-desktop-session-run-control-authority/u);
   for (const value of [module, catalog, entry]) {
     assert.doesNotMatch(JSON.stringify(value), /apiKey|localApiToken|Authorization/iu);
   }
 });
 
-test('Loader activation and Profile disable remove Artifact Action without fallback', async () => {
+test('Loader activation and Profile disable remove run-control without fallback', async () => {
   const bootstrap = loadBootstrap();
   const loader = new LoaderV2(rendererDefinitions(), 'desktop-renderer');
   const generation = await loader.stage(bootstrap);
   const service = generation.resolve(
-    DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_SERVICE_V2,
+    DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_SERVICE_V2,
     { kind: 'root' },
-    { version: DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_VERSION_V2 },
+    { version: DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
   assert.deepEqual(Object.keys(service), ['bindOperation']);
+  assert.equal('config' in service, false);
+  assert.equal('client' in service, false);
   assert.throws(
-    () =>
-      service.bindOperation(
-        runtimeConfig(),
-        identity({ tenant_id: 'tenant-2' }),
-      ),
+    () => service.bindOperation(runtimeConfig(), identity({ tenant_id: 'tenant-2' })),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_session_artifact_action_scope_mismatch',
+      error.code === 'desktop_session_run_control_scope_mismatch',
   );
   assert.throws(
     () =>
-      applyDesktopSessionArtifactActionAuthorityV2(
+      applyDesktopSessionRunControlAuthorityV2(
         { provide: () => assert.fail('invalid config must not provide') },
         { strategy: 'legacy-client' },
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_session_artifact_action_authority_config_invalid',
+      error.code === 'desktop_session_run_control_authority_config_invalid',
   );
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-artifact-action-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-run-control-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>
       disabledGeneration.resolve(
-        DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_SERVICE_V2,
+        DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_SERVICE_V2,
         {
           kind: 'session',
           tenant_id: 'tenant-1',
           project_id: 'project-1',
           session_id: 'conversation-1',
         },
-        { version: DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_VERSION_V2 },
+        { version: DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_VERSION_V2 },
       ),
     (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
@@ -280,13 +269,26 @@ test('Loader activation and Profile disable remove Artifact Action without fallb
   await generation.dispose();
 });
 
-test('Local and Cloud transports preserve action contracts and vault secrecy', async () => {
+test('Local and Cloud transports preserve five mutation contracts and vault secrecy', async () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
   const localCalls = [];
   globalThis.fetch = async (input, init) => {
     localCalls.push({ input, init });
-    return json(String(input).endsWith('/review') ? reviewOutcome() : deliveryOutcome());
+    const action = new URL(String(input)).pathname.split('/').at(-1);
+    const body = JSON.parse(String(init.body));
+    if (action === 'fork') return json(forkOutcome());
+    if (action === 'pause') {
+      return json(requestedOutcome('pause_requested', body.expected_revision));
+    }
+    if (action === 'cancel') {
+      return json(requestedOutcome('cancel_requested', body.expected_revision));
+    }
+    const statuses = {
+      resume: 'running',
+      review: body.action === 'approve' ? 'completed' : 'running',
+    };
+    return json(controlOutcome(statuses[action], body.expected_revision));
   };
 
   try {
@@ -294,42 +296,52 @@ test('Local and Cloud transports preserve action contracts and vault secrecy', a
       loadBootstrap(),
     );
     const service = generation.resolve(
-      DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_SERVICE_V2,
+      DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_SERVICE_V2,
       { kind: 'root' },
-      { version: DESKTOP_SESSION_ARTIFACT_ACTION_AUTHORITY_VERSION_V2 },
+      { version: DESKTOP_SESSION_RUN_CONTROL_AUTHORITY_VERSION_V2 },
     );
     const local = service.bindOperation(runtimeConfig(), identity());
-    await local.reviewArtifactVersion('artifact-version-2', {
-      action: 'approve',
-      expectedRevision: 3,
+    await local.pauseRun('run-1', 7);
+    await local.resumeRun('run-1', 8);
+    await local.forkRecoveryRun('run-1', 9, 'desktop-recovery-fork:run-1:9');
+    await local.cancelRun('run-1', 10);
+    await local.reviewRun('run-1', {
+      action: 'request_changes',
+      expectedRevision: 11,
+      feedback: 'Add the missing evidence.',
     });
-    await local.deliverArtifactVersion('artifact-version-2', {
-      expectedRevision: 4,
-      idempotencyKey: 'artifact-version-2:4:deliver',
-      destination: 'local_workspace',
-    });
+
     assert.deepEqual(
       localCalls.map(({ input }) => new URL(String(input)).pathname),
       [
-        '/api/v1/agent/artifact-versions/artifact-version-2/review',
-        '/api/v1/agent/artifact-versions/artifact-version-2/deliver',
+        '/api/v1/agent/runs/run-1/pause',
+        '/api/v1/agent/runs/run-1/resume',
+        '/api/v1/agent/runs/run-1/fork',
+        '/api/v1/agent/runs/run-1/cancel',
+        '/api/v1/agent/runs/run-1/review',
       ],
     );
     assert.deepEqual(
       localCalls.map(({ init }) => JSON.parse(String(init.body))),
       [
-        { action: 'approve', expected_revision: 3 },
+        { expected_revision: 7 },
+        { expected_revision: 8 },
         {
-          expected_revision: 4,
-          idempotency_key: 'artifact-version-2:4:deliver',
-          destination: 'local_workspace',
+          expected_revision: 9,
+          idempotency_key: 'desktop-recovery-fork:run-1:9',
+        },
+        { expected_revision: 10 },
+        {
+          action: 'request_changes',
+          expected_revision: 11,
+          feedback: 'Add the missing evidence.',
         },
       ],
     );
-    assert.equal(
-      new Headers(localCalls[0].init.headers).get('Authorization'),
-      'Bearer artifact-action-session',
-    );
+    for (const { init } of localCalls) {
+      assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer run-control-session');
+      assert.equal(new Headers(init.headers).get('X-Agistack-Launch'), 'run-control-launch');
+    }
 
     const cloudCalls = [];
     globalThis.window = {
@@ -339,7 +351,9 @@ test('Local and Cloud transports preserve action contracts and vault secrecy', a
             cloudCalls.push({ command, args });
             return {
               status: 200,
-              body: args.request.path.endsWith('/review') ? reviewOutcome() : deliveryOutcome(),
+              body: requestedOutcome('pause_requested', 12, {
+                run: run({ id: 'cloud-run', status: 'running', revision: 12 }),
+              }),
             };
           },
         },
@@ -349,24 +363,23 @@ test('Local and Cloud transports preserve action contracts and vault secrecy', a
       runtimeConfig({ mode: 'cloud', apiKey: '', localApiToken: '' }),
       identity(),
     );
-    await cloud.reviewArtifactVersion('artifact-version-2', {
-      action: 'approve',
-      expectedRevision: 3,
-    });
-    await cloud.deliverArtifactVersion('artifact-version-2', {
-      expectedRevision: 4,
-      idempotencyKey: 'artifact-version-2:4:deliver',
-      destination: 'local_workspace',
-    });
+    await cloud.pauseRun('cloud-run', 12);
     assert.deepEqual(
-      cloudCalls.map(({ command, args }) => [command, args.request.path]),
+      cloudCalls.map(({ command, args }) => ({ command, request: args.request })),
       [
-        ['cloud_request', '/api/v1/agent/artifact-versions/artifact-version-2/review'],
-        ['cloud_request', '/api/v1/agent/artifact-versions/artifact-version-2/deliver'],
+        {
+          command: 'cloud_request',
+          request: {
+            path: '/api/v1/agent/runs/cloud-run/pause',
+            method: 'POST',
+            body: { expected_revision: 12 },
+          },
+        },
       ],
     );
-    assert.equal(JSON.stringify(cloudCalls).includes('artifact-action-session'), false);
-    assert.equal(JSON.stringify(cloudCalls).includes('artifact-action-launch'), false);
+    assert.equal(JSON.stringify(cloudCalls).includes('run-control-session'), false);
+    assert.equal(JSON.stringify(cloudCalls).includes('run-control-launch'), false);
+    assert.equal(JSON.stringify(cloudCalls).includes('Bearer'), false);
     await generation.dispose();
   } finally {
     globalThis.fetch = originalFetch;

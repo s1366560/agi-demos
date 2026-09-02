@@ -8,89 +8,88 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source(
-  'src/features/session/desktopSessionRunControlClientProviderV2.ts',
-);
-const ownedMethods = [
-  'pauseRun',
-  'resumeRun',
-  'forkRecoveryRun',
-  'cancelRun',
-  'reviewRun',
-];
-const stableProviderPattern = new RegExp(
+const authority = source('src/plugins/desktopSessionRunControlAuthorityModuleV2.ts');
+const contract = source('src/plugins/desktopSessionRunControlContractV2.ts');
+const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const stableOperationsPattern = new RegExp(
   [
-    'const desktopSessionRunControlClientProviderV2 = useMemo\\(',
-    '[\\s\\S]*?createDesktopSessionRunControlClientProviderV2\\(\\)',
+    'const desktopSessionRunControlOperationsV2 = useMemo\\(',
+    '[\\s\\S]*?createDesktopSessionRunControlOperationsV2\\(',
+    '[\\s\\S]*?desktopPluginMarketplaceGenerationActionsRefV2\\.current',
     '[\\s\\S]*?\\[\\],[\\s\\S]*?\\);',
   ].join(''),
   'u',
 );
-const exactMethodOwnershipPattern = new RegExp(
-  [
-    'type DesktopSessionRunControlMethod =',
-    "[\\s\\S]*?'pauseRun'",
-    "[\\s\\S]*?'resumeRun'",
-    "[\\s\\S]*?'forkRecoveryRun'",
-    "[\\s\\S]*?'cancelRun'",
-    "[\\s\\S]*?'reviewRun'",
-  ].join(''),
-  'u',
-);
-const forbiddenProviderOwnershipPattern = new RegExp(
+const forbiddenAuthorityPolicyPattern = new RegExp(
   [
     'sessionDetailViewModel',
     'runActions',
-    'desktop-recovery-fork',
+    'setSessionRunActionPending',
     'applyAuthoritativeRun',
     'invalidateSessionAuthority',
     'showToast',
-    'setError',
+    'desktop-recovery-fork',
   ].join('|'),
   'u',
 );
 
-test('App publishes one stable V2 session run-control client Provider', () => {
-  assert.match(app, /createDesktopSessionRunControlClientProviderV2/u);
-  assert.match(app, stableProviderPattern);
-  assert.match(
-    app,
-    /desktopSessionRunControlClientProviderV2\.publish\(\{ config \}\)/u,
-  );
+test('App owns one stable generation-bound session run-control facade', () => {
+  assert.match(app, /createDesktopSessionRunControlOperationsV2/u);
+  assert.match(app, stableOperationsPattern);
+  assert.doesNotMatch(app, /createDesktopSessionRunControlClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopSessionRunControlClientProviderV2\.publish/u);
 });
 
-test('session run actions bind one submitted-scope V2 client without moving policy', () => {
+test('session run actions bind one exact authoritative-session V2 authority', () => {
   const action = callbackSource(app, 'handleSessionRunAction', 'handleArtifactAction');
 
+  assert.match(action, /const authoritativeRun = sessionProjection\?\.currentRun;/u);
   assert.match(action, /const requestConfig = configRef\.current;/u);
   assert.match(
     action,
-    /const client = desktopSessionRunControlClientV2\.bindOperation\(requestConfig\);/u,
+    /desktopSessionRunControlOperationsV2\.bindOperation\([\s\S]*?requestConfig,[\s\S]*?authoritativeRun\.conversation_id,[\s\S]*?\);/u,
   );
-  for (const method of ownedMethods) {
+  for (const method of [
+    'pauseRun',
+    'resumeRun',
+    'forkRecoveryRun',
+    'cancelRun',
+    'reviewRun',
+  ]) {
     assert.match(action, new RegExp(`await client\\.${method}\\(`, 'u'));
   }
+  assert.match(action, /authoritativeRun\.id !== runId/u);
+  assert.match(action, /authoritativeRun\.revision !== revision/u);
+  assert.match(action, /!sessionDetailViewModel\.runActions\.includes\(action\)/u);
+  assert.match(action, /`desktop-recovery-fork:\$\{runId\}:\$\{revision\}`/u);
+  assert.match(action, /applyAuthoritativeRun\(outcome\.run\)/u);
+  assert.match(action, /invalidateSessionAuthority\(\)/u);
   assert.doesNotMatch(
     action,
     /api\.(?:pauseRun|resumeRun|forkRecoveryRun|cancelRun|reviewRun)/u,
   );
-  assert.match(action, /!runId \|\| revision === null \|\| revision === undefined/u);
-  assert.match(action, /!sessionDetailViewModel\.runActions\.includes\(action\)/u);
-  assert.match(action, /`desktop-recovery-fork:\$\{runId\}:\$\{revision\}`/u);
-  assert.match(action, /action: action === 'approve' \? 'approve' : 'request_changes'/u);
-  assert.match(action, /\.\.\.\(feedback \? \{ feedback \} : \{\}\)/u);
-  assert.match(action, /applyAuthoritativeRun\(outcome\.run\)/u);
-  assert.match(action, /invalidateSessionAuthority\(\)/u);
-  assert.match(action, /toast\.sessionRunActionSuccess/u);
 });
 
-test('session run-control Provider owns exactly five transport methods', () => {
-  assert.match(provider, exactMethodOwnershipPattern);
-  for (const method of ownedMethods) {
-    assert.match(provider, new RegExp(`${method}:`, 'u'));
-  }
-  assert.match(provider, /bindOperation/u);
-  assert.doesNotMatch(provider, forbiddenProviderOwnershipPattern);
+test('session run-control authority is cataloged and owns no UI policy', () => {
+  assert.match(authority, /service:desktop-renderer\.session-run-control-authority/u);
+  assert.match(authority, /acquireServiceOperationLease/u);
+  assert.match(authority, /kind: 'session'/u);
+  assert.match(authority, /pauseRun/u);
+  assert.match(authority, /resumeRun/u);
+  assert.match(authority, /forkRecoveryRun/u);
+  assert.match(authority, /cancelRun/u);
+  assert.match(authority, /reviewRun/u);
+  assert.match(contract, /assertRunControlOutcomeV2/u);
+  assert.match(contract, /assertForkRecoveryOutcomeV2/u);
+  assert.match(generation, /desktopSessionRunControlAuthorityDefinitionV2/u);
+  assert.doesNotMatch(authority, forbiddenAuthorityPolicyPattern);
+  assert.doesNotMatch(contract, forbiddenAuthorityPolicyPattern);
+  assert.equal(
+    existsSync(
+      new URL('../src/features/session/desktopSessionRunControlClientProviderV2.ts', import.meta.url),
+    ),
+    false,
+  );
 });
 
 function callbackSource(sourceText, name, nextName) {

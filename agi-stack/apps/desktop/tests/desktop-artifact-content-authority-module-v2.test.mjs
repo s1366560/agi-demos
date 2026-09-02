@@ -37,6 +37,9 @@ const { desktopProjectSearchAuthorityDefinitionV2 } = require(
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
+const { desktopSessionRunControlAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopSessionRunControlAuthorityModuleV2.js',
+);
 const {
   DesktopArtifactRequestError,
 } = require(COMPILED_ROOT + '/src/features/chat/desktopArtifactClient.js');
@@ -114,6 +117,7 @@ function rendererDefinitions() {
     desktopNewThreadCreationAuthorityDefinitionV2,
     desktopProjectSearchAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
+    desktopSessionRunControlAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
     desktopConversationConfigAuthorityDefinitionV2,

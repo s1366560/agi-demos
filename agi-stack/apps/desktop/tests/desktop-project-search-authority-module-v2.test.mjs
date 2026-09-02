@@ -29,6 +29,7 @@ const authorityModules = [
   'desktopNewThreadCreationAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
   'desktopSessionProjectionAuthorityModuleV2',
+  'desktopSessionRunControlAuthorityModuleV2',
   'desktopSessionRunChangesAuthorityModuleV2',
   'desktopSessionTimelineAuthorityModuleV2',
   'desktopTenantCatalogAuthorityModuleV2',
