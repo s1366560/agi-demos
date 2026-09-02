@@ -12,14 +12,16 @@ const {
   RuntimeV2Error,
 } = require('@agistack/plugin-runtime');
 const {
-  DESKTOP_TENANT_OVERVIEW_AUTHORITY_MODULE_REF_V2,
-  DESKTOP_TENANT_OVERVIEW_AUTHORITY_SERVICE_V2,
-  DESKTOP_TENANT_OVERVIEW_AUTHORITY_VERSION_V2,
-  applyDesktopTenantOverviewAuthorityV2,
-  desktopTenantOverviewAuthorityDefinitionV2,
-} = require(COMPILED_ROOT + '/src/plugins/desktopTenantOverviewAuthorityModuleV2.js');
+  DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_MODULE_REF_V2,
+  DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_SERVICE_V2,
+  DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_VERSION_V2,
+  applyDesktopTenantAgentBindingsAuthorityV2,
+  desktopTenantAgentBindingsAuthorityDefinitionV2,
+} = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantAgentBindingsAuthorityModuleV2.js'
+);
 
-const authorityModules = [
+const authorityModuleNames = [
   'desktopArtifactContentAuthorityModuleV2',
   'desktopAutomationAuthorityModuleV2',
   'desktopConversationConfigAuthorityModuleV2',
@@ -52,7 +54,8 @@ const authorityModules = [
   'desktopWorkspaceMemberMutationAuthorityModuleV2',
   'desktopWorkspaceMessageCatalogAuthorityModuleV2',
   'desktopWorkspaceRosterAuthorityModuleV2',
-].flatMap((moduleName) =>
+];
+const authorityModules = authorityModuleNames.flatMap((moduleName) =>
   Object.values(require(`${COMPILED_ROOT}/src/plugins/${moduleName}.js`)).filter(
     (value) => value?.moduleRef && typeof value?.apply === 'function',
   ),
@@ -67,26 +70,23 @@ const MANIFEST_PATH = new URL(
   'config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json',
   REPOSITORY_ROOT,
 );
-const PROFILE_PATH = new URL(
-  'config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
-  REPOSITORY_ROOT,
-);
 
 function bootstrap() {
   return JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
 }
 
-test('generated contract declares one credential-free root tenant overview Provider', () => {
+test('generated contract declares one credential-free root tenant bindings Provider', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
-  const profile = readFileSync(PROFILE_PATH, 'utf8');
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_TENANT_OVERVIEW_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) =>
+      moduleRef === DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_TENANT_OVERVIEW_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) =>
+      moduleRef === DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap().entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-tenant-overview-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-tenant-agent-bindings-authority',
   );
 
   assert.ok(module);
@@ -96,8 +96,8 @@ test('generated contract declares one credential-free root tenant overview Provi
   assert.deepEqual(module.contract.services, {
     provides: [
       {
-        service: DESKTOP_TENANT_OVERVIEW_AUTHORITY_SERVICE_V2,
-        version: DESKTOP_TENANT_OVERVIEW_AUTHORITY_VERSION_V2,
+        service: DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_SERVICE_V2,
+        version: DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_VERSION_V2,
       },
     ],
     requires: [],
@@ -107,63 +107,54 @@ test('generated contract declares one credential-free root tenant overview Provi
   assert.deepEqual(module.contract.config_schema.required, ['strategy']);
   assert.equal(module.contract.config_schema.properties.strategy.const, 'desktop-api-fetch');
   assert.equal(module.contract_digest, catalog.contract_digest);
-  assert.equal(module.contract_digest, desktopTenantOverviewAuthorityDefinitionV2.contractDigest);
-  assert.equal(catalog.entrypoint, 'applyDesktopTenantOverviewAuthorityV2');
   assert.equal(
-    catalog.artifact_source,
-    'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
-      'desktopTenantOverviewAuthorityModuleV2.ts',
+    module.contract_digest,
+    desktopTenantAgentBindingsAuthorityDefinitionV2.contractDigest,
   );
   assert.deepEqual(entry.scope, { kind: 'root' });
   assert.deepEqual(entry.config, { strategy: 'desktop-api-fetch' });
   assert.deepEqual(entry.inject, {});
-  assert.equal(entry.enabled, true);
-  assert.match(profile, /entry_id: builtin-desktop-tenant-overview-authority/u);
   for (const value of [module, catalog, entry]) {
-    assert.doesNotMatch(
-      JSON.stringify(value),
-      /apiKey|localApiToken|Authorization|tenant-overview-secret/iu,
-    );
+    assert.doesNotMatch(JSON.stringify(value), /apiKey|localApiToken|Authorization|secret/iu);
   }
 });
 
-test('Loader activates the exact service and disabled Profile fails closed', async () => {
-  const definitions = [
-    ...createDesktopRendererDefinitionsV2(),
-    ...authorityModules,
-  ];
-  const loader = new LoaderV2(definitions, 'desktop-renderer');
+test('Loader activates the exact bindings service and disabled Profile fails closed', async () => {
+  const loader = new LoaderV2(
+    [...createDesktopRendererDefinitionsV2(), ...authorityModules],
+    'desktop-renderer',
+  );
   const generation = await loader.stage(bootstrap());
   const service = generation.resolve(
-    DESKTOP_TENANT_OVERVIEW_AUTHORITY_SERVICE_V2,
+    DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_SERVICE_V2,
     { kind: 'root' },
-    { version: DESKTOP_TENANT_OVERVIEW_AUTHORITY_VERSION_V2 },
+    { version: DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
   assert.deepEqual(Object.keys(service), ['bindOperation']);
   assert.throws(
     () =>
-      applyDesktopTenantOverviewAuthorityV2(
+      applyDesktopTenantAgentBindingsAuthorityV2(
         { provide: () => assert.fail('invalid config must not publish') },
         { strategy: 'legacy-client' },
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_tenant_overview_authority_config_invalid',
+      error.code === 'desktop_tenant_agent_bindings_authority_config_invalid',
   );
 
   const disabled = structuredClone(bootstrap());
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-tenant-overview-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-tenant-agent-bindings-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>
       disabledGeneration.resolve(
-        DESKTOP_TENANT_OVERVIEW_AUTHORITY_SERVICE_V2,
+        DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_SERVICE_V2,
         { kind: 'root' },
-        { version: DESKTOP_TENANT_OVERVIEW_AUTHORITY_VERSION_V2 },
+        { version: DESKTOP_TENANT_AGENT_BINDINGS_AUTHORITY_VERSION_V2 },
       ),
     (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );

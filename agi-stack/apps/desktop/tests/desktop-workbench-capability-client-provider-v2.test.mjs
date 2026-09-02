@@ -50,6 +50,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'local', projectId: 'project-local' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
@@ -58,6 +59,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-cloud' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
@@ -78,6 +80,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     automationApi: automationApi(),
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
@@ -95,6 +98,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         automationApi: automationApi(),
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
         tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
@@ -117,6 +121,10 @@ test('App consumes the published V2 workbench capability client', () => {
     /createDesktopWorkbenchCapabilityClient\(input\.automationApi, config, \{/u,
   );
   assert.match(providerSource, /pluginMarketplaceOperationsV2:\s*input\.pluginMarketplaceOperationsV2/u);
+  assert.match(
+    providerSource,
+    /tenantAgentBindingsOperationsV2:\s*input\.tenantAgentBindingsOperationsV2/u,
+  );
   assert.match(
     providerSource,
     /tenantAgentDashboardOperationsV2:\s*input\.tenantAgentDashboardOperationsV2/u,
@@ -154,6 +162,14 @@ function tenantAgentDashboardOperationsV2() {
   return {
     loadTenantAgentDashboard: async () => {
       throw new Error('tenant_agent_dashboard_not_exercised');
+    },
+  };
+}
+
+function tenantAgentBindingsOperationsV2() {
+  return {
+    listTenantAgentBindings: async () => {
+      throw new Error('tenant_agent_bindings_not_exercised');
     },
   };
 }

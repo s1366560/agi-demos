@@ -235,6 +235,7 @@ import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
+import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
@@ -253,6 +254,7 @@ export type AppRouteRegistryRefs = {
     'projectMarketplacePlugins'
   >;
   tenantAnalyticsOperationsV2: DesktopTenantAnalyticsOperationsV2;
+  tenantAgentBindingsOperationsV2: DesktopTenantAgentBindingsOperationsV2;
   tenantAgentDashboardOperationsV2: DesktopTenantAgentDashboardOperationsV2;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
   tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
@@ -311,7 +313,9 @@ type AppSettingsRouteContentRefs = Pick<
 >;
 export type AppTenantAgentBuildingRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'tenantAgentDashboardOperationsV2'
+  | 'configRef'
+  | 'tenantAgentBindingsOperationsV2'
+  | 'tenantAgentDashboardOperationsV2'
 > &
   AppSettingsRouteContentRefs;
 export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
@@ -915,7 +919,11 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
 export function createAppTenantAgentBuildingRouteRegistry(
   refs: AppTenantAgentBuildingRouteRegistryRefs,
 ) {
-  const { configRef, tenantAgentDashboardOperationsV2 } = refs;
+  const {
+    configRef,
+    tenantAgentBindingsOperationsV2,
+    tenantAgentDashboardOperationsV2,
+  } = refs;
   const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
@@ -929,7 +937,11 @@ export function createAppTenantAgentBuildingRouteRegistry(
       }),
       [TENANT_AGENT_BINDINGS_ROUTE_ID]: createTenantAgentBindingsRouteModuleLoader({
         createBinding: (context) =>
-          createTenantAgentBindingsRouteBindingForRuntime(configRef.current, context),
+          createTenantAgentBindingsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantAgentBindingsOperationsV2,
+          ),
       }),
       [TENANT_AGENT_DEFINITIONS_ROUTE_ID]: createAgentDefinitionsRouteModuleLoader({
         createBinding: (context) =>

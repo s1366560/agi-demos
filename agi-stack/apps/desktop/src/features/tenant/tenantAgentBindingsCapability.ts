@@ -1,11 +1,11 @@
 import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
+import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type {
   DesktopCapabilityAvailability,
   DesktopCapabilityScope,
 } from '../runtime/capabilitySnapshot';
 import type { TenantAgentBindingsAction } from './tenantAgentBindingsClient';
-import { createTenantAgentBindingsHttpClient } from './tenantAgentBindingsHttpClient';
 
 const ACTION_ORDER = Object.freeze<TenantAgentBindingsAction[]>([
   'view',
@@ -18,6 +18,10 @@ const ACTION_ORDER = Object.freeze<TenantAgentBindingsAction[]>([
 
 export async function loadTenantAgentBindingsCapability(
   config: DesktopRuntimeConfig,
+  tenantAgentBindingsOperationsV2: Pick<
+    DesktopTenantAgentBindingsOperationsV2,
+    'listTenantAgentBindings'
+  >,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
   const tenantId = scopeIdentifier(config.tenantId);
@@ -26,11 +30,11 @@ export async function loadTenantAgentBindingsCapability(
     return unavailable('tenant_agent_bindings_scope_unavailable', scope);
   }
   try {
-    const snapshot = await createTenantAgentBindingsHttpClient(config).list(
-      { authority: config.mode, tenantId },
-      undefined,
-      { signal },
-    );
+    const snapshot = await tenantAgentBindingsOperationsV2.listTenantAgentBindings({
+      config,
+      scope: { authority: config.mode, tenantId },
+      ...(signal === undefined ? {} : { signal }),
+    });
     if (!isOrderedActionSubset(snapshot.allowedActions)) {
       return unavailable('tenant_agent_bindings_contract_invalid', scope);
     }

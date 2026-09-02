@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -99,6 +100,7 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
       unavailableAutomation,
       cloudConfig,
       {
+        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         tenantGovernanceClient: probe('available', null, ['view', 'list', 'invite']),
@@ -176,6 +178,7 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
       unavailableAutomation,
       { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
       {
+        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         tenantGovernanceClient: neverProbe,

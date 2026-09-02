@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -82,13 +83,25 @@ const automationContract = {
   delete: { allowed: true },
 };
 
-test('workbench capability client requires the Tenant Analytics V2 authority', () => {
+test('workbench capability client requires the Tenant Agent Bindings V2 authority', () => {
   assert.throws(
     () =>
       createDesktopWorkbenchCapabilityClient(
         { getAutomationCapabilities: async () => automationContract },
         DEFAULT_CONFIG,
         undefined,
+      ),
+    /desktop_tenant_agent_bindings_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Analytics V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        { tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture() },
       ),
     /desktop_tenant_analytics_authority_required/u,
   );
@@ -100,7 +113,10 @@ test('workbench capability client requires the Tenant Agent Dashboard V2 authori
       createDesktopWorkbenchCapabilityClient(
         { getAutomationCapabilities: async () => automationContract },
         DEFAULT_CONFIG,
-        { tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture() },
+        {
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+        },
       ),
     /desktop_tenant_agent_dashboard_authority_required/u,
   );
@@ -1523,6 +1539,7 @@ test('local Electron Workspace Collaboration reports permanent Core cutover outa
 
 function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
   return createDesktopWorkbenchCapabilityClient(automationApi, config, {
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
     ...options,

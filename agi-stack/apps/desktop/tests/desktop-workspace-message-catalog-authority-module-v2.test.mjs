@@ -158,6 +158,8 @@ function rendererDefinitions() {
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopTenantAgentBindingsAuthorityModuleV2.js')
+      .desktopTenantAgentBindingsAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.js')
       .desktopTenantAgentDashboardAuthorityDefinitionV2,
     desktopTenantAnalyticsAuthorityDefinitionV2,

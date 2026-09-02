@@ -1,6 +1,7 @@
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
+import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import {
@@ -31,6 +32,10 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   tenantAnalyticsOperationsV2: Pick<
     DesktopTenantAnalyticsOperationsV2,
     'loadTenantAnalytics'
+  >;
+  tenantAgentBindingsOperationsV2: Pick<
+    DesktopTenantAgentBindingsOperationsV2,
+    'listTenantAgentBindings'
   >;
   tenantAgentDashboardOperationsV2: Pick<
     DesktopTenantAgentDashboardOperationsV2,
@@ -80,6 +85,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
   const config = Object.freeze({ ...input.config });
   const client = createDesktopWorkbenchCapabilityClient(input.automationApi, config, {
     pluginMarketplaceOperationsV2: input.pluginMarketplaceOperationsV2,
+    tenantAgentBindingsOperationsV2: input.tenantAgentBindingsOperationsV2,
     tenantAgentDashboardOperationsV2: input.tenantAgentDashboardOperationsV2,
     tenantAnalyticsOperationsV2: input.tenantAnalyticsOperationsV2,
     tenantOverviewOperationsV2: input.tenantOverviewOperationsV2,

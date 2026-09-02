@@ -100,6 +100,7 @@ import { createDesktopSessionRunControlOperationsV2 } from './plugins/desktopSes
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopSessionRunInputOperationsV2 } from './plugins/desktopSessionRunInputAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
+import { createDesktopTenantAgentBindingsOperationsV2 } from './plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import { createDesktopTenantAgentDashboardOperationsV2 } from './plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import { createDesktopTenantAnalyticsOperationsV2 } from './plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
@@ -840,6 +841,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantAgentBindingsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAgentBindingsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopConversationConfigOperationsV2 = useMemo(
     () =>
       createDesktopConversationConfigOperationsV2(
@@ -1128,6 +1136,7 @@ export function App() {
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+      tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
       tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
       tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
       tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
@@ -1147,6 +1156,7 @@ export function App() {
     [
       desktopPluginMarketplaceOperationsV2,
       desktopProjectSearchOperationsV2,
+      desktopTenantAgentBindingsOperationsV2,
       desktopTenantAgentDashboardOperationsV2,
       desktopTenantAnalyticsOperationsV2,
       desktopTenantCatalogOperationsV2,
@@ -1184,6 +1194,7 @@ export function App() {
         automationApi: desktopAutomationApiV2,
         config,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
         tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
         tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
         tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
@@ -1192,6 +1203,7 @@ export function App() {
       config,
       desktopAutomationApiV2,
       desktopPluginMarketplaceOperationsV2,
+      desktopTenantAgentBindingsOperationsV2,
       desktopTenantAgentDashboardOperationsV2,
       desktopTenantAnalyticsOperationsV2,
       desktopTenantOverviewOperationsV2,
