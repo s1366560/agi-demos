@@ -152,6 +152,8 @@ function rendererDefinitions() {
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.js')
+      .desktopTenantAgentDashboardAuthorityDefinitionV2,
     desktopTenantAnalyticsAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopTenantOverviewAuthorityDefinitionV2,

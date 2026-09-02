@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -408,7 +409,10 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         projectId: 'project-1',
         workspaceId: 'workspace-1',
       },
-      { tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture() },
+      {
+        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      },
     );
 
     const snapshot = await client.loadSnapshot();

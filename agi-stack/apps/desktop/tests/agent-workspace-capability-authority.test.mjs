@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -92,6 +93,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
         },
         config,
         {
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
           agentWorkspaceClient: {
             async probe() {
@@ -134,6 +136,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
     },
     cloudConfig,
     {
+      tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
       tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       agentWorkspaceJourneyClient: {
         async probe() {
@@ -180,7 +183,10 @@ test('Workbench default production journey authority supports tenant-level scope
         },
       },
       config,
-      { tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture() },
+      {
+        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      },
     );
     const snapshot = await client.loadSnapshot();
     const capability = snapshot.capabilities['agent-workspace-tenant-agent-workspace'];
@@ -226,6 +232,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
     },
     cloudConfig,
     {
+      tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
       tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       agentWorkspaceClient: {
         async probe() {

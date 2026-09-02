@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -90,6 +91,18 @@ test('workbench capability client requires the Tenant Analytics V2 authority', (
         undefined,
       ),
     /desktop_tenant_analytics_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Agent Dashboard V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        { tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture() },
+      ),
+    /desktop_tenant_agent_dashboard_authority_required/u,
   );
 });
 
@@ -1510,6 +1523,7 @@ test('local Electron Workspace Collaboration reports permanent Core cutover outa
 
 function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
   return createDesktopWorkbenchCapabilityClient(automationApi, config, {
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
     ...options,
   });

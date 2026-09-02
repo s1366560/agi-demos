@@ -95,6 +95,7 @@ import { loadTenantAgentDashboardCapability } from '../tenant/tenantAgentDashboa
 import { loadTenantAgentBindingsCapability } from '../tenant/tenantAgentBindingsCapability';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
+import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
 import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
@@ -147,6 +148,10 @@ type ManagementRouteCapabilityClients = Readonly<
 >;
 
 export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
+  tenantAgentDashboardOperationsV2: Pick<
+    DesktopTenantAgentDashboardOperationsV2,
+    'loadTenantAgentDashboard'
+  >;
   tenantAnalyticsOperationsV2: Pick<
     DesktopTenantAnalyticsOperationsV2,
     'loadTenantAnalytics'
@@ -260,6 +265,12 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof tenantAnalyticsOperationsV2?.loadTenantAnalytics !== 'function') {
     throw new Error('desktop_tenant_analytics_authority_required');
   }
+  const tenantAgentDashboardOperationsV2 = options?.tenantAgentDashboardOperationsV2;
+  if (
+    typeof tenantAgentDashboardOperationsV2?.loadTenantAgentDashboard !== 'function'
+  ) {
+    throw new Error('desktop_tenant_agent_dashboard_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -344,7 +355,11 @@ export function createDesktopWorkbenchCapabilityClient(
           tenantAnalyticsOperationsV2,
           signal,
         ),
-        loadTenantAgentDashboardCapability(config, signal),
+        loadTenantAgentDashboardCapability(
+          config,
+          tenantAgentDashboardOperationsV2,
+          signal,
+        ),
         loadTenantAgentBindingsCapability(config, signal),
         loadTenantProjectsCapability(config, signal),
         loadManagementRouteCapabilities(managementRouteClients, config, signal),

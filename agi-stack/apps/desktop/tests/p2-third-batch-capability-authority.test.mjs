@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const root = '/tmp/agistack-desktop-test-dist/src/features/settings-routes';
@@ -180,6 +181,7 @@ test('workbench Snapshot v4 keeps unversioned P2 observations unavailable', asyn
       unavailableAutomation,
       cloudConfig,
       {
+        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         p2ThirdBatchCapabilityClient: {
           async load() {

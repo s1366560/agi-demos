@@ -50,7 +50,8 @@ import type { TenantAnalyticsClient } from '../tenant/tenantAnalyticsClient';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { TenantAgentDashboardRouteBinding } from '../tenant/tenantAgentDashboardRouteModule';
 import { createTenantAgentDashboardController } from '../tenant/tenantAgentDashboardController';
-import { createTenantAgentDashboardHttpClient } from '../tenant/tenantAgentDashboardHttpClient';
+import type { TenantAgentDashboardClient } from '../tenant/tenantAgentDashboardClient';
+import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { TenantAgentBindingsRouteBinding } from '../tenant/tenantAgentBindingsRouteModule';
 import { createTenantAgentBindingsController } from '../tenant/tenantAgentBindingsController';
 import { createTenantAgentBindingsHttpClient } from '../tenant/tenantAgentBindingsHttpClient';
@@ -290,6 +291,7 @@ export function createTenantAgentBindingsRouteBindingForRuntime(
 export function createTenantAgentDashboardRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  tenantAgentDashboardOperationsV2: DesktopTenantAgentDashboardOperationsV2,
 ): TenantAgentDashboardRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_agent_dashboard_runtime_scope_mismatch');
@@ -298,7 +300,33 @@ export function createTenantAgentDashboardRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createTenantAgentDashboardHttpClient(config);
+  const client: TenantAgentDashboardClient = Object.freeze({
+    async load(requestScope, signal) {
+      return tenantAgentDashboardOperationsV2.loadTenantAgentDashboard({
+        config,
+        scope: requestScope,
+        ...(signal === undefined ? {} : { signal }),
+      });
+    },
+    async updateConfig(requestScope, input, expectedRevision, signal) {
+      return tenantAgentDashboardOperationsV2.updateTenantAgentDashboardConfig({
+        config,
+        scope: requestScope,
+        input,
+        expectedRevision,
+        ...(signal === undefined ? {} : { signal }),
+      });
+    },
+    async inspectTrace(requestScope, conversationId, traceId, signal) {
+      return tenantAgentDashboardOperationsV2.inspectTenantAgentDashboardTrace({
+        config,
+        scope: requestScope,
+        conversationId,
+        traceId,
+        ...(signal === undefined ? {} : { signal }),
+      });
+    },
+  });
   return Object.freeze({
     controller: createTenantAgentDashboardController({
       authority: config.mode,

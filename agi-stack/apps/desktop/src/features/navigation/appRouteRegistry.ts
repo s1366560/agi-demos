@@ -235,6 +235,7 @@ import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
+import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type {
@@ -252,6 +253,7 @@ export type AppRouteRegistryRefs = {
     'projectMarketplacePlugins'
   >;
   tenantAnalyticsOperationsV2: DesktopTenantAnalyticsOperationsV2;
+  tenantAgentDashboardOperationsV2: DesktopTenantAgentDashboardOperationsV2;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
   tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
   desktopWorkspaceCatalogOperationsV2: DesktopWorkspaceCatalogOperationsV2;
@@ -307,7 +309,10 @@ type AppSettingsRouteContentRefs = Pick<
   | 'setSettingsWindowOpen'
   | 'settingsRouteCloseNavigationRef'
 >;
-export type AppTenantAgentBuildingRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'> &
+export type AppTenantAgentBuildingRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  'configRef' | 'tenantAgentDashboardOperationsV2'
+> &
   AppSettingsRouteContentRefs;
 export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -910,13 +915,17 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
 export function createAppTenantAgentBuildingRouteRegistry(
   refs: AppTenantAgentBuildingRouteRegistryRefs,
 ) {
-  const { configRef } = refs;
+  const { configRef, tenantAgentDashboardOperationsV2 } = refs;
   const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_AGENT_DASHBOARD_ROUTE_ID]: createTenantAgentDashboardRouteModuleLoader({
         createBinding: (context) =>
-          createTenantAgentDashboardRouteBindingForRuntime(configRef.current, context),
+          createTenantAgentDashboardRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantAgentDashboardOperationsV2,
+          ),
       }),
       [TENANT_AGENT_BINDINGS_ROUTE_ID]: createTenantAgentBindingsRouteModuleLoader({
         createBinding: (context) =>
