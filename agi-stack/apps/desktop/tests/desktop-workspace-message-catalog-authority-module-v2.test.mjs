@@ -5,6 +5,9 @@ import { test } from "node:test";
 
 const COMPILED_ROOT = "/tmp/agistack-desktop-test-dist";
 const require = createRequire(import.meta.url);
+const { desktopArtifactContentAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopArtifactContentAuthorityModuleV2.js',
+);
 const {
   createDesktopRendererDefinitionsV2,
   GenerationManagerV2,
@@ -93,6 +96,7 @@ function loadBootstrap() {
 function rendererDefinitions() {
   return [
     ...createDesktopRendererDefinitionsV2(),
+    desktopArtifactContentAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,

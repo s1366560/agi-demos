@@ -78,6 +78,9 @@ import { createDesktopRendererAppCompositionPortV2 } from './plugins/desktopRend
 import {
   createDesktopPluginMarketplaceOperationsV2,
 } from './plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import {
+  createDesktopArtifactContentClientV2,
+} from './plugins/desktopArtifactContentAuthorityModuleV2';
 import { createDesktopConversationLifecycleOperationsV2 } from './plugins/desktopConversationLifecycleAuthorityModuleV2';
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
 import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
@@ -117,7 +120,6 @@ import {
   type AgentTaskSignal,
 } from './features/chat/agentTaskSignalModel';
 import { classifyHitlAuthorityRecovery } from './features/chat/hitlAuthorityRecovery';
-import { createDesktopArtifactClientProviderV2 } from './features/chat/desktopArtifactClientProviderV2';
 import {
   applyArtifactCanvasStreamEvent,
   emptyArtifactCanvasState,
@@ -792,6 +794,14 @@ export function App() {
   );
   const desktopPluginMarketplaceGenerationActionsRefV2 =
     useRef<DesktopRendererGenerationActionsV2 | null>(null);
+  const desktopArtifactClientV2 = useMemo(
+    () =>
+      createDesktopArtifactContentClientV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+        () => configRef.current,
+      ),
+    [],
+  );
   const desktopPluginMarketplaceOperationsV2 = useMemo(
     () =>
       createDesktopPluginMarketplaceOperationsV2(
@@ -922,10 +932,6 @@ export function App() {
   );
   const workspaceCollaborationClientProviderV2 = useMemo(
     () => createWorkspaceCollaborationClientProviderV2(),
-    [],
-  );
-  const desktopArtifactClientProviderV2 = useMemo(
-    () => createDesktopArtifactClientProviderV2(),
     [],
   );
   const desktopSessionArtifactActionClientProviderV2 = useMemo(
@@ -1098,10 +1104,6 @@ export function App() {
   const desktopAutomationApiV2 = useMemo(
     () => desktopAutomationApiProviderV2.publish({ baseApi: api, config }),
     [api, config, desktopAutomationApiProviderV2],
-  );
-  const desktopArtifactClientV2 = useMemo(
-    () => desktopArtifactClientProviderV2.publish({ config }),
-    [config, desktopArtifactClientProviderV2],
   );
   const desktopSessionArtifactActionClientV2 = useMemo(
     () => desktopSessionArtifactActionClientProviderV2.publish({ config }),
@@ -6594,7 +6596,7 @@ export function App() {
         setRunInputReferences((current) => toggleRunInputReference(current, reference)),
     },
     meta: {
-      artifactClient: desktopArtifactClientV2.client,
+      artifactClient: desktopArtifactClientV2,
       mcpAppApi: api,
       mcpAppProjectId: config.projectId,
       mcpAppSandboxProxyUrl: desktopMCPAppSandboxProxyUrl(config.apiBaseUrl),

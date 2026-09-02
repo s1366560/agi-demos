@@ -8,9 +8,9 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const artifactClientProvider = source(
-  'src/features/chat/desktopArtifactClientProviderV2.ts',
-);
+const artifactAuthority = source('src/plugins/desktopArtifactContentAuthorityModuleV2.ts');
+const artifactClientProvider = source('src/features/chat/desktopArtifactClientProviderV2.ts');
+const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
 const artifactCatalog = source('src/plugins/desktopRendererArtifactCatalogV2.ts');
 const boundary = source('src/plugins/DesktopRendererSessionCanvasV2.tsx');
 const composition = source('src/plugins/desktopRendererAppCompositionV2.tsx');
@@ -51,10 +51,19 @@ test('session canvas is selected from one typed V2 surface without a React callb
     app,
     /\bWorkspaceReviewPanel\b|SessionCanvasControls|renderWorkspaceReviewPanel|renderCanvas/u,
   );
-  assert.match(app, /desktopArtifactClientProviderV2\.publish\(\{/u);
-  assert.match(app, /artifactClient:\s*desktopArtifactClientV2\.client/u);
+  assert.match(app, /createDesktopArtifactContentClientV2/u);
+  assert.match(
+    app,
+    /const desktopArtifactClientV2 = useMemo\([\s\S]*?createDesktopArtifactContentClientV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?configRef\.current[\s\S]*?\[\],[\s\S]*?\);/u,
+  );
+  assert.match(app, /artifactClient:\s*desktopArtifactClientV2/u);
+  assert.doesNotMatch(app, /createDesktopArtifactClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopArtifactClientProviderV2\.publish/u);
   assert.doesNotMatch(app, /createHttpDesktopArtifactClient\(/u);
-  assert.match(artifactClientProvider, /createHttpDesktopArtifactClient\(config\)/u);
+  assert.equal(artifactClientProvider, '');
+  assert.match(artifactAuthority, /createHttpDesktopArtifactClient\(operationConfig\)/u);
+  assert.match(artifactAuthority, /acquireServiceOperationLease/u);
+  assert.match(generation, /desktopArtifactContentAuthorityDefinitionV2/u);
 });
 
 test('session canvas resolver validates the exact slot contract and fails closed in the boundary', () => {

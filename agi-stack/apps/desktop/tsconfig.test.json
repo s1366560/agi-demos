@@ -151,7 +151,7 @@
     "src/features/chat/artifactContentContractV2.ts",
     "src/features/chat/artifactPreviewModel.ts",
     "src/features/chat/desktopArtifactClient.ts",
-    "src/features/chat/desktopArtifactClientProviderV2.ts",
+    "src/plugins/desktopArtifactContentAuthorityModuleV2.ts",
     "src/features/chat/mcpAppCanvasEventModel.ts",
     "src/features/chat/mcpAppsClient.ts",
     "src/features/chat/mcpAppTimelineModel.ts",

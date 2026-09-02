@@ -384,7 +384,7 @@ function mutationAuthority(headersInit: HeadersInit | undefined): VaultBoundClou
 function validIdempotencyKey(value: string | null): value is string {
   return (
     value !== null &&
-    value.length >= 16 &&
+    value.length >= 8 &&
     value.length <= 256 &&
     value === value.trim()
   );

@@ -322,6 +322,37 @@
       "contract_digest": "sha256:29e1d038b902b4448658d3739210572703af2c77198d9b49f83381a119de1dda"
     },
     {
+      "module_ref": "builtin://memstack/desktop/artifact-content-authority",
+      "entrypoint": "applyDesktopArtifactContentAuthorityV2",
+      "artifact": {
+        "digest": "sha256:297e39170232dac06542589270479d6cd79e38a5a9af721685fb6572dea216e3",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopArtifactContentAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.artifact-content-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:3916579a46edffd5aca3080beea0f8c3be859f40a57113b4b075cc12fdb43c04"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/my-work-authority",
       "entrypoint": "applyDesktopMyWorkAuthorityV2",
       "artifact": {

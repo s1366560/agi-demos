@@ -15,6 +15,7 @@ import {
 
 import type { DesktopRuntimeConfig } from '../types';
 
+import { desktopArtifactContentAuthorityDefinitionV2 } from './desktopArtifactContentAuthorityModuleV2';
 import { desktopConversationLifecycleAuthorityDefinitionV2 } from './desktopConversationLifecycleAuthorityModuleV2';
 import { validateDesktopRendererContributionsV2 } from './desktopRendererArtifactCatalogV2';
 import { desktopConversationConfigAuthorityDefinitionV2 } from './desktopConversationConfigAuthorityModuleV2';
@@ -40,6 +41,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
   'desktop-renderer',
   Object.freeze([
     ...createDesktopRendererDefinitionsV2(validateDesktopRendererContributionsV2),
+    desktopArtifactContentAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
     desktopConversationConfigAuthorityDefinitionV2,
