@@ -64,14 +64,13 @@
       ],
       "permission_requirements": [
         {"surface": "web", "actions": ["view", "inspect-stats", "navigate"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null},
-        {"surface": "desktop_cloud", "actions": ["view", "inspect-stats"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null},
         {"surface": "desktop_local", "actions": ["view"], "authentication": "authenticated", "authorization": ["project_member"], "enforcement": "enforced", "feature_gate": null}
       ],
       "web_status": "partial",
       "web_reason_code": "web_project_overview_structured_state_contract_partial",
-      "cloud_status": "partial",
-      "cloud_reason_code": "desktop_project_overview_navigation_and_state_contract_partial",
-      "cloud_actions": ["view", "inspect-stats"],
+      "cloud_status": "unavailable",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
+      "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/project/projectOverviewRouteModule.tsx",
@@ -93,7 +92,7 @@
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/project_overview.rs"
       ],
-      "judgment_rationale": "The previous planned verdict is stale. Current production code mounts the native Project Overview route with authenticated project scope and separate Cloud and Local authorities. Web remains partial because production 403, 404, conflict and unavailable responses collapse into a generic load error, stale requests have no explicit stale presentation, and complete structured states remain unproven. Cloud Desktop renders native project details, statistics and recent memories and publishes inspect-stats only after both project and statistics authority succeed, but it lacks the Web navigation contract for memories, memory detail and project settings and still lacks complete empty, conflict and explicit stale states. Local Desktop is a sidecar-native degraded equivalent protected by launch capability, session and project scope; it intentionally exposes timeline-backed recent knowledge with view-only authority and never fabricates cloud graph, quota or collaboration values."
+      "judgment_rationale": "Current production code routes Project Overview reads and capability probes through one generation-pinned V2 authority with authenticated project scope. Web remains partial because production 403, 404, conflict and unavailable responses collapse into a generic load error, stale requests have no explicit stale presentation, and complete structured states remain unproven. Cloud Desktop can load project details, statistics and recent memories under one project lease, but its capability response has no authoritative revision and therefore fails closed as unavailable with no allowed actions. Local Desktop remains a sidecar-native degraded equivalent with a scoped authority revision and view-only authority; it intentionally exposes timeline-backed recent knowledge and never fabricates cloud graph, quota or collaboration values."
     },
     {
       "id": "project-project-workspaces",
