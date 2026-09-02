@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -98,6 +99,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
           tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
           tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
           agentWorkspaceClient: {
@@ -144,6 +146,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
       tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
       tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+      tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
       tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
       tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       agentWorkspaceJourneyClient: {
@@ -195,6 +198,7 @@ test('Workbench default production journey authority supports tenant-level scope
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+        tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       },
@@ -246,6 +250,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
       tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
       tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+      tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
       tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
       tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       agentWorkspaceClient: {

@@ -9,7 +9,7 @@ const BROKER_BOUND_CLIENTS = [
   'src/features/runtime/workbenchCapabilityClient.ts',
   'src/plugins/desktopTenantOverviewAuthorityModuleV2.ts',
   'src/plugins/desktopTenantProjectsAuthorityModuleV2.ts',
-  'src/features/tenant/tenantTasksHttpClient.ts',
+  'src/plugins/desktopTenantTasksAuthorityModuleV2.ts',
   'src/plugins/desktopTenantAnalyticsAuthorityModuleV2.ts',
   'src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.ts',
   'src/plugins/desktopTenantAgentBindingsAuthorityModuleV2.ts',

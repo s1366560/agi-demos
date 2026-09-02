@@ -209,7 +209,7 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
   );
 });
 
-test("Tenant Tasks records fail-closed Cloud and explicit Local degradation boundaries", () => {
+test("Tenant Tasks records observed transports and fail-closed revision boundaries", () => {
   const capability = readCapability(
     "parity-capability-definitions.02-tenant-operations.v2.json",
     "tenant-tenant-tasks",
@@ -220,14 +220,25 @@ test("Tenant Tasks records fail-closed Cloud and explicit Local degradation boun
   assert.equal(capability.cloud_status, "unavailable");
   assert.equal(
     capability.cloud_reason_code,
-    "renderer_capability_authority_unobserved",
+    "capability_authority_revision_unavailable",
   );
   assert.equal(capability.local_status, "unavailable");
   assert.equal(
     capability.local_reason_code,
-    "renderer_capability_authority_unobserved",
+    "capability_authority_revision_unavailable",
   );
-  assert.deepEqual(capability.cloud_actions, []);
+  assert.deepEqual(capability.cloud_actions, [
+    "view",
+    "list",
+    "search",
+    "filter",
+    "paginate",
+    "refresh",
+    "retry-task",
+    "stop-task",
+    "retry-pending",
+    "navigate-dead-letter-queue",
+  ]);
   assert.deepEqual(capability.local_actions, [
     "view",
     "list",
@@ -239,11 +250,11 @@ test("Tenant Tasks records fail-closed Cloud and explicit Local degradation boun
   ]);
   assert.match(
     capability.judgment_rationale,
-    /renderer_capability_authority_unobserved/u,
+    /generation-backed V2 Provider/u,
   );
   assert.match(
     capability.judgment_rationale,
-    /both modes.*renderer_capability_authority_unobserved/u,
+    /neither response supplies a snapshot-wide authority revision/u,
   );
   assertPermissionCoverage(
     capability,
@@ -884,11 +895,6 @@ test("renderer-declared Cloud route slices retain entries but expose no actions"
     [
       "parity-capability-definitions.02-tenant-operations.v2.json",
       "tenant-tenant-workspaces",
-      true,
-    ],
-    [
-      "parity-capability-definitions.02-tenant-operations.v2.json",
-      "tenant-tenant-tasks",
       true,
     ],
     [

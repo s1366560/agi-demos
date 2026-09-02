@@ -99,8 +99,9 @@ import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/deskt
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
+import type { DesktopTenantTasksOperationsV2 } from '../../plugins/desktopTenantTasksAuthorityModuleV2';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
-import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
+import { loadTenantTasksCapability } from '../tenant/tenantTasksCapability';
 import { tenantWorkspacesCapability } from '../tenant/tenantWorkspacesCapability';
 import type { TenantAuditClient } from '../tenant-admin/tenantAuditClient';
 import {
@@ -170,6 +171,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     DesktopTenantProjectsOperationsV2,
     'listTenantProjects'
   >;
+  tenantTasksOperationsV2: Pick<DesktopTenantTasksOperationsV2, 'loadTenantTasks'>;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -291,6 +293,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof tenantProjectsOperationsV2?.listTenantProjects !== 'function') {
     throw new Error('desktop_tenant_projects_authority_required');
   }
+  const tenantTasksOperationsV2 = options?.tenantTasksOperationsV2;
+  if (typeof tenantTasksOperationsV2?.loadTenantTasks !== 'function') {
+    throw new Error('desktop_tenant_tasks_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -349,6 +355,7 @@ export function createDesktopWorkbenchCapabilityClient(
         tenantAgentDashboard,
         tenantAgentBindings,
         tenantProjects,
+        tenantTasks,
         managementRouteCapabilities,
         projectWorkspaces,
         projectBlackboard,
@@ -386,6 +393,7 @@ export function createDesktopWorkbenchCapabilityClient(
           signal,
         ),
         loadTenantProjectsCapability(config, tenantProjectsOperationsV2, signal),
+        loadTenantTasksCapability(config, tenantTasksOperationsV2, signal),
         loadManagementRouteCapabilities(managementRouteClients, config, signal),
         loadProjectWorkspacesCapability(projectWorkspacesClient, config, signal),
         loadProjectBlackboardCapability(projectBlackboardClient, config, signal),
@@ -571,7 +579,7 @@ export function createDesktopWorkbenchCapabilityClient(
             tenantAdminCapabilities['tenant-tenant-trust-policies'],
           ),
           'tenant-tenant-workspaces': declared(tenantWorkspacesCapability(config)),
-          'tenant-tenant-tasks': declared(tenantTasksCapability(config)),
+          'tenant-tenant-tasks': observed(tenantTasks),
           'tenant-tenant-runtimes': declared(unifiedRuntimesCapability(config)),
           'tenant-tenant-pool': declared(runtimePoolCapability(config)),
           'tenant-tenant-instances': declared(runtimeInstancesCapability(config)),

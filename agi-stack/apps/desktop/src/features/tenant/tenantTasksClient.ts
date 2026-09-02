@@ -1,10 +1,18 @@
 export type TenantTasksAuthority = 'cloud' | 'local';
 
-export type TenantTasksScope = Readonly<{
-  authority: TenantTasksAuthority;
+export type CloudTenantTasksScope = Readonly<{
+  authority: 'cloud';
+  tenantId: string;
+  projectId: null;
+}>;
+
+export type LocalTenantTasksScope = Readonly<{
+  authority: 'local';
   tenantId: string;
   projectId: string;
 }>;
+
+export type TenantTasksScope = CloudTenantTasksScope | LocalTenantTasksScope;
 
 export type TenantTasksQuery = Readonly<{
   search?: string;

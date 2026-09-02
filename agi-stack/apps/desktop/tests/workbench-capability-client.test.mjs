@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -138,6 +139,23 @@ test('workbench capability client requires the Tenant Projects V2 authority', ()
         },
       ),
     /desktop_tenant_projects_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Tasks V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+        },
+      ),
+    /desktop_tenant_tasks_authority_required/u,
   );
 });
 
@@ -405,23 +423,12 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-tasks'],
-      withDeclaredAuthority({
-        availability: 'available',
-        reason_code: null,
+      withObservedAuthority({
+        availability: 'unavailable',
+        reason_code: 'capability_authority_revision_unavailable',
         service_version: '0.1.0',
         contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'search',
-          'filter',
-          'paginate',
-          'refresh',
-          'retry-task',
-          'stop-task',
-          'retry-pending',
-          'navigate-dead-letter-queue',
-        ],
+        allowed_actions: [],
         scope: {
           tenant_id: 'default',
           project_id: null,
@@ -429,7 +436,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
           instance_id: null,
         },
         authority_revision: null,
-      }),
+      }, 'cloud_service'),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-pool'],
@@ -909,20 +916,12 @@ test('local workbench capability client consumes the scoped degraded Search cont
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-tasks'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'local_task_dashboard_partial',
+      withObservedAuthority({
+        availability: 'unavailable',
+        reason_code: 'capability_authority_revision_unavailable',
         service_version: '0.1.0',
         contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'search',
-          'filter',
-          'paginate',
-          'refresh',
-          'open-workspace',
-        ],
+        allowed_actions: [],
         scope: {
           tenant_id: 'local',
           project_id: 'local-project',
@@ -930,7 +929,7 @@ test('local workbench capability client consumes the scoped degraded Search cont
           instance_id: null,
         },
         authority_revision: null,
-      }),
+      }, 'sidecar'),
     );
     assert.deepEqual(
       snapshot.capabilities.sandbox_isolation,
@@ -1561,6 +1560,7 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
     tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
     ...options,

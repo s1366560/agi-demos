@@ -679,7 +679,18 @@
         "retry-pending",
         "navigate-dead-letter-queue"
       ],
-      "cloud_actions": [],
+      "cloud_actions": [
+        "view",
+        "list",
+        "search",
+        "filter",
+        "paginate",
+        "refresh",
+        "retry-task",
+        "stop-task",
+        "retry-pending",
+        "navigate-dead-letter-queue"
+      ],
       "local_actions": ["view","list","search","filter","paginate","refresh","open-workspace"],
       "permission_requirements": [
         {
@@ -719,14 +730,51 @@
         }
       ],
       "cloud_status": "unavailable",
-      "cloud_reason_code": "renderer_capability_authority_unobserved",
-      "cloud_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts","agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts"],
+      "cloud_reason_code": "capability_authority_revision_unavailable",
+      "cloud_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantTasksCapability.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantTasksClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTasksAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTasksContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTasksHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTasksOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+      ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
-      "local_reason_code": "renderer_capability_authority_unobserved",
-      "local_deviation": "The sidecar has a reviewed project-scoped My Work contract, but the workbench wrapper still marks its active helper result as renderer-declared. Snapshot v4 promotes no Local task action until observed sidecar provenance is carried end to end.",
-      "local_entries": ["agi-stack/apps/desktop/src/App.tsx","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts","agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts","agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts","agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx","agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx","agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts","agi-stack/apps/desktop/src/features/tenant/tenantTasksHttpClient.ts","agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"],
-      "judgment_rationale": "Desktop has a real Tenant Tasks loader, App binding, typed Cloud and Local clients and a shared controller for the reviewed task journeys. However, workbenchCapabilityClient still wraps both active capability helpers with declared renderer provenance, so Snapshot v4 closes both modes to renderer_capability_authority_unobserved and promotes no action. The Local desired-action set continues to document project-scoped My Work discovery and Workspace navigation without claiming route reachability."
+      "local_reason_code": "capability_authority_revision_unavailable",
+      "local_deviation": "Local Desktop observes the selected-project My Work projection through a project-scoped V2 generation lease and retains the reviewed degraded route behavior. The response has per-item revisions but no project-wide snapshot authority revision, so Snapshot v4 promotes no Local task action; item maxima, payload hashes and generation digests are not substituted for data authority.",
+      "local_entries": [
+        "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantTasksCapability.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantTasksClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantTasksRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/TenantTasksPage.tsx",
+        "agi-stack/apps/desktop/src/features/tenant/tenantTasksController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTasksAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTasksContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTasksHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTasksOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+      ],
+      "judgment_rationale": "Desktop now routes Tenant Tasks through one generation-backed V2 Provider. Cloud reads the tenant-wide stats, queue and recent projections and keeps retry, stop and retry-pending behind a tenant lease and vault-bound transport; Local reads only the selected project's My Work projection behind a project lease and rejects Cloud mutations before acquisition. Both transports are observed rather than renderer-declared, but neither response supplies a snapshot-wide authority revision. Snapshot v4 therefore intentionally closes both surfaces to capability_authority_revision_unavailable and promotes no action until Cloud provides one tenant/principal-scoped coherent snapshot revision and the sidecar provides one project-scoped My Work snapshot revision."
     },
     {
       "id": "tenant-tenant-analytics",

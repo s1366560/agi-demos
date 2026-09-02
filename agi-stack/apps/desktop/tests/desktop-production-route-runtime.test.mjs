@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const {
   createProjectOverviewRouteBindingForRuntime,
@@ -10,6 +12,7 @@ const {
   createRuntimeDeploymentsRouteBindingForRuntime,
   createRuntimeInstancesRouteBindingForRuntime,
   createRuntimePoolRouteBindingForRuntime,
+  createTenantTasksRouteBindingForRuntime,
   createUnifiedRuntimesRouteBindingForRuntime,
   desktopRouteBasePermissionsForAuth,
   desktopRoutePermissionsForContext,
@@ -281,6 +284,54 @@ test('project overview scope mismatch fails before constructing any authority', 
     );
     assert.deepEqual(calls, []);
   }
+});
+
+test('Tenant Tasks binding keeps Cloud tenant-wide and Local project-scoped', () => {
+  const cloud = createTenantTasksRouteBindingForRuntime(
+    runtimeConfig('cloud', { projectId: '' }),
+    { tenantId },
+    tenantTasksOperationsV2Fixture(),
+  );
+  assert.deepEqual(cloud.scope, {
+    authority: 'cloud',
+    tenantId,
+    projectId: null,
+  });
+  assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
+
+  const local = createTenantTasksRouteBindingForRuntime(
+    runtimeConfig('local'),
+    { tenantId },
+    tenantTasksOperationsV2Fixture(),
+  );
+  assert.deepEqual(local.scope, {
+    authority: 'local',
+    tenantId,
+    projectId,
+  });
+  assert.equal(local.controller.getSnapshot().authority, 'local');
+});
+
+test('Tenant Tasks binding rejects tenant drift and missing Local project scope', () => {
+  const operations = tenantTasksOperationsV2Fixture();
+  assert.throws(
+    () =>
+      createTenantTasksRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId: 'tenant-other' },
+        operations,
+      ),
+    /tenant_tasks_runtime_scope_mismatch/u,
+  );
+  assert.throws(
+    () =>
+      createTenantTasksRouteBindingForRuntime(
+        runtimeConfig('local', { projectId: '' }),
+        { tenantId },
+        operations,
+      ),
+    /tenant_tasks_runtime_scope_mismatch/u,
+  );
 });
 
 test('Runtime Pool binding preserves exact Cloud and Local tenant authority', async () => {

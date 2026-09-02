@@ -151,6 +151,8 @@ function rendererDefinitions() {
       .desktopTenantAgentBindingsAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopTenantProjectsAuthorityModuleV2.js')
       .desktopTenantProjectsAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopTenantTasksAuthorityModuleV2.js')
+      .desktopTenantTasksAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.js')
       .desktopTenantAgentDashboardAuthorityDefinitionV2,
     desktopTenantAnalyticsAuthorityDefinitionV2,
