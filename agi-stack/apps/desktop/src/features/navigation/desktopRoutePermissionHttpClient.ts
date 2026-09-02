@@ -1,11 +1,13 @@
 import { DesktopApiClient } from '../../api/client';
 import type { VaultBoundCloudRequestBroker } from '../../api/cloudRequestBroker';
+import type { DesktopWorkspaceRosterOperationsV2 } from '../../plugins/desktopWorkspaceRosterAuthorityModuleV2';
 import type { CurrentUser, DesktopRuntimeConfig, WorkspaceContextResponse } from '../../types';
 import type { DesktopRouteContext } from './desktopRouteRegistry';
 import type { DesktopRoutePermissionAuthorityClient } from './desktopRoutePermissionAuthority';
 
 export function createCloudDesktopRoutePermissionClient(
   config: DesktopRuntimeConfig,
+  workspaceRosterOperationsV2: DesktopWorkspaceRosterOperationsV2,
   broker: VaultBoundCloudRequestBroker | null = null,
 ): DesktopRoutePermissionAuthorityClient {
   if (config.mode !== 'cloud') throw new Error('desktop_route_permission_mode_mismatch');
@@ -23,24 +25,28 @@ export function createCloudDesktopRoutePermissionClient(
           signal,
         })) as WorkspaceContextResponse;
       },
-      async listWorkspaceMembers() {
-        throw new Error('desktop_route_permission_workspace_authority_unavailable');
-      },
+      listWorkspaceMembers: (context, signal) =>
+        workspaceRosterOperationsV2.listWorkspaceMembers({
+          config: scopedConfig(config, context, true),
+          signal,
+        }),
     });
   }
-  return createDesktopRoutePermissionClient(config);
+  return createDesktopRoutePermissionClient(config, workspaceRosterOperationsV2);
 }
 
 export function createLocalDesktopRoutePermissionClient(
   config: DesktopRuntimeConfig,
+  workspaceRosterOperationsV2: DesktopWorkspaceRosterOperationsV2,
 ): DesktopRoutePermissionAuthorityClient {
   if (config.mode !== 'local') throw new Error('desktop_route_permission_mode_mismatch');
-  return createDesktopRoutePermissionClient(config);
+  return createDesktopRoutePermissionClient(config, workspaceRosterOperationsV2);
 }
 
 export function createVaultBoundCloudDesktopRoutePermissionClient(
   config: DesktopRuntimeConfig,
   broker: VaultBoundCloudRequestBroker | null,
+  workspaceRosterOperationsV2: DesktopWorkspaceRosterOperationsV2,
 ): DesktopRoutePermissionAuthorityClient {
   if (config.mode !== 'local') throw new Error('desktop_route_permission_mode_mismatch');
   if (!broker) throw new Error('cloud_request_broker_missing');
@@ -57,24 +63,37 @@ export function createVaultBoundCloudDesktopRoutePermissionClient(
         signal,
       })) as WorkspaceContextResponse;
     },
-    async listWorkspaceMembers() {
-      throw new Error('desktop_route_permission_workspace_authority_unavailable');
-    },
+    listWorkspaceMembers: (context, signal) =>
+      workspaceRosterOperationsV2.listWorkspaceMembers({
+        config: scopedConfig(
+          Object.freeze({
+            ...config,
+            apiKey: '',
+            localApiToken: '',
+            mode: 'cloud',
+          }),
+          context,
+          true,
+        ),
+        signal,
+      }),
   });
 }
 
 function createDesktopRoutePermissionClient(
   config: DesktopRuntimeConfig,
+  workspaceRosterOperationsV2: DesktopWorkspaceRosterOperationsV2,
 ): DesktopRoutePermissionAuthorityClient {
   const baseConfig = Object.freeze({ ...config });
   const identity = new DesktopApiClient(baseConfig);
   return Object.freeze({
     getCurrentUser: (signal) => identity.currentUser(signal),
     getWorkspaceContext: (signal) => identity.getWorkspaceContext(signal),
-    listWorkspaceMembers: (context, signal) => {
-      const scoped = new DesktopApiClient(scopedConfig(baseConfig, context, true));
-      return scoped.listWorkspaceMembers(signal);
-    },
+    listWorkspaceMembers: (context, signal) =>
+      workspaceRosterOperationsV2.listWorkspaceMembers({
+        config: scopedConfig(baseConfig, context, true),
+        signal,
+      }),
   });
 }
 

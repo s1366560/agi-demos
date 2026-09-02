@@ -8,6 +8,7 @@ const {
   createLocalDesktopRoutePermissionClient,
   createVaultBoundCloudDesktopRoutePermissionClient,
 } = require('/tmp/agistack-desktop-test-dist/src/features/navigation/desktopRoutePermissionHttpClient.js');
+const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 
 function runtimeConfig(mode) {
   return {
@@ -68,7 +69,10 @@ test('Cloud permission client uses scoped production APIs and preserves AbortSig
   };
 
   try {
-    const client = createCloudDesktopRoutePermissionClient(runtimeConfig('cloud'));
+    const client = createCloudDesktopRoutePermissionClient(
+      runtimeConfig('cloud'),
+      workspaceRosterOperationsV2()
+    );
     const context = Object.freeze({
       tenantId: 'tenant-1',
       projectId: 'project-1',
@@ -81,13 +85,13 @@ test('Cloud permission client uses scoped production APIs and preserves AbortSig
     assert.equal(members[0].workspace_id, 'workspace-1');
     assert.equal(
       calls.every(([, init]) => init.signal === controller.signal),
-      true,
+      true
     );
     assert.equal(
       calls.some(([url]) =>
-        url.includes('/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/members?'),
+        url.includes('/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/members?')
       ),
-      true,
+      true
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -98,7 +102,7 @@ test('Cloud permission client uses the vault-bound broker when renderer credenti
   const requests = [];
   const controller = new AbortController();
   const config = { ...runtimeConfig('cloud'), apiKey: '' };
-  const client = createCloudDesktopRoutePermissionClient(config, {
+  const client = createCloudDesktopRoutePermissionClient(config, workspaceRosterOperationsV2(), {
     async requestJson(request) {
       requests.push(request);
       if (request.path === '/api/v1/auth/me') {
@@ -139,61 +143,86 @@ test('Cloud permission client uses the vault-bound broker when renderer credenti
   assert.equal(workspace.context.revision, 9);
   assert.deepEqual(
     requests.map((request) => request.path),
-    ['/api/v1/auth/me', '/api/v1/workspace-context'],
+    ['/api/v1/auth/me', '/api/v1/workspace-context']
   );
   assert.equal(
     requests.every((request) => request.signal === controller.signal),
-    true,
+    true
   );
 });
 
 test('permission clients reject Cloud and Local mode drift', () => {
   assert.throws(
-    () => createCloudDesktopRoutePermissionClient(runtimeConfig('local')),
-    /desktop_route_permission_mode_mismatch/u,
+    () =>
+      createCloudDesktopRoutePermissionClient(
+        runtimeConfig('local'),
+        workspaceRosterOperationsV2()
+      ),
+    /desktop_route_permission_mode_mismatch/u
   );
   assert.throws(
-    () => createLocalDesktopRoutePermissionClient(runtimeConfig('cloud')),
-    /desktop_route_permission_mode_mismatch/u,
+    () =>
+      createLocalDesktopRoutePermissionClient(
+        runtimeConfig('cloud'),
+        workspaceRosterOperationsV2()
+      ),
+    /desktop_route_permission_mode_mismatch/u
   );
 });
 
 test('Local-online Cloud permission client uses only the vault-bound broker', async () => {
   const requests = [];
+  const rosterRequests = [];
   const controller = new AbortController();
-  const client = createVaultBoundCloudDesktopRoutePermissionClient(runtimeConfig('local'), {
-    async requestJson(request) {
-      requests.push(request);
-      if (request.path === '/api/v1/auth/me') {
-        return {
-          user_id: 'user-1',
-          email: 'user@example.invalid',
-          name: 'Route User',
-          roles: [],
-          global_roles: [],
-          is_active: true,
-          is_superuser: false,
-          created_at: '2026-07-30T00:00:00Z',
-          profile: {},
-        };
-      }
-      if (request.path === '/api/v1/workspace-context') {
-        return {
-          context: {
-            tenant_id: 'tenant-current',
-            project_id: 'project-current',
-            revision: 9,
-            updated_at: '2026-08-10T00:00:00Z',
+  const client = createVaultBoundCloudDesktopRoutePermissionClient(
+    runtimeConfig('local'),
+    {
+      async requestJson(request) {
+        requests.push(request);
+        if (request.path === '/api/v1/auth/me') {
+          return {
+            user_id: 'user-1',
+            email: 'user@example.invalid',
+            name: 'Route User',
+            roles: [],
+            global_roles: [],
+            is_active: true,
+            is_superuser: false,
+            created_at: '2026-07-30T00:00:00Z',
+            profile: {},
+          };
+        }
+        if (request.path === '/api/v1/workspace-context') {
+          return {
+            context: {
+              tenant_id: 'tenant-current',
+              project_id: 'project-current',
+              revision: 9,
+              updated_at: '2026-08-10T00:00:00Z',
+            },
+            membership_role: 'admin',
+          };
+        }
+        throw new Error(`unexpected broker request: ${request.path}`);
+      },
+      async requestNoContent() {
+        throw new Error('permission observation must be read-only');
+      },
+    },
+    {
+      async listWorkspaceMembers(input) {
+        rosterRequests.push(input);
+        return [
+          {
+            id: 'member-1',
+            workspace_id: input.config.workspaceId,
+            user_id: 'user-1',
+            role: 'viewer',
           },
-          membership_role: 'admin',
-        };
-      }
-      throw new Error(`unexpected broker request: ${request.path}`);
-    },
-    async requestNoContent() {
-      throw new Error('permission observation must be read-only');
-    },
-  });
+        ];
+      },
+    }
+  );
 
   const user = await client.getCurrentUser(controller.signal);
   const workspace = await client.getWorkspaceContext(controller.signal);
@@ -202,25 +231,36 @@ test('Local-online Cloud permission client uses only the vault-bound broker', as
   assert.equal(workspace.context.revision, 9);
   assert.deepEqual(
     requests.map((request) => request.path),
-    ['/api/v1/auth/me', '/api/v1/workspace-context'],
+    ['/api/v1/auth/me', '/api/v1/workspace-context']
   );
   assert.equal(
     requests.every((request) => request.signal === controller.signal),
-    true,
+    true
   );
   assert.equal(
     requests.every((request) => Object.hasOwn(request, 'headers') === false),
-    true,
+    true
   );
-  await assert.rejects(
-    client.listWorkspaceMembers(
-      {
-        tenantId: 'tenant-current',
-        projectId: 'project-current',
-        workspaceId: 'workspace-current',
-      },
-      controller.signal,
-    ),
-    /desktop_route_permission_workspace_authority_unavailable/u,
+  const members = await client.listWorkspaceMembers(
+    {
+      tenantId: 'tenant-current',
+      projectId: 'project-current',
+      workspaceId: 'workspace-current',
+    },
+    controller.signal
   );
+  assert.equal(members[0].workspace_id, 'workspace-current');
+  assert.equal(rosterRequests.length, 1);
+  assert.equal(rosterRequests[0].config.mode, 'cloud');
+  assert.equal(rosterRequests[0].config.apiKey, '');
+  assert.equal(rosterRequests[0].config.localApiToken, '');
+  assert.equal(rosterRequests[0].signal, controller.signal);
 });
+
+function workspaceRosterOperationsV2() {
+  return Object.freeze({
+    listWorkspaceMembers({ config, signal }) {
+      return new DesktopApiClient(config).listWorkspaceMembers(signal);
+    },
+  });
+}

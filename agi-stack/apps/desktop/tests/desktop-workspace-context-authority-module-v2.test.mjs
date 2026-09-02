@@ -144,6 +144,8 @@ function rendererDefinitions() {
     desktopWorkspaceCatalogAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.js')
       .desktopWorkspaceLifecycleAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.js')
+      .desktopWorkspaceRosterAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
   ];
@@ -252,6 +254,8 @@ test('Loader activates one frozen root service and fails closed on missing or wr
       desktopWorkspaceCatalogAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.js')
       .desktopWorkspaceLifecycleAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.js')
+      .desktopWorkspaceRosterAuthorityDefinitionV2,
       desktopSessionTimelineAuthorityDefinitionV2,
       desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
       ...marketplaceDefinitions(),
@@ -272,6 +276,8 @@ test('Loader activates one frozen root service and fails closed on missing or wr
       desktopWorkspaceCatalogAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.js')
       .desktopWorkspaceLifecycleAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.js')
+      .desktopWorkspaceRosterAuthorityDefinitionV2,
       desktopSessionTimelineAuthorityDefinitionV2,
       desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
       ...marketplaceDefinitions(),

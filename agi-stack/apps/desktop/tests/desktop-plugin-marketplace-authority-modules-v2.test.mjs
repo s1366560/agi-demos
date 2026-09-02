@@ -150,6 +150,8 @@ function rendererDefinitions() {
     desktopWorkspaceCatalogAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.js')
       .desktopWorkspaceLifecycleAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.js')
+      .desktopWorkspaceRosterAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
   ];

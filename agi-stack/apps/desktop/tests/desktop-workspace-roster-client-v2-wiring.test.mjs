@@ -9,52 +9,69 @@ function source(relativePath) {
 
 const app = source('src/App.tsx');
 const provider = source('src/features/workspace/desktopWorkspaceRosterClientProviderV2.ts');
+const authority = source('src/plugins/desktopWorkspaceRosterAuthorityModuleV2.ts');
+const routePermissionClient = source('src/features/navigation/desktopRoutePermissionHttpClient.ts');
+const routeAuthorityProvider = source(
+  'src/features/navigation/desktopProductionRouteAuthorityProviderV2.ts'
+);
+const policyHook = source('src/features/settings/useWorkspaceAgentPolicy.ts');
+const composerCatalogProvider = source(
+  'src/features/task/desktopNewThreadComposerCatalogClientProviderV2.ts'
+);
 
-test('App publishes one stable V2 workspace roster Provider', () => {
-  assert.match(app, /createDesktopWorkspaceRosterClientProviderV2/u);
+test('App resolves one stable V2 workspace roster operation facade', () => {
   assert.match(
     app,
-    /const desktopWorkspaceRosterClientProviderV2 = useMemo\([\s\S]*?createDesktopWorkspaceRosterClientProviderV2\(\)[\s\S]*?\[\],[\s\S]*?\);/u,
+    /const desktopWorkspaceRosterOperationsV2 = useMemo\([\s\S]*?createDesktopWorkspaceRosterOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u
   );
-  assert.match(app, /desktopWorkspaceRosterClientProviderV2\.publish\(\{ config \}\)/u);
+  assert.doesNotMatch(app, /createDesktopWorkspaceRosterClientProviderV2/u);
+  assert.equal(provider, '');
 });
 
-test('runtime refresh pins workspace roster hydration to one V2 operation binding', () => {
+test('runtime refresh resolves both roster reads through project generation leases', () => {
   const refresh = refreshRuntimeSource(app);
 
   assert.match(
     refresh,
-    /const workspaceRosterClient =\s*desktopWorkspaceRosterClientV2\.bindOperation\(resolvedConfig\);/u,
+    /desktopWorkspaceRosterOperationsV2\.listWorkspaceMembers\(\{[\s\S]*?config: resolvedConfig[\s\S]*?\}\)/u
   );
   assert.match(
     refresh,
-    /resolveWorkspaceAuthority\(workspaceRosterClient\.listWorkspaceMembers\(\)\)/u,
+    /desktopWorkspaceRosterOperationsV2\.listWorkspaceAgents\(\{[\s\S]*?config: resolvedConfig[\s\S]*?\}\)/u
   );
+  assert.doesNotMatch(refresh, /workspaceRosterClient|\.bindOperation\(resolvedConfig\)/u);
   assert.match(
     refresh,
-    /resolveWorkspaceAuthority\(workspaceRosterClient\.listWorkspaceAgents\(\)\)/u,
-  );
-  assert.doesNotMatch(
-    refresh,
-    /scopedClient\.listWorkspace(?:Members|Agents)\(\)/u,
-  );
-  assert.match(
-    refresh,
-    /desktopWorkspaceConversationCatalogOperationsV2,[\s\S]*?desktopWorkspaceRosterClientV2,/u,
+    /desktopWorkspaceConversationCatalogOperationsV2,[\s\S]*?desktopWorkspaceRosterOperationsV2,/u
   );
 });
 
-test('workspace roster Provider owns only read authority', () => {
+test('workspace roster module owns exactly two read operations', () => {
   assert.match(
-    provider,
-    /type DesktopWorkspaceRosterMethod =[\s\S]*?'listWorkspaceMembers'[\s\S]*?'listWorkspaceAgents'/u,
+    authority,
+    /DESKTOP_WORKSPACE_ROSTER_AUTHORITY_SERVICE_V2 =[\s\S]*?'service:desktop-renderer\.workspace-roster-authority'/u
   );
-  assert.match(provider, /listWorkspaceMembers:/u);
-  assert.match(provider, /listWorkspaceAgents:/u);
-  assert.match(provider, /bindOperation/u);
+  assert.match(authority, /listWorkspaceMembers/u);
+  assert.match(authority, /listWorkspaceAgents/u);
+  assert.match(authority, /acquireServiceOperationLease/u);
   assert.doesNotMatch(
-    provider,
-    /addWorkspaceMember|removeWorkspaceMember|updateWorkspaceMemberRole|bindWorkspaceAgent|unbindWorkspaceAgent|listWorkspacesForProject|listConversations/u,
+    authority,
+    /addWorkspaceMember|removeWorkspaceMember|updateWorkspaceMemberRole|bindWorkspaceAgent|unbindWorkspaceAgent|listWorkspacesForProject|listConversations/u
+  );
+});
+
+test('route permissions, policy and New Thread delegate roster reads to the same V2 seam', () => {
+  assert.match(routePermissionClient, /workspaceRosterOperationsV2\.listWorkspaceMembers/u);
+  assert.doesNotMatch(routePermissionClient, /scoped\.listWorkspaceMembers/u);
+  assert.match(routeAuthorityProvider, /workspaceRosterOperationsV2/u);
+  assert.match(policyHook, /workspaceRosterOperationsV2\.listWorkspaceMembers/u);
+  assert.doesNotMatch(policyHook, /client\.listWorkspaceMembers/u);
+  assert.match(composerCatalogProvider, /workspaceRosterOperationsV2\.listWorkspaceAgents/u);
+  assert.doesNotMatch(composerCatalogProvider, /authority\.listWorkspaceAgents/u);
+  assert.match(app, /workspaceRosterOperationsV2:\s*desktopWorkspaceRosterOperationsV2/u);
+  assert.match(
+    app,
+    /useWorkspaceAgentPolicy\([\s\S]*?newThreadRuntimeConfig,[\s\S]*?desktopWorkspaceRosterOperationsV2/u
   );
 });
 

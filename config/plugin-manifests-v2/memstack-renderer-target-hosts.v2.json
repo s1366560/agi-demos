@@ -322,6 +322,37 @@
       "contract_digest": "sha256:7f6d77c065f6396c88a37f24ddb4c8d9d5a709366a8c57272bd720c019aa9462"
     },
     {
+      "module_ref": "builtin://memstack/desktop/workspace-roster-authority",
+      "entrypoint": "applyDesktopWorkspaceRosterAuthorityV2",
+      "artifact": {
+        "digest": "sha256:76315dd2c359828a34787922fc0836a1d06f15938ba99f425a7464d5bb53fe18",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-roster-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:43084aa8b836be281a2f32a77bfdb38319faa5a217eb26f1378722a787d824e8"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/workspace-agent-binding-authority",
       "entrypoint": "applyDesktopWorkspaceAgentBindingAuthorityV2",
       "artifact": {

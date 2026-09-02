@@ -41,6 +41,7 @@ const authorityModules = [
   'desktopWorkspaceMemberMutationAuthorityModuleV2',
   'desktopWorkspaceCatalogAuthorityModuleV2',
   'desktopWorkspaceLifecycleAuthorityModuleV2',
+  'desktopWorkspaceRosterAuthorityModuleV2',
   'desktopWorkspaceContextAuthorityModuleV2',
   'desktopWorkspaceExecutionSnapshotAuthorityModuleV2',
   'desktopWorkspaceMessageCatalogAuthorityModuleV2',

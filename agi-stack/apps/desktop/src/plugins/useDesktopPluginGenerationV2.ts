@@ -44,6 +44,7 @@ import { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } from './desktopWo
 import { desktopWorkspaceContextAuthorityDefinitionV2 } from './desktopWorkspaceContextAuthorityModuleV2';
 import { desktopWorkspaceCatalogAuthorityDefinitionV2 } from './desktopWorkspaceCatalogAuthorityModuleV2';
 import { desktopWorkspaceLifecycleAuthorityDefinitionV2 } from './desktopWorkspaceLifecycleAuthorityModuleV2';
+import { desktopWorkspaceRosterAuthorityDefinitionV2 } from './desktopWorkspaceRosterAuthorityModuleV2';
 import { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } from './desktopWorkspaceExecutionSnapshotAuthorityModuleV2';
 import {
   desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
@@ -80,6 +81,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopWorkspaceCatalogAuthorityDefinitionV2,
     desktopWorkspaceLifecycleAuthorityDefinitionV2,
+    desktopWorkspaceRosterAuthorityDefinitionV2,
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,

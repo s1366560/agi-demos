@@ -125,6 +125,9 @@ import {
   createDesktopWorkspaceLifecycleOperationsV2,
 } from './plugins/desktopWorkspaceLifecycleAuthorityModuleV2';
 import {
+  createDesktopWorkspaceRosterOperationsV2,
+} from './plugins/desktopWorkspaceRosterAuthorityModuleV2';
+import {
   createDesktopWorkspaceExecutionSnapshotOperationsV2,
 } from './plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
@@ -352,9 +355,6 @@ import {
   retainOpenWorkspaceAutonomyAttentionResolveAttempts,
   type WorkspaceAutonomyAttentionResolveAttempt,
 } from './features/workspace/autonomyAttentionResolveAttemptModel';
-import {
-  createDesktopWorkspaceRosterClientProviderV2,
-} from './features/workspace/desktopWorkspaceRosterClientProviderV2';
 import { createWorkspaceCollaborationClientProviderV2 } from './features/workspace/workspaceCollaborationClientProviderV2';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
 import type {
@@ -970,8 +970,11 @@ export function App() {
     () => createDesktopProductionRouteAuthorityProviderV2(),
     [],
   );
-  const desktopWorkspaceRosterClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceRosterClientProviderV2(),
+  const desktopWorkspaceRosterOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceRosterOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
     [],
   );
   const desktopNewThreadComposerCatalogClientProviderV2 = useMemo(
@@ -1151,10 +1154,6 @@ export function App() {
     () => desktopSessionRunInputClientProviderV2.publish({ config }),
     [config, desktopSessionRunInputClientProviderV2],
   );
-  const desktopWorkspaceRosterClientV2 = useMemo(
-    () => desktopWorkspaceRosterClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceRosterClientProviderV2],
-  );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
       desktopWorkbenchCapabilityClientProviderV2.publish({
@@ -1269,12 +1268,14 @@ export function App() {
         config,
         capabilitySnapshot: desktopCapabilityState.snapshot,
         cloudRequestBroker: desktopVaultBoundCloudRequestBroker(),
+        workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
       }),
     [
       auth,
       config,
       desktopCapabilityState.snapshot,
       desktopProductionRouteAuthorityProviderV2,
+      desktopWorkspaceRosterOperationsV2,
     ],
   );
   projectSearchRouteBindingProviderV2.publish({
@@ -1338,16 +1339,19 @@ export function App() {
       desktopNewThreadComposerCatalogClientProviderV2.publish({
         config: newThreadRuntimeConfig,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
       }),
     [
       desktopNewThreadComposerCatalogClientProviderV2,
       desktopPluginMarketplaceOperationsV2,
+      desktopWorkspaceRosterOperationsV2,
       newThreadRuntimeConfig,
     ],
   );
   const workspaceAgentPolicy = useWorkspaceAgentPolicy(
     newThreadRuntimeConfig,
     identityAuthenticated && showRuntimeConfig && connection === 'ready',
+    desktopWorkspaceRosterOperationsV2,
   );
   const canManageWorkspacePolicy = useMemo(() => {
     if (auth.user?.roles.some((role) => role === 'admin' || role === 'owner')) return true;
@@ -2789,8 +2793,6 @@ export function App() {
           projectId: resolvedProjectId,
           workspaceId,
         };
-        const workspaceRosterClient =
-          desktopWorkspaceRosterClientV2.bindOperation(resolvedConfig);
         if (!contextIsCurrent()) return false;
         const autonomyAttentionScopeKey = workspaceAutonomyAttentionScopeKey(resolvedConfig);
         setWorkspaceAutonomyAttentionState({
@@ -2890,10 +2892,18 @@ export function App() {
                 .catch(() => null)
             : Promise.resolve(null),
           workspaceId
-            ? resolveWorkspaceAuthority(workspaceRosterClient.listWorkspaceMembers())
+            ? resolveWorkspaceAuthority(
+                desktopWorkspaceRosterOperationsV2.listWorkspaceMembers({
+                  config: resolvedConfig,
+                }),
+              )
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceMemberSummary>()),
           workspaceId
-            ? resolveWorkspaceAuthority(workspaceRosterClient.listWorkspaceAgents())
+            ? resolveWorkspaceAuthority(
+                desktopWorkspaceRosterOperationsV2.listWorkspaceAgents({
+                  config: resolvedConfig,
+                }),
+              )
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
           workspaceId
             ? resolveWorkspaceAuthority(
@@ -3122,7 +3132,7 @@ export function App() {
       desktopWorkspaceConversationCatalogOperationsV2,
       desktopWorkspaceExecutionSnapshotOperationsV2,
       desktopWorkspaceMessageCatalogOperationsV2,
-      desktopWorkspaceRosterClientV2,
+      desktopWorkspaceRosterOperationsV2,
       listMyWorkForConfig,
       syncLocalRuntimeConfig,
       t,

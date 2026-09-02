@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DesktopApiClient, DesktopApiError } from '../../api/client';
+import type { DesktopWorkspaceRosterOperationsV2 } from '../../plugins/desktopWorkspaceRosterAuthorityModuleV2';
 import type {
   DesktopRuntimeConfig,
   ManagedLlmProvider,
@@ -30,6 +31,7 @@ export type WorkspaceAgentPolicyAuthority = WorkspaceAgentPolicyState & {
 export function useWorkspaceAgentPolicy(
   config: DesktopRuntimeConfig,
   enabled: boolean,
+  workspaceRosterOperationsV2: DesktopWorkspaceRosterOperationsV2,
 ): WorkspaceAgentPolicyAuthority {
   const client = useMemo(() => new DesktopApiClient(config), [config]);
   const scopeKey = [
@@ -80,7 +82,10 @@ export function useWorkspaceAgentPolicy(
       ? loadAgentPolicy(client, config.projectId, config.workspaceId, controller.signal)
       : Promise.resolve({ policy: null, compatibilityMode: false });
     const membersPromise = config.workspaceId
-      ? client.listWorkspaceMembers(controller.signal)
+      ? workspaceRosterOperationsV2.listWorkspaceMembers({
+          config,
+          signal: controller.signal,
+        })
       : Promise.resolve<WorkspaceMemberSummary[]>([]);
     void Promise.all([
       policyPromise,
@@ -112,7 +117,7 @@ export function useWorkspaceAgentPolicy(
         });
       });
     return () => controller.abort();
-  }, [client, config, enabled, refreshRevision, scopeKey]);
+  }, [client, config, enabled, refreshRevision, scopeKey, workspaceRosterOperationsV2]);
 
   const current =
     state.scopeKey === scopeKey

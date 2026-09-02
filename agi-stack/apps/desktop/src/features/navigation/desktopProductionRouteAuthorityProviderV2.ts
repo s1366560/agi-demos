@@ -1,4 +1,5 @@
 import type { VaultBoundCloudRequestBroker } from '../../api/cloudRequestBroker';
+import type { DesktopWorkspaceRosterOperationsV2 } from '../../plugins/desktopWorkspaceRosterAuthorityModuleV2';
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { deviceApprovalCapability } from '../device-approval/deviceApprovalCapability';
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
@@ -44,6 +45,7 @@ export type DesktopProductionRouteAuthorityInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
   capabilitySnapshot: DesktopCapabilitySnapshot | null;
   cloudRequestBroker: VaultBoundCloudRequestBroker | null;
+  workspaceRosterOperationsV2: DesktopWorkspaceRosterOperationsV2;
 }>;
 
 export type DesktopProductionRouteAuthorityBindingV2 = Readonly<{
@@ -92,6 +94,7 @@ function createDesktopProductionRouteAuthorityBindingV2(
     cloudRequestBroker: input.cloudRequestBroker,
     config,
     mode,
+    workspaceRosterOperationsV2: input.workspaceRosterOperationsV2,
   });
   const resolveCapability: DesktopRouteCapabilityResolver = (capability, context) => {
     if (capability === DEVICE_APPROVAL_ROUTE_ID) {
@@ -119,22 +122,31 @@ function createPermissionSnapshotResolver(
     cloudRequestBroker: VaultBoundCloudRequestBroker | null;
     config: DesktopRuntimeConfig;
     mode: DesktopRouteRuntimeMode;
+    workspaceRosterOperationsV2: DesktopWorkspaceRosterOperationsV2;
   }>
 ): DesktopRoutePermissionSnapshotResolver {
   if (input.config.mode === 'cloud') {
     return createCloudDesktopRoutePermissionResolver({
-      client: createCloudDesktopRoutePermissionClient(input.config, input.cloudRequestBroker),
+      client: createCloudDesktopRoutePermissionClient(
+        input.config,
+        input.workspaceRosterOperationsV2,
+        input.cloudRequestBroker,
+      ),
     });
   }
 
   const localResolver = createLocalDesktopRoutePermissionResolver({
-    client: createLocalDesktopRoutePermissionClient(input.config),
+    client: createLocalDesktopRoutePermissionClient(
+      input.config,
+      input.workspaceRosterOperationsV2,
+    ),
   });
   const localOnlineCloudResolver = input.cloudRequestBroker
     ? createCloudDesktopRoutePermissionResolver({
         client: createVaultBoundCloudDesktopRoutePermissionClient(
           input.config,
-          input.cloudRequestBroker
+          input.cloudRequestBroker,
+          input.workspaceRosterOperationsV2,
         ),
       })
     : null;

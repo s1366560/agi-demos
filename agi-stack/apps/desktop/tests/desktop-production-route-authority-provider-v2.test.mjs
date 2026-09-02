@@ -158,6 +158,10 @@ function input(overrides = {}) {
     config: runtimeConfig('cloud'),
     capabilitySnapshot: capabilitySnapshot('cloud', {}),
     cloudRequestBroker: null,
+    workspaceRosterOperationsV2: Object.freeze({
+      listWorkspaceMembers: async () => [],
+      listWorkspaceAgents: async () => [],
+    }),
     ...overrides,
   };
 }

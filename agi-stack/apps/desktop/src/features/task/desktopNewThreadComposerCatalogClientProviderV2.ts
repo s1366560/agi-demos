@@ -1,5 +1,6 @@
 import { DesktopApiClient } from '../../api/client';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type { DesktopWorkspaceRosterOperationsV2 } from '../../plugins/desktopWorkspaceRosterAuthorityModuleV2';
 import type { DesktopRuntimeConfig } from '../../types';
 
 type DesktopNewThreadComposerCatalogMethod =
@@ -32,6 +33,10 @@ export type DesktopNewThreadComposerCatalogClientProviderInputV2 = Readonly<{
   pluginMarketplaceOperationsV2: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
     'listMarketplacePlugins'
+  >;
+  workspaceRosterOperationsV2: Pick<
+    DesktopWorkspaceRosterOperationsV2,
+    'listWorkspaceAgents'
   >;
 }>;
 
@@ -74,9 +79,10 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
   const workspaceId = config.workspaceId.trim();
   const authority = new DesktopApiClient(config);
   const client: DesktopNewThreadComposerCatalogClient = Object.freeze({
-    listWorkspaceAgents: (
-      ...args: Parameters<DesktopApiClient['listWorkspaceAgents']>
-    ) => (workspaceId ? authority.listWorkspaceAgents(...args) : Promise.resolve([])),
+    listWorkspaceAgents: (signal?: AbortSignal) =>
+      workspaceId
+        ? input.workspaceRosterOperationsV2.listWorkspaceAgents({ config, signal })
+        : Promise.resolve([]),
     listManagedAgents: (
       ...args: Parameters<DesktopApiClient['listManagedAgents']>
     ) => authority.listManagedAgents(...args),
