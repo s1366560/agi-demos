@@ -8,63 +8,72 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source(
-  'src/features/session/desktopSessionArtifactActionClientProviderV2.ts',
-);
-const stableProviderPattern = new RegExp(
+const authority = source('src/plugins/desktopSessionArtifactActionAuthorityModuleV2.ts');
+const contract = source('src/plugins/desktopSessionArtifactActionContractV2.ts');
+const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const stableOperationsPattern = new RegExp(
   [
-    'const desktopSessionArtifactActionClientProviderV2 = useMemo\\(',
-    '[\\s\\S]*?createDesktopSessionArtifactActionClientProviderV2\\(\\)',
+    'const desktopSessionArtifactActionOperationsV2 = useMemo\\(',
+    '[\\s\\S]*?createDesktopSessionArtifactActionOperationsV2\\(',
+    '[\\s\\S]*?desktopPluginMarketplaceGenerationActionsRefV2\\.current',
     '[\\s\\S]*?\\[\\],[\\s\\S]*?\\);',
   ].join(''),
   'u',
 );
-const exactMethodOwnershipPattern = new RegExp(
-  [
-    'type DesktopSessionArtifactActionMethod =',
-    "\\s*\\| 'reviewArtifactVersion'",
-    "\\s*\\| 'deliverArtifactVersion'",
-  ].join(''),
-  'u',
-);
-const forbiddenProviderOwnershipPattern = new RegExp(
+const forbiddenAuthorityPolicyPattern = new RegExp(
   [
     'artifactVersionActions',
-    'artifactReviewRequest',
-    'artifactDeliveryRequest',
     'setArtifactActionPending',
     'invalidateSessionAuthority',
+    'allowedActions',
+    'canDeliverArtifacts',
+    'canReviewArtifacts',
   ].join('|'),
   'u',
 );
 
-test('App publishes one stable V2 session artifact action client Provider', () => {
-  assert.match(app, /createDesktopSessionArtifactActionClientProviderV2/u);
-  assert.match(app, stableProviderPattern);
-  assert.match(app, /desktopSessionArtifactActionClientProviderV2\.publish\(\{ config \}\)/u);
+test('App owns one stable generation-bound session artifact action facade', () => {
+  assert.match(app, /createDesktopSessionArtifactActionOperationsV2/u);
+  assert.match(app, stableOperationsPattern);
+  assert.doesNotMatch(app, /createDesktopSessionArtifactActionClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopSessionArtifactActionClientProviderV2\.publish/u);
 });
 
-test('artifact actions bind one submitted-scope V2 client', () => {
+test('artifact actions bind one exact submitted-session V2 authority', () => {
   const action = callbackSource(app, 'handleArtifactAction', 'hasWorkspaceScope');
 
   assert.match(action, /const requestConfig = configRef\.current;/u);
   assert.match(
     action,
-    /const client = desktopSessionArtifactActionClientV2\.bindOperation\(requestConfig\);/u,
+    /desktopSessionArtifactActionOperationsV2\.bindOperation\([\s\S]*?requestConfig,[\s\S]*?authoritativeVersion\.conversation_id,[\s\S]*?\);/u,
   );
   assert.match(action, /await client\.deliverArtifactVersion\(/u);
   assert.match(action, /await client\.reviewArtifactVersion\(/u);
   assert.match(action, /formatConnectionError\(caught, requestConfig\.apiBaseUrl\)/u);
-  assert.match(action, /desktopSessionArtifactActionClientV2/u);
+  assert.match(action, /desktopSessionArtifactActionOperationsV2/u);
   assert.doesNotMatch(action, /api\.(?:deliver|review)ArtifactVersion/u);
 });
 
-test('session artifact action Provider owns only review and delivery transport', () => {
-  assert.match(provider, exactMethodOwnershipPattern);
-  assert.match(provider, /reviewArtifactVersion:/u);
-  assert.match(provider, /deliverArtifactVersion:/u);
-  assert.match(provider, /bindOperation/u);
-  assert.doesNotMatch(provider, forbiddenProviderOwnershipPattern);
+test('session artifact action authority is cataloged and owns no UI policy', () => {
+  assert.match(authority, /service:desktop-renderer\.session-artifact-action-authority/u);
+  assert.match(authority, /acquireServiceOperationLease/u);
+  assert.match(authority, /kind: 'session'/u);
+  assert.match(authority, /reviewArtifactVersion/u);
+  assert.match(authority, /deliverArtifactVersion/u);
+  assert.match(contract, /assertArtifactReviewOutcomeV2/u);
+  assert.match(contract, /assertArtifactDeliveryOutcomeV2/u);
+  assert.match(generation, /desktopSessionArtifactActionAuthorityDefinitionV2/u);
+  assert.doesNotMatch(authority, forbiddenAuthorityPolicyPattern);
+  assert.doesNotMatch(contract, forbiddenAuthorityPolicyPattern);
+  assert.equal(
+    existsSync(
+      new URL(
+        '../src/features/session/desktopSessionArtifactActionClientProviderV2.ts',
+        import.meta.url,
+      ),
+    ),
+    false,
+  );
 });
 
 function callbackSource(sourceText, name, nextName) {

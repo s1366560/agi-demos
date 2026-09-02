@@ -27,6 +27,9 @@ const {
 const { desktopProjectSearchAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopProjectSearchAuthorityModuleV2.js',
 );
+const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
+);
 const { desktopArtifactContentAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopArtifactContentAuthorityModuleV2.js',
 );
@@ -126,6 +129,7 @@ function rendererDefinitions() {
     desktopNewTaskFlowAuthorityDefinitionV2,
     desktopNewThreadCreationAuthorityDefinitionV2,
     desktopProjectSearchAuthorityDefinitionV2,
+    desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,

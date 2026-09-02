@@ -27,6 +27,7 @@ const authorityModules = [
   'desktopMyWorkAuthorityModuleV2',
   'desktopNewTaskFlowAuthorityModuleV2',
   'desktopNewThreadCreationAuthorityModuleV2',
+  'desktopSessionArtifactActionAuthorityModuleV2',
   'desktopSessionProjectionAuthorityModuleV2',
   'desktopSessionRunChangesAuthorityModuleV2',
   'desktopSessionTimelineAuthorityModuleV2',

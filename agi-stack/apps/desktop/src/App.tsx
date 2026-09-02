@@ -95,6 +95,9 @@ import {
 import {
   createDesktopProjectSearchOperationsV2,
 } from './plugins/desktopProjectSearchAuthorityModuleV2';
+import {
+  createDesktopSessionArtifactActionOperationsV2,
+} from './plugins/desktopSessionArtifactActionAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
@@ -184,9 +187,6 @@ import {
   artifactVersionActions,
   type ArtifactVersionAction,
 } from './features/session/sessionArtifactModel';
-import {
-  createDesktopSessionArtifactActionClientProviderV2,
-} from './features/session/desktopSessionArtifactActionClientProviderV2';
 import {
   createDesktopSessionRunControlClientProviderV2,
 } from './features/session/desktopSessionRunControlClientProviderV2';
@@ -887,6 +887,13 @@ export function App() {
       ),
     [],
   );
+  const desktopSessionArtifactActionOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionArtifactActionOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -953,10 +960,6 @@ export function App() {
   );
   const workspaceCollaborationClientProviderV2 = useMemo(
     () => createWorkspaceCollaborationClientProviderV2(),
-    [],
-  );
-  const desktopSessionArtifactActionClientProviderV2 = useMemo(
-    () => createDesktopSessionArtifactActionClientProviderV2(),
     [],
   );
   const desktopSessionRunControlClientProviderV2 = useMemo(
@@ -1124,10 +1127,6 @@ export function App() {
     navigationRegistry: desktopCanonicalNavigationRegistry,
     routeRegistry: desktopProductionRouteRegistry,
   } = desktopRendererGenerationV2.state;
-  const desktopSessionArtifactActionClientV2 = useMemo(
-    () => desktopSessionArtifactActionClientProviderV2.publish({ config }),
-    [config, desktopSessionArtifactActionClientProviderV2],
-  );
   const desktopSessionRunControlClientV2 = useMemo(
     () => desktopSessionRunControlClientProviderV2.publish({ config }),
     [config, desktopSessionRunControlClientProviderV2],
@@ -4908,7 +4907,10 @@ export function App() {
       setArtifactActionPending({ versionId: authoritativeVersion.id, action });
       setError(null);
       try {
-        const client = desktopSessionArtifactActionClientV2.bindOperation(requestConfig);
+        const client = desktopSessionArtifactActionOperationsV2.bindOperation(
+          requestConfig,
+          authoritativeVersion.conversation_id,
+        );
         if (action === 'deliver') {
           const outcome = await client.deliverArtifactVersion(
             authoritativeVersion.id,
@@ -4932,7 +4934,7 @@ export function App() {
     [
       applyAuthoritativeRun,
       currentArtifactRun,
-      desktopSessionArtifactActionClientV2,
+      desktopSessionArtifactActionOperationsV2,
       invalidateSessionAuthority,
       selectedConversation,
       sessionProjection?.capabilities,

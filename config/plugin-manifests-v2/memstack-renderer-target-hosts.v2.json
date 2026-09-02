@@ -483,6 +483,37 @@
       "contract_digest": "sha256:8ecb9f84ebc667bfeee3313e26fe1abe41e57799450a3cf7d494577f3059e093"
     },
     {
+      "module_ref": "builtin://memstack/desktop/session-artifact-action-authority",
+      "entrypoint": "applyDesktopSessionArtifactActionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ece2b0e4213fa3585b9155261614f944b84cad321195d176f63912cee624f077",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.session-artifact-action-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:ca7cef1df427814b6e85f2b2f753533f4fc5ee31a0afb624589e108edccd18db"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/my-work-authority",
       "entrypoint": "applyDesktopMyWorkAuthorityV2",
       "artifact": {
