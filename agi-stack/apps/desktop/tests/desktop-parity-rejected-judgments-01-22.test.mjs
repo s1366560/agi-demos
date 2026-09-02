@@ -211,7 +211,7 @@ test("Tenant Workspaces binds native settings entries, contracts, and permission
 
 test("Tenant Tasks records observed transports and fail-closed revision boundaries", () => {
   const capability = readCapability(
-    "parity-capability-definitions.02-tenant-operations.v2.json",
+    "parity-capability-definitions.02-tenant-tasks.v2.json",
     "tenant-tenant-tasks",
   );
 
