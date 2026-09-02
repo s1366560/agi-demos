@@ -341,6 +341,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-new-thread-creation-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/new-thread-creation-authority
+      enabled: true
+      config:
+        strategy: desktop-api-client
+      inject:
+        task_flow: service:desktop-renderer.new-task-flow-authority
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-my-work-authority
       parent_entry_id: builtin-desktop-renderer-host
       plugin_ref: memstack-renderer-target-hosts

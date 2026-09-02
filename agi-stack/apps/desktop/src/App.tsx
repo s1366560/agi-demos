@@ -89,6 +89,9 @@ import {
   createDesktopNewTaskFlowOperationsV2,
   type DesktopNewTaskFlowClientV2,
 } from './plugins/desktopNewTaskFlowAuthorityModuleV2';
+import {
+  createDesktopNewThreadCreationOperationsV2,
+} from './plugins/desktopNewThreadCreationAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
@@ -315,9 +318,6 @@ import type { NewTaskResumeDraft } from './features/task/NewTaskFlow';
 import {
   createDesktopNewThreadComposerCatalogClientProviderV2,
 } from './features/task/desktopNewThreadComposerCatalogClientProviderV2';
-import {
-  createDesktopNewThreadCreationClientProviderV2,
-} from './features/task/desktopNewThreadCreationClientProviderV2';
 import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
@@ -869,6 +869,13 @@ export function App() {
       ),
     [],
   );
+  const desktopNewThreadCreationOperationsV2 = useMemo(
+    () =>
+      createDesktopNewThreadCreationOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -931,10 +938,6 @@ export function App() {
   );
   const desktopNewThreadComposerCatalogClientProviderV2 = useMemo(
     () => createDesktopNewThreadComposerCatalogClientProviderV2(),
-    [],
-  );
-  const desktopNewThreadCreationClientProviderV2 = useMemo(
-    () => createDesktopNewThreadCreationClientProviderV2(),
     [],
   );
   const workspaceCollaborationClientProviderV2 = useMemo(
@@ -1143,10 +1146,6 @@ export function App() {
   const desktopWorkspaceMemberMutationClientV2 = useMemo(
     () => desktopWorkspaceMemberMutationClientProviderV2.publish({ config }),
     [config, desktopWorkspaceMemberMutationClientProviderV2],
-  );
-  const desktopNewThreadCreationClientV2 = useMemo(
-    () => desktopNewThreadCreationClientProviderV2.publish({ config }),
-    [config, desktopNewThreadCreationClientProviderV2],
   );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
@@ -5623,7 +5622,7 @@ export function App() {
     loadConversationTimeline,
     localRuntimeMode,
     newThreadWorkspaces,
-    newThreadCreationClientV2: desktopNewThreadCreationClientV2,
+    newThreadCreationClientV2: desktopNewThreadCreationOperationsV2,
     sessionRunInputClientV2: desktopSessionRunInputClientV2,
     pendingNewTaskAgentTurnsRef,
     permissionPreset,

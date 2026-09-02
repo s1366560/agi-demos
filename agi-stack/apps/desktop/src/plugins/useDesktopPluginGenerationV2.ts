@@ -24,6 +24,9 @@ import { desktopHitlResponseAuthorityDefinitionV2 } from './desktopHitlResponseA
 import { desktopMyWorkAuthorityDefinitionV2 } from './desktopMyWorkAuthorityModuleV2';
 import { desktopNewTaskFlowAuthorityDefinitionV2 } from './desktopNewTaskFlowAuthorityModuleV2';
 import {
+  desktopNewThreadCreationAuthorityDefinitionV2,
+} from './desktopNewThreadCreationAuthorityModuleV2';
+import {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
 } from './desktopPluginMarketplaceAuthorityModulesV2';
@@ -52,6 +55,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopHitlResponseAuthorityDefinitionV2,
     desktopMyWorkAuthorityDefinitionV2,
     desktopNewTaskFlowAuthorityDefinitionV2,
+    desktopNewThreadCreationAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,

@@ -415,6 +415,43 @@
       "contract_digest": "sha256:1b0c12496a6efcef6a546a0f7a26d62871c7d5959f1d7ea947661b033cf01c88"
     },
     {
+      "module_ref": "builtin://memstack/desktop/new-thread-creation-authority",
+      "entrypoint": "applyDesktopNewThreadCreationAuthorityV2",
+      "artifact": {
+        "digest": "sha256:c38b9c89795b373de113f44a9e73ddcda3ced9072603fa4a7c5c4330863e6124",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopNewThreadCreationAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.new-thread-creation-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": [
+            {
+              "alias": "task_flow",
+              "service": "service:desktop-renderer.new-task-flow-authority",
+              "version": "1.0.0"
+            }
+          ]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:9401877965af6ff73c82e7fafb9bddf6d0ad730fff5e86060a1c344bdea7a998"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/my-work-authority",
       "entrypoint": "applyDesktopMyWorkAuthorityV2",
       "artifact": {

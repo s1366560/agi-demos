@@ -22,6 +22,9 @@ const {
   desktopNewTaskFlowAuthorityDefinitionV2,
   withDesktopNewTaskFlowAuthorityOperationV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopNewTaskFlowAuthorityModuleV2.js');
+const { desktopNewThreadCreationAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopNewThreadCreationAuthorityModuleV2.js',
+);
 const { desktopArtifactContentAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopArtifactContentAuthorityModuleV2.js',
 );
@@ -103,6 +106,7 @@ function rendererDefinitions() {
     desktopHitlResponseAuthorityDefinitionV2,
     desktopMyWorkAuthorityDefinitionV2,
     desktopNewTaskFlowAuthorityDefinitionV2,
+    desktopNewThreadCreationAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,
@@ -412,6 +416,9 @@ test('Loader activates the exact service and Profile disable removes it without 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
     ({ entry_id: entryId }) => entryId === 'builtin-desktop-new-task-flow-authority',
+  ).enabled = false;
+  disabled.entries.find(
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-new-thread-creation-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(

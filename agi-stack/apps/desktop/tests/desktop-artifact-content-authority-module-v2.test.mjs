@@ -28,6 +28,9 @@ const { desktopAutomationAuthorityDefinitionV2 } = require(
 const { desktopNewTaskFlowAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopNewTaskFlowAuthorityModuleV2.js',
 );
+const { desktopNewThreadCreationAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopNewThreadCreationAuthorityModuleV2.js',
+);
 const {
   DesktopArtifactRequestError,
 } = require(COMPILED_ROOT + '/src/features/chat/desktopArtifactClient.js');
@@ -102,6 +105,7 @@ function rendererDefinitions() {
     desktopArtifactContentAuthorityDefinitionV2,
     desktopAutomationAuthorityDefinitionV2,
     desktopNewTaskFlowAuthorityDefinitionV2,
+    desktopNewThreadCreationAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
     desktopConversationConfigAuthorityDefinitionV2,

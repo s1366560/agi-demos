@@ -10,44 +10,43 @@ function source(relativePath) {
 const app = source('src/App.tsx');
 const conversation = source('src/hooks/useAgentConversation.ts');
 const threads = source('src/hooks/useConversationThreads.ts');
-const provider = source('src/features/task/desktopNewThreadCreationClientProviderV2.ts');
+const authority = source('src/plugins/desktopNewThreadCreationAuthorityModuleV2.ts');
 
-test('new-thread creation resolves its API authority from one V2 publication', () => {
-  assert.match(app, /createDesktopNewThreadCreationClientProviderV2/u);
+test('new-thread creation resolves every operation through the renderer generation authority', () => {
+  assert.match(app, /createDesktopNewThreadCreationOperationsV2/u);
+  assert.doesNotMatch(app, /createDesktopNewThreadCreationClientProviderV2/u);
   assert.match(
     app,
-    /desktopNewThreadCreationClientProviderV2\.publish\(\{ config \}\)/u,
+    /newThreadCreationClientV2:\s*desktopNewThreadCreationOperationsV2/u,
   );
-  assert.match(
-    app,
-    /newThreadCreationClientV2:\s*desktopNewThreadCreationClientV2/u,
-  );
-  assert.match(conversation, /DesktopNewThreadCreationClientBindingV2/u);
+  assert.match(conversation, /DesktopNewThreadCreationOperationsV2/u);
   assert.match(
     conversation,
-    /newThreadCreationClientV2:\s*DesktopNewThreadCreationClientBindingV2/u,
+    /newThreadCreationClientV2:\s*DesktopNewThreadCreationOperationsV2/u,
   );
   assert.match(threads, /newThreadCreationClientV2/u);
   assert.doesNotMatch(threads, /DesktopApiClient/u);
   assert.doesNotMatch(threads, /new DesktopApiClient\(/u);
 });
 
-test('new-thread creation Provider exposes only the three owned transport methods', () => {
+test('new-thread creation authority exposes only three operations and requires task-flow injection', () => {
   assert.match(
-    provider,
-    /type DesktopNewThreadCreationMethod =[\s\S]*'createAgentConversation'/u,
+    authority,
+    /type DesktopNewThreadCreationMethodV2 =[\s\S]*'createAgentConversation'/u,
   );
-  assert.match(provider, /'createTaskSession'[\s\S]*'runAgentMessage'/u);
+  assert.match(authority, /'createTaskSession'[\s\S]*'runAgentMessage'/u);
   for (const method of [
     'createAgentConversation',
     'createTaskSession',
     'runAgentMessage',
   ]) {
-    assert.match(provider, new RegExp(`${method}:`));
+    assert.match(authority, new RegExp(`${method}\\(`));
   }
-  assert.match(provider, /bindOperation/u);
+  assert.match(authority, /context\.require<[^>]+>\(\s*'task_flow'/u);
+  assert.match(authority, /acquireServiceOperationLease/u);
+  assert.match(authority, /bindOperation/u);
   assert.doesNotMatch(
-    provider,
+    authority,
     /sendMessage:|createRunInput:|updateAgentConversationMode:/u,
   );
 });

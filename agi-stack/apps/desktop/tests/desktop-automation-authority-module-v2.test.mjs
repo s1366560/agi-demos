@@ -40,6 +40,9 @@ const { desktopMyWorkAuthorityDefinitionV2 } = require(
 const { desktopNewTaskFlowAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopNewTaskFlowAuthorityModuleV2.js',
 );
+const { desktopNewThreadCreationAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopNewThreadCreationAuthorityModuleV2.js',
+);
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
@@ -100,6 +103,7 @@ function rendererDefinitions() {
     desktopHitlResponseAuthorityDefinitionV2,
     desktopMyWorkAuthorityDefinitionV2,
     desktopNewTaskFlowAuthorityDefinitionV2,
+    desktopNewThreadCreationAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,
