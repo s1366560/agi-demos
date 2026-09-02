@@ -60,6 +60,10 @@ const { desktopMyWorkAuthorityDefinitionV2 } = require(
 const { desktopSessionTimelineAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js',
 );
+const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT +
+    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+);
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
   COMPILED_ROOT +
     '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
@@ -120,6 +124,7 @@ function rendererDefinitions() {
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,
+    desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,

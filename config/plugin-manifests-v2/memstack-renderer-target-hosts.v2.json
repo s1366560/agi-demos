@@ -291,6 +291,37 @@
       "contract_digest": "sha256:fc7690fe093a7f1578e3ca7dae268339e67960cf3746197d357b9a97149d2577"
     },
     {
+      "module_ref": "builtin://memstack/desktop/workspace-conversation-catalog-authority",
+      "entrypoint": "applyDesktopWorkspaceConversationCatalogAuthorityV2",
+      "artifact": {
+        "digest": "sha256:68108e1fc2b58fc0f61df9300fc7f9e990c77339984de310aeaebc6929fa101f",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-conversation-catalog-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:1c71ce981db6d3039f68ff325de90d8361fc9dbe5216d223c3b9e1dc9f4e715a"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/workspace-execution-snapshot-authority",
       "entrypoint": "applyDesktopWorkspaceExecutionSnapshotAuthorityV2",
       "artifact": {

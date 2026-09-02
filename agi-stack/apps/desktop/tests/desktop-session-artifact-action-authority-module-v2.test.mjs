@@ -36,6 +36,7 @@ const authorityModules = [
   'desktopTerminalLifecycleAuthorityModuleV2',
   'desktopWorkspaceCatalogAuthorityModuleV2',
   'desktopWorkspaceContextAuthorityModuleV2',
+  'desktopWorkspaceConversationCatalogAuthorityModuleV2',
   'desktopWorkspaceExecutionSnapshotAuthorityModuleV2',
   'desktopWorkspaceMessageCatalogAuthorityModuleV2',
 ].flatMap((moduleName) =>

@@ -8,40 +8,46 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source(
-  'src/features/workspace/desktopWorkspaceConversationCatalogClientProviderV2.ts',
+const authority = source(
+  'src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts',
+);
+const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const legacyProviderUrl = new URL(
+  '../src/features/workspace/desktopWorkspaceConversationCatalogClientProviderV2.ts',
+  import.meta.url,
 );
 
-test('App publishes one stable V2 workspace conversation catalog Provider', () => {
-  assert.match(app, /createDesktopWorkspaceConversationCatalogClientProviderV2/u);
+test('App owns one stable generation-bound workspace conversation catalog operations facade', () => {
+  assert.match(app, /createDesktopWorkspaceConversationCatalogOperationsV2/u);
   assert.match(
     app,
-    /const desktopWorkspaceConversationCatalogClientProviderV2 = useMemo\([\s\S]*?createDesktopWorkspaceConversationCatalogClientProviderV2\(\)[\s\S]*?\[\],[\s\S]*?\);/u,
+    /const desktopWorkspaceConversationCatalogOperationsV2 = useMemo\([\s\S]*?createDesktopWorkspaceConversationCatalogOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u,
   );
+  assert.doesNotMatch(app, /createDesktopWorkspaceConversationCatalogClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopWorkspaceConversationCatalogClientProviderV2/u);
+  assert.equal(existsSync(legacyProviderUrl), false);
+  assert.match(generation, /desktopWorkspaceConversationCatalogAuthorityDefinitionV2/u);
   assert.match(
-    app,
-    /desktopWorkspaceConversationCatalogClientProviderV2\.publish\(\{ config \}\)/u,
+    authority,
+    /service:desktop-renderer\.workspace-conversation-catalog-authority/u,
   );
+  assert.match(authority, /acquireServiceOperationLease/u);
 });
 
-test('workspace conversation hydration pins one submitted-scope V2 operation binding', () => {
+test('workspace conversation hydration pins immutable filters to one project generation lease', () => {
   const loader = callbackSource(app, 'loadWorkspaceConversations', 'refreshMyWork');
   assert.match(
     loader,
-    /desktopWorkspaceConversationCatalogClientV2\.bindOperation\(\{[\s\S]*?\.\.\.requestConfig,[\s\S]*?workspaceId: isUnboundGroup \? '' : workspaceId,[\s\S]*?\}\)/u,
+    /desktopWorkspaceConversationCatalogOperationsV2\.listConversations\(\{[\s\S]*?config: requestConfig,[\s\S]*?workspaceId: isUnboundGroup \? null : workspaceId,[\s\S]*?unboundOnly: isUnboundGroup,[\s\S]*?\}\)/u,
   );
   assert.match(
     loader,
-    /client\.listConversations\(projectId, \{[\s\S]*?workspaceId: isUnboundGroup \? null : workspaceId,[\s\S]*?unboundOnly: isUnboundGroup,/u,
-  );
-  assert.match(
-    loader,
-    /\[\s*clearMissingConversationSelection,\s*desktopWorkspaceConversationCatalogClientV2,\s*updateDataset,?\s*\]/u,
+    /\[\s*clearMissingConversationSelection,\s*desktopWorkspaceConversationCatalogOperationsV2,\s*updateDataset,?\s*\]/u,
   );
   assert.doesNotMatch(loader, /new DesktopApiClient\(/u);
 });
 
-test('runtime refresh pins each conversation catalog target to one V2 operation binding', () => {
+test('runtime refresh pins each catalog target to one submitted project generation', () => {
   const refresh = refreshRuntimeSource(app);
   const conversationLoaderStart = refresh.indexOf('const conversationResultsPromise');
   const conversationLoaderEnd = refresh.indexOf('\n        const [', conversationLoaderStart);
@@ -51,28 +57,20 @@ test('runtime refresh pins each conversation catalog target to one V2 operation 
 
   assert.match(
     conversationLoader,
-    /desktopWorkspaceConversationCatalogClientV2\.bindOperation\(\{[\s\S]*?\.\.\.resolvedConfig,[\s\S]*?workspaceId: isUnboundGroup \? '' : targetWorkspaceId,[\s\S]*?\}\)/u,
-  );
-  assert.match(
-    conversationLoader,
-    /client\.listConversations\(resolvedProjectId, \{[\s\S]*?workspaceId: isUnboundGroup \? null : targetWorkspaceId,[\s\S]*?unboundOnly: isUnboundGroup,/u,
+    /desktopWorkspaceConversationCatalogOperationsV2\.listConversations\(\{[\s\S]*?config: resolvedConfig,[\s\S]*?workspaceId: isUnboundGroup \? null : targetWorkspaceId,[\s\S]*?unboundOnly: isUnboundGroup,[\s\S]*?\}\)/u,
   );
   assert.doesNotMatch(conversationLoader, /new DesktopApiClient\(/u);
   assert.match(
     refresh,
-    /desktopWorkspaceAutonomyAttentionClientV2,[\s\S]*?desktopWorkspaceConversationCatalogClientV2,[\s\S]*?listMyWorkForConfig,/u,
+    /desktopWorkspaceAutonomyAttentionClientV2,[\s\S]*?desktopWorkspaceConversationCatalogOperationsV2,[\s\S]*?listMyWorkForConfig/u,
   );
 });
 
-test('session fallback lookups pin submitted-scope V2 conversation catalog operations', () => {
+test('session fallback lookups use submitted-scope generation operations', () => {
   const myWorkLoader = functionSource(app, 'openMyWorkSession', 'openAgentSession');
   assert.match(
     myWorkLoader,
-    /desktopWorkspaceConversationCatalogClientV2\.bindOperation\(\{[\s\S]*?\.\.\.config,[\s\S]*?projectId: item\.project_id,[\s\S]*?workspaceId,[\s\S]*?\}\)/u,
-  );
-  assert.match(
-    myWorkLoader,
-    /client\.listConversations\(\s*item\.project_id,\s*workspaceId \? workspaceId : \{ workspaceId: null, unboundOnly: true \},\s*\)/u,
+    /desktopWorkspaceConversationCatalogOperationsV2\.listConversations\(\{[\s\S]*?config: \{[\s\S]*?\.\.\.config,[\s\S]*?projectId: item\.project_id,[\s\S]*?workspaceId,[\s\S]*?\},[\s\S]*?workspaceId: workspaceId \|\| null,[\s\S]*?unboundOnly: !workspaceId,[\s\S]*?\}\)/u,
   );
   assert.match(myWorkLoader, /myWorkConversationMatchesScope/u);
   assert.match(myWorkLoader, /contextRevisionRef\.current/u);
@@ -82,9 +80,8 @@ test('session fallback lookups pin submitted-scope V2 conversation catalog opera
   const agentLoader = functionSource(app, 'openAgentSession', 'createBoardWorkbenchViewV2');
   assert.match(
     agentLoader,
-    /desktopWorkspaceConversationCatalogClientV2\.bindOperation\(\{[\s\S]*?\.\.\.config,[\s\S]*?projectId,[\s\S]*?workspaceId,[\s\S]*?\}\)/u,
+    /desktopWorkspaceConversationCatalogOperationsV2\.listConversations\(\{[\s\S]*?config: \{[\s\S]*?\.\.\.config,[\s\S]*?projectId,[\s\S]*?workspaceId,[\s\S]*?\},[\s\S]*?workspaceId,[\s\S]*?unboundOnly: false,[\s\S]*?\}\)/u,
   );
-  assert.match(agentLoader, /client\.listConversations\(projectId, workspaceId\)/u);
   assert.match(agentLoader, /conversation\.tenant_id !== config\.tenantId/u);
   assert.match(agentLoader, /conversation\.workspace_id !== workspaceId/u);
   assert.match(agentLoader, /contextRevisionRef\.current/u);
@@ -92,23 +89,22 @@ test('session fallback lookups pin submitted-scope V2 conversation catalog opera
   assert.doesNotMatch(agentLoader, /api\.listConversations/u);
 });
 
-test('workspace conversation catalog Provider owns exactly one read method', () => {
-  assert.match(provider, /type DesktopWorkspaceConversationCatalogMethod = 'listConversations'/u);
-  assert.match(provider, /listConversations:/u);
-  assert.match(provider, /bindOperation/u);
+test('workspace conversation catalog authority owns exactly one read operation', () => {
+  assert.match(authority, /listConversations:/u);
+  assert.match(authority, /bindOperation/u);
   assert.doesNotMatch(
-    provider,
+    authority,
     /loadRuntime|getConversationMessages|createConversation|deleteConversation|refreshRuntime/u,
   );
 });
 
-test('every App conversation catalog read is covered by one V2 operation binding', () => {
-  assert.equal(app.match(/client\.listConversations\(/gu)?.length, 4);
+test('every App conversation catalog read is covered by one generation operation', () => {
   assert.equal(
-    app.match(/desktopWorkspaceConversationCatalogClientV2\.bindOperation\(/gu)?.length,
+    app.match(/desktopWorkspaceConversationCatalogOperationsV2\.listConversations\(/gu)
+      ?.length,
     4,
   );
-  assert.doesNotMatch(app, /(?:api|scopedClient)\.listConversations\(/u);
+  assert.doesNotMatch(app, /(?:api|scopedClient|client)\.listConversations\(/u);
 });
 
 function callbackSource(sourceText, name, nextName) {

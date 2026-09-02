@@ -107,6 +107,9 @@ import {
   createDesktopWorkspaceMessageCatalogOperationsV2,
 } from './plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2';
 import {
+  createDesktopWorkspaceConversationCatalogOperationsV2,
+} from './plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2';
+import {
   createDesktopWorkspaceCatalogOperationsV2,
 } from './plugins/desktopWorkspaceCatalogAuthorityModuleV2';
 import {
@@ -343,9 +346,6 @@ import {
 import {
   createDesktopWorkspaceAutonomyAttentionClientProviderV2,
 } from './features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2';
-import {
-  createDesktopWorkspaceConversationCatalogClientProviderV2,
-} from './features/workspace/desktopWorkspaceConversationCatalogClientProviderV2';
 import {
   createDesktopWorkspaceRosterClientProviderV2,
 } from './features/workspace/desktopWorkspaceRosterClientProviderV2';
@@ -842,6 +842,13 @@ export function App() {
       ),
     [],
   );
+  const desktopWorkspaceConversationCatalogOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceConversationCatalogOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopWorkspaceCatalogOperationsV2 = useMemo(
     () =>
       createDesktopWorkspaceCatalogOperationsV2(
@@ -941,10 +948,6 @@ export function App() {
   );
   const desktopWorkspaceAutonomyAttentionClientProviderV2 = useMemo(
     () => createDesktopWorkspaceAutonomyAttentionClientProviderV2(),
-    [],
-  );
-  const desktopWorkspaceConversationCatalogClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceConversationCatalogClientProviderV2(),
     [],
   );
   const desktopWorkspaceRosterClientProviderV2 = useMemo(
@@ -1139,10 +1142,6 @@ export function App() {
   const desktopWorkspaceAutonomyAttentionClientV2 = useMemo(
     () => desktopWorkspaceAutonomyAttentionClientProviderV2.publish({ config }),
     [config, desktopWorkspaceAutonomyAttentionClientProviderV2],
-  );
-  const desktopWorkspaceConversationCatalogClientV2 = useMemo(
-    () => desktopWorkspaceConversationCatalogClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceConversationCatalogClientProviderV2],
   );
   const desktopWorkspaceRosterClientV2 = useMemo(
     () => desktopWorkspaceRosterClientProviderV2.publish({ config }),
@@ -2843,15 +2842,13 @@ export function App() {
           conversationLoadTargets.map(async (targetWorkspaceId) => {
             const requestGeneration = conversationRequestGenerations.get(targetWorkspaceId);
             const isUnboundGroup = targetWorkspaceId === UNBOUND_CONVERSATIONS_KEY;
-            const client = desktopWorkspaceConversationCatalogClientV2.bindOperation({
-              ...resolvedConfig,
-              workspaceId: isUnboundGroup ? '' : targetWorkspaceId,
-            });
             try {
-              const response = await client.listConversations(resolvedProjectId, {
-                workspaceId: isUnboundGroup ? null : targetWorkspaceId,
-                unboundOnly: isUnboundGroup,
-              });
+              const response =
+                await desktopWorkspaceConversationCatalogOperationsV2.listConversations({
+                  config: resolvedConfig,
+                  workspaceId: isUnboundGroup ? null : targetWorkspaceId,
+                  unboundOnly: isUnboundGroup,
+                });
               return {
                 workspaceId: targetWorkspaceId,
                 requestGeneration,
@@ -3121,7 +3118,7 @@ export function App() {
       config,
       desktopWorkspaceAutonomyAttentionClientV2,
       desktopWorkspaceCatalogOperationsV2,
-      desktopWorkspaceConversationCatalogClientV2,
+      desktopWorkspaceConversationCatalogOperationsV2,
       desktopWorkspaceExecutionSnapshotOperationsV2,
       desktopWorkspaceMessageCatalogOperationsV2,
       desktopWorkspaceRosterClientV2,
@@ -3392,14 +3389,12 @@ export function App() {
       }));
 
       try {
-        const client = desktopWorkspaceConversationCatalogClientV2.bindOperation({
-          ...requestConfig,
-          workspaceId: isUnboundGroup ? '' : workspaceId,
-        });
-        const response = await client.listConversations(projectId, {
-          workspaceId: isUnboundGroup ? null : workspaceId,
-          unboundOnly: isUnboundGroup,
-        });
+        const response =
+          await desktopWorkspaceConversationCatalogOperationsV2.listConversations({
+            config: requestConfig,
+            workspaceId: isUnboundGroup ? null : workspaceId,
+            unboundOnly: isUnboundGroup,
+          });
         const refreshedConversations = response.items;
         if (!requestIsCurrent()) return;
         updateDataset((current) => {
@@ -3464,7 +3459,7 @@ export function App() {
     },
     [
       clearMissingConversationSelection,
-      desktopWorkspaceConversationCatalogClientV2,
+      desktopWorkspaceConversationCatalogOperationsV2,
       updateDataset,
     ],
   );
@@ -6383,15 +6378,16 @@ export function App() {
     }
     if (!conversation) {
       try {
-        const client = desktopWorkspaceConversationCatalogClientV2.bindOperation({
-          ...config,
-          projectId: item.project_id,
-          workspaceId,
-        });
-        const response = await client.listConversations(
-          item.project_id,
-          workspaceId ? workspaceId : { workspaceId: null, unboundOnly: true },
-        );
+        const response =
+          await desktopWorkspaceConversationCatalogOperationsV2.listConversations({
+            config: {
+              ...config,
+              projectId: item.project_id,
+              workspaceId,
+            },
+            workspaceId: workspaceId || null,
+            unboundOnly: !workspaceId,
+          });
         conversation = response.items.find((candidate) => candidate.id === item.conversation_id);
       } catch (caught) {
         if (
@@ -6438,12 +6434,16 @@ export function App() {
     );
     if (!conversation) {
       try {
-        const client = desktopWorkspaceConversationCatalogClientV2.bindOperation({
-          ...config,
-          projectId,
-          workspaceId,
-        });
-        const response = await client.listConversations(projectId, workspaceId);
+        const response =
+          await desktopWorkspaceConversationCatalogOperationsV2.listConversations({
+            config: {
+              ...config,
+              projectId,
+              workspaceId,
+            },
+            workspaceId,
+            unboundOnly: false,
+          });
         conversation = response.items.find((candidate) => candidate.id === conversationId);
       } catch (caught) {
         if (

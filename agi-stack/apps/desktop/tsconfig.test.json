@@ -470,7 +470,7 @@
     "src/features/workspace/desktopWorkspaceAgentBindingDialogClientProviderV2.ts",
     "src/features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2.ts",
     "src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.ts",
-    "src/features/workspace/desktopWorkspaceConversationCatalogClientProviderV2.ts",
+    "src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts",
     "src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.ts",
     "src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.ts",
     "src/features/workspace/desktopWorkspaceRosterClientProviderV2.ts",

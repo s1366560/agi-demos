@@ -44,7 +44,7 @@ test('runtime refresh keeps task and plan reads in their original slots', () => 
   assert.match(refresh, /messages,\s*tasks,\s*plan,/u);
   assert.match(
     refresh,
-    /desktopWorkspaceConversationCatalogClientV2,[\s\S]*?desktopWorkspaceExecutionSnapshotOperationsV2,[\s\S]*?desktopWorkspaceMessageCatalogOperationsV2,/u
+    /desktopWorkspaceConversationCatalogOperationsV2,[\s\S]*?desktopWorkspaceExecutionSnapshotOperationsV2,[\s\S]*?desktopWorkspaceMessageCatalogOperationsV2,/u
   );
 });
 

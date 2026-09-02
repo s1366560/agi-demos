@@ -40,7 +40,7 @@ test('runtime refresh pins workspace roster hydration to one V2 operation bindin
   );
   assert.match(
     refresh,
-    /desktopWorkspaceConversationCatalogClientV2,[\s\S]*?desktopWorkspaceRosterClientV2,/u,
+    /desktopWorkspaceConversationCatalogOperationsV2,[\s\S]*?desktopWorkspaceRosterClientV2,/u,
   );
 });
 
