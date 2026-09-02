@@ -222,6 +222,11 @@ test("My Work routes unbound Agent Workspace items through the unbound conversat
 
   assert.ok(callback);
   assert.match(callback, /workspaceId \|\| UNBOUND_CONVERSATIONS_KEY/u);
-  assert.match(callback, /\{ workspaceId: null, unboundOnly: true \}/u);
+  assert.match(
+    callback,
+    /desktopWorkspaceConversationCatalogOperationsV2\.listConversations\(\{/u,
+  );
+  assert.match(callback, /workspaceId: workspaceId \|\| null/u);
+  assert.match(callback, /unboundOnly: !workspaceId/u);
   assert.doesNotMatch(callback, /if \(!workspaceId \|\|/u);
 });
