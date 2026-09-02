@@ -94,12 +94,17 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
   assert.match(
     registrySource,
-    /PROJECT_SEARCH_ROUTE_ID[\s\S]*createProjectSearchRouteModuleLoader\(\{[\s\S]*projectSearchRouteBindingProviderV2\.resolve\(context\)/u,
+    /PROJECT_SEARCH_ROUTE_ID[\s\S]*createProjectSearchRouteModuleLoader\(\{[\s\S]*projectSearchRouteBindingProviderV2\.resolve\(context\)[\s\S]*projectSearchOperationsV2/u,
   );
   assert.match(
     appSource,
-    /projectSearchRouteBindingProviderV2\.publish\(\{[\s\S]*api,[\s\S]*scope:[\s\S]*projects:[\s\S]*capabilitySnapshot:[\s\S]*capabilityLoading:/u,
+    /projectSearchRouteBindingProviderV2\.publish\(\{[\s\S]*scope:[\s\S]*projects:[\s\S]*capabilitySnapshot:[\s\S]*capabilityLoading:/u,
   );
+  assert.doesNotMatch(
+    appSource,
+    /projectSearchRouteBindingProviderV2\.publish\(\{(?:(?!\n {2}\}\);)[\s\S])*?\bapi,/u,
+  );
+  assert.doesNotMatch(projectSearchBindingProviderSource, /DesktopApiClient|\bapi:/u);
   assert.doesNotMatch(appSource, /projectSearchRouteBindingRef|PROJECT_SEARCH_ROUTE_ID/u);
   assert.doesNotMatch(
     projectDiscoveryFactorySource,

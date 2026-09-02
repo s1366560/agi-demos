@@ -1,4 +1,3 @@
-import type { DesktopApiClient } from '../../api/client';
 import type { ProjectSummary } from '../../types';
 import {
   desktopCapability,
@@ -27,7 +26,6 @@ export class ProjectSearchRouteBindingProviderErrorV2 extends Error {
 }
 
 export type ProjectSearchRouteBindingInputV2 = Readonly<{
-  api: Pick<DesktopApiClient, 'searchProject'>;
   scope: ProjectSearchRouteScope;
   projects: readonly ProjectSummary[];
   capabilitySnapshot: DesktopCapabilitySnapshot | null;
@@ -62,7 +60,6 @@ export function createProjectSearchRouteBindingProviderV2(): ProjectSearchRouteB
         desktopCapability(input.capabilitySnapshot, PROJECT_SEARCH_ROUTE_ID),
       );
       const binding = Object.freeze({
-        api: input.api,
         scope,
         projectName: (project?.name ?? project?.id ?? scope.projectId) || null,
         capability,

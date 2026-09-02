@@ -452,6 +452,37 @@
       "contract_digest": "sha256:9401877965af6ff73c82e7fafb9bddf6d0ad730fff5e86060a1c344bdea7a998"
     },
     {
+      "module_ref": "builtin://memstack/desktop/project-search-authority",
+      "entrypoint": "applyDesktopProjectSearchAuthorityV2",
+      "artifact": {
+        "digest": "sha256:2e92f7ed4dcf451ecd0fdbda155f802c652a8c8cc9ab41c128d2bff9ba6176ed",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSearchAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-search-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8ecb9f84ebc667bfeee3313e26fe1abe41e57799450a3cf7d494577f3059e093"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/my-work-authority",
       "entrypoint": "applyDesktopMyWorkAuthorityV2",
       "artifact": {

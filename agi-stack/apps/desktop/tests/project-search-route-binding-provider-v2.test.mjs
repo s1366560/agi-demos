@@ -42,13 +42,7 @@ function capabilitySnapshot(entry = capabilityEntry()) {
 }
 
 function input(overrides = {}) {
-  const api = Object.freeze({
-    async searchProject() {
-      return Object.freeze({ results: Object.freeze([]) });
-    },
-  });
   return {
-    api,
     scope: Object.freeze({ tenantId, projectId }),
     projects: Object.freeze([
       Object.freeze({ id: projectId, tenant_id: 'tenant-other', name: 'Wrong tenant' }),
@@ -89,7 +83,6 @@ test('project search binding provider resolves one frozen exact-scope publicatio
   assert.equal(Object.isFrozen(binding), true);
   assert.equal(Object.isFrozen(binding.scope), true);
   assert.equal(Object.isFrozen(binding.capability), true);
-  assert.equal(binding.api, current.api);
   assert.deepEqual(binding.scope, { tenantId, projectId });
   assert.equal(binding.projectName, 'Project One');
   assert.equal(binding.capability.availability, 'available');
@@ -116,14 +109,8 @@ test('project search binding provider rejects a mismatched scope without exposin
 test('republishing a new scope invalidates the previous project binding', () => {
   const provider = createProjectSearchRouteBindingProviderV2();
   provider.publish(input());
-  const nextApi = Object.freeze({
-    async searchProject() {
-      return Object.freeze({ results: Object.freeze([]) });
-    },
-  });
   provider.publish(
     input({
-      api: nextApi,
       scope: Object.freeze({ tenantId: 'tenant-2', projectId: 'project-2' }),
       projects: Object.freeze([]),
     }),
@@ -134,7 +121,6 @@ test('republishing a new scope invalidates the previous project binding', () => 
     providerError('project_search_route_binding_scope_mismatch'),
   );
   const nextBinding = provider.resolve({ tenantId: 'tenant-2', projectId: 'project-2' });
-  assert.equal(nextBinding.api, nextApi);
   assert.equal(nextBinding.projectName, 'project-2');
 });
 

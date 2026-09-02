@@ -42,6 +42,8 @@ test('App projects capabilities into V2 Search and Automation route bindings', (
     projectSearchBindingProviderSource,
     /desktopCapability\(input\.capabilitySnapshot,\s*PROJECT_SEARCH_ROUTE_ID\)/u,
   );
+  assert.match(appSource, /createDesktopProjectSearchOperationsV2/u);
+  assert.doesNotMatch(projectSearchBindingProviderSource, /DesktopApiClient|\bapi:/u);
   assert.doesNotMatch(appSource, /projectSearchCapability|PROJECT_SEARCH_ROUTE_ID/u);
   assert.match(
     appSource,
@@ -52,6 +54,7 @@ test('App projects capabilities into V2 Search and Automation route bindings', (
     /desktopCapability\(input\.capabilitySnapshot,\s*AUTOMATION_RUN_CAPABILITY_ID\)/u,
   );
   assert.match(registrySource, /projectSearchRouteBindingProviderV2\.resolve\(context\)/u);
+  assert.match(registrySource, /projectSearchOperationsV2/u);
   assert.match(registrySource, /projectCronJobsRouteBindingProviderV2\.resolve\(context\)/u);
   assert.doesNotMatch(appSource, /projectCronJobsRouteBindingRef|automationRunCapability/u);
   assert.doesNotMatch(registrySource, /current\?\.runCapability/u);

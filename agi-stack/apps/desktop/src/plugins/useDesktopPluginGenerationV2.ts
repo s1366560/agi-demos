@@ -26,6 +26,7 @@ import { desktopNewTaskFlowAuthorityDefinitionV2 } from './desktopNewTaskFlowAut
 import {
   desktopNewThreadCreationAuthorityDefinitionV2,
 } from './desktopNewThreadCreationAuthorityModuleV2';
+import { desktopProjectSearchAuthorityDefinitionV2 } from './desktopProjectSearchAuthorityModuleV2';
 import {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
@@ -56,6 +57,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopMyWorkAuthorityDefinitionV2,
     desktopNewTaskFlowAuthorityDefinitionV2,
     desktopNewThreadCreationAuthorityDefinitionV2,
+    desktopProjectSearchAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,

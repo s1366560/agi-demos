@@ -61,10 +61,23 @@ const routeContext = Object.freeze({
   tenantId: 'tenant-1',
   projectId: 'project-1',
 });
+const projectSearchOperationsV2 = Object.freeze({
+  async searchProject() {
+    return Object.freeze({
+      results: Object.freeze([]),
+      total: 0,
+      searchType: 'advanced',
+      limit: 20,
+      offset: null,
+      facets: null,
+    });
+  },
+});
 
 test('factory stays lazy and publishes the exact Project Advanced Search route contract', async () => {
   let bindingCalls = 0;
   const loader = createProjectSearchRouteModuleLoader({
+    projectSearchOperationsV2,
     createBinding() {
       bindingCalls += 1;
       return binding();
@@ -164,6 +177,7 @@ function implementedRouteLoader(routeId) {
 test('surface reuses DesktopSearch and binds only exact tenant and project context', async () => {
   const receivedContexts = [];
   const module = await createProjectSearchRouteModuleLoader({
+    projectSearchOperationsV2,
     createBinding(context) {
       receivedContexts.push(context);
       return binding();
@@ -186,6 +200,7 @@ test('surface reuses DesktopSearch and binds only exact tenant and project conte
 test('missing tenant or project context fails closed without creating a binding', async () => {
   let bindingCalls = 0;
   const module = await createProjectSearchRouteModuleLoader({
+    projectSearchOperationsV2,
     createBinding() {
       bindingCalls += 1;
       return binding();
@@ -207,17 +222,12 @@ test('missing tenant or project context fails closed without creating a binding'
 test('binding scope drift fails closed before exposing the search authority', async () => {
   const calls = [];
   const module = await createProjectSearchRouteModuleLoader({
+    projectSearchOperationsV2,
     createBinding() {
       return binding({
         scope: {
           tenantId: 'tenant-1',
           projectId: 'project-other',
-        },
-        api: {
-          async searchProject() {
-            calls.push('search');
-            throw new Error('search authority must stay unreachable');
-          },
         },
       });
     },
@@ -253,11 +263,6 @@ function renderRoute(module, context) {
 
 function binding(overrides = {}) {
   return {
-    api: {
-      async searchProject() {
-        return { search_type: 'advanced', total: 0, results: [] };
-      },
-    },
     scope: routeContext,
     projectName: 'Project One',
     capability: availableCapability(),

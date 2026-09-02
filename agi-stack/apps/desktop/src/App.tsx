@@ -92,6 +92,9 @@ import {
 import {
   createDesktopNewThreadCreationOperationsV2,
 } from './plugins/desktopNewThreadCreationAuthorityModuleV2';
+import {
+  createDesktopProjectSearchOperationsV2,
+} from './plugins/desktopProjectSearchAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
@@ -876,6 +879,14 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectSearchOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectSearchOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+        () => configRef.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -1075,6 +1086,7 @@ export function App() {
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
       projectCronJobsRouteBindingProviderV2,
+      projectSearchOperationsV2: desktopProjectSearchOperationsV2,
       projectSearchRouteBindingProviderV2,
       setAuth,
       setInvitationSignInRequested,
@@ -1085,6 +1097,7 @@ export function App() {
     }),
     [
       desktopPluginMarketplaceOperationsV2,
+      desktopProjectSearchOperationsV2,
       desktopTenantCatalogOperationsV2,
     ],
   );
@@ -1270,7 +1283,6 @@ export function App() {
     ],
   );
   projectSearchRouteBindingProviderV2.publish({
-    api,
     scope: Object.freeze({
       tenantId: config.tenantId,
       projectId: config.projectId,

@@ -1,4 +1,6 @@
-import type { DesktopApiClient } from '../../api/client';
+import type {
+  DesktopProjectSearchClientV2,
+} from '../../plugins/desktopProjectSearchAuthorityModuleV2';
 import type {
   DesktopImplementedRouteModule,
   DesktopRouteModuleLoader,
@@ -27,7 +29,6 @@ export type ProjectSearchRouteScope = Readonly<{
 }>;
 
 export type ProjectSearchRouteBinding = Readonly<{
-  api: Pick<DesktopApiClient, 'searchProject'>;
   scope: ProjectSearchRouteScope;
   projectName: string | null;
   capability: DesktopCapabilityView;
@@ -40,6 +41,7 @@ export type ProjectSearchRouteModuleOptions = Readonly<{
   createBinding: (
     context: ProjectSearchRouteContext,
   ) => ProjectSearchRouteBinding;
+  projectSearchOperationsV2: DesktopProjectSearchClientV2;
 }>;
 
 type DesktopSearchComponent =
@@ -47,9 +49,13 @@ type DesktopSearchComponent =
 
 export function createProjectSearchRouteModuleLoader({
   createBinding,
+  projectSearchOperationsV2,
 }: ProjectSearchRouteModuleOptions): DesktopRouteModuleLoader {
   if (typeof createBinding !== 'function') {
     throw new Error('project_search_route_binding_factory_invalid');
+  }
+  if (typeof projectSearchOperationsV2?.searchProject !== 'function') {
+    throw new Error('project_search_route_authority_invalid');
   }
 
   return async () => {
@@ -82,7 +88,7 @@ export function createProjectSearchRouteModuleLoader({
 
       return (
         <DesktopSearch
-          api={binding.api}
+          api={projectSearchOperationsV2}
           tenantId={routeContext.tenantId}
           projectId={routeContext.projectId}
           projectName={binding.projectName}
@@ -132,7 +138,7 @@ function UnavailableProjectSearch({
   );
 }
 
-const UNAVAILABLE_SEARCH_API: Pick<DesktopApiClient, 'searchProject'> =
+const UNAVAILABLE_SEARCH_API: DesktopProjectSearchClientV2 =
   Object.freeze({
     async searchProject() {
       throw new Error('project_search_route_authority_unavailable');

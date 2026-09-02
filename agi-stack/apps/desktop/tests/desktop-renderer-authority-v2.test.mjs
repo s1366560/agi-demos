@@ -126,6 +126,11 @@ const appComposition = createDesktopRendererAppCompositionPortV2({
       throw new Error("project_cron_jobs_route_binding_unpublished");
     },
   },
+  projectSearchOperationsV2: {
+    searchProject: async () => {
+      throw new Error("project_search_route_authority_unavailable");
+    },
+  },
   projectSearchRouteBindingProviderV2: {
     publish: () => undefined,
     resolve: () => {

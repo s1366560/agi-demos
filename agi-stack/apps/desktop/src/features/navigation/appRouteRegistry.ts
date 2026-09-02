@@ -231,6 +231,9 @@ import {
 import { createSkillsRouteModuleLoader } from '../settings-routes/skillsRouteModule';
 import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRouteModule';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type {
+  DesktopProjectSearchClientV2,
+} from '../../plugins/desktopProjectSearchAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
 
 export type AppRouteRegistryRefs = {
@@ -247,6 +250,7 @@ export type AppRouteRegistryRefs = {
     openPath: (path: string) => void;
   }>;
   projectCronJobsRouteBindingProviderV2: ProjectCronJobsRouteBindingProviderV2;
+  projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
   setInvitationSignInRequested: Dispatch<SetStateAction<boolean>>;
@@ -273,7 +277,7 @@ export type AppProjectWorkspaceRouteRegistryRefs = Pick<
 >;
 export type AppProjectDiscoveryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'projectSearchRouteBindingProviderV2'
+  'projectSearchOperationsV2' | 'projectSearchRouteBindingProviderV2'
 >;
 export type AppTenantCoreRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'authRef' | 'configRef'>;
 type AppSettingsRouteContentRefs = Pick<
@@ -824,11 +828,12 @@ export function createAppProjectWorkspaceRouteRegistry(
 }
 
 export function createAppProjectDiscoveryRouteRegistry(refs: AppProjectDiscoveryRouteRegistryRefs) {
-  const { projectSearchRouteBindingProviderV2 } = refs;
+  const { projectSearchOperationsV2, projectSearchRouteBindingProviderV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_SEARCH_ROUTE_ID]: createProjectSearchRouteModuleLoader({
         createBinding: (context) => projectSearchRouteBindingProviderV2.resolve(context),
+        projectSearchOperationsV2,
       }),
     }),
   });
