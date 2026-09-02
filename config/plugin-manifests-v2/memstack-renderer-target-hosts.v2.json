@@ -291,6 +291,37 @@
       "contract_digest": "sha256:fc7690fe093a7f1578e3ca7dae268339e67960cf3746197d357b9a97149d2577"
     },
     {
+      "module_ref": "builtin://memstack/desktop/workspace-agent-binding-authority",
+      "entrypoint": "applyDesktopWorkspaceAgentBindingAuthorityV2",
+      "artifact": {
+        "digest": "sha256:9bd015f66ea8bcde588bf870fa41c47e542b8309083976a216d1aae27ebaa510",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceAgentBindingAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-agent-binding-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:329680a143895e16d32e166e9a362d2b193253211bf214fdc5fdde521ea7e3aa"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/workspace-conversation-catalog-authority",
       "entrypoint": "applyDesktopWorkspaceConversationCatalogAuthorityV2",
       "artifact": {

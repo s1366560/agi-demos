@@ -104,6 +104,9 @@ import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSes
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import {
+  createDesktopWorkspaceAgentBindingOperationsV2,
+} from './plugins/desktopWorkspaceAgentBindingAuthorityModuleV2';
+import {
   createDesktopWorkspaceMessageCatalogOperationsV2,
 } from './plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2';
 import {
@@ -340,9 +343,6 @@ import {
   retainOpenWorkspaceAutonomyAttentionResolveAttempts,
   type WorkspaceAutonomyAttentionResolveAttempt,
 } from './features/workspace/autonomyAttentionResolveAttemptModel';
-import {
-  createDesktopWorkspaceAgentBindingDialogClientProviderV2,
-} from './features/workspace/desktopWorkspaceAgentBindingDialogClientProviderV2';
 import {
   createDesktopWorkspaceAutonomyAttentionClientProviderV2,
 } from './features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2';
@@ -849,6 +849,13 @@ export function App() {
       ),
     [],
   );
+  const desktopWorkspaceAgentBindingOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceAgentBindingOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopWorkspaceCatalogOperationsV2 = useMemo(
     () =>
       createDesktopWorkspaceCatalogOperationsV2(
@@ -940,10 +947,6 @@ export function App() {
   );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
     () => createDesktopProductionRouteAuthorityProviderV2(),
-    [],
-  );
-  const desktopWorkspaceAgentBindingDialogClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceAgentBindingDialogClientProviderV2(),
     [],
   );
   const desktopWorkspaceAutonomyAttentionClientProviderV2 = useMemo(
@@ -1134,10 +1137,6 @@ export function App() {
   const desktopSessionRunInputClientV2 = useMemo(
     () => desktopSessionRunInputClientProviderV2.publish({ config }),
     [config, desktopSessionRunInputClientProviderV2],
-  );
-  const desktopWorkspaceAgentBindingDialogClientV2 = useMemo(
-    () => desktopWorkspaceAgentBindingDialogClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceAgentBindingDialogClientProviderV2],
   );
   const desktopWorkspaceAutonomyAttentionClientV2 = useMemo(
     () => desktopWorkspaceAutonomyAttentionClientProviderV2.publish({ config }),
@@ -3803,26 +3802,29 @@ export function App() {
     }
   };
 
-  const workspaceAgentBindingClient = (scope: WorkspaceSettingsScope) =>
-    desktopWorkspaceAgentBindingDialogClientV2.bindOperation({
+  const workspaceAgentBindingOperationScope = (
+    scope: WorkspaceSettingsScope,
+    signal: AbortSignal,
+  ) => ({
+    config: {
       ...configRef.current,
       tenantId: scope.tenantId,
       projectId: scope.projectId,
       workspaceId: scope.workspaceId,
-    });
+    },
+    workspaceId: scope.workspaceId,
+    signal,
+  });
 
   const loadWorkspaceAgentDefinitionsFromDialog = async (
     submittedScope: WorkspaceSettingsScope,
     signal: AbortSignal,
   ): Promise<WorkspaceBindingAgentDefinition[]> => {
     assertWorkspaceAgentBindingScope(submittedScope);
-    const definitions = await workspaceAgentBindingClient(
-      submittedScope,
-    ).listWorkspaceBindingAgentDefinitionsForProject(
-      submittedScope.projectId,
-      submittedScope.tenantId,
-      signal,
-    );
+    const definitions =
+      await desktopWorkspaceAgentBindingOperationsV2.listWorkspaceBindingAgentDefinitions(
+        workspaceAgentBindingOperationScope(submittedScope, signal),
+      );
     assertWorkspaceAgentBindingScope(submittedScope);
     return definitions;
   };
@@ -3835,13 +3837,10 @@ export function App() {
     signal: AbortSignal,
   ): Promise<WorkspaceAgentBinding> => {
     assertWorkspaceAgentBindingScope(submittedScope);
-    const binding = await workspaceAgentBindingClient(submittedScope).bindWorkspaceAgentForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
-      { agentId, displayName, description },
-      submittedScope.tenantId,
-      signal,
-    );
+    const binding = await desktopWorkspaceAgentBindingOperationsV2.bindWorkspaceAgent({
+      ...workspaceAgentBindingOperationScope(submittedScope, signal),
+      input: { agentId, displayName, description },
+    });
     assertWorkspaceAgentBindingScope(submittedScope);
     updateDataset((current) => ({
       ...current,
@@ -3860,13 +3859,10 @@ export function App() {
     signal: AbortSignal,
   ): Promise<void> => {
     assertWorkspaceAgentBindingScope(submittedScope);
-    await workspaceAgentBindingClient(submittedScope).unbindWorkspaceAgentForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    await desktopWorkspaceAgentBindingOperationsV2.unbindWorkspaceAgent({
+      ...workspaceAgentBindingOperationScope(submittedScope, signal),
       bindingId,
-      submittedScope.tenantId,
-      signal,
-    );
+    });
     assertWorkspaceAgentBindingScope(submittedScope);
     updateDataset((current) => ({
       ...current,

@@ -34,6 +34,7 @@ const authorityModules = [
   'desktopSessionTimelineAuthorityModuleV2',
   'desktopTenantCatalogAuthorityModuleV2',
   'desktopTerminalLifecycleAuthorityModuleV2',
+  'desktopWorkspaceAgentBindingAuthorityModuleV2',
   'desktopWorkspaceCatalogAuthorityModuleV2',
   'desktopWorkspaceContextAuthorityModuleV2',
   'desktopWorkspaceConversationCatalogAuthorityModuleV2',

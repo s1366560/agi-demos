@@ -43,6 +43,9 @@ const {
   desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
   withDesktopWorkspaceExecutionSnapshotAuthorityOperationV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js');
+const { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceAgentBindingAuthorityModuleV2.js',
+);
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
   COMPILED_ROOT +
     '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
@@ -130,6 +133,7 @@ function rendererDefinitions() {
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopWorkspaceCatalogAuthorityDefinitionV2,
+    desktopWorkspaceAgentBindingAuthorityDefinitionV2,
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,

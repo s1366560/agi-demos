@@ -38,6 +38,7 @@ import { desktopSessionRunChangesAuthorityDefinitionV2 } from './desktopSessionR
 import { desktopSessionTimelineAuthorityDefinitionV2 } from './desktopSessionTimelineAuthorityModuleV2';
 import { desktopTerminalLifecycleAuthorityDefinitionV2 } from './desktopTerminalLifecycleAuthorityModuleV2';
 import { desktopTenantCatalogAuthorityDefinitionV2 } from './desktopTenantCatalogAuthorityModuleV2';
+import { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } from './desktopWorkspaceAgentBindingAuthorityModuleV2';
 import { desktopWorkspaceContextAuthorityDefinitionV2 } from './desktopWorkspaceContextAuthorityModuleV2';
 import { desktopWorkspaceCatalogAuthorityDefinitionV2 } from './desktopWorkspaceCatalogAuthorityModuleV2';
 import { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } from './desktopWorkspaceExecutionSnapshotAuthorityModuleV2';
@@ -70,6 +71,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopSessionTimelineAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
+    desktopWorkspaceAgentBindingAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopWorkspaceCatalogAuthorityDefinitionV2,
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,

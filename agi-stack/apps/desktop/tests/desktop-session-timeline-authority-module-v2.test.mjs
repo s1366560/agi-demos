@@ -66,6 +66,9 @@ const { desktopSessionProjectionAuthorityDefinitionV2 } = require(
 const { desktopSessionRunChangesAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js'
 );
+const { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceAgentBindingAuthorityModuleV2.js',
+);
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
   COMPILED_ROOT +
     '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
@@ -129,6 +132,7 @@ function rendererDefinitions() {
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,
+    desktopWorkspaceAgentBindingAuthorityDefinitionV2,
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopTerminalLifecycleAuthorityDefinitionV2,
