@@ -79,7 +79,7 @@ import {
   NewTaskReviewStage,
 } from './NewTaskFlowStages';
 import { FlowStep, NewTaskFooterBackButton } from './NewTaskStagePrimitives';
-import type { DesktopNewTaskFlowClientBindingV2 } from './desktopNewTaskFlowClientProviderV2';
+import type { DesktopNewTaskFlowOperationsV2 } from '../../plugins/desktopNewTaskFlowAuthorityModuleV2';
 import './NewTaskFlow.css';
 import './NewTaskPlanReview.css';
 
@@ -121,7 +121,7 @@ type NewTaskFlowProps = {
   open: boolean;
   config: DesktopRuntimeConfig;
   actorId: string | null | undefined;
-  newTaskFlowClientV2: DesktopNewTaskFlowClientBindingV2;
+  newTaskFlowClientV2: DesktopNewTaskFlowOperationsV2;
   workspaceAuthority?: WorkspaceAuthorityCollection<WorkspaceSummary>;
   workspaces?: WorkspaceSummary[];
   resumeDraft?: NewTaskResumeDraft | null;

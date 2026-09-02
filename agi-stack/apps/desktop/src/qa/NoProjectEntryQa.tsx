@@ -6,7 +6,6 @@ import { Theme } from '@radix-ui/themes';
 import { DesktopSidebar } from '../features/navigation/DesktopSidebar';
 import { SettingsWindow, type SettingsSection } from '../features/settings/SettingsWindow';
 import { NewTaskFlow } from '../features/task/NewTaskFlow';
-import { createDesktopNewTaskFlowClientProviderV2 } from '../features/task/desktopNewTaskFlowClientProviderV2';
 import { WorkspaceOverview } from '../features/workspace/WorkspaceOverview';
 import { I18nProvider, useI18n } from '../i18n';
 import {
@@ -21,6 +20,7 @@ import type {
   WorkspaceAuthorityCollection,
   WorkspaceSummary,
 } from '../types';
+import { createDesktopNewTaskFlowQaOperationsV2 } from './desktopNewTaskFlowAuthorityQaV2';
 import '../styles/global.css';
 
 declare global {
@@ -163,10 +163,7 @@ try {
 
 function NoProjectEntryQa() {
   const { t } = useI18n();
-  const desktopNewTaskFlowClientProviderV2 = useMemo(
-    () => createDesktopNewTaskFlowClientProviderV2(),
-    [],
-  );
+  const desktopNewTaskFlowClientV2 = useMemo(createDesktopNewTaskFlowQaOperationsV2, []);
   const [auth, setAuth] = useState<AuthState>(() =>
     qaScenario === 'empty-workspaces'
       ? {
@@ -198,10 +195,6 @@ function NoProjectEntryQa() {
       (qaScenario !== 'empty-workspaces' && qaWindowState !== 'closed'),
   );
   const [newTaskOpen, setNewTaskOpen] = useState(false);
-  const desktopNewTaskFlowClientV2 = useMemo(
-    () => desktopNewTaskFlowClientProviderV2.publish({ config }),
-    [config, desktopNewTaskFlowClientProviderV2],
-  );
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === config.tenantId) ?? null;
   const selectedProject = auth.projects.find((project) => project.id === config.projectId) ?? null;
   const tenantName = selectedTenant?.name || t('settings.noTenantSelected');

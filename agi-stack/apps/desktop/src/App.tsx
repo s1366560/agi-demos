@@ -85,6 +85,10 @@ import { createDesktopConversationLifecycleOperationsV2 } from './plugins/deskto
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
 import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
 import { createDesktopMyWorkOperationsV2 } from './plugins/desktopMyWorkAuthorityModuleV2';
+import {
+  createDesktopNewTaskFlowOperationsV2,
+  type DesktopNewTaskFlowClientV2,
+} from './plugins/desktopNewTaskFlowAuthorityModuleV2';
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
@@ -314,10 +318,6 @@ import {
 import {
   createDesktopNewThreadCreationClientProviderV2,
 } from './features/task/desktopNewThreadCreationClientProviderV2';
-import {
-  createDesktopNewTaskFlowClientProviderV2,
-  type DesktopNewTaskFlowClient,
-} from './features/task/desktopNewTaskFlowClientProviderV2';
 import {
   browserLegacyPlanApprovalStorage,
   canResumeLegacyPlanApproval,
@@ -858,6 +858,13 @@ export function App() {
       ),
     [],
   );
+  const desktopNewTaskFlowClientV2 = useMemo(
+    () =>
+      createDesktopNewTaskFlowOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopHitlResponseOperationsV2 = useMemo(
     () =>
       createDesktopHitlResponseOperationsV2(
@@ -924,10 +931,6 @@ export function App() {
   );
   const desktopNewThreadCreationClientProviderV2 = useMemo(
     () => createDesktopNewThreadCreationClientProviderV2(),
-    [],
-  );
-  const desktopNewTaskFlowClientProviderV2 = useMemo(
-    () => createDesktopNewTaskFlowClientProviderV2(),
     [],
   );
   const workspaceCollaborationClientProviderV2 = useMemo(
@@ -1144,10 +1147,6 @@ export function App() {
   const desktopNewThreadCreationClientV2 = useMemo(
     () => desktopNewThreadCreationClientProviderV2.publish({ config }),
     [config, desktopNewThreadCreationClientProviderV2],
-  );
-  const desktopNewTaskFlowClientV2 = useMemo(
-    () => desktopNewTaskFlowClientProviderV2.publish({ config }),
-    [config, desktopNewTaskFlowClientProviderV2],
   );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
@@ -4768,7 +4767,7 @@ export function App() {
       try {
         const { approvePlanAndStart } =
           desktopNewTaskFlowClientV2.bindOperation(requestConfig);
-        const client: Pick<DesktopNewTaskFlowClient, 'approvePlanAndStart'> = Object.freeze({
+        const client: Pick<DesktopNewTaskFlowClientV2, 'approvePlanAndStart'> = Object.freeze({
           approvePlanAndStart,
         });
         const outcome = await client.approvePlanAndStart(

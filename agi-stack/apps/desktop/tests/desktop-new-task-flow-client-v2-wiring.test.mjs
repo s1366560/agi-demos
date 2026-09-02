@@ -9,41 +9,40 @@ function source(relativePath) {
 
 const app = source('src/App.tsx');
 const flow = source('src/features/task/NewTaskFlow.tsx');
-const provider = source('src/features/task/desktopNewTaskFlowClientProviderV2.ts');
+const authority = source('src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts');
+const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
 const standaloneQa = source('src/qa/NewTaskFlowQa.tsx');
 const noProjectQa = source('src/qa/NoProjectEntryQa.tsx');
+const qaAuthority = source('src/qa/desktopNewTaskFlowAuthorityQaV2.ts');
+const testTypeScriptConfig = source('tsconfig.test.json');
+const legacyProviderUrl = new URL(
+  '../src/features/task/desktopNewTaskFlowClientProviderV2.ts',
+  import.meta.url,
+);
 
-test('new-task flow resolves its transport authority from one V2 publication', () => {
-  assert.match(app, /createDesktopNewTaskFlowClientProviderV2/u);
-  assert.match(app, /desktopNewTaskFlowClientProviderV2\.publish\(\{ config \}\)/u);
-  assert.match(app, /newTaskFlowClientV2:\s*desktopNewTaskFlowClientV2/u);
-  assert.match(flow, /DesktopNewTaskFlowClientBindingV2/u);
-  assert.match(flow, /newTaskFlowClientV2:\s*DesktopNewTaskFlowClientBindingV2/u);
-  assert.doesNotMatch(flow, /DesktopApiClient/u);
-  assert.doesNotMatch(flow, /new DesktopApiClient\(/u);
+test('production Loader registers the explicit new-task-flow V2 authority', () => {
+  assert.match(generation, /desktopNewTaskFlowAuthorityDefinitionV2/u);
+  assert.match(authority, /builtin:\/\/memstack\/desktop\/new-task-flow-authority/u);
+  assert.match(authority, /service:desktop-renderer\.new-task-flow-authority/u);
+  assert.match(authority, /applyDesktopNewTaskFlowAuthorityV2/u);
+  assert.match(authority, /context\.provide\(DESKTOP_NEW_TASK_FLOW_AUTHORITY_SERVICE_V2/u);
+  assert.doesNotMatch(authority, /optional|fallback|legacy-client/iu);
 });
 
-test('new-task flow Provider exposes only its eight owned transport methods', () => {
-  for (const method of [
-    'approvePlanAndStart',
-    'createTaskSession',
-    'getConversationMessages',
-    'listAgentPlanTasks',
-    'listWorkspaces',
-    'sendMessage',
-    'supportsAgentPlanWorkflow',
-    'switchPlanMode',
-  ]) {
-    assert.match(provider, new RegExp(`${method}:`));
-  }
-  assert.match(provider, /bindOperation/u);
-  assert.doesNotMatch(
-    provider,
-    /createAgentConversation:|runAgentMessage:|updateAgentConversationMode:/u,
+test('App owns one stable generation-backed facade and no private publication', () => {
+  assert.match(app, /createDesktopNewTaskFlowOperationsV2/u);
+  assert.match(
+    app,
+    /createDesktopNewTaskFlowOperationsV2\(\s*\(\) =>\s*desktopPluginMarketplaceGenerationActionsRefV2\.current,?\s*\)/u,
   );
+  assert.match(app, /newTaskFlowClientV2:\s*desktopNewTaskFlowClientV2/u);
+  assert.doesNotMatch(app, /createDesktopNewTaskFlowClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopNewTaskFlowClientProviderV2\.publish/u);
 });
 
-test('new-task flow binds every operation config without selecting an implementation class', () => {
+test('new-task flow consumes only the declared V2 operations facade', () => {
+  assert.match(flow, /DesktopNewTaskFlowOperationsV2/u);
+  assert.match(flow, /newTaskFlowClientV2:\s*DesktopNewTaskFlowOperationsV2/u);
   assert.match(flow, /newTaskFlowClientV2\.bindOperation\(config\)/u);
   assert.match(flow, /newTaskFlowClientV2\.bindOperation\(session\.config\)/u);
   assert.match(flow, /newTaskFlowClientV2\.bindOperation\(activeSession\.config\)/u);
@@ -51,6 +50,7 @@ test('new-task flow binds every operation config without selecting an implementa
   assert.match(flow, /\.createTaskSession\(/u);
   assert.match(flow, /\.listAgentPlanTasks\(/u);
   assert.match(flow, /\.approvePlanAndStart\(/u);
+  assert.doesNotMatch(flow, /DesktopApiClient|new DesktopApiClient\(/u);
 });
 
 test('session plan approval receives one submitted-scope V2 transport method', () => {
@@ -63,7 +63,7 @@ test('session plan approval receives one submitted-scope V2 transport method', (
   );
   assert.match(
     callback,
-    /const client: Pick<DesktopNewTaskFlowClient, 'approvePlanAndStart'> =\s*Object\.freeze\(\{[\s\S]*?approvePlanAndStart,[\s\S]*?\}\)/u,
+    /const client: Pick<DesktopNewTaskFlowClientV2, 'approvePlanAndStart'> =\s*Object\.freeze\(\{[\s\S]*?approvePlanAndStart,[\s\S]*?\}\)/u,
   );
   assert.match(callback, /client\.approvePlanAndStart\(\s*sessionPlanApprovalRequest\(/u);
   assert.doesNotMatch(callback, /api\.approvePlanAndStart/u);
@@ -90,11 +90,19 @@ test('session plan approval receives one submitted-scope V2 transport method', (
   assert.doesNotMatch(callback, /\[\s*api,/u);
 });
 
-test('standalone QA composition roots supply the same explicit V2 client binding', () => {
-  assert.match(standaloneQa, /createDesktopNewTaskFlowClientProviderV2/u);
+test('standalone QA roots activate the same module behind a QA-only service admission', () => {
+  assert.match(standaloneQa, /createDesktopNewTaskFlowQaOperationsV2/u);
   assert.match(standaloneQa, /newTaskFlowClientV2=\{newTaskFlowClientV2\}/u);
-  assert.match(noProjectQa, /createDesktopNewTaskFlowClientProviderV2/u);
+  assert.match(noProjectQa, /useMemo\(createDesktopNewTaskFlowQaOperationsV2, \[\]\)/u);
   assert.match(noProjectQa, /newTaskFlowClientV2=\{desktopNewTaskFlowClientV2\}/u);
+  assert.match(qaAuthority, /applyDesktopNewTaskFlowAuthorityV2/u);
+  assert.match(qaAuthority, /acquireServiceOperationLease/u);
+  assert.doesNotMatch(qaAuthority, /new DesktopApiClient\(/u);
+});
+
+test('the private provider implementation and compile inventory entry are retired', () => {
+  assert.equal(existsSync(legacyProviderUrl), false);
+  assert.doesNotMatch(testTypeScriptConfig, /desktopNewTaskFlowClientProviderV2/u);
 });
 
 function callbackSource(sourceText, name, nextName) {

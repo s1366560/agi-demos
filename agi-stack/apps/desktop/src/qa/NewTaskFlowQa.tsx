@@ -7,8 +7,8 @@ import {
   type NewTaskAgentTurnInput,
   type NewTaskSession,
 } from '../features/task/NewTaskFlow';
-import { createDesktopNewTaskFlowClientProviderV2 } from '../features/task/desktopNewTaskFlowClientProviderV2';
 import { I18nProvider } from '../i18n';
+import { createDesktopNewTaskFlowQaOperationsV2 } from './desktopNewTaskFlowAuthorityQaV2';
 import type {
   AgentConversation,
   AgentPlanTask,
@@ -144,7 +144,7 @@ const config: DesktopRuntimeConfig = {
   mode: 'local',
   workspaceRoot: '/workspace/product-strategy',
 };
-const newTaskFlowClientV2 = createDesktopNewTaskFlowClientProviderV2().publish({ config });
+const newTaskFlowClientV2 = createDesktopNewTaskFlowQaOperationsV2();
 
 let planningTurnAcceptedAt = 0;
 let taskSessionPostCount = 0;
@@ -341,6 +341,7 @@ window.fetch = async (input, init) => {
         id: 'run-retention',
         conversation_id: conversation.id,
         project_id: config.projectId,
+        plan_version_id: planVersion.id,
         status: 'queued',
         revision: 1,
         created_at: now,

@@ -21,6 +21,7 @@ import { validateDesktopRendererContributionsV2 } from './desktopRendererArtifac
 import { desktopConversationConfigAuthorityDefinitionV2 } from './desktopConversationConfigAuthorityModuleV2';
 import { desktopHitlResponseAuthorityDefinitionV2 } from './desktopHitlResponseAuthorityModuleV2';
 import { desktopMyWorkAuthorityDefinitionV2 } from './desktopMyWorkAuthorityModuleV2';
+import { desktopNewTaskFlowAuthorityDefinitionV2 } from './desktopNewTaskFlowAuthorityModuleV2';
 import {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
@@ -48,6 +49,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopConversationLifecycleAuthorityDefinitionV2,
     desktopHitlResponseAuthorityDefinitionV2,
     desktopMyWorkAuthorityDefinitionV2,
+    desktopNewTaskFlowAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
     desktopSessionRunChangesAuthorityDefinitionV2,
     desktopSessionTimelineAuthorityDefinitionV2,
