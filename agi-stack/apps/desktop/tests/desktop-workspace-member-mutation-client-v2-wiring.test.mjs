@@ -8,69 +8,64 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source(
-  'src/features/workspace/desktopWorkspaceMemberMutationClientProviderV2.ts',
+const legacyProviderPath = new URL(
+  '../src/features/workspace/desktopWorkspaceMemberMutationClientProviderV2.ts',
+  import.meta.url,
 );
 
-test('App publishes one stable V2 workspace-member mutation Provider', () => {
-  assert.match(app, /createDesktopWorkspaceMemberMutationClientProviderV2/u);
+test('App owns one stable generation-bound workspace-member mutation operation set', () => {
+  assert.match(app, /createDesktopWorkspaceMemberMutationOperationsV2/u);
   assert.match(
     app,
-    /const desktopWorkspaceMemberMutationClientProviderV2 = useMemo\([\s\S]*?createDesktopWorkspaceMemberMutationClientProviderV2\(\)[\s\S]*?\[\],[\s\S]*?\);/u,
+    /const desktopWorkspaceMemberMutationOperationsV2 = useMemo\([\s\S]*?createDesktopWorkspaceMemberMutationOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u,
   );
-  assert.match(
-    app,
-    /desktopWorkspaceMemberMutationClientProviderV2\.publish\(\{ config \}\)/u,
-  );
+  assert.doesNotMatch(app, /createDesktopWorkspaceMemberMutationClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopWorkspaceMemberMutationClientProviderV2\.publish/u);
+  assert.equal(existsSync(legacyProviderPath), false);
 });
 
-test('workspace-member handlers bind only the V2 mutation authority to submitted scope', () => {
-  const factory = arrowFunctionSource(app, 'workspaceMemberMutationClient');
-  assert.match(
-    factory,
-    /desktopWorkspaceMemberMutationClientV2\.bindOperation\(\{/u,
-  );
-  for (const field of ['tenantId', 'projectId', 'workspaceId']) {
-    assert.match(factory, new RegExp(`${field}: scope\\.${field}`));
-  }
-  assert.doesNotMatch(factory, /new DesktopApiClient\(/u);
-
-  for (const [handlerName, methodName] of [
-    ['addWorkspaceMemberFromDialog', 'addWorkspaceMemberForProject'],
-    ['updateWorkspaceMemberRoleFromDialog', 'updateWorkspaceMemberRoleForProject'],
-    ['removeWorkspaceMemberFromDialog', 'removeWorkspaceMemberForProject'],
+test('workspace-member handlers use only V2 operations with submitted frozen scope', () => {
+  for (const [handlerName, operationName] of [
+    ['addWorkspaceMemberFromDialog', 'addWorkspaceMember'],
+    ['updateWorkspaceMemberRoleFromDialog', 'updateWorkspaceMemberRole'],
+    ['removeWorkspaceMemberFromDialog', 'removeWorkspaceMember'],
   ]) {
     const handler = asyncArrowFunctionSource(app, handlerName);
     assert.match(
       handler,
-      new RegExp(
-        `workspaceMemberMutationClient\\(\\s*submittedScope,?\\s*\\)\\s*\\.${methodName}`,
-      ),
+      new RegExp(`desktopWorkspaceMemberMutationOperationsV2\\.${operationName}\\(\\{`),
     );
-    assert.doesNotMatch(handler, /new DesktopApiClient\(/u);
+    assert.equal(
+      (handler.match(/assertWorkspaceMemberMutationScope\(submittedScope\)/gu) ?? []).length,
+      2,
+    );
+    for (const field of ['tenantId', 'projectId', 'workspaceId']) {
+      assert.match(handler, new RegExp(`${field}: submittedScope\\.${field}`));
+    }
+    assert.match(handler, /workspaceId: submittedScope\.workspaceId/u);
+    assert.match(handler, /userId/u);
+    assert.match(handler, /signal/u);
+    assert.doesNotMatch(handler, /new DesktopApiClient\(|bindOperation|ForProject/u);
+    assert.ok(
+      handler.indexOf('await desktopWorkspaceMemberMutationOperationsV2') <
+        handler.indexOf('updateDataset'),
+    );
   }
+
+  assert.match(asyncArrowFunctionSource(app, 'addWorkspaceMemberFromDialog'), /role,/u);
+  assert.match(asyncArrowFunctionSource(app, 'updateWorkspaceMemberRoleFromDialog'), /role,/u);
+  assert.doesNotMatch(asyncArrowFunctionSource(app, 'removeWorkspaceMemberFromDialog'), /role,/u);
 });
 
-test('workspace-member mutation Provider exposes no member read-model authority', () => {
-  for (const method of [
-    'addWorkspaceMemberForProject',
-    'removeWorkspaceMemberForProject',
-    'updateWorkspaceMemberRoleForProject',
-  ]) {
-    assert.match(provider, new RegExp(`${method}:`));
+test('workspace-member mutation authority remains separate from roster and lifecycle reads', () => {
+  const module = source('src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.ts');
+  for (const method of ['addMember', 'removeMember', 'updateMemberRole']) {
+    assert.match(module, new RegExp(method));
   }
-  assert.match(provider, /bindOperation/u);
-  assert.doesNotMatch(provider, /listWorkspaceMembers/u);
-  assert.doesNotMatch(provider, /createWorkspaceForProject|updateWorkspaceForProject/u);
+  assert.match(module, /acquireServiceOperationLease/u);
+  assert.doesNotMatch(module, /listWorkspaceMembers|createWorkspaceForProject/u);
+  assert.doesNotMatch(app, /workspaceMemberMutationClient/u);
 });
-
-function arrowFunctionSource(sourceText, name) {
-  const start = sourceText.indexOf(`const ${name} = (`);
-  assert.notEqual(start, -1);
-  const end = sourceText.indexOf('\n\n  const ', start + 1);
-  assert.notEqual(end, -1);
-  return sourceText.slice(start, end);
-}
 
 function asyncArrowFunctionSource(sourceText, name) {
   const start = sourceText.indexOf(`const ${name} = async`);

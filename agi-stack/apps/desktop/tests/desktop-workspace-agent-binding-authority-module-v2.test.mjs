@@ -41,6 +41,7 @@ const authorityModules = [
   'desktopWorkspaceConversationCatalogAuthorityModuleV2',
   'desktopWorkspaceExecutionSnapshotAuthorityModuleV2',
   'desktopWorkspaceMessageCatalogAuthorityModuleV2',
+  'desktopWorkspaceMemberMutationAuthorityModuleV2',
 ].flatMap((moduleName) =>
   Object.values(require(`${COMPILED_ROOT}/src/plugins/${moduleName}.js`)).filter(
     (value) => value?.moduleRef && typeof value?.apply === 'function',

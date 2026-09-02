@@ -322,6 +322,37 @@
       "contract_digest": "sha256:329680a143895e16d32e166e9a362d2b193253211bf214fdc5fdde521ea7e3aa"
     },
     {
+      "module_ref": "builtin://memstack/desktop/workspace-member-mutation-authority",
+      "entrypoint": "applyDesktopWorkspaceMemberMutationAuthorityV2",
+      "artifact": {
+        "digest": "sha256:8e83e9f678c47346465f0f0b4f41a7c9faf80007e073d823c0cbb03129b21ae0",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-member-mutation-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:25762524ec3c6eb618fce4b1ef6f6cb008f40a37b9d38c8a2f62f7f66e59e93e"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/workspace-conversation-catalog-authority",
       "entrypoint": "applyDesktopWorkspaceConversationCatalogAuthorityV2",
       "artifact": {

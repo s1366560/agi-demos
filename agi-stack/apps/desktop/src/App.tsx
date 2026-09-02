@@ -107,6 +107,9 @@ import {
   createDesktopWorkspaceAgentBindingOperationsV2,
 } from './plugins/desktopWorkspaceAgentBindingAuthorityModuleV2';
 import {
+  createDesktopWorkspaceMemberMutationOperationsV2,
+} from './plugins/desktopWorkspaceMemberMutationAuthorityModuleV2';
+import {
   createDesktopWorkspaceMessageCatalogOperationsV2,
 } from './plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2';
 import {
@@ -352,9 +355,6 @@ import {
 import {
   createDesktopWorkspaceLifecycleClientProviderV2,
 } from './features/workspace/desktopWorkspaceLifecycleClientProviderV2';
-import {
-  createDesktopWorkspaceMemberMutationClientProviderV2,
-} from './features/workspace/desktopWorkspaceMemberMutationClientProviderV2';
 import { createWorkspaceCollaborationClientProviderV2 } from './features/workspace/workspaceCollaborationClientProviderV2';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
 import type {
@@ -856,6 +856,13 @@ export function App() {
       ),
     [],
   );
+  const desktopWorkspaceMemberMutationOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceMemberMutationOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopWorkspaceCatalogOperationsV2 = useMemo(
     () =>
       createDesktopWorkspaceCatalogOperationsV2(
@@ -959,10 +966,6 @@ export function App() {
   );
   const desktopWorkspaceLifecycleClientProviderV2 = useMemo(
     () => createDesktopWorkspaceLifecycleClientProviderV2(),
-    [],
-  );
-  const desktopWorkspaceMemberMutationClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceMemberMutationClientProviderV2(),
     [],
   );
   const desktopNewThreadComposerCatalogClientProviderV2 = useMemo(
@@ -1149,10 +1152,6 @@ export function App() {
   const desktopWorkspaceLifecycleClientV2 = useMemo(
     () => desktopWorkspaceLifecycleClientProviderV2.publish({ config }),
     [config, desktopWorkspaceLifecycleClientProviderV2],
-  );
-  const desktopWorkspaceMemberMutationClientV2 = useMemo(
-    () => desktopWorkspaceMemberMutationClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceMemberMutationClientProviderV2],
   );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
@@ -3691,14 +3690,6 @@ export function App() {
     }
   };
 
-  const workspaceMemberMutationClient = (scope: WorkspaceSettingsScope) =>
-    desktopWorkspaceMemberMutationClientV2.bindOperation({
-      ...configRef.current,
-      tenantId: scope.tenantId,
-      projectId: scope.projectId,
-      workspaceId: scope.workspaceId,
-    });
-
   const addWorkspaceMemberFromDialog = async (
     userId: string,
     role: WorkspaceMemberRole,
@@ -3706,16 +3697,18 @@ export function App() {
     signal: AbortSignal,
   ): Promise<WorkspaceMemberSummary> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    const member = await workspaceMemberMutationClient(
-      submittedScope,
-    ).addWorkspaceMemberForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    const member = await desktopWorkspaceMemberMutationOperationsV2.addWorkspaceMember({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: submittedScope.workspaceId,
+      },
+      workspaceId: submittedScope.workspaceId,
       userId,
       role,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     assertWorkspaceMemberMutationScope(submittedScope);
     updateDataset((current) => ({
       ...current,
@@ -3735,16 +3728,18 @@ export function App() {
     signal: AbortSignal,
   ): Promise<WorkspaceMemberSummary> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    const member = await workspaceMemberMutationClient(
-      submittedScope,
-    ).updateWorkspaceMemberRoleForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    const member = await desktopWorkspaceMemberMutationOperationsV2.updateWorkspaceMemberRole({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: submittedScope.workspaceId,
+      },
+      workspaceId: submittedScope.workspaceId,
       userId,
       role,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     assertWorkspaceMemberMutationScope(submittedScope);
     updateDataset((current) => ({
       ...current,
@@ -3763,15 +3758,17 @@ export function App() {
     signal: AbortSignal,
   ): Promise<void> => {
     assertWorkspaceMemberMutationScope(submittedScope);
-    await workspaceMemberMutationClient(
-      submittedScope,
-    ).removeWorkspaceMemberForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    await desktopWorkspaceMemberMutationOperationsV2.removeWorkspaceMember({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: submittedScope.workspaceId,
+      },
+      workspaceId: submittedScope.workspaceId,
       userId,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     assertWorkspaceMemberMutationScope(submittedScope);
     updateDataset((current) => ({
       ...current,
