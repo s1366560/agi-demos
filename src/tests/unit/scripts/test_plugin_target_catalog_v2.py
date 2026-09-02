@@ -44,6 +44,7 @@ _EXPECTED_TARGET_MODULES = {
     "desktop-renderer": frozenset(
         {
             "builtin://memstack/desktop/artifact-content-authority",
+            "builtin://memstack/desktop/automation-authority",
             "builtin://memstack/desktop/conversation-config-authority",
             "builtin://memstack/desktop/conversation-lifecycle-authority",
             "builtin://memstack/desktop/hitl-response-authority",
@@ -202,7 +203,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 355
+    assert len(entries) == 356
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",

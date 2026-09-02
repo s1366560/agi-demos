@@ -25,6 +25,9 @@ const {
 const { desktopArtifactContentAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopArtifactContentAuthorityModuleV2.js',
 );
+const { desktopAutomationAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopAutomationAuthorityModuleV2.js',
+);
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
 );
@@ -92,6 +95,7 @@ function rendererDefinitions() {
   return [
     ...createDesktopRendererDefinitionsV2(),
     desktopArtifactContentAuthorityDefinitionV2,
+    desktopAutomationAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,
     desktopConversationConfigAuthorityDefinitionV2,

@@ -94,7 +94,7 @@ test('failed capability client publication keeps the last-good binding', () => {
 
 test('App consumes the published V2 workbench capability client', () => {
   assert.match(appSource, /desktopWorkbenchCapabilityClientProviderV2\.publish\(\{/u);
-  assert.match(appSource, /automationApi:\s*desktopAutomationApiV2\.api/u);
+  assert.match(appSource, /automationApi:\s*desktopAutomationApiV2/u);
   assert.match(
     appSource,
     /useDesktopCapabilitySnapshot\(\s*desktopWorkbenchCapabilityClientV2\.client/u,

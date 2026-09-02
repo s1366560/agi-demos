@@ -64,7 +64,6 @@ import {
   type PendingPasswordChangeAttempt,
 } from './features/auth/forcePasswordChangeModel';
 import { LoginScreen, type WorkspaceSsoPresentation } from './features/auth/LoginScreen';
-import { createDesktopAutomationApiProviderV2 } from './features/automations/desktopAutomationApiProviderV2';
 import {
   createProjectCronJobsRouteBindingProviderV2,
 } from './features/automations/projectCronJobsRouteBindingProviderV2';
@@ -81,6 +80,7 @@ import {
 import {
   createDesktopArtifactContentClientV2,
 } from './plugins/desktopArtifactContentAuthorityModuleV2';
+import { createDesktopAutomationOperationsV2 } from './plugins/desktopAutomationAuthorityModuleV2';
 import { createDesktopConversationLifecycleOperationsV2 } from './plugins/desktopConversationLifecycleAuthorityModuleV2';
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
 import { createDesktopHitlResponseOperationsV2 } from './plugins/desktopHitlResponseAuthorityModuleV2';
@@ -784,10 +784,6 @@ export function App() {
     () => createProjectCronJobsRouteBindingProviderV2(),
     [],
   );
-  const desktopAutomationApiProviderV2 = useMemo(
-    () => createDesktopAutomationApiProviderV2(),
-    [],
-  );
   const desktopWorkbenchCapabilityClientProviderV2 = useMemo(
     () => createDesktopWorkbenchCapabilityClientProviderV2(),
     [],
@@ -797,6 +793,14 @@ export function App() {
   const desktopArtifactClientV2 = useMemo(
     () =>
       createDesktopArtifactContentClientV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+        () => configRef.current,
+      ),
+    [],
+  );
+  const desktopAutomationApiV2 = useMemo(
+    () =>
+      createDesktopAutomationOperationsV2(
         () => desktopPluginMarketplaceGenerationActionsRefV2.current,
         () => configRef.current,
       ),
@@ -1104,10 +1108,6 @@ export function App() {
     navigationRegistry: desktopCanonicalNavigationRegistry,
     routeRegistry: desktopProductionRouteRegistry,
   } = desktopRendererGenerationV2.state;
-  const desktopAutomationApiV2 = useMemo(
-    () => desktopAutomationApiProviderV2.publish({ baseApi: api, config }),
-    [api, config, desktopAutomationApiProviderV2],
-  );
   const desktopSessionArtifactActionClientV2 = useMemo(
     () => desktopSessionArtifactActionClientProviderV2.publish({ config }),
     [config, desktopSessionArtifactActionClientProviderV2],
@@ -1151,13 +1151,13 @@ export function App() {
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
       desktopWorkbenchCapabilityClientProviderV2.publish({
-        automationApi: desktopAutomationApiV2.api,
+        automationApi: desktopAutomationApiV2,
         config,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       }),
     [
       config,
-      desktopAutomationApiV2.api,
+      desktopAutomationApiV2,
       desktopPluginMarketplaceOperationsV2,
       desktopWorkbenchCapabilityClientProviderV2,
     ],
@@ -5840,7 +5840,7 @@ export function App() {
     openSettingsEntry('runtime_connection');
   };
   projectCronJobsRouteBindingProviderV2.publish({
-    api: desktopAutomationApiV2.api,
+    api: desktopAutomationApiV2,
     scope: Object.freeze({
       tenantId: config.tenantId,
       projectId: config.projectId,

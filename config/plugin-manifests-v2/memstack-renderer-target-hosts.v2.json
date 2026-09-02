@@ -353,6 +353,37 @@
       "contract_digest": "sha256:3916579a46edffd5aca3080beea0f8c3be859f40a57113b4b075cc12fdb43c04"
     },
     {
+      "module_ref": "builtin://memstack/desktop/automation-authority",
+      "entrypoint": "applyDesktopAutomationAuthorityV2",
+      "artifact": {
+        "digest": "sha256:da8faced811d629018735ca6896369fabbf906c91c2de0ab856850998477f92d",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopAutomationAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.automation-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-client", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:04ffffd3ce3f7a25be14d7583324a3c0f31874597b09b47235df321e55072528"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/new-task-flow-authority",
       "entrypoint": "applyDesktopNewTaskFlowAuthorityV2",
       "artifact": {

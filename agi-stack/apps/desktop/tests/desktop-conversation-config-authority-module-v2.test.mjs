@@ -8,6 +8,9 @@ const require = createRequire(import.meta.url);
 const { desktopArtifactContentAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopArtifactContentAuthorityModuleV2.js',
 );
+const { desktopAutomationAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopAutomationAuthorityModuleV2.js',
+);
 const { desktopNewTaskFlowAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopNewTaskFlowAuthorityModuleV2.js',
 );
@@ -97,6 +100,7 @@ function rendererDefinitions() {
   return [
     ...createDesktopRendererDefinitionsV2(),
     desktopArtifactContentAuthorityDefinitionV2,
+    desktopAutomationAuthorityDefinitionV2,
     desktopNewTaskFlowAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
