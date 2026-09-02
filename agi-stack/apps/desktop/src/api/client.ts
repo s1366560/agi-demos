@@ -1714,7 +1714,11 @@ export class DesktopApiClient {
     );
   }
 
-  async createRunInput(runId: string, input: CreateRunInputRequest): Promise<RunInputAck> {
+  async createRunInput(
+    runId: string,
+    input: CreateRunInputRequest,
+    signal?: AbortSignal,
+  ): Promise<RunInputAck> {
     return this.request<RunInputAck>(
       `/api/v1/agent/runs/${encodeURIComponent(runId)}/inputs`,
       {
@@ -1728,32 +1732,40 @@ export class DesktopApiClient {
           references: input.references,
           context_items: input.contextItems,
         },
+        signal,
       },
     );
   }
 
-  async listRunInputs(runId: string): Promise<{
+  async listRunInputs(runId: string, signal?: AbortSignal): Promise<{
     run_id: string;
     run_revision: number;
     inputs: DesktopRunInput[];
     total_count: number;
   }> {
-    return this.request(`/api/v1/agent/runs/${encodeURIComponent(runId)}/inputs`);
+    return this.request(`/api/v1/agent/runs/${encodeURIComponent(runId)}/inputs`, { signal });
   }
 
   async promoteRunInput(
+    runId: string,
     inputId: string,
     expectedSourceRunRevision: number,
     idempotencyKey: string,
+    signal?: AbortSignal,
   ): Promise<PromoteRunInputResponse> {
+    const path =
+      this.config.mode === 'cloud'
+        ? `/api/v1/agent/runs/${encodeURIComponent(runId)}/inputs/${encodeURIComponent(inputId)}/promote`
+        : `/api/v1/agent/run-inputs/${encodeURIComponent(inputId)}/promote-to-plan`;
     return this.request<PromoteRunInputResponse>(
-      `/api/v1/agent/run-inputs/${encodeURIComponent(inputId)}/promote-to-plan`,
+      path,
       {
         method: 'POST',
         body: {
           expected_source_run_revision: expectedSourceRunRevision,
           idempotency_key: idempotencyKey,
         },
+        signal,
       },
     );
   }

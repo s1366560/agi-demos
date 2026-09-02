@@ -127,6 +127,8 @@ function loadBootstrap() {
 function rendererDefinitions() {
   return [
     ...createDesktopRendererDefinitionsV2(),
+    require(COMPILED_ROOT + '/src/plugins/desktopSessionRunInputAuthorityModuleV2.js')
+      .desktopSessionRunInputAuthorityDefinitionV2,
     desktopArtifactContentAuthorityDefinitionV2,
     desktopAutomationAuthorityDefinitionV2,
     desktopNewTaskFlowAuthorityDefinitionV2,

@@ -41,10 +41,7 @@ import {
 import type { CloudSessionProjection } from './api/cloudSessionProjectionClient';
 import { useResizablePanelWidth } from './components/ResizeHandle';
 import type { RunChangeScope } from './features/agent-authority/agentAuthorityTypes';
-import {
-  desktopChangeSnapshotFromCloud,
-  desktopRunInputFromCloud,
-} from './features/agent-authority/agentAuthorityProjection';
+import { desktopChangeSnapshotFromCloud } from './features/agent-authority/agentAuthorityProjection';
 import {
   createDesktopAgentAuthorityProviderV2,
 } from './features/agent-authority/desktopAgentAuthorityProviderV2';
@@ -101,6 +98,7 @@ import {
 import { createDesktopSessionProjectionOperationsV2 } from './plugins/desktopSessionProjectionAuthorityModuleV2';
 import { createDesktopSessionRunControlOperationsV2 } from './plugins/desktopSessionRunControlAuthorityModuleV2';
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
+import { createDesktopSessionRunInputOperationsV2 } from './plugins/desktopSessionRunInputAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import {
@@ -206,9 +204,6 @@ import {
   artifactVersionActions,
   type ArtifactVersionAction,
 } from './features/session/sessionArtifactModel';
-import {
-  createDesktopSessionRunInputClientProviderV2,
-} from './features/session/desktopSessionRunInputClientProviderV2';
 import {
   chatWorkflowTargetForReviewTab,
   defaultSessionCanvasTab,
@@ -962,6 +957,13 @@ export function App() {
       ),
     [],
   );
+  const desktopSessionRunInputOperationsV2 = useMemo(
+    () =>
+      createDesktopSessionRunInputOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopAgentAuthorityProviderV2 = useMemo(
     () => createDesktopAgentAuthorityProviderV2(),
     [],
@@ -983,10 +985,6 @@ export function App() {
   );
   const workspaceCollaborationClientProviderV2 = useMemo(
     () => createWorkspaceCollaborationClientProviderV2(),
-    [],
-  );
-  const desktopSessionRunInputClientProviderV2 = useMemo(
-    () => createDesktopSessionRunInputClientProviderV2(),
     [],
   );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
@@ -1150,10 +1148,6 @@ export function App() {
     navigationRegistry: desktopCanonicalNavigationRegistry,
     routeRegistry: desktopProductionRouteRegistry,
   } = desktopRendererGenerationV2.state;
-  const desktopSessionRunInputClientV2 = useMemo(
-    () => desktopSessionRunInputClientProviderV2.publish({ config }),
-    [config, desktopSessionRunInputClientProviderV2],
-  );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
       desktopWorkbenchCapabilityClientProviderV2.publish({
@@ -4397,21 +4391,7 @@ export function App() {
   const runInputDeliveryOptions = useMemo(() => {
     if (!currentArtifactRun) return [];
     const options: RunInputDelivery[] = [];
-    if (config.mode === 'cloud') {
-      if (
-        !activityAuthorityAdapter.client ||
-        !activityAuthorityScope ||
-        !activityAuthorityAdapter.allowedActions.includes('create_run_input')
-      ) {
-        return options;
-      }
-      if (currentArtifactRun.status === 'running') options.push('steer_now');
-      if (currentArtifactRun.status === 'queued' || currentArtifactRun.status === 'running') {
-        options.push('queue_next');
-      }
-      return options;
-    }
-    if (!localRuntimeMode) return options;
+    if (config.mode === 'local' && !localRuntimeMode) return options;
     if (
       sessionProjection?.capabilities.canSteerNow &&
       sessionProjection.capabilities.allowedActions.includes('steer_now')
@@ -4426,8 +4406,6 @@ export function App() {
     }
     return options;
   }, [
-    activityAuthorityAdapter,
-    activityAuthorityScope,
     config.mode,
     currentArtifactRun,
     localRuntimeMode,
@@ -4546,37 +4524,30 @@ export function App() {
   }, [loadRunChanges]);
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     const requestConfig = configRef.current;
     if (
       !currentArtifactRun ||
-      (requestConfig.mode === 'local' && !localRuntimeMode) ||
-      (requestConfig.mode === 'cloud' &&
-        (!activityAuthorityAdapter.client || !activityAuthorityScope))
+      !scopedConversation ||
+      (requestConfig.mode === 'local' && !localRuntimeMode)
     ) {
       setRunInputs([]);
       setRunInputsLoading(false);
       setRunInputsError(null);
       return () => {
         active = false;
+        controller.abort();
       };
     }
     setRunInputsLoading(true);
     setRunInputsError(null);
     const requestRunInputs = async (): Promise<DesktopRunInput[]> => {
-      if (
-        requestConfig.mode === 'cloud' &&
-        activityAuthorityAdapter.client &&
-        activityAuthorityScope
-      ) {
-        const response = await activityAuthorityAdapter.client.listRunInputs(
-          activityAuthorityScope,
-          currentArtifactRun.id,
-        );
-        return response.inputs.map(desktopRunInputFromCloud);
-      }
-      const response = await desktopSessionRunInputClientV2
-        .bindOperation(requestConfig)
-        .listRunInputs(currentArtifactRun.id);
+      const response = await desktopSessionRunInputOperationsV2.listRunInputs({
+        config: requestConfig,
+        conversation: scopedConversation,
+        runId: currentArtifactRun.id,
+        signal: controller.signal,
+      });
       return response.inputs;
     };
     void requestRunInputs()
@@ -4593,15 +4564,15 @@ export function App() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [
-    activityAuthorityAdapter,
-    activityAuthorityScope,
     config.apiBaseUrl,
     config.mode,
     currentArtifactRun,
-    desktopSessionRunInputClientV2,
+    desktopSessionRunInputOperationsV2,
     localRuntimeMode,
+    scopedConversation,
   ]);
   useEffect(() => {
     setRunInputDelivery((current) =>
@@ -4620,47 +4591,29 @@ export function App() {
   const promoteQueuedRunInput = useCallback(
     async (input: DesktopRunInput) => {
       const requestConfig = configRef.current;
-      if (!currentArtifactRun || currentArtifactRun.id !== input.run_id) {
+      if (
+        !currentArtifactRun ||
+        currentArtifactRun.id !== input.run_id ||
+        !selectedConversation
+      ) {
         setError(t('session.queueSourceRunUnavailable'));
         return;
       }
       setPromotingRunInputId(input.id);
       setError(null);
       try {
-        if (requestConfig.mode === 'cloud') {
-          if (!activityAuthorityAdapter.client || !activityAuthorityScope) {
-            throw new Error('cloud_run_input_authority_scope_unavailable');
-          }
-          const outcome = await activityAuthorityAdapter.client.promoteRunInput(
-            activityAuthorityScope,
-            currentArtifactRun.id,
-            input.id,
-            {
-              expected_source_run_revision: currentArtifactRun.revision,
-              idempotency_key: `desktop-run-input-promotion:${input.id}`,
-            },
-          );
-          setRunInputs((current) =>
-            current.map((candidate) =>
-              candidate.id === outcome.input.id
-                ? desktopRunInputFromCloud(outcome.input)
-                : candidate,
-            ),
-          );
-          invalidateSessionAuthority();
-          setReviewTab('plan');
-          if (selectedConversation) {
-            await loadConversationTimeline(selectedConversation, requestConfig.projectId);
-          }
-          return;
-        }
-        const outcome = await desktopSessionRunInputClientV2
-          .bindOperation(requestConfig)
-          .promoteRunInput(
-            input.id,
-            currentArtifactRun.revision,
-            `desktop-run-input-promotion:${input.id}`,
-          );
+        const outcome = await desktopSessionRunInputOperationsV2.promoteRunInput({
+          config: requestConfig,
+          conversation: selectedConversation,
+          runId: currentArtifactRun.id,
+          inputId: input.id,
+          expectedSourceRunRevision: currentArtifactRun.revision,
+          idempotencyKey: `desktop-run-input-promotion:${input.id}`,
+        });
+        const promotedConversation = {
+          ...selectedConversation,
+          ...outcome.conversation,
+        };
         invalidateSessionAuthority();
         setRunInputs((current) =>
           current.map((candidate) =>
@@ -4669,7 +4622,10 @@ export function App() {
         );
         setAgentConversationSession((current) =>
           current?.conversation.id === outcome.conversation.id
-            ? { ...current, conversation: outcome.conversation }
+            ? {
+                ...current,
+                conversation: { ...current.conversation, ...outcome.conversation },
+              }
             : current,
         );
         setDataset((current) => ({
@@ -4678,13 +4634,15 @@ export function App() {
             Object.entries(current.conversationsByWorkspace).map(([workspaceId, conversations]) => [
               workspaceId,
               conversations.map((conversation) =>
-                conversation.id === outcome.conversation.id ? outcome.conversation : conversation,
+                conversation.id === outcome.conversation.id
+                  ? { ...conversation, ...outcome.conversation }
+                  : conversation,
               ),
             ]),
           ),
         }));
         setReviewTab('plan');
-        await loadConversationTimeline(outcome.conversation, requestConfig.projectId);
+        await loadConversationTimeline(promotedConversation, requestConfig.projectId);
       } catch (caught) {
         setError(formatConnectionError(caught, requestConfig.apiBaseUrl));
       } finally {
@@ -4692,10 +4650,8 @@ export function App() {
       }
     },
     [
-      activityAuthorityAdapter,
-      activityAuthorityScope,
       currentArtifactRun,
-      desktopSessionRunInputClientV2,
+      desktopSessionRunInputOperationsV2,
       invalidateSessionAuthority,
       loadConversationTimeline,
       selectedConversation,
@@ -5622,8 +5578,6 @@ export function App() {
     api,
     applySectionSideEffects,
     auth,
-    activityAuthorityAdapter,
-    activityAuthorityScope,
     canManageWorkspacePolicy,
     commitRuntimeConfig,
     config,
@@ -5639,7 +5593,7 @@ export function App() {
     localRuntimeMode,
     newThreadWorkspaces,
     newThreadCreationClientV2: desktopNewThreadCreationOperationsV2,
-    sessionRunInputClientV2: desktopSessionRunInputClientV2,
+    sessionRunInputOperationsV2: desktopSessionRunInputOperationsV2,
     pendingNewTaskAgentTurnsRef,
     permissionPreset,
     resetConversationTimeline,

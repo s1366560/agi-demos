@@ -2738,7 +2738,7 @@ test('run changes and structured inputs preserve snapshot, revision, and deliver
       ],
     });
     await client.listRunInputs('run/1');
-    await client.promoteRunInput('input/1', 8, 'promote-input-1');
+    await client.promoteRunInput('run/1', 'input/1', 8, 'promote-input-1');
 
     assert.equal(
       String(calls[0].input),

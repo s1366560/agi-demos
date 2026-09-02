@@ -1,8 +1,5 @@
 import { useI18n } from '../i18n';
 import {
-  desktopRunInputFromCloud,
-} from '../features/agent-authority/agentAuthorityProjection';
-import {
   composerAgentExecutionContext,
   workspaceMessageRequiresDefaultAgentLaunch,
 } from '../features/chat/chatComposerModel';
@@ -50,10 +47,8 @@ export function useConversationMessaging(params: AgentConversationParams) {
     sessionChatDisabledReason,
     localRuntimeMode,
     api,
-    sessionRunInputClientV2,
+    sessionRunInputOperationsV2,
     socket,
-    activityAuthorityAdapter,
-    activityAuthorityScope,
     setDataset,
     setError,
     setSending,
@@ -219,13 +214,7 @@ export function useConversationMessaging(params: AgentConversationParams) {
       sessionProjection.capabilities.allowedActions.includes('send_message'),
     );
     const canSendRunInput = Boolean(
-      (localRuntimeMode ||
-        (config.mode === 'cloud' &&
-          activityAuthorityAdapter.client !== null &&
-          activityAuthorityAdapter.allowedActions.includes(
-            'create_run_input',
-          ) &&
-          activityAuthorityScope !== undefined)) &&
+      runInputDeliveryOptions.length > 0 &&
       currentArtifactRun &&
       selectedConversation?.id === currentArtifactRun.conversation_id &&
       (currentArtifactRun.status === 'queued' ||
@@ -285,59 +274,28 @@ export function useConversationMessaging(params: AgentConversationParams) {
         }
         const request = runInputRequestRef.current;
         const requestConfig = configRef.current;
-        let acknowledgementInput: DesktopRunInput;
-        let acknowledgementConversationId: string;
-        let acknowledgementMessageId: string;
-        let acknowledgementDeliveryMode: RunInputDelivery;
-        let acknowledgementQueuePosition: number | null | undefined;
-        if (requestConfig.mode === 'cloud') {
-          if (!activityAuthorityAdapter.client || !activityAuthorityScope) {
-            throw new Error('cloud_run_input_authority_scope_unavailable');
-          }
-          const acknowledgement =
-            await activityAuthorityAdapter.client.createRunInput(
-              activityAuthorityScope,
-              currentArtifactRun.id,
-              {
-                expected_run_revision: currentArtifactRun.revision,
-                message: content,
-                message_id: request.messageId,
-                idempotency_key: request.idempotencyKey,
-                delivery: requestedDelivery,
-                references: outgoingReferences.map((reference) => ({
-                  ...reference,
-                })),
-                context_items: contextItems.map((item) => ({
-                  ...item,
-                  metadata: item.metadata ? { ...item.metadata } : null,
-                })),
-              },
-            );
-          acknowledgementInput = desktopRunInputFromCloud(
-            acknowledgement.input,
-          );
-          acknowledgementConversationId = acknowledgement.conversation_id;
-          acknowledgementMessageId = acknowledgement.message_id;
-          acknowledgementDeliveryMode = acknowledgement.delivery_mode;
-          acknowledgementQueuePosition = acknowledgement.queue_position;
-        } else {
-          const acknowledgement = await sessionRunInputClientV2
-            .bindOperation(requestConfig)
-            .createRunInput(currentArtifactRun.id, {
-              expectedRunRevision: currentArtifactRun.revision,
-              message: content,
-              messageId: request.messageId,
-              idempotencyKey: request.idempotencyKey,
-              delivery: requestedDelivery,
-              references: outgoingReferences,
-              contextItems,
-            });
-          acknowledgementInput = acknowledgement.input;
-          acknowledgementConversationId = acknowledgement.conversation_id;
-          acknowledgementMessageId = acknowledgement.message_id;
-          acknowledgementDeliveryMode = acknowledgement.delivery_mode;
-          acknowledgementQueuePosition = acknowledgement.queue_position;
+        if (!selectedConversation) {
+          throw new Error('session_run_input_conversation_unavailable');
         }
+        const acknowledgement = await sessionRunInputOperationsV2.createRunInput({
+          config: requestConfig,
+          conversation: selectedConversation,
+          runId: currentArtifactRun.id,
+          request: {
+            expectedRunRevision: currentArtifactRun.revision,
+            message: content,
+            messageId: request.messageId,
+            idempotencyKey: request.idempotencyKey,
+            delivery: requestedDelivery,
+            references: outgoingReferences,
+            contextItems,
+          },
+        });
+        const acknowledgementInput: DesktopRunInput = acknowledgement.input;
+        const acknowledgementConversationId = acknowledgement.conversation_id;
+        const acknowledgementMessageId = acknowledgement.message_id;
+        const acknowledgementDeliveryMode: RunInputDelivery = acknowledgement.delivery_mode;
+        const acknowledgementQueuePosition = acknowledgement.queue_position;
         onWorkspaceMessageSaved?.();
         if (!referencesOverride) setRunInputReferences([]);
         setRunInputs((current) =>

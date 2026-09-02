@@ -7,16 +7,11 @@ import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   parseActivityReadState,
-  parsePromoteRunInputResponse,
   parseProjectMyWorkResponse,
-  parseRunInputAck,
-  parseRunInputListResponse,
   parseRunChanges,
   parseRunSummary,
   requireActivityReadUpdateRequest,
   requireCloudAuthorityScope,
-  requireCreateRunInputRequest,
-  requirePromoteRunInputRequest,
   requireRunChangesOptions,
 } from './agentAuthorityContract';
 import { createLocalStorageActivityReadRetryStore } from './activityReadRetryStore';
@@ -40,9 +35,6 @@ const CLOUD_ALLOWED_ACTIONS: readonly DesktopAgentAuthorityAction[] = Object.fre
   'write_activity',
   'review_run_summary',
   'review_run_changes',
-  'create_run_input',
-  'list_run_inputs',
-  'promote_run_input',
 ] as const);
 const LOCAL_ACTIVITY_ALLOWED_ACTIONS: readonly DesktopAgentAuthorityAction[] =
   Object.freeze(['read_activity', 'write_activity']);
@@ -185,70 +177,6 @@ function createCloudAgentAuthorityClient(
         { signal: currentRequest.signal },
       );
       return parseRunChanges(payload, currentRunId, currentRequest);
-    },
-    async createRunInput(scope, runId, request, requestOptions) {
-      const currentScope = requireRuntimeScope(runtimeConfig, scope);
-      const currentRunId = requireIdentifier(
-        runId,
-        'cloud_run_input_run_id_invalid',
-      );
-      const currentRequest = requireCreateRunInputRequest(request);
-      const payload = await requestJson(
-        runtimeConfig,
-        fetchImpl,
-        runPath(currentRunId, '/inputs'),
-        {
-          method: 'POST',
-          body: currentRequest,
-          signal: requestOptions?.signal,
-        },
-      );
-      return parseRunInputAck(payload, currentRunId, currentRequest);
-    },
-    async listRunInputs(scope, runId, requestOptions) {
-      requireRuntimeScope(runtimeConfig, scope);
-      const currentRunId = requireIdentifier(
-        runId,
-        'cloud_run_input_run_id_invalid',
-      );
-      const payload = await requestJson(
-        runtimeConfig,
-        fetchImpl,
-        runPath(currentRunId, '/inputs'),
-        { signal: requestOptions?.signal },
-      );
-      return parseRunInputListResponse(payload, currentRunId);
-    },
-    async promoteRunInput(scope, runId, inputId, request, requestOptions) {
-      const currentScope = requireRuntimeScope(runtimeConfig, scope);
-      const currentRunId = requireIdentifier(
-        runId,
-        'cloud_run_input_run_id_invalid',
-      );
-      const currentInputId = requireIdentifier(
-        inputId,
-        'cloud_run_input_id_invalid',
-      );
-      const currentRequest = requirePromoteRunInputRequest(request);
-      const payload = await requestJson(
-        runtimeConfig,
-        fetchImpl,
-        runPath(
-          currentRunId,
-          `/inputs/${encodeURIComponent(currentInputId)}/promote`,
-        ),
-        {
-          method: 'POST',
-          body: currentRequest,
-          signal: requestOptions?.signal,
-        },
-      );
-      return parsePromoteRunInputResponse(
-        payload,
-        currentScope,
-        currentRunId,
-        currentRequest,
-      );
     },
   };
   return Object.freeze(client);
