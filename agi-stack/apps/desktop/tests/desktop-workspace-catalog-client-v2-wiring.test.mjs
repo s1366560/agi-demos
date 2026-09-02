@@ -48,7 +48,7 @@ test("runtime refresh pins each project workspace catalog read to one generation
   assert.doesNotMatch(catalogLoader, /new DesktopApiClient\(/u);
   assert.match(
     refresh,
-    /desktopWorkspaceAutonomyAttentionClientV2,[\s\S]*?desktopWorkspaceCatalogOperationsV2,[\s\S]*?desktopWorkspaceConversationCatalogOperationsV2,/u,
+    /desktopWorkspaceAutonomyAttentionOperationsV2,[\s\S]*?desktopWorkspaceCatalogOperationsV2,[\s\S]*?desktopWorkspaceConversationCatalogOperationsV2,/u,
   );
 });
 

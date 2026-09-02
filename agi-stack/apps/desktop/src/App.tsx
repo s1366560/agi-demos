@@ -107,6 +107,9 @@ import {
   createDesktopWorkspaceAgentBindingOperationsV2,
 } from './plugins/desktopWorkspaceAgentBindingAuthorityModuleV2';
 import {
+  createDesktopWorkspaceAutonomyAttentionOperationsV2,
+} from './plugins/desktopWorkspaceAutonomyAttentionAuthorityModuleV2';
+import {
   createDesktopWorkspaceMemberMutationOperationsV2,
 } from './plugins/desktopWorkspaceMemberMutationAuthorityModuleV2';
 import {
@@ -346,9 +349,6 @@ import {
   retainOpenWorkspaceAutonomyAttentionResolveAttempts,
   type WorkspaceAutonomyAttentionResolveAttempt,
 } from './features/workspace/autonomyAttentionResolveAttemptModel';
-import {
-  createDesktopWorkspaceAutonomyAttentionClientProviderV2,
-} from './features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2';
 import {
   createDesktopWorkspaceRosterClientProviderV2,
 } from './features/workspace/desktopWorkspaceRosterClientProviderV2';
@@ -856,6 +856,13 @@ export function App() {
       ),
     [],
   );
+  const desktopWorkspaceAutonomyAttentionOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceAutonomyAttentionOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopWorkspaceMemberMutationOperationsV2 = useMemo(
     () =>
       createDesktopWorkspaceMemberMutationOperationsV2(
@@ -954,10 +961,6 @@ export function App() {
   );
   const desktopProductionRouteAuthorityProviderV2 = useMemo(
     () => createDesktopProductionRouteAuthorityProviderV2(),
-    [],
-  );
-  const desktopWorkspaceAutonomyAttentionClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceAutonomyAttentionClientProviderV2(),
     [],
   );
   const desktopWorkspaceRosterClientProviderV2 = useMemo(
@@ -1140,10 +1143,6 @@ export function App() {
   const desktopSessionRunInputClientV2 = useMemo(
     () => desktopSessionRunInputClientProviderV2.publish({ config }),
     [config, desktopSessionRunInputClientProviderV2],
-  );
-  const desktopWorkspaceAutonomyAttentionClientV2 = useMemo(
-    () => desktopWorkspaceAutonomyAttentionClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceAutonomyAttentionClientProviderV2],
   );
   const desktopWorkspaceRosterClientV2 = useMemo(
     () => desktopWorkspaceRosterClientProviderV2.publish({ config }),
@@ -2789,8 +2788,6 @@ export function App() {
         };
         const workspaceRosterClient =
           desktopWorkspaceRosterClientV2.bindOperation(resolvedConfig);
-        const workspaceAutonomyAttentionClient =
-          desktopWorkspaceAutonomyAttentionClientV2.bindOperation(resolvedConfig);
         if (!contextIsCurrent()) return false;
         const autonomyAttentionScopeKey = workspaceAutonomyAttentionScopeKey(resolvedConfig);
         setWorkspaceAutonomyAttentionState({
@@ -2897,7 +2894,10 @@ export function App() {
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAgentBinding>()),
           workspaceId
             ? resolveWorkspaceAuthority(
-                workspaceAutonomyAttentionClient.listWorkspaceAutonomyAttentions(),
+                desktopWorkspaceAutonomyAttentionOperationsV2.listWorkspaceAutonomyAttentions({
+                  config: resolvedConfig,
+                  workspaceId,
+                }),
               )
             : Promise.resolve(unavailableWorkspaceAuthority<WorkspaceAutonomyAttention>()),
           resolvedProjectId
@@ -3114,7 +3114,7 @@ export function App() {
       clearMissingConversationSelection,
       commitRuntimeConfig,
       config,
-      desktopWorkspaceAutonomyAttentionClientV2,
+      desktopWorkspaceAutonomyAttentionOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceConversationCatalogOperationsV2,
       desktopWorkspaceExecutionSnapshotOperationsV2,
@@ -5695,7 +5695,6 @@ export function App() {
     const requestConfig = configRef.current;
     const requestScopeKey = workspaceAutonomyAttentionScopeKey(requestConfig);
     if (!requestConfig.workspaceId.trim()) return;
-    const client = desktopWorkspaceAutonomyAttentionClientV2.bindOperation(requestConfig);
     const requestIsCurrent = () =>
       isSameDesktopRequestScope(requestConfig, configRef.current) &&
       requestScopeKey === workspaceAutonomyAttentionScopeKey(configRef.current);
@@ -5706,8 +5705,18 @@ export function App() {
         : current,
     );
     try {
-      await client.retryWorkspaceAutonomyAttention(attentionId);
-      const attentions = await client.listWorkspaceAutonomyAttentions();
+      const attentions =
+        await desktopWorkspaceAutonomyAttentionOperationsV2.withRetryWorkspaceAutonomyAttention(
+          {
+            config: requestConfig,
+            workspaceId: requestConfig.workspaceId,
+            attentionId,
+          },
+          async (client) => {
+            await client.retryWorkspaceAutonomyAttention(attentionId);
+            return client.listWorkspaceAutonomyAttentions();
+          },
+        );
       if (!requestIsCurrent()) return;
       setWorkspaceAutonomyAttentionState({
         scopeKey: requestScopeKey,
@@ -5731,13 +5740,12 @@ export function App() {
         );
       }
     }
-  }, [desktopWorkspaceAutonomyAttentionClientV2]);
+  }, [desktopWorkspaceAutonomyAttentionOperationsV2]);
   const resolveWorkspaceAutonomyAttention = useCallback(async (attentionId: string) => {
     const requestConfig = configRef.current;
     const requestScopeKey = workspaceAutonomyAttentionScopeKey(requestConfig);
     const requestActorId = authRef.current.user?.user_id.trim() ?? '';
     if (!requestConfig.workspaceId.trim() || !requestActorId) return;
-    const client = desktopWorkspaceAutonomyAttentionClientV2.bindOperation(requestConfig);
     const requestIsCurrent = () =>
       isSameDesktopRequestScope(requestConfig, configRef.current) &&
       requestScopeKey === workspaceAutonomyAttentionScopeKey(configRef.current) &&
@@ -5765,74 +5773,110 @@ export function App() {
       });
       return attentionRemainsOpen;
     };
+    const persistedAttempt = currentWorkspaceAutonomyAttentionResolveAttempt(
+      workspaceAutonomyAttentionResolveAttemptsRef.current,
+      requestScopeKey,
+      requestActorId,
+      attentionId,
+    );
+    const operationIdempotencyKey =
+      persistedAttempt?.idempotencyKey ??
+      `desktop-autonomy-attention-resolve:${globalThis.crypto.randomUUID()}`;
     setResolvingWorkspaceAutonomyAttentionId(attentionId);
     setWorkspaceAutonomyAttentionState((current) =>
       current.scopeKey === requestScopeKey
         ? { ...current, authority: { ...current.authority, error: null } }
         : current,
     );
+    let operationErrorHandled = false;
     try {
-      let attempt = currentWorkspaceAutonomyAttentionResolveAttempt(
-        workspaceAutonomyAttentionResolveAttemptsRef.current,
-        requestScopeKey,
-        requestActorId,
-        attentionId,
-      );
-      if (!attempt) {
-        const expectedRevision = await client.getWorkspaceAuthorityRevision();
-        if (!requestIsCurrent()) return;
-        attempt = resolveWorkspaceAutonomyAttentionAttempt(
-          workspaceAutonomyAttentionResolveAttemptsRef.current,
-          {
-            scopeKey: requestScopeKey,
-            actorId: requestActorId,
-            attentionId,
-            expectedRevision,
-            idempotencyKey: `desktop-autonomy-attention-resolve:${globalThis.crypto.randomUUID()}`,
-          },
-        );
-      }
-      await client.resolveWorkspaceAutonomyAttention(
-        attentionId,
-        attempt.expectedRevision,
-        attempt.idempotencyKey,
-      );
-      const attentions = await client.listWorkspaceAutonomyAttentions();
-      if (!requestIsCurrent()) return;
-      applyCanonicalAttentions(attentions, null);
-    } catch (caught) {
-      if (!requestIsCurrent()) return;
-      const resolveError = formatConnectionError(caught, requestConfig.apiBaseUrl);
-      try {
-        const attentions = await client.listWorkspaceAutonomyAttentions();
-        if (!requestIsCurrent()) return;
-        const attentionRemainsOpen = attentions.some(
-          (attention) => attention.attention_id === attentionId,
-        );
-        if (!attentionRemainsOpen) {
-          applyCanonicalAttentions(attentions, null);
-          return;
-        }
-        if (caught instanceof DesktopApiError && caught.status === 409) {
-          discardWorkspaceAutonomyAttentionResolveAttempt(
-            workspaceAutonomyAttentionResolveAttemptsRef.current,
-            requestScopeKey,
-            requestActorId,
-            attentionId,
-          );
-        }
-        applyCanonicalAttentions(attentions, resolveError);
-      } catch {
-        if (!requestIsCurrent()) return;
-        setWorkspaceAutonomyAttentionState((current) =>
-          current.scopeKey === requestScopeKey
-            ? {
-                ...current,
-                authority: { ...current.authority, status: 'error', error: resolveError },
+      await desktopWorkspaceAutonomyAttentionOperationsV2.withResolveWorkspaceAutonomyAttention(
+        {
+          config: requestConfig,
+          workspaceId: requestConfig.workspaceId,
+          actorId: requestActorId,
+          attentionId,
+          expectedRevision: persistedAttempt?.expectedRevision ?? null,
+          idempotencyKey: operationIdempotencyKey,
+        },
+        async (client, prepared) => {
+          try {
+            let attempt = persistedAttempt;
+            if (!attempt) {
+              const expectedRevision = await client.getWorkspaceAuthorityRevision();
+              if (!requestIsCurrent()) return;
+              attempt = resolveWorkspaceAutonomyAttentionAttempt(
+                workspaceAutonomyAttentionResolveAttemptsRef.current,
+                {
+                  scopeKey: requestScopeKey,
+                  actorId: requestActorId,
+                  attentionId,
+                  expectedRevision,
+                  idempotencyKey: prepared.idempotencyKey,
+                },
+              );
+            }
+            await client.resolveWorkspaceAutonomyAttention(
+              attentionId,
+              attempt.expectedRevision,
+              attempt.idempotencyKey,
+            );
+            const attentions = await client.listWorkspaceAutonomyAttentions();
+            if (!requestIsCurrent()) return;
+            applyCanonicalAttentions(attentions, null);
+          } catch (caught) {
+            if (!requestIsCurrent()) throw caught;
+            const resolveError = formatConnectionError(caught, requestConfig.apiBaseUrl);
+            try {
+              const attentions = await client.listWorkspaceAutonomyAttentions();
+              if (!requestIsCurrent()) throw caught;
+              const attentionRemainsOpen = attentions.some(
+                (attention) => attention.attention_id === attentionId,
+              );
+              if (!attentionRemainsOpen) {
+                applyCanonicalAttentions(attentions, null);
+              } else {
+                if (caught instanceof DesktopApiError && caught.status === 409) {
+                  discardWorkspaceAutonomyAttentionResolveAttempt(
+                    workspaceAutonomyAttentionResolveAttemptsRef.current,
+                    requestScopeKey,
+                    requestActorId,
+                    attentionId,
+                  );
+                }
+                applyCanonicalAttentions(attentions, resolveError);
               }
-            : current,
-        );
-      }
+            } catch {
+              if (!requestIsCurrent()) throw caught;
+              setWorkspaceAutonomyAttentionState((current) =>
+                current.scopeKey === requestScopeKey
+                  ? {
+                      ...current,
+                      authority: {
+                        ...current.authority,
+                        status: 'error',
+                        error: resolveError,
+                      },
+                    }
+                  : current,
+              );
+            }
+            operationErrorHandled = true;
+            throw caught;
+          }
+        },
+      );
+    } catch (caught) {
+      if (!requestIsCurrent() || operationErrorHandled) return;
+      const resolveError = formatConnectionError(caught, requestConfig.apiBaseUrl);
+      setWorkspaceAutonomyAttentionState((current) =>
+        current.scopeKey === requestScopeKey
+          ? {
+              ...current,
+              authority: { ...current.authority, status: 'error', error: resolveError },
+            }
+          : current,
+      );
     } finally {
       if (requestIsCurrent()) {
         setResolvingWorkspaceAutonomyAttentionId((current) =>
@@ -5840,7 +5884,7 @@ export function App() {
         );
       }
     }
-  }, [desktopWorkspaceAutonomyAttentionClientV2]);
+  }, [desktopWorkspaceAutonomyAttentionOperationsV2]);
   const openProfileWorkspaceSettings = () => openSettingsEntry('profile_workspace_switch');
 
   const openConnectionSettings = () => {

@@ -46,6 +46,9 @@ const {
 const { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceAgentBindingAuthorityModuleV2.js',
 );
+const { desktopWorkspaceAutonomyAttentionAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceAutonomyAttentionAuthorityModuleV2.js',
+);
 const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
@@ -137,6 +140,7 @@ function rendererDefinitions() {
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopWorkspaceCatalogAuthorityDefinitionV2,
     desktopWorkspaceAgentBindingAuthorityDefinitionV2,
+    desktopWorkspaceAutonomyAttentionAuthorityDefinitionV2,
     desktopWorkspaceMemberMutationAuthorityDefinitionV2,
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,

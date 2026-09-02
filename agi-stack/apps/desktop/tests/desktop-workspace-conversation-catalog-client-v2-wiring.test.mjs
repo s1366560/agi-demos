@@ -62,7 +62,7 @@ test('runtime refresh pins each catalog target to one submitted project generati
   assert.doesNotMatch(conversationLoader, /new DesktopApiClient\(/u);
   assert.match(
     refresh,
-    /desktopWorkspaceAutonomyAttentionClientV2,[\s\S]*?desktopWorkspaceConversationCatalogOperationsV2,[\s\S]*?listMyWorkForConfig/u,
+    /desktopWorkspaceAutonomyAttentionOperationsV2,[\s\S]*?desktopWorkspaceConversationCatalogOperationsV2,[\s\S]*?listMyWorkForConfig/u,
   );
 });
 

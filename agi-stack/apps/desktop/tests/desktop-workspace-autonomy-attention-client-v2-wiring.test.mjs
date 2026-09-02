@@ -8,71 +8,83 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const provider = source(
-  'src/features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2.ts',
+const authorityModule = source(
+  'src/plugins/desktopWorkspaceAutonomyAttentionAuthorityModuleV2.ts',
 );
 const lifecycleProvider = source(
   'src/features/workspace/desktopWorkspaceLifecycleClientProviderV2.ts',
 );
+const legacyProviderPath = new URL(
+  '../src/features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2.ts',
+  import.meta.url,
+);
 const testTypeScriptConfig = source('tsconfig.test.json');
 
-test('App publishes one stable V2 Workspace Autonomy Attention client Provider', () => {
-  assert.match(app, /createDesktopWorkspaceAutonomyAttentionClientProviderV2/u);
+test('App owns one stable generation-bound autonomy-attention operation set', () => {
+  assert.match(app, /createDesktopWorkspaceAutonomyAttentionOperationsV2/u);
   assert.match(
     app,
-    /const desktopWorkspaceAutonomyAttentionClientProviderV2 = useMemo\([\s\S]*?createDesktopWorkspaceAutonomyAttentionClientProviderV2\(\)[\s\S]*?\[\],[\s\S]*?\);/u,
+    /const desktopWorkspaceAutonomyAttentionOperationsV2 = useMemo\([\s\S]*?createDesktopWorkspaceAutonomyAttentionOperationsV2\([\s\S]*?desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*?\[\],[\s\S]*?\);/u,
   );
-  assert.match(
-    app,
-    /desktopWorkspaceAutonomyAttentionClientProviderV2\.publish\(\{ config \}\)/u,
-  );
+  assert.doesNotMatch(app, /createDesktopWorkspaceAutonomyAttentionClientProviderV2/u);
+  assert.doesNotMatch(app, /desktopWorkspaceAutonomyAttentionClientProviderV2\.publish/u);
+  assert.equal(existsSync(legacyProviderPath), false);
 });
 
-test('runtime refresh binds the initial attention read to the resolved immutable scope', () => {
+test('runtime refresh resolves the initial attention read through the immutable generation', () => {
   const refresh = refreshRuntimeSource(app);
 
   assert.match(
     refresh,
-    /const workspaceAutonomyAttentionClient =\s*desktopWorkspaceAutonomyAttentionClientV2\.bindOperation\(resolvedConfig\);/u,
+    /desktopWorkspaceAutonomyAttentionOperationsV2\.listWorkspaceAutonomyAttentions\(\{[\s\S]*?config: resolvedConfig,[\s\S]*?workspaceId,/u,
   );
-  assert.match(
+  assert.doesNotMatch(
     refresh,
-    /resolveWorkspaceAuthority\(\s*workspaceAutonomyAttentionClient\.listWorkspaceAutonomyAttentions\(\),?\s*\)/u,
+    /workspaceAutonomyAttentionClient|desktopWorkspaceAutonomyAttention\w*\.bindOperation/u,
   );
-  assert.doesNotMatch(refresh, /scopedClient\.listWorkspaceAutonomyAttentions/u);
 });
 
-test('retry binds mutation and canonical reread to one submitted-scope operation client', () => {
+test('retry pins mutation and canonical reread inside one V2 operation boundary', () => {
   const retry = asyncArrowFunctionSource(app, 'retryWorkspaceAutonomyAttention');
 
   assert.match(retry, /const requestConfig = configRef\.current;/u);
   assert.match(
     retry,
-    /const client = desktopWorkspaceAutonomyAttentionClientV2\.bindOperation\(requestConfig\);/u,
+    /desktopWorkspaceAutonomyAttentionOperationsV2\.withRetryWorkspaceAutonomyAttention\(/u,
   );
+  assert.match(retry, /config: requestConfig,/u);
+  assert.match(retry, /workspaceId: requestConfig\.workspaceId,/u);
+  assert.match(retry, /attentionId,/u);
   assert.match(retry, /await client\.retryWorkspaceAutonomyAttention\(attentionId\);/u);
-  assert.match(retry, /await client\.listWorkspaceAutonomyAttentions\(\);/u);
+  assert.match(retry, /return client\.listWorkspaceAutonomyAttentions\(\);/u);
   assert.match(retry, /isSameDesktopRequestScope\(requestConfig, configRef\.current\)/u);
-  assert.doesNotMatch(retry, /new DesktopApiClient\(/u);
+  assert.doesNotMatch(retry, /new DesktopApiClient\(|bindOperation/u);
 });
 
-test('resolve keeps revision, idempotency, 409 recovery and reread on one operation client', () => {
+test('resolve keeps revision, idempotency, recovery and rereads on one pinned generation', () => {
   const resolve = asyncArrowFunctionSource(app, 'resolveWorkspaceAutonomyAttention');
 
-  assert.match(resolve, /const requestConfig = configRef\.current;/u);
+  assert.match(resolve, /const persistedAttempt = currentWorkspaceAutonomyAttentionResolveAttempt/u);
   assert.match(
     resolve,
-    /const client = desktopWorkspaceAutonomyAttentionClientV2\.bindOperation\(requestConfig\);/u,
+    /desktop-autonomy-attention-resolve:\$\{globalThis\.crypto\.randomUUID\(\)\}/u,
   );
-  assert.equal(
-    countMatches(
-      resolve,
-      /desktopWorkspaceAutonomyAttentionClientV2\.bindOperation\(requestConfig\)/gu,
-    ),
-    1,
+  assert.match(
+    resolve,
+    /desktopWorkspaceAutonomyAttentionOperationsV2\.withResolveWorkspaceAutonomyAttention\(/u,
   );
+  for (const input of [
+    /config: requestConfig,/u,
+    /workspaceId: requestConfig\.workspaceId,/u,
+    /actorId: requestActorId,/u,
+    /attentionId,/u,
+    /expectedRevision: persistedAttempt\?\.expectedRevision \?\? null,/u,
+    /idempotencyKey: operationIdempotencyKey,/u,
+  ]) {
+    assert.match(resolve, input);
+  }
   assert.match(resolve, /await client\.getWorkspaceAuthorityRevision\(\);/u);
-  assert.match(resolve, /desktop-autonomy-attention-resolve:\$\{globalThis\.crypto\.randomUUID\(\)\}/u);
+  assert.match(resolve, /idempotencyKey: prepared\.idempotencyKey,/u);
   assert.match(resolve, /await client\.resolveWorkspaceAutonomyAttention\(/u);
   assert.equal(
     countMatches(resolve, /await client\.listWorkspaceAutonomyAttentions\(\);/gu),
@@ -80,12 +92,20 @@ test('resolve keeps revision, idempotency, 409 recovery and reread on one operat
   );
   assert.match(resolve, /caught instanceof DesktopApiError && caught\.status === 409/u);
   assert.match(resolve, /discardWorkspaceAutonomyAttentionResolveAttempt/u);
-  assert.match(resolve, /applyCanonicalAttentions\(attentions, resolveError\)/u);
-  assert.doesNotMatch(resolve, /new DesktopApiClient\(/u);
+  assert.match(resolve, /operationErrorHandled = true;/u);
+  assert.doesNotMatch(resolve, /new DesktopApiClient\(|bindOperation/u);
 });
 
-test('attention Provider owns exactly four transport methods and no App policy', () => {
+test('authority module owns four transports, project lease and no App state policy', () => {
   assert.match(
+    testTypeScriptConfig,
+    /src\/plugins\/desktopWorkspaceAutonomyAttentionAuthorityModuleV2\.ts/u,
+  );
+  assert.match(
+    testTypeScriptConfig,
+    /src\/plugins\/desktopWorkspaceAutonomyAttentionContractV2\.ts/u,
+  );
+  assert.doesNotMatch(
     testTypeScriptConfig,
     /src\/features\/workspace\/desktopWorkspaceAutonomyAttentionClientProviderV2\.ts/u,
   );
@@ -95,12 +115,14 @@ test('attention Provider owns exactly four transport methods and no App policy',
     'retryWorkspaceAutonomyAttention',
     'resolveWorkspaceAutonomyAttention',
   ]) {
-    assert.match(provider, new RegExp(`${method}:`));
+    assert.match(authorityModule, new RegExp(method));
   }
-  assert.match(provider, /bindOperation/u);
+  assert.match(authorityModule, /acquireServiceOperationLease/u);
+  assert.match(authorityModule, /kind: 'project'/u);
+  assert.match(authorityModule, /new DesktopApiClient\(operationConfig\)/u);
   assert.doesNotMatch(
-    provider,
-    /resolveWorkspaceAutonomyAttentionAttempt|retainOpenWorkspaceAutonomyAttentionResolveAttempts|discardWorkspaceAutonomyAttentionResolveAttempt|randomUUID|DesktopApiError|setWorkspaceAutonomyAttentionState/u,
+    authorityModule,
+    /resolveWorkspaceAutonomyAttentionAttempt|retainOpenWorkspaceAutonomyAttentionResolveAttempts|discardWorkspaceAutonomyAttentionResolveAttempt|randomUUID|setWorkspaceAutonomyAttentionState/u,
   );
   assert.doesNotMatch(
     lifecycleProvider,
