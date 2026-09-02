@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const {
-  createTenantOverviewHttpClient,
+  applyDesktopTenantOverviewAuthorityV2,
+  createDesktopTenantOverviewOperationsV2,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/tenant/tenantOverviewHttpClient.js'
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantOverviewAuthorityModuleV2.js'
 );
 
 const originalFetch = globalThis.fetch;
@@ -51,7 +52,7 @@ test('cloud client validates and projects the authoritative tenant stats contrac
     });
   };
 
-  const client = createTenantOverviewHttpClient(
+  const client = createTenantOverviewClientV2(
     runtimeConfig({ mode: 'cloud', tenantId: 'tenant-1' }),
   );
   const result = await client.load({
@@ -143,7 +144,7 @@ test('local client accepts only the declared degraded sidecar projection', async
       },
     });
 
-  const client = createTenantOverviewHttpClient(
+  const client = createTenantOverviewClientV2(
     runtimeConfig({
       mode: 'local',
       tenantId: 'tenant-local',
@@ -180,13 +181,13 @@ test('client fails closed on runtime scope drift and malformed payloads', async 
       tenant_info: { organization_id: '#TEN-X', plan: 'Free' },
     });
   };
-  const client = createTenantOverviewHttpClient(
+  const client = createTenantOverviewClientV2(
     runtimeConfig({ mode: 'cloud', tenantId: 'tenant-1' }),
   );
 
   await assert.rejects(
     client.load({ authority: 'cloud', tenantId: 'tenant-other' }),
-    /tenant_overview_runtime_scope_mismatch/u,
+    (error) => error?.code === 'desktop_tenant_overview_operation_input_invalid',
   );
   assert.equal(calls, 0);
 
@@ -195,6 +196,35 @@ test('client fails closed on runtime scope drift and malformed payloads', async 
     /cloud_tenant_overview_contract_invalid/u,
   );
 });
+
+function createTenantOverviewClientV2(config) {
+  let service;
+  applyDesktopTenantOverviewAuthorityV2(
+    {
+      provide(_key, candidate) {
+        service = candidate;
+      },
+    },
+    { strategy: 'desktop-api-fetch' },
+  );
+  const operations = createDesktopTenantOverviewOperationsV2(() => ({
+    acquireServiceOperationLease: async () => ({
+      status: 'accepted',
+      digest: 'tenant-overview-test-generation',
+      useService: (operation) => operation(service),
+      release: async () => undefined,
+    }),
+  }));
+  return Object.freeze({
+    async load(scope, options) {
+      return operations.loadTenantOverview({
+        config,
+        scope,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
+  });
+}
 
 function runtimeConfig(overrides) {
   return {

@@ -101,6 +101,7 @@ import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSes
 import { createDesktopSessionRunInputOperationsV2 } from './plugins/desktopSessionRunInputAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
+import { createDesktopTenantOverviewOperationsV2 } from './plugins/desktopTenantOverviewAuthorityModuleV2';
 import {
   createDesktopWorkspaceAgentBindingOperationsV2,
 } from './plugins/desktopWorkspaceAgentBindingAuthorityModuleV2';
@@ -816,6 +817,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantOverviewOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantOverviewOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopConversationConfigOperationsV2 = useMemo(
     () =>
       createDesktopConversationConfigOperationsV2(
@@ -1105,6 +1113,7 @@ export function App() {
       desktopProductionRouteNavigation,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
+      tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceLifecycleOperationsV2,
       projectCronJobsRouteBindingProviderV2,
@@ -1121,6 +1130,7 @@ export function App() {
       desktopPluginMarketplaceOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopTenantCatalogOperationsV2,
+      desktopTenantOverviewOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceLifecycleOperationsV2,
     ],
@@ -1154,11 +1164,13 @@ export function App() {
         automationApi: desktopAutomationApiV2,
         config,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
       }),
     [
       config,
       desktopAutomationApiV2,
       desktopPluginMarketplaceOperationsV2,
+      desktopTenantOverviewOperationsV2,
       desktopWorkbenchCapabilityClientProviderV2,
     ],
   );

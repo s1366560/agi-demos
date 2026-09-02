@@ -42,7 +42,8 @@ import type {
 } from '../runtime/capabilitySnapshot';
 import type { TenantOverviewRouteBinding } from '../tenant/tenantOverviewRouteModule';
 import { createTenantOverviewController } from '../tenant/tenantOverviewController';
-import { createTenantOverviewHttpClient } from '../tenant/tenantOverviewHttpClient';
+import type { TenantOverviewClient } from '../tenant/tenantOverviewClient';
+import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { TenantAnalyticsRouteBinding } from '../tenant/tenantAnalyticsRouteModule';
 import { createTenantAnalyticsController } from '../tenant/tenantAnalyticsController';
 import { createTenantAnalyticsHttpClient } from '../tenant/tenantAnalyticsHttpClient';
@@ -195,6 +196,10 @@ export function createProjectOverviewRouteBindingForRuntime(
 export function createTenantOverviewRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  tenantOverviewOperationsV2: Pick<
+    DesktopTenantOverviewOperationsV2,
+    'loadTenantOverview'
+  >,
 ): TenantOverviewRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_overview_runtime_scope_mismatch');
@@ -203,7 +208,15 @@ export function createTenantOverviewRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createTenantOverviewHttpClient(config);
+  const client: TenantOverviewClient = Object.freeze({
+    async load(requestScope, options) {
+      return tenantOverviewOperationsV2.loadTenantOverview({
+        config,
+        scope: requestScope,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
+  });
   return Object.freeze({
     controller: createTenantOverviewController({
       authority: config.mode,

@@ -977,6 +977,37 @@
         }
       },
       "contract_digest": "sha256:89213cec91a23b4f3cbb6050059ce15af96da798eef093ed5b905da6a623d364"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-overview-authority",
+      "entrypoint": "applyDesktopTenantOverviewAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f245ecee0ed7526a2de020f0c589f23ee65fc32daa1894398b22cb77cbc1b263",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantOverviewAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-overview-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:212f0d67dc5b6077648619866b1939a18a94375db32decae9761a0a838637f98"
     }
   ],
   "permissions": [],

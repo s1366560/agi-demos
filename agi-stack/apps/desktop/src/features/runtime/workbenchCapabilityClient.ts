@@ -94,6 +94,7 @@ import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapabili
 import { loadTenantAgentDashboardCapability } from '../tenant/tenantAgentDashboardCapability';
 import { loadTenantAgentBindingsCapability } from '../tenant/tenantAgentBindingsCapability';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
+import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
 import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
 import { tenantWorkspacesCapability } from '../tenant/tenantWorkspacesCapability';
@@ -145,6 +146,10 @@ type ManagementRouteCapabilityClients = Readonly<
 >;
 
 export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
+  tenantOverviewOperationsV2: Pick<
+    DesktopTenantOverviewOperationsV2,
+    'loadTenantOverview'
+  >;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -244,8 +249,9 @@ const SEARCH_CONTRACT: Readonly<Record<string, SearchCapabilityDeclaration>> = {
 export function createDesktopWorkbenchCapabilityClient(
   automationApi: AutomationCapabilityAuthority,
   config: DesktopRuntimeConfig,
-  options: DesktopWorkbenchCapabilityClientOptions = {},
+  options: DesktopWorkbenchCapabilityClientOptions,
 ): DesktopWorkbenchCapabilityClient {
+  options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
     createManagementRouteClients(
@@ -319,7 +325,11 @@ export function createDesktopWorkbenchCapabilityClient(
         loadAutomationCapabilities(automationApi, config.projectId, signal),
         loadWorkspaceCollaborationCapability(config, signal),
         loadProjectOverviewCapability(config, signal),
-        loadTenantOverviewCapability(config, signal),
+        loadTenantOverviewCapability(
+          config,
+          options.tenantOverviewOperationsV2,
+          signal,
+        ),
         loadTenantAnalyticsCapability(config, signal),
         loadTenantAgentDashboardCapability(config, signal),
         loadTenantAgentBindingsCapability(config, signal),

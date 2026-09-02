@@ -73,7 +73,8 @@
         "agi-stack/apps/desktop/src/features/tenant/tenantOverviewRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant/TenantOverviewPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant/tenantOverviewController.ts",
-        "agi-stack/apps/desktop/src/features/tenant/tenantOverviewHttpClient.ts"
+        "agi-stack/apps/desktop/src/plugins/desktopTenantOverviewAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantOverviewContractV2.ts"
       ],
       "local_status": "partial",
       "local_reason_code": "local_tenant_overview_memory_projection_unavailable",
@@ -83,7 +84,8 @@
         "agi-stack/apps/desktop/src/features/tenant/tenantOverviewRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant/TenantOverviewPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant/tenantOverviewController.ts",
-        "agi-stack/apps/desktop/src/features/tenant/tenantOverviewHttpClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantOverviewAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantOverviewContractV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/tenant_overview.rs"
       ],

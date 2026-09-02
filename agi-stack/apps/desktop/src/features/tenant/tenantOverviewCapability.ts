@@ -4,12 +4,16 @@ import type {
   DesktopCapabilityAvailability,
   DesktopCapabilityScope,
 } from '../runtime/capabilitySnapshot';
-import { createTenantOverviewHttpClient } from './tenantOverviewHttpClient';
+import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 
 const CLOUD_TENANT_OVERVIEW_SERVICE_VERSION = '0.1.0';
 
 export async function loadTenantOverviewCapability(
   config: DesktopRuntimeConfig,
+  tenantOverviewOperationsV2: Pick<
+    DesktopTenantOverviewOperationsV2,
+    'loadTenantOverview'
+  > | undefined,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
   const tenantId = scopeIdentifier(config.tenantId);
@@ -17,13 +21,17 @@ export async function loadTenantOverviewCapability(
   if (!tenantId) {
     return unavailable('tenant_overview_scope_unavailable', scope);
   }
+  if (tenantOverviewOperationsV2 === undefined) {
+    return unavailable('tenant_overview_authority_unavailable', scope);
+  }
 
   try {
     const authority = config.mode === 'local' ? 'local' : 'cloud';
-    const snapshot = await createTenantOverviewHttpClient(config).load(
-      { authority, tenantId },
-      { signal },
-    );
+    const snapshot = await tenantOverviewOperationsV2.loadTenantOverview({
+      config,
+      scope: { authority, tenantId },
+      ...(signal === undefined ? {} : { signal }),
+    });
     if (
       snapshot.allowedActions.length !== 1 ||
       snapshot.allowedActions[0] !== 'view'

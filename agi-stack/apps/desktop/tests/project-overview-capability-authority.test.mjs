@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { createDesktopWorkbenchCapabilityClient } from '/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js';
+import {
+  applyDesktopTenantOverviewAuthorityV2,
+  createDesktopTenantOverviewOperationsV2,
+} from '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantOverviewAuthorityModuleV2.js';
 import { DEFAULT_CONFIG } from '/tmp/agistack-desktop-test-dist/src/types.js';
 
 const automationContract = {
@@ -431,7 +435,28 @@ function createClient(config) {
   return createDesktopWorkbenchCapabilityClient(
     { getAutomationCapabilities: async () => automationContract },
     config,
+    { tenantOverviewOperationsV2: tenantOverviewOperationsV2() },
   );
+}
+
+function tenantOverviewOperationsV2() {
+  let service;
+  applyDesktopTenantOverviewAuthorityV2(
+    {
+      provide: (_key, candidate) => {
+        service = candidate;
+      },
+    },
+    { strategy: 'desktop-api-fetch' },
+  );
+  return createDesktopTenantOverviewOperationsV2(() => ({
+    acquireServiceOperationLease: async () => ({
+      status: 'accepted',
+      digest: 'tenant-overview-capability-test',
+      useService: (operation) => operation(service),
+      release: async () => undefined,
+    }),
+  }));
 }
 
 function cloudConfig() {

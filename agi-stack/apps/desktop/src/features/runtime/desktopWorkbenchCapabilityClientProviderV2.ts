@@ -1,5 +1,6 @@
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import {
   createDesktopWorkbenchCapabilityClient,
   type DesktopWorkbenchCapabilityClient,
@@ -24,6 +25,10 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   pluginMarketplaceOperationsV2: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
     'projectMarketplacePlugins'
+  >;
+  tenantOverviewOperationsV2: Pick<
+    DesktopTenantOverviewOperationsV2,
+    'loadTenantOverview'
   >;
 }>;
 
@@ -65,6 +70,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
   const config = Object.freeze({ ...input.config });
   const client = createDesktopWorkbenchCapabilityClient(input.automationApi, config, {
     pluginMarketplaceOperationsV2: input.pluginMarketplaceOperationsV2,
+    tenantOverviewOperationsV2: input.tenantOverviewOperationsV2,
   });
   return Object.freeze({ client });
 }

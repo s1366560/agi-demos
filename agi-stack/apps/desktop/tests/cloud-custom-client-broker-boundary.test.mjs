@@ -7,7 +7,7 @@ const desktopRoot = new URL('../', import.meta.url);
 const BROKER_BOUND_CLIENTS = [
   'src/features/automations/automationClient.ts',
   'src/features/runtime/workbenchCapabilityClient.ts',
-  'src/features/tenant/tenantOverviewHttpClient.ts',
+  'src/plugins/desktopTenantOverviewAuthorityModuleV2.ts',
   'src/features/tenant/tenantProjectsHttpClient.ts',
   'src/features/tenant/tenantTasksHttpClient.ts',
   'src/features/tenant/tenantAnalyticsHttpClient.ts',

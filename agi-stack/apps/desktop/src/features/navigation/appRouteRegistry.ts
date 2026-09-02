@@ -235,6 +235,7 @@ import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
+import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type {
   DesktopWorkspaceCatalogOperationsV2,
 } from '../../plugins/desktopWorkspaceCatalogAuthorityModuleV2';
@@ -250,6 +251,7 @@ export type AppRouteRegistryRefs = {
     'projectMarketplacePlugins'
   >;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
+  tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
   desktopWorkspaceCatalogOperationsV2: DesktopWorkspaceCatalogOperationsV2;
   desktopWorkspaceLifecycleOperationsV2: DesktopWorkspaceLifecycleOperationsV2;
   desktopProductionRouteLocation: DesktopHashLocationPort;
@@ -291,6 +293,7 @@ export type AppTenantCoreRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   | 'authRef'
   | 'configRef'
+  | 'tenantOverviewOperationsV2'
   | 'desktopWorkspaceCatalogOperationsV2'
   | 'desktopWorkspaceLifecycleOperationsV2'
 >;
@@ -857,6 +860,7 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
   const {
     authRef,
     configRef,
+    tenantOverviewOperationsV2,
     desktopWorkspaceCatalogOperationsV2,
     desktopWorkspaceLifecycleOperationsV2,
   } = refs;
@@ -865,7 +869,11 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
       [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
       [TENANT_OVERVIEW_ROUTE_ID]: createTenantOverviewRouteModuleLoader({
         createBinding: (context) =>
-          createTenantOverviewRouteBindingForRuntime(configRef.current, context),
+          createTenantOverviewRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantOverviewOperationsV2,
+          ),
       }),
       [TENANT_PROJECTS_ROUTE_ID]: createTenantProjectsRouteModuleLoader({
         createBinding: (context) =>
