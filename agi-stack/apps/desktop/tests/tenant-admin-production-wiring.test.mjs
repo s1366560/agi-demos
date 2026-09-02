@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 require.extensions['.css'] = () => {};
 const {
@@ -96,6 +98,7 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
       unavailableAutomation,
       cloudConfig,
       {
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         tenantGovernanceClient: probe('available', null, ['view', 'list', 'invite']),
         tenantBillingClient: probe(
           'degraded',
@@ -171,6 +174,7 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
       unavailableAutomation,
       { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
       {
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         tenantGovernanceClient: neverProbe,
         tenantBillingClient: neverProbe,
         tenantAuditClient: neverProbe,

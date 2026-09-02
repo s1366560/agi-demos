@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const {
   CANONICAL_DESKTOP_ROUTE_IDS,
@@ -77,6 +79,7 @@ test('runtime snapshot declares tenant workspaces and canonical Agent Workspace 
         tenantId: 'local',
         projectId: 'local-project',
       },
+      { tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture() },
     );
     const snapshot = await client.loadSnapshot();
 

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const root = '/tmp/agistack-desktop-test-dist/src/features/settings-routes';
 const {
@@ -178,6 +180,7 @@ test('workbench Snapshot v4 keeps unversioned P2 observations unavailable', asyn
       unavailableAutomation,
       cloudConfig,
       {
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         p2ThirdBatchCapabilityClient: {
           async load() {
             return projectionSet();

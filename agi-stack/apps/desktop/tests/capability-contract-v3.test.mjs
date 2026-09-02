@@ -3,6 +3,8 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const {
   DESKTOP_CAPABILITY_NAMES,
@@ -406,6 +408,7 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         projectId: 'project-1',
         workspaceId: 'workspace-1',
       },
+      { tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture() },
     );
 
     const snapshot = await client.loadSnapshot();

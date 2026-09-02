@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+
 import { createDesktopWorkbenchCapabilityClient } from '/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js';
 import {
   applyDesktopTenantOverviewAuthorityV2,
@@ -435,7 +437,10 @@ function createClient(config) {
   return createDesktopWorkbenchCapabilityClient(
     { getAutomationCapabilities: async () => automationContract },
     config,
-    { tenantOverviewOperationsV2: tenantOverviewOperationsV2() },
+    {
+      tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
+    },
   );
 }
 

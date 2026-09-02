@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 require.extensions['.css'] = () => {};
 const {
@@ -200,7 +202,10 @@ async function loadSnapshot(config, clients) {
         },
       },
       config,
-      clients,
+      {
+        ...clients,
+        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      },
     ).loadSnapshot();
   } finally {
     globalThis.fetch = originalFetch;

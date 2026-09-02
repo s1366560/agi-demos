@@ -11,15 +11,12 @@ export async function loadTenantAnalyticsCapability(
   tenantAnalyticsOperationsV2: Pick<
     DesktopTenantAnalyticsOperationsV2,
     'loadTenantAnalytics'
-  > | undefined,
+  >,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
   const tenantId = scopeIdentifier(config.tenantId);
   const scope = tenantCapabilityScope(tenantId);
   if (!tenantId) return unavailable('tenant_analytics_scope_unavailable', scope);
-  if (tenantAnalyticsOperationsV2 === undefined) {
-    return unavailable('tenant_analytics_authority_unavailable', scope);
-  }
   try {
     const snapshot = await tenantAnalyticsOperationsV2.loadTenantAnalytics({
       config,

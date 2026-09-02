@@ -3,6 +3,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const compiledNavigationDirectory = '/tmp/agistack-desktop-test-dist/src/features/navigation';
 mkdirSync(compiledNavigationDirectory, { recursive: true });
@@ -325,6 +327,7 @@ test('workbench v4 marks transport authority observed and renderer declarations 
         projectId: 'local-project',
         workspaceId: 'local-workspace',
       },
+      { tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture() },
     );
     const snapshot = await client.loadSnapshot();
 

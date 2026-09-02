@@ -256,6 +256,10 @@ export function createDesktopWorkbenchCapabilityClient(
   config: DesktopRuntimeConfig,
   options: DesktopWorkbenchCapabilityClientOptions,
 ): DesktopWorkbenchCapabilityClient {
+  const tenantAnalyticsOperationsV2 = options?.tenantAnalyticsOperationsV2;
+  if (typeof tenantAnalyticsOperationsV2?.loadTenantAnalytics !== 'function') {
+    throw new Error('desktop_tenant_analytics_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -337,7 +341,7 @@ export function createDesktopWorkbenchCapabilityClient(
         ),
         loadTenantAnalyticsCapability(
           config,
-          options.tenantAnalyticsOperationsV2,
+          tenantAnalyticsOperationsV2,
           signal,
         ),
         loadTenantAgentDashboardCapability(config, signal),

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
+
 const require = createRequire(import.meta.url);
 const {
   createDesktopWorkbenchCapabilityClient,
@@ -78,6 +80,18 @@ const automationContract = {
   run_now: { allowed: true },
   delete: { allowed: true },
 };
+
+test('workbench capability client requires the Tenant Analytics V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        undefined,
+      ),
+    /desktop_tenant_analytics_authority_required/u,
+  );
+});
 
 const workspaceCollaborationContract = {
   service_version: '0.1.0',
@@ -256,7 +270,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
   };
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => automationContract,
       },
@@ -589,7 +603,7 @@ test('management routes become observed only after their typed clients read curr
         projectId: mode === 'local' ? 'local-project' : 'project-1',
         localApiToken: 'launch-capability',
       };
-      const client = createDesktopWorkbenchCapabilityClient(
+      const client = createWorkbenchCapabilityClient(
         {
           getAutomationCapabilities: async () => automationContract,
         },
@@ -638,7 +652,7 @@ test('management route observation failures stay unavailable and never promote r
     });
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => automationContract,
       },
@@ -707,7 +721,7 @@ test('local workbench capability client consumes the scoped degraded Search cont
   };
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => ({
           ...automationContract,
@@ -906,7 +920,7 @@ test('local-online snapshot requires observed cloud scope and preserves compound
     );
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => ({
           ...automationContract,
@@ -1045,7 +1059,7 @@ test('legacy capability authorities fail closed before payload inference', async
       headers: { 'content-type': 'application/json' },
     });
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => {
           throw new Error('capability authority unavailable');
@@ -1144,7 +1158,7 @@ test('cloud client loads the scoped degraded Workspace Collaboration authority',
   };
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       {
         getAutomationCapabilities: async () => automationContract,
       },
@@ -1307,7 +1321,7 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
   };
 
   try {
-    const cloudClient = createDesktopWorkbenchCapabilityClient(
+    const cloudClient = createWorkbenchCapabilityClient(
       { getAutomationCapabilities: async () => automationContract },
       {
         ...DEFAULT_CONFIG,
@@ -1336,7 +1350,7 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
     );
     assert.equal(capabilityFetchCalls, 1);
 
-    const localClient = createDesktopWorkbenchCapabilityClient(
+    const localClient = createWorkbenchCapabilityClient(
       { getAutomationCapabilities: async () => automationContract },
       {
         ...DEFAULT_CONFIG,
@@ -1471,7 +1485,7 @@ test('local Electron Workspace Collaboration reports permanent Core cutover outa
   };
 
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
+    const client = createWorkbenchCapabilityClient(
       { getAutomationCapabilities: async () => automationContract },
       {
         ...DEFAULT_CONFIG,
@@ -1493,3 +1507,10 @@ test('local Electron Workspace Collaboration reports permanent Core cutover outa
     else globalThis.window = originalWindow;
   }
 });
+
+function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
+  return createDesktopWorkbenchCapabilityClient(automationApi, config, {
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    ...options,
+  });
+}

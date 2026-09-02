@@ -25,7 +25,9 @@ test('route and capability consumers share one generation-backed analytics facad
   );
   assert.match(capability, /tenantAnalyticsOperationsV2\.loadTenantAnalytics/u);
   assert.match(workbench, /tenantAnalyticsOperationsV2/u);
+  assert.match(workbench, /desktop_tenant_analytics_authority_required/u);
   assert.match(provider, /tenantAnalyticsOperationsV2/u);
+  assert.doesNotMatch(capability, /tenantAnalyticsOperationsV2\s*===\s*undefined/u);
 });
 
 test('the static analytics HTTP authority is retired without a direct fallback', () => {
