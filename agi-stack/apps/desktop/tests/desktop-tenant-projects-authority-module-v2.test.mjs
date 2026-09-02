@@ -12,14 +12,14 @@ const {
   RuntimeV2Error,
 } = require('@agistack/plugin-runtime');
 const {
-  DESKTOP_TENANT_ANALYTICS_AUTHORITY_MODULE_REF_V2,
-  DESKTOP_TENANT_ANALYTICS_AUTHORITY_SERVICE_V2,
-  DESKTOP_TENANT_ANALYTICS_AUTHORITY_VERSION_V2,
-  applyDesktopTenantAnalyticsAuthorityV2,
-  desktopTenantAnalyticsAuthorityDefinitionV2,
-} = require(COMPILED_ROOT + '/src/plugins/desktopTenantAnalyticsAuthorityModuleV2.js');
+  DESKTOP_TENANT_PROJECTS_AUTHORITY_MODULE_REF_V2,
+  DESKTOP_TENANT_PROJECTS_AUTHORITY_SERVICE_V2,
+  DESKTOP_TENANT_PROJECTS_AUTHORITY_VERSION_V2,
+  applyDesktopTenantProjectsAuthorityV2,
+  desktopTenantProjectsAuthorityDefinitionV2,
+} = require(COMPILED_ROOT + '/src/plugins/desktopTenantProjectsAuthorityModuleV2.js');
 
-const authorityModules = [
+const authorityModuleNames = [
   'desktopArtifactContentAuthorityModuleV2',
   'desktopAutomationAuthorityModuleV2',
   'desktopConversationConfigAuthorityModuleV2',
@@ -37,11 +37,11 @@ const authorityModules = [
   'desktopSessionRunInputAuthorityModuleV2',
   'desktopSessionTimelineAuthorityModuleV2',
   'desktopTenantAgentBindingsAuthorityModuleV2',
-  'desktopTenantProjectsAuthorityModuleV2',
   'desktopTenantAgentDashboardAuthorityModuleV2',
   'desktopTenantAnalyticsAuthorityModuleV2',
   'desktopTenantCatalogAuthorityModuleV2',
   'desktopTenantOverviewAuthorityModuleV2',
+  'desktopTenantProjectsAuthorityModuleV2',
   'desktopTerminalLifecycleAuthorityModuleV2',
   'desktopWorkspaceAgentBindingAuthorityModuleV2',
   'desktopWorkspaceAutonomyAttentionAuthorityModuleV2',
@@ -53,7 +53,8 @@ const authorityModules = [
   'desktopWorkspaceMemberMutationAuthorityModuleV2',
   'desktopWorkspaceMessageCatalogAuthorityModuleV2',
   'desktopWorkspaceRosterAuthorityModuleV2',
-].flatMap((moduleName) =>
+];
+const authorityModules = authorityModuleNames.flatMap((moduleName) =>
   Object.values(require(`${COMPILED_ROOT}/src/plugins/${moduleName}.js`)).filter(
     (value) => value?.moduleRef && typeof value?.apply === 'function',
   ),
@@ -73,16 +74,16 @@ function bootstrap() {
   return JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
 }
 
-test('generated contract declares one credential-free root tenant analytics Provider', () => {
+test('generated contract declares one credential-free root Tenant Projects Provider', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_TENANT_ANALYTICS_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_TENANT_PROJECTS_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_TENANT_ANALYTICS_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_TENANT_PROJECTS_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap().entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-tenant-analytics-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-tenant-projects-authority',
   );
 
   assert.ok(module);
@@ -92,8 +93,8 @@ test('generated contract declares one credential-free root tenant analytics Prov
   assert.deepEqual(module.contract.services, {
     provides: [
       {
-        service: DESKTOP_TENANT_ANALYTICS_AUTHORITY_SERVICE_V2,
-        version: DESKTOP_TENANT_ANALYTICS_AUTHORITY_VERSION_V2,
+        service: DESKTOP_TENANT_PROJECTS_AUTHORITY_SERVICE_V2,
+        version: DESKTOP_TENANT_PROJECTS_AUTHORITY_VERSION_V2,
       },
     ],
     requires: [],
@@ -103,7 +104,7 @@ test('generated contract declares one credential-free root tenant analytics Prov
   assert.deepEqual(module.contract.config_schema.required, ['strategy']);
   assert.equal(module.contract.config_schema.properties.strategy.const, 'desktop-api-fetch');
   assert.equal(module.contract_digest, catalog.contract_digest);
-  assert.equal(module.contract_digest, desktopTenantAnalyticsAuthorityDefinitionV2.contractDigest);
+  assert.equal(module.contract_digest, desktopTenantProjectsAuthorityDefinitionV2.contractDigest);
   assert.deepEqual(entry.scope, { kind: 'root' });
   assert.deepEqual(entry.config, { strategy: 'desktop-api-fetch' });
   assert.deepEqual(entry.inject, {});
@@ -112,42 +113,42 @@ test('generated contract declares one credential-free root tenant analytics Prov
   }
 });
 
-test('Loader activates the exact service and disabled Profile fails closed', async () => {
+test('Loader activates the exact Tenant Projects service and disabled Profile fails closed', async () => {
   const loader = new LoaderV2(
     [...createDesktopRendererDefinitionsV2(), ...authorityModules],
     'desktop-renderer',
   );
   const generation = await loader.stage(bootstrap());
   const service = generation.resolve(
-    DESKTOP_TENANT_ANALYTICS_AUTHORITY_SERVICE_V2,
+    DESKTOP_TENANT_PROJECTS_AUTHORITY_SERVICE_V2,
     { kind: 'root' },
-    { version: DESKTOP_TENANT_ANALYTICS_AUTHORITY_VERSION_V2 },
+    { version: DESKTOP_TENANT_PROJECTS_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
   assert.deepEqual(Object.keys(service), ['bindOperation']);
   assert.throws(
     () =>
-      applyDesktopTenantAnalyticsAuthorityV2(
+      applyDesktopTenantProjectsAuthorityV2(
         { provide: () => assert.fail('invalid config must not publish') },
         { strategy: 'legacy-client' },
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_tenant_analytics_authority_config_invalid',
+      error.code === 'desktop_tenant_projects_authority_config_invalid',
   );
 
   const disabled = structuredClone(bootstrap());
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-tenant-analytics-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-tenant-projects-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>
       disabledGeneration.resolve(
-        DESKTOP_TENANT_ANALYTICS_AUTHORITY_SERVICE_V2,
+        DESKTOP_TENANT_PROJECTS_AUTHORITY_SERVICE_V2,
         { kind: 'root' },
-        { version: DESKTOP_TENANT_ANALYTICS_AUTHORITY_VERSION_V2 },
+        { version: DESKTOP_TENANT_PROJECTS_AUTHORITY_VERSION_V2 },
       ),
     (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );

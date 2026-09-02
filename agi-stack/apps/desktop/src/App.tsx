@@ -105,6 +105,7 @@ import { createDesktopTenantAgentDashboardOperationsV2 } from './plugins/desktop
 import { createDesktopTenantAnalyticsOperationsV2 } from './plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import { createDesktopTenantOverviewOperationsV2 } from './plugins/desktopTenantOverviewAuthorityModuleV2';
+import { createDesktopTenantProjectsOperationsV2 } from './plugins/desktopTenantProjectsAuthorityModuleV2';
 import {
   createDesktopWorkspaceAgentBindingOperationsV2,
 } from './plugins/desktopWorkspaceAgentBindingAuthorityModuleV2';
@@ -848,6 +849,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantProjectsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantProjectsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopConversationConfigOperationsV2 = useMemo(
     () =>
       createDesktopConversationConfigOperationsV2(
@@ -1141,6 +1149,7 @@ export function App() {
       tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
       tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
       tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
+      tenantProjectsOperationsV2: desktopTenantProjectsOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceLifecycleOperationsV2,
       projectCronJobsRouteBindingProviderV2,
@@ -1161,6 +1170,7 @@ export function App() {
       desktopTenantAnalyticsOperationsV2,
       desktopTenantCatalogOperationsV2,
       desktopTenantOverviewOperationsV2,
+      desktopTenantProjectsOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceLifecycleOperationsV2,
     ],
@@ -1198,6 +1208,7 @@ export function App() {
         tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
         tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
         tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
+        tenantProjectsOperationsV2: desktopTenantProjectsOperationsV2,
       }),
     [
       config,
@@ -1207,6 +1218,7 @@ export function App() {
       desktopTenantAgentDashboardOperationsV2,
       desktopTenantAnalyticsOperationsV2,
       desktopTenantOverviewOperationsV2,
+      desktopTenantProjectsOperationsV2,
       desktopWorkbenchCapabilityClientProviderV2,
     ],
   );

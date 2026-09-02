@@ -228,7 +228,7 @@
       "method": "GET",
       "uri": "/api/v1/tenant-projects?tenant_id=local&page=1&page_size=20",
       "source": "tenant_projects",
-      "source_marker": "'/api/v1/tenant-projects'",
+      "source_marker": "desktopTenantProjectsListPathV2(operationConfig, operationScope, query)",
       "authority": "local_tenant_projects",
       "body": {}
     },
@@ -237,7 +237,7 @@
       "method": "GET",
       "uri": "/api/v1/tenant-projects/local-project?tenant_id=local",
       "source": "tenant_projects",
-      "source_marker": "`${root}/${encodeURIComponent(projectId)}`",
+      "source_marker": "`${desktopTenantProjectPathV2(operationConfig, projectId)}?${params}`",
       "authority": "local_tenant_projects",
       "body": {}
     },
@@ -246,7 +246,7 @@
       "method": "POST",
       "uri": "/api/v1/tenant-projects",
       "source": "tenant_projects",
-      "source_marker": "collectionPath(runtimeConfig)",
+      "source_marker": "desktopTenantProjectsCollectionPathV2(operationConfig)",
       "authority": "local_tenant_projects",
       "idempotency_key": "route-parity-create-project",
       "body": {
@@ -260,7 +260,7 @@
       "method": "PUT",
       "uri": "/api/v1/tenant-projects/local-project",
       "source": "tenant_projects",
-      "source_marker": "projectPath(runtimeConfig, id)",
+      "source_marker": "desktopTenantProjectPathV2(operationConfig, projectId)",
       "authority": "local_tenant_projects",
       "idempotency_key": "route-parity-update-project",
       "body": {
@@ -273,7 +273,7 @@
       "method": "POST",
       "uri": "/api/v1/tenant-projects/local-project/archive",
       "source": "tenant_projects",
-      "source_marker": "`${project}/archive`",
+      "source_marker": "desktopTenantProjectDeletePathV2(operationConfig, projectId)",
       "authority": "local_tenant_projects",
       "expected_status": 409,
       "idempotency_key": "route-parity-archive-project",
@@ -844,7 +844,7 @@
       "method": "POST",
       "uri": "/api/v1/agent/bindings?tenant_id=local",
       "source": "client",
-      "source_marker": "tenantMutationPath('/api/v1/agent/bindings', scope)",
+      "source_marker": "tenantMutationPathV2('/api/v1/agent/bindings', operationScope)",
       "authority": "agent_bindings_unavailable",
       "body": {}
     },
@@ -853,7 +853,7 @@
       "method": "DELETE",
       "uri": "/api/v1/agent/bindings/binding-1?tenant_id=local",
       "source": "client",
-      "source_marker": "/api/v1/agent/bindings/${encodeURIComponent(bindingId)}",
+      "source_marker": "/api/v1/agent/bindings/${encodeURIComponent(bindingId)}`",
       "authority": "agent_bindings_unavailable",
       "body": {}
     },
@@ -862,7 +862,7 @@
       "method": "PATCH",
       "uri": "/api/v1/agent/bindings/binding-1/enabled?tenant_id=local",
       "source": "client",
-      "source_marker": "/api/v1/agent/bindings/${encodeURIComponent(bindingId)}/enabled",
+      "source_marker": "/api/v1/agent/bindings/${encodeURIComponent(bindingId)}/enabled`",
       "authority": "agent_bindings_unavailable",
       "body": {
         "enabled": false
@@ -873,7 +873,7 @@
       "method": "POST",
       "uri": "/api/v1/agent/bindings/test?tenant_id=local",
       "source": "client",
-      "source_marker": "tenantMutationPath('/api/v1/agent/bindings/test', scope)",
+      "source_marker": "tenantMutationPathV2('/api/v1/agent/bindings/test', operationScope)",
       "authority": "agent_bindings_unavailable",
       "body": {}
     },

@@ -299,7 +299,10 @@
         "agi-stack/apps/desktop/src/features/tenant/tenantProjectsRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant/TenantProjectsPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant/tenantProjectsController.ts",
-        "agi-stack/apps/desktop/src/features/tenant/tenantProjectsHttpClient.ts"
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProjectsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProjectsContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProjectsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProjectsOperationContractV2.ts"
       ],
       "local_status": "partial",
       "local_reason_code": "local_project_configuration_projection_partial",
@@ -309,7 +312,10 @@
         "agi-stack/apps/desktop/src/features/tenant/tenantProjectsRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant/TenantProjectsPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant/tenantProjectsController.ts",
-        "agi-stack/apps/desktop/src/features/tenant/tenantProjectsHttpClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProjectsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProjectsContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProjectsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantProjectsOperationContractV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes/tenant_projects.rs"
       ],

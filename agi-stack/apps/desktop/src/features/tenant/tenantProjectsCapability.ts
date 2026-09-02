@@ -4,7 +4,7 @@ import type {
   DesktopCapabilityAvailability,
   DesktopCapabilityScope,
 } from '../runtime/capabilitySnapshot';
-import { createTenantProjectsHttpClient } from './tenantProjectsHttpClient';
+import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 
 const TENANT_PROJECT_ACTIONS = Object.freeze([
   'view',
@@ -16,6 +16,10 @@ const TENANT_PROJECT_ACTIONS = Object.freeze([
 
 export async function loadTenantProjectsCapability(
   config: DesktopRuntimeConfig,
+  tenantProjectsOperationsV2: Pick<
+    DesktopTenantProjectsOperationsV2,
+    'listTenantProjects'
+  >,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
   const tenantId = scopeIdentifier(config.tenantId);
@@ -23,11 +27,12 @@ export async function loadTenantProjectsCapability(
   if (!tenantId) return unavailable('tenant_projects_scope_unavailable', scope);
   try {
     const authority = config.mode === 'local' ? 'local' : 'cloud';
-    const snapshot = await createTenantProjectsHttpClient(config).list(
-      { authority, tenantId },
-      { page: 1, pageSize: 1 },
-      { signal },
-    );
+    const snapshot = await tenantProjectsOperationsV2.listTenantProjects({
+      config,
+      scope: { authority, tenantId },
+      query: { page: 1, pageSize: 1 },
+      ...(signal === undefined ? {} : { signal }),
+    });
     if (!isOrderedActionSubset(snapshot.allowedActions)) {
       return unavailable('tenant_projects_contract_invalid', scope);
     }

@@ -60,7 +60,10 @@ import {
 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { TenantProjectsRouteBinding } from '../tenant/tenantProjectsRouteModule';
 import { createTenantProjectsController } from '../tenant/tenantProjectsController';
-import { createTenantProjectsHttpClient } from '../tenant/tenantProjectsHttpClient';
+import {
+  createDesktopTenantProjectsClientV2,
+  type DesktopTenantProjectsOperationsV2,
+} from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type { TenantTasksRouteBinding } from '../tenant/tenantTasksRouteModule';
 import { createTenantTasksController } from '../tenant/tenantTasksController';
 import { createTenantTasksHttpClient } from '../tenant/tenantTasksHttpClient';
@@ -347,6 +350,7 @@ export function createTenantAgentDashboardRouteBindingForRuntime(
 export function createTenantProjectsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  tenantProjectsOperationsV2: DesktopTenantProjectsOperationsV2,
 ): TenantProjectsRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_projects_runtime_scope_mismatch');
@@ -355,7 +359,7 @@ export function createTenantProjectsRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createTenantProjectsHttpClient(config);
+  const client = createDesktopTenantProjectsClientV2(tenantProjectsOperationsV2, config);
   return Object.freeze({
     controller: createTenantProjectsController({
       authority: config.mode,

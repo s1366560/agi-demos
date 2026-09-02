@@ -43,6 +43,7 @@ import { desktopTenantAgentDashboardAuthorityDefinitionV2 } from './desktopTenan
 import { desktopTenantAnalyticsAuthorityDefinitionV2 } from './desktopTenantAnalyticsAuthorityModuleV2';
 import { desktopTenantCatalogAuthorityDefinitionV2 } from './desktopTenantCatalogAuthorityModuleV2';
 import { desktopTenantOverviewAuthorityDefinitionV2 } from './desktopTenantOverviewAuthorityModuleV2';
+import { desktopTenantProjectsAuthorityDefinitionV2 } from './desktopTenantProjectsAuthorityModuleV2';
 import { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } from './desktopWorkspaceAgentBindingAuthorityModuleV2';
 import { desktopWorkspaceAutonomyAttentionAuthorityDefinitionV2 } from './desktopWorkspaceAutonomyAttentionAuthorityModuleV2';
 import { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } from './desktopWorkspaceMemberMutationAuthorityModuleV2';
@@ -85,6 +86,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopTenantAnalyticsAuthorityDefinitionV2,
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopTenantOverviewAuthorityDefinitionV2,
+    desktopTenantProjectsAuthorityDefinitionV2,
     desktopWorkspaceAgentBindingAuthorityDefinitionV2,
     desktopWorkspaceAutonomyAttentionAuthorityDefinitionV2,
     desktopWorkspaceMemberMutationAuthorityDefinitionV2,

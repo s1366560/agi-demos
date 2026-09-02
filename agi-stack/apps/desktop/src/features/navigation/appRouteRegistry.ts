@@ -239,6 +239,7 @@ import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/deskt
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
+import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type {
   DesktopWorkspaceCatalogOperationsV2,
 } from '../../plugins/desktopWorkspaceCatalogAuthorityModuleV2';
@@ -258,6 +259,7 @@ export type AppRouteRegistryRefs = {
   tenantAgentDashboardOperationsV2: DesktopTenantAgentDashboardOperationsV2;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
   tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
+  tenantProjectsOperationsV2: DesktopTenantProjectsOperationsV2;
   desktopWorkspaceCatalogOperationsV2: DesktopWorkspaceCatalogOperationsV2;
   desktopWorkspaceLifecycleOperationsV2: DesktopWorkspaceLifecycleOperationsV2;
   desktopProductionRouteLocation: DesktopHashLocationPort;
@@ -301,6 +303,7 @@ export type AppTenantCoreRouteRegistryRefs = Pick<
   | 'configRef'
   | 'tenantAnalyticsOperationsV2'
   | 'tenantOverviewOperationsV2'
+  | 'tenantProjectsOperationsV2'
   | 'desktopWorkspaceCatalogOperationsV2'
   | 'desktopWorkspaceLifecycleOperationsV2'
 >;
@@ -874,6 +877,7 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
     configRef,
     tenantAnalyticsOperationsV2,
     tenantOverviewOperationsV2,
+    tenantProjectsOperationsV2,
     desktopWorkspaceCatalogOperationsV2,
     desktopWorkspaceLifecycleOperationsV2,
   } = refs;
@@ -890,7 +894,11 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
       }),
       [TENANT_PROJECTS_ROUTE_ID]: createTenantProjectsRouteModuleLoader({
         createBinding: (context) =>
-          createTenantProjectsRouteBindingForRuntime(configRef.current, context),
+          createTenantProjectsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantProjectsOperationsV2,
+          ),
       }),
       [TENANT_WORKSPACES_ROUTE_ID]: createTenantWorkspacesRouteModuleLoader({
         createBinding: (context) =>

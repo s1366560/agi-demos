@@ -258,6 +258,7 @@ fn is_desktop_route_source_file(file_name: &str) -> bool {
     file_name.ends_with("Client.ts")
         || file_name.ends_with("client.ts")
         || file_name.ends_with("Contract.ts")
+        || file_name.ends_with("AuthorityModuleV2.ts")
 }
 
 fn source_path_suffix(source: &str) -> Option<&'static str> {
@@ -269,8 +270,8 @@ fn source_path_suffix(source: &str) -> Option<&'static str> {
         "search" => Some("api/searchContract.ts"),
         "sandbox" => Some("features/sandbox/sandboxRuntimeClient.ts"),
         "sandbox_surface" => Some("features/sandbox/sandboxRuntimeSurfaceClient.ts"),
-        "tenant_overview" => Some("features/tenant/tenantOverviewHttpClient.ts"),
-        "tenant_projects" => Some("features/tenant/tenantProjectsHttpClient.ts"),
+        "tenant_overview" => Some("plugins/desktopTenantOverviewAuthorityModuleV2.ts"),
+        "tenant_projects" => Some("plugins/desktopTenantProjectsAuthorityModuleV2.ts"),
         other => panic!("unsupported route source {other}"),
     }
 }

@@ -98,6 +98,7 @@ import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTe
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
+import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
 import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
 import { tenantWorkspacesCapability } from '../tenant/tenantWorkspacesCapability';
@@ -164,6 +165,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantOverviewOperationsV2: Pick<
     DesktopTenantOverviewOperationsV2,
     'loadTenantOverview'
+  >;
+  tenantProjectsOperationsV2: Pick<
+    DesktopTenantProjectsOperationsV2,
+    'listTenantProjects'
   >;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
@@ -282,6 +287,10 @@ export function createDesktopWorkbenchCapabilityClient(
   ) {
     throw new Error('desktop_tenant_agent_dashboard_authority_required');
   }
+  const tenantProjectsOperationsV2 = options?.tenantProjectsOperationsV2;
+  if (typeof tenantProjectsOperationsV2?.listTenantProjects !== 'function') {
+    throw new Error('desktop_tenant_projects_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -376,7 +385,7 @@ export function createDesktopWorkbenchCapabilityClient(
           tenantAgentBindingsOperationsV2,
           signal,
         ),
-        loadTenantProjectsCapability(config, signal),
+        loadTenantProjectsCapability(config, tenantProjectsOperationsV2, signal),
         loadManagementRouteCapabilities(managementRouteClients, config, signal),
         loadProjectWorkspacesCapability(projectWorkspacesClient, config, signal),
         loadProjectBlackboardCapability(projectBlackboardClient, config, signal),

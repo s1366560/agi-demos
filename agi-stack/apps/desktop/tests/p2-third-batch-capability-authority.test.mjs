@@ -4,6 +4,7 @@ import { test } from 'node:test';
 
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -183,6 +184,8 @@ test('workbench Snapshot v4 keeps unversioned P2 observations unavailable', asyn
       cloudConfig,
       {
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         p2ThirdBatchCapabilityClient: {

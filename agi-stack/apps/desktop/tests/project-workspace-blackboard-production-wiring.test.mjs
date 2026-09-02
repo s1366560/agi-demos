@@ -5,6 +5,7 @@ import { test } from 'node:test';
 
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
+import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -183,6 +184,8 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
         config,
         {
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
           tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
           projectWorkspacesClient: {
@@ -263,6 +266,8 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
       config,
       {
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         projectWorkspacesClient: {

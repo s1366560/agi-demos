@@ -4,6 +4,7 @@ import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTe
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
+import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import {
   createDesktopWorkbenchCapabilityClient,
   type DesktopWorkbenchCapabilityClient,
@@ -44,6 +45,10 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   tenantOverviewOperationsV2: Pick<
     DesktopTenantOverviewOperationsV2,
     'loadTenantOverview'
+  >;
+  tenantProjectsOperationsV2: Pick<
+    DesktopTenantProjectsOperationsV2,
+    'listTenantProjects'
   >;
 }>;
 
@@ -89,6 +94,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
     tenantAgentDashboardOperationsV2: input.tenantAgentDashboardOperationsV2,
     tenantAnalyticsOperationsV2: input.tenantAnalyticsOperationsV2,
     tenantOverviewOperationsV2: input.tenantOverviewOperationsV2,
+    tenantProjectsOperationsV2: input.tenantProjectsOperationsV2,
   });
   return Object.freeze({ client });
 }

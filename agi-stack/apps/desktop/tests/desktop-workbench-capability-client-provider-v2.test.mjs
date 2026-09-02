@@ -54,6 +54,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2(),
   });
   const cloud = provider.publish({
     automationApi: automationApi(),
@@ -63,6 +64,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2(),
   });
 
   assert.equal(Object.isFrozen(local), true);
@@ -84,6 +86,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2(),
   });
   const poisonedConfig = {
     ...DEFAULT_CONFIG,
@@ -102,6 +105,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
         tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
+        tenantProjectsOperationsV2: tenantProjectsOperationsV2(),
       }),
     /candidate_capability_config_invalid/u,
   );
@@ -131,6 +135,7 @@ test('App consumes the published V2 workbench capability client', () => {
   );
   assert.match(providerSource, /tenantAnalyticsOperationsV2:\s*input\.tenantAnalyticsOperationsV2/u);
   assert.match(providerSource, /tenantOverviewOperationsV2:\s*input\.tenantOverviewOperationsV2/u);
+  assert.match(providerSource, /tenantProjectsOperationsV2:\s*input\.tenantProjectsOperationsV2/u);
 });
 
 function automationApi() {
@@ -178,6 +183,14 @@ function tenantOverviewOperationsV2() {
   return {
     loadTenantOverview: async () => {
       throw new Error('tenant_overview_not_exercised');
+    },
+  };
+}
+
+function tenantProjectsOperationsV2() {
+  return {
+    listTenantProjects: async () => {
+      throw new Error('tenant_projects_not_exercised');
     },
   };
 }
