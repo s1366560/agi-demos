@@ -26,6 +26,7 @@ import { desktopNewTaskFlowAuthorityDefinitionV2 } from './desktopNewTaskFlowAut
 import {
   desktopNewThreadCreationAuthorityDefinitionV2,
 } from './desktopNewThreadCreationAuthorityModuleV2';
+import { desktopProjectOverviewAuthorityDefinitionV2 } from './desktopProjectOverviewAuthorityModuleV2';
 import { desktopProjectSearchAuthorityDefinitionV2 } from './desktopProjectSearchAuthorityModuleV2';
 import { desktopSessionArtifactActionAuthorityDefinitionV2 } from './desktopSessionArtifactActionAuthorityModuleV2';
 import { desktopSessionRunControlAuthorityDefinitionV2 } from './desktopSessionRunControlAuthorityModuleV2';
@@ -74,6 +75,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopMyWorkAuthorityDefinitionV2,
     desktopNewTaskFlowAuthorityDefinitionV2,
     desktopNewThreadCreationAuthorityDefinitionV2,
+    desktopProjectOverviewAuthorityDefinitionV2,
     desktopProjectSearchAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,

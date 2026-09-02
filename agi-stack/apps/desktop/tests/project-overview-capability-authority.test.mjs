@@ -9,6 +9,10 @@ import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardO
 
 import { createDesktopWorkbenchCapabilityClient } from '/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js';
 import {
+  applyDesktopProjectOverviewAuthorityV2,
+  createDesktopProjectOverviewOperationsV2,
+} from '/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectOverviewAuthorityModuleV2.js';
+import {
   applyDesktopTenantOverviewAuthorityV2,
   createDesktopTenantOverviewOperationsV2,
 } from '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantOverviewAuthorityModuleV2.js';
@@ -236,6 +240,9 @@ test('Cloud workbench keeps unversioned Overview probes unavailable', async () =
       if (String(input).endsWith('/api/v1/projects/project-1/stats')) {
         return jsonResponse(cloudProjectStats);
       }
+      if (String(input).includes('/api/v1/memories/')) {
+        return jsonResponse({ memories: [], total: 0, page: 1, page_size: 5 });
+      }
       return jsonResponse({}, { status: 404 });
     },
     async () => {
@@ -337,6 +344,12 @@ test('Cloud Project Overview failures stay structured and never infer reason fro
     await withFetch(
       async (input) => {
         if (String(input).includes('/api/v1/projects/project-1?')) return response;
+        if (String(input).endsWith('/api/v1/projects/project-1/stats')) {
+          return jsonResponse(cloudProjectStats);
+        }
+        if (String(input).includes('/api/v1/memories/')) {
+          return jsonResponse({ memories: [], total: 0, page: 1, page_size: 5 });
+        }
         return jsonResponse({}, { status: 404 });
       },
       async () => {
@@ -442,6 +455,7 @@ function createClient(config) {
     { getAutomationCapabilities: async () => automationContract },
     config,
     {
+      projectOverviewOperationsV2: projectOverviewOperationsV2(),
       tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
       tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
@@ -451,6 +465,26 @@ function createClient(config) {
       tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
     },
   );
+}
+
+function projectOverviewOperationsV2() {
+  let service;
+  applyDesktopProjectOverviewAuthorityV2(
+    {
+      provide: (_key, candidate) => {
+        service = candidate;
+      },
+    },
+    { strategy: 'desktop-api-fetch' },
+  );
+  return createDesktopProjectOverviewOperationsV2(() => ({
+    acquireServiceOperationLease: async () => ({
+      status: 'accepted',
+      digest: 'project-overview-capability-test',
+      useService: (operation) => operation(service),
+      release: async () => undefined,
+    }),
+  }));
 }
 
 function tenantOverviewOperationsV2() {

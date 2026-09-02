@@ -33,7 +33,7 @@ const localScope = Object.freeze({
 test('controller constructs with only the adapter for its production authority', async () => {
   const cloudController = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient: cloudClientFor(async (scope) => cloudProject(scope)),
+    client: cloudClientFor(async (scope) => cloudProject(scope)),
     initialScope: cloudScope,
   });
   await cloudController.load(cloudScope);
@@ -42,9 +42,9 @@ test('controller constructs with only the adapter for its production authority',
 
   const localController = createProjectOverviewController({
     authority: 'local',
-    localClient: {
+    client: {
       async load(scope) {
-        return localSnapshot(scope);
+        return { kind: 'local-ready', snapshot: localSnapshot(scope) };
       },
     },
     initialScope: localScope,
@@ -58,7 +58,7 @@ test('controller fails closed when a scope authority does not match its adapter'
   let cloudReads = 0;
   const cloudController = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient: cloudClientFor(async (scope) => {
+    client: cloudClientFor(async (scope) => {
       cloudReads += 1;
       return cloudProject(scope);
     }),
@@ -78,10 +78,10 @@ test('controller fails closed when a scope authority does not match its adapter'
   let localReads = 0;
   const localController = createProjectOverviewController({
     authority: 'local',
-    localClient: {
+    client: {
       async load(scope) {
         localReads += 1;
-        return localSnapshot(scope);
+        return { kind: 'local-ready', snapshot: localSnapshot(scope) };
       },
     },
     initialScope: localScope,
@@ -99,7 +99,7 @@ test('controller fails closed when a scope authority does not match its adapter'
 
   const invalidInitialController = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient: cloudClientFor(async (scope) => cloudProject(scope)),
+    client: cloudClientFor(async (scope) => cloudProject(scope)),
     initialScope: localScope,
   });
   assert.deepEqual(pickTerminal(invalidInitialController.getSnapshot()), {
@@ -122,7 +122,7 @@ test('controller suppresses stale Cloud results during rapid scope changes', asy
   });
   const controller = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient,
+    client: cloudClient,
     initialScope: cloudScope,
   });
   const states = [];
@@ -153,7 +153,7 @@ test('controller aborts stopped work and retries a structured transient error', 
   let pendingSignal;
   const stoppedController = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient: cloudClientFor(async (_scope, options) => {
+    client: cloudClientFor(async (_scope, options) => {
       pendingSignal = options.signal;
       return pendingProject.promise;
     }),
@@ -170,7 +170,7 @@ test('controller aborts stopped work and retries a structured transient error', 
   let attempts = 0;
   const retryController = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient: cloudClientFor(async (scope) => {
+    client: cloudClientFor(async (scope) => {
       attempts += 1;
       if (attempts === 1) {
         throw new DesktopApiError('must not leak', 500, {
@@ -197,7 +197,7 @@ test('controller aborts stopped work and retries a structured transient error', 
 test('controller maps only structured DesktopApiError fields to forbidden', async () => {
   const controller = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient: cloudClientFor(async () => {
+    client: cloudClientFor(async () => {
       throw new DesktopApiError('message text must not classify the result', 403, {
         detail: 'also not presentation detail',
         reason_code: 'project_overview_scope_forbidden',
@@ -223,7 +223,7 @@ test('controller maps Local contract failures to structured unavailable', async 
   let receivedSignal;
   const controller = createProjectOverviewController({
     authority: 'local',
-    localClient: {
+    client: {
       async load(scope, options) {
         receivedScope = scope;
         receivedSignal = options.signal;
@@ -252,15 +252,9 @@ test('controller maps Local contract failures to structured unavailable', async 
 test('controller delegates empty and degraded states to the presentation model', async () => {
   const emptyController = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient: {
-      async getProject() {
-        return null;
-      },
-      async getProjectStats() {
-        return cloudStats();
-      },
-      async listMemories() {
-        return { memories: [], total: 0, page: 1, page_size: 5 };
+    client: {
+      async load() {
+        return { kind: 'empty' };
       },
     },
     initialScope: cloudScope,
@@ -273,10 +267,10 @@ test('controller delegates empty and degraded states to the presentation model',
   let localLoads = 0;
   const localController = createProjectOverviewController({
     authority: 'local',
-    localClient: {
+    client: {
       async load(scope) {
         localLoads += 1;
-        return localSnapshot(scope);
+        return { kind: 'local-ready', snapshot: localSnapshot(scope) };
       },
     },
     initialScope: localScope,
@@ -292,7 +286,7 @@ test('controller delegates empty and degraded states to the presentation model',
 test('React hook owns controller load, cancellation, and retry delegation', () => {
   const controller = createProjectOverviewController({
     authority: 'cloud',
-    cloudClient: unexpectedCloudClient(),
+    client: unexpectedCloudClient(),
     initialScope: cloudScope,
   });
   const markup = renderToStaticMarkup(
@@ -323,16 +317,18 @@ test('React hook owns controller load, cancellation, and retry delegation', () =
 
 function cloudClientFor(getProject) {
   return {
-    getProject,
-    async getProjectStats() {
-      return cloudStats();
-    },
-    async listMemories(scope) {
+    async load(scope, options) {
+      const project = await getProject(scope, options);
+      if (project === null) return { kind: 'empty' };
       return {
-        memories: [cloudMemory(scope)],
-        total: 1,
-        page: 1,
-        page_size: 5,
+        kind: 'cloud-ready',
+        snapshot: {
+          scope,
+          project,
+          stats: cloudStats(),
+          latestMemories: [cloudMemory(scope)],
+          latestMemoriesTotal: 1,
+        },
       };
     },
   };
@@ -434,13 +430,10 @@ function localSnapshot(scope) {
 }
 
 function unexpectedCloudClient() {
-  const fail = async () => {
-    throw new Error('Cloud client must not be selected');
-  };
   return {
-    getProject: fail,
-    getProjectStats: fail,
-    listMemories: fail,
+    async load() {
+      throw new Error('Cloud client must not be selected');
+    },
   };
 }
 

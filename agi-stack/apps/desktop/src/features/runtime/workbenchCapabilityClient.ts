@@ -59,8 +59,6 @@ import { createProviderRouteClient } from '../settings-routes/providerRouteClien
 import { createSkillsRouteClient } from '../settings-routes/skillsRouteClient';
 import type { TemplatesRouteClient } from '../settings-routes/templatesRouteClient';
 import { unifiedRuntimesCapability } from '../unified-runtimes/unifiedRuntimesCapability';
-import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
-import { createLocalProjectOverviewClient } from '../project/projectOverviewLocalClient';
 import {
   createProjectBlackboardCloudClient,
   createProjectBlackboardLocalClient,
@@ -121,6 +119,7 @@ import {
   createDesktopPluginMarketplaceOperationsV2,
   type DesktopPluginMarketplaceCatalogOperationsV2,
 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
 import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_MINIMUM_CONTRACT_VERSION,
@@ -172,6 +171,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     'listTenantProjects'
   >;
   tenantTasksOperationsV2: Pick<DesktopTenantTasksOperationsV2, 'loadTenantTasks'>;
+  projectOverviewOperationsV2: Pick<
+    DesktopProjectOverviewOperationsV2,
+    'probeProjectOverview'
+  >;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -213,8 +216,6 @@ type WorkspaceCollaborationCapabilityScope = {
 
 const WORKSPACE_COLLABORATION_DEGRADED_REASON =
   'workspace_collaboration_mutation_guards_unavailable';
-const PROJECT_OVERVIEW_SERVICE_VERSION = '0.1.0';
-const PROJECT_OVERVIEW_CONTRACT_VERSION = '3.0.0';
 const LOCAL_SEARCH_SUPPORTED_TYPES = ['advanced', 'temporal', 'faceted'] as const;
 const LOCAL_SEARCH_UNAVAILABLE_TYPES = ['graph_traversal', 'community'] as const;
 
@@ -297,6 +298,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof tenantTasksOperationsV2?.loadTenantTasks !== 'function') {
     throw new Error('desktop_tenant_tasks_authority_required');
   }
+  const projectOverviewOperationsV2 = options?.projectOverviewOperationsV2;
+  if (typeof projectOverviewOperationsV2?.probeProjectOverview !== 'function') {
+    throw new Error('desktop_project_overview_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -371,7 +376,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadSearchCapability(config, signal),
         loadAutomationCapabilities(automationApi, config.projectId, signal),
         loadWorkspaceCollaborationCapability(config, signal),
-        loadProjectOverviewCapability(config, signal),
+        loadProjectOverviewCapability(config, projectOverviewOperationsV2, signal),
         loadTenantOverviewCapability(
           config,
           options.tenantOverviewOperationsV2,
@@ -1698,6 +1703,7 @@ function closeCapabilityAuthority(
 
 async function loadProjectOverviewCapability(
   config: DesktopRuntimeConfig,
+  operations: Pick<DesktopProjectOverviewOperationsV2, 'probeProjectOverview'>,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
   const tenantId = scopeIdentifier(config.tenantId);
@@ -1707,48 +1713,15 @@ async function loadProjectOverviewCapability(
   }
 
   try {
-    if (config.mode === 'local') {
-      const snapshot = await createLocalProjectOverviewClient(config).load(
-        {
-          authority: 'local',
-          tenantId,
-          projectId,
-        },
-        { signal },
-      );
-      return {
-        availability: snapshot.capability.availability,
-        reason_code: snapshot.capability.reasonCode,
-        service_version: snapshot.capability.serviceVersion,
-        contract_version: snapshot.capability.contractVersion,
-        allowed_actions: [...snapshot.capability.allowedActions],
-        scope: {
-          tenant_id: snapshot.capability.scope.tenantId,
-          project_id: snapshot.capability.scope.projectId,
-          workspace_id: snapshot.capability.scope.workspaceId,
-          instance_id: snapshot.capability.scope.instanceId,
-        },
-        authority_revision: snapshot.capability.authorityRevision,
-      };
-    }
-
-    const cloudClient = createCloudProjectOverviewClient(config);
-    const scope = {
-      authority: 'cloud' as const,
-      tenantId,
-      projectId,
-    };
-    await cloudClient.getProject(scope, { signal });
-    await cloudClient.getProjectStats(scope, { signal });
-    return {
-      availability: 'available',
-      reason_code: null,
-      service_version: PROJECT_OVERVIEW_SERVICE_VERSION,
-      contract_version: PROJECT_OVERVIEW_CONTRACT_VERSION,
-      allowed_actions: ['view', 'inspect-stats'],
-      scope: emptyCapabilityScope(),
-      authority_revision: null,
-    };
+    return await operations.probeProjectOverview({
+      config,
+      scope: {
+        authority: config.mode,
+        tenantId,
+        projectId,
+      },
+      ...(signal === undefined ? {} : { signal }),
+    });
   } catch (error) {
     if (signal?.aborted) throw error;
     if (error instanceof DesktopApiError && error.status === 403) {

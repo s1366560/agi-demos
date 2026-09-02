@@ -90,6 +90,9 @@ import {
   createDesktopNewThreadCreationOperationsV2,
 } from './plugins/desktopNewThreadCreationAuthorityModuleV2';
 import {
+  createDesktopProjectOverviewOperationsV2,
+} from './plugins/desktopProjectOverviewAuthorityModuleV2';
+import {
   createDesktopProjectSearchOperationsV2,
 } from './plugins/desktopProjectSearchAuthorityModuleV2';
 import {
@@ -303,7 +306,6 @@ import {
   shortcutChordFor,
 } from './features/navigation/keyboardShortcutModel';
 import {
-  createLocalProjectOverviewClient,
   isCurrentLocalConversationStatusRequest,
   nextLocalConversationStatusRequest,
   type LocalConversationStatusSummary,
@@ -864,6 +866,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectOverviewOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectOverviewOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopConversationConfigOperationsV2 = useMemo(
     () =>
       createDesktopConversationConfigOperationsV2(
@@ -1152,6 +1161,7 @@ export function App() {
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+      projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
       tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
       tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
@@ -1173,6 +1183,7 @@ export function App() {
     }),
     [
       desktopPluginMarketplaceOperationsV2,
+      desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopTenantAgentBindingsOperationsV2,
       desktopTenantAgentDashboardOperationsV2,
@@ -1214,6 +1225,7 @@ export function App() {
         automationApi: desktopAutomationApiV2,
         config,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
         tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
         tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
@@ -1225,6 +1237,7 @@ export function App() {
       config,
       desktopAutomationApiV2,
       desktopPluginMarketplaceOperationsV2,
+      desktopProjectOverviewOperationsV2,
       desktopTenantAgentBindingsOperationsV2,
       desktopTenantAgentDashboardOperationsV2,
       desktopTenantAnalyticsOperationsV2,
@@ -2989,13 +3002,20 @@ export function App() {
             : Promise.resolve({ items: [] as ProjectWorkItem[], error: null }),
           conversationResultsPromise,
           localConversationStatusRequest
-            ? createLocalProjectOverviewClient(resolvedConfig)
-                .load({
-                  authority: 'local',
-                  tenantId: resolvedConfig.tenantId,
-                  projectId: resolvedConfig.projectId,
+            ? desktopProjectOverviewOperationsV2
+                .loadProjectOverview({
+                  config: resolvedConfig,
+                  scope: {
+                    authority: 'local',
+                    tenantId: resolvedConfig.tenantId,
+                    projectId: resolvedConfig.projectId,
+                  },
                 })
-                .then((snapshot) => snapshot.conversationStatusSummary.value)
+                .then((result) =>
+                  result.kind === 'local-ready'
+                    ? result.snapshot.conversationStatusSummary.value
+                    : null,
+                )
                 .catch(() => null)
             : Promise.resolve(null),
         ]);
@@ -3193,6 +3213,7 @@ export function App() {
       clearMissingConversationSelection,
       commitRuntimeConfig,
       config,
+      desktopProjectOverviewOperationsV2,
       desktopWorkspaceAutonomyAttentionOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceConversationCatalogOperationsV2,
@@ -3234,12 +3255,17 @@ export function App() {
         requestScope,
       );
       conversationStatusRequestRef.current = statusRequest.generation;
-      let request: ReturnType<ReturnType<typeof createLocalProjectOverviewClient>['load']>;
+      let request: ReturnType<
+        typeof desktopProjectOverviewOperationsV2.loadProjectOverview
+      >;
       try {
-        request = createLocalProjectOverviewClient(runtimeConfig).load({
-          authority: 'local',
-          tenantId: runtimeConfig.tenantId,
-          projectId: runtimeConfig.projectId,
+        request = desktopProjectOverviewOperationsV2.loadProjectOverview({
+          config: runtimeConfig,
+          scope: {
+            authority: 'local',
+            tenantId: runtimeConfig.tenantId,
+            projectId: runtimeConfig.projectId,
+          },
         });
       } catch {
         if (
@@ -3255,7 +3281,9 @@ export function App() {
         return;
       }
       void request
-        .then((snapshot) => {
+        .then((result) => {
+          if (result.kind !== 'local-ready') return;
+          const snapshot = result.snapshot;
           if (
             active &&
             isCurrentLocalConversationStatusRequest(
@@ -3304,6 +3332,7 @@ export function App() {
     config.tenantId,
     connection,
     conversationStatusRefreshRevision,
+    desktopProjectOverviewOperationsV2,
   ]);
   productionRouteRefreshRef.current = (nextConfig, projects) =>
     refreshRuntime(nextConfig, projects);

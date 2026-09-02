@@ -231,6 +231,7 @@ import {
 import { createSkillsRouteModuleLoader } from '../settings-routes/skillsRouteModule';
 import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRouteModule';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
@@ -270,6 +271,7 @@ export type AppRouteRegistryRefs = {
     openPath: (path: string) => void;
   }>;
   projectCronJobsRouteBindingProviderV2: ProjectCronJobsRouteBindingProviderV2;
+  projectOverviewOperationsV2: DesktopProjectOverviewOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
@@ -293,7 +295,7 @@ export type AppProjectAdministrationRouteRegistryRefs = Pick<
 export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'desktopProductionRouteNavigation'
+  'configRef' | 'desktopProductionRouteNavigation' | 'projectOverviewOperationsV2'
 >;
 export type AppProjectDiscoveryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -801,12 +803,16 @@ export function createAppRuntimeInfrastructureRouteRegistry(
 export function createAppProjectWorkspaceRouteRegistry(
   refs: AppProjectWorkspaceRouteRegistryRefs,
 ) {
-  const { configRef, desktopProductionRouteNavigation } = refs;
+  const { configRef, desktopProductionRouteNavigation, projectOverviewOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_OVERVIEW_ROUTE_ID]: createProjectOverviewRouteModuleLoader({
         createBinding: (context) =>
-          createProjectOverviewRouteBindingForRuntime(configRef.current, context),
+          createProjectOverviewRouteBindingForRuntime(
+            configRef.current,
+            context,
+            projectOverviewOperationsV2,
+          ),
       }),
       [PROJECT_WORKSPACES_ROUTE_ID]: createProjectWorkspacesRouteModuleLoader({
         createBinding: (context) => {

@@ -1,13 +1,9 @@
 import { DesktopApiError } from '../../api/client';
-import {
-  readCloudProjectOverview,
-  type CloudProjectOverviewClient,
-  type CloudProjectOverviewScope,
-} from './projectOverviewClient';
 import type {
-  LocalProjectOverviewClient,
-  LocalProjectOverviewScope,
-} from './projectOverviewLocalClient';
+  ProjectOverviewClient,
+  ProjectOverviewReadResult,
+  ProjectOverviewScope,
+} from './projectOverviewClient';
 import {
   buildProjectOverviewPresentation,
   type ProjectOverviewPresentationInput,
@@ -15,19 +11,11 @@ import {
   type ProjectOverviewPresentationScope,
 } from './projectOverviewPresentationModel';
 
-export type ProjectOverviewControllerOptions =
-  | Readonly<{
-      authority: 'cloud';
-      cloudClient: CloudProjectOverviewClient;
-      localClient?: never;
-      initialScope: CloudProjectOverviewScope;
-    }>
-  | Readonly<{
-      authority: 'local';
-      cloudClient?: never;
-      localClient: LocalProjectOverviewClient;
-      initialScope: LocalProjectOverviewScope;
-    }>;
+export type ProjectOverviewControllerOptions = Readonly<{
+  authority: ProjectOverviewScope['authority'];
+  client: ProjectOverviewClient;
+  initialScope: ProjectOverviewScope;
+}>;
 
 export type ProjectOverviewController = Readonly<{
   getSnapshot: () => ProjectOverviewPresentationModel;
@@ -37,23 +25,6 @@ export type ProjectOverviewController = Readonly<{
   cancel: () => void;
   stop: () => void;
 }>;
-
-type ProjectOverviewReaderResult =
-  | Readonly<{
-      kind: 'cloud-ready';
-      snapshot: Extract<
-        ProjectOverviewPresentationInput,
-        Readonly<{ kind: 'cloud-ready' }>
-      >['snapshot'];
-    }>
-  | Readonly<{
-      kind: 'local-ready';
-      snapshot: Extract<
-        ProjectOverviewPresentationInput,
-        Readonly<{ kind: 'local-ready' }>
-      >['snapshot'];
-    }>
-  | Readonly<{ kind: 'empty' }>;
 
 export function createProjectOverviewController(
   options: ProjectOverviewControllerOptions,
@@ -134,29 +105,20 @@ async function readProjectOverview(
   options: ProjectOverviewControllerOptions,
   scope: ProjectOverviewPresentationScope,
   signal: AbortSignal,
-): Promise<ProjectOverviewReaderResult> {
-  if (options.authority === 'cloud' && scope.authority === 'cloud') {
-    const cloudScope: CloudProjectOverviewScope = {
-      authority: 'cloud',
-      tenantId: scope.tenantId,
-      projectId: scope.projectId,
-    };
-    const result = await readCloudProjectOverview(options.cloudClient, cloudScope, { signal });
-    if (result.kind === 'empty') return result;
-    return { kind: 'cloud-ready', snapshot: result.snapshot };
+): Promise<ProjectOverviewReadResult> {
+  const result = await options.client.load(scope as ProjectOverviewScope, { signal });
+  if (
+    (scope.authority === 'cloud' &&
+      (result.kind === 'cloud-ready' || result.kind === 'empty')) ||
+    (scope.authority === 'local' && result.kind === 'local-ready')
+  ) {
+    return result;
   }
+  throw authorityMismatchError();
+}
 
-  if (options.authority === 'local' && scope.authority === 'local') {
-    const localScope: LocalProjectOverviewScope = {
-      authority: 'local',
-      tenantId: scope.tenantId,
-      projectId: scope.projectId,
-    };
-    const snapshot = await options.localClient.load(localScope, { signal });
-    return { kind: 'local-ready', snapshot };
-  }
-
-  throw new DesktopApiError(
+function authorityMismatchError(): DesktopApiError {
+  return new DesktopApiError(
     'project_overview_controller_authority_mismatch',
     0,
     { reason_code: 'project_overview_controller_authority_mismatch' },

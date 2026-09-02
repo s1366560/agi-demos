@@ -1,17 +1,13 @@
-import type { CloudProjectOverviewClient } from '../src/features/project/projectOverviewClient';
+import type { ProjectOverviewClient } from '../src/features/project/projectOverviewClient';
 import type {
   ProjectOverviewControllerOptions,
 } from '../src/features/project/projectOverviewController';
-import type {
-  LocalProjectOverviewClient,
-} from '../src/features/project/projectOverviewLocalClient';
 
-declare const cloudClient: CloudProjectOverviewClient;
-declare const localClient: LocalProjectOverviewClient;
+declare const client: ProjectOverviewClient;
 
 const cloudOptions = {
   authority: 'cloud',
-  cloudClient,
+  client,
   initialScope: {
     authority: 'cloud',
     tenantId: 'tenant-1',
@@ -21,7 +17,7 @@ const cloudOptions = {
 
 const localOptions = {
   authority: 'local',
-  localClient,
+  client,
   initialScope: {
     authority: 'local',
     tenantId: 'local-tenant',
@@ -29,19 +25,15 @@ const localOptions = {
   },
 } satisfies ProjectOverviewControllerOptions;
 
-// @ts-expect-error A Cloud controller cannot accept a Local adapter.
-const cloudWithOppositeAdapter: Extract<
-  ProjectOverviewControllerOptions,
-  { authority: 'cloud' }
->['localClient'] = localClient;
+type ProjectOverviewControllerOptionKey = keyof ProjectOverviewControllerOptions;
 
-// @ts-expect-error A Local controller cannot accept a Cloud adapter.
-const localWithOppositeAdapter: Extract<
-  ProjectOverviewControllerOptions,
-  { authority: 'local' }
->['cloudClient'] = cloudClient;
+// @ts-expect-error Legacy authority-specific clients are no longer accepted.
+const legacyCloudClientKey: ProjectOverviewControllerOptionKey = 'cloudClient';
+
+// @ts-expect-error Legacy authority-specific clients are no longer accepted.
+const legacyLocalClientKey: ProjectOverviewControllerOptionKey = 'localClient';
 
 void cloudOptions;
 void localOptions;
-void cloudWithOppositeAdapter;
-void localWithOppositeAdapter;
+void legacyCloudClientKey;
+void legacyLocalClientKey;

@@ -29,6 +29,7 @@ const authorityModules = [
   'desktopNewTaskFlowAuthorityModuleV2',
   'desktopNewThreadCreationAuthorityModuleV2',
   'desktopPluginMarketplaceAuthorityModulesV2',
+  'desktopProjectOverviewAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
   'desktopSessionProjectionAuthorityModuleV2',

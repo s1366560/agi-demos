@@ -86,12 +86,21 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
   assert.match(
     registrySource,
-    /createProjectOverviewRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+    /createProjectOverviewRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*projectOverviewOperationsV2,?\s*\)/u,
   );
   assert.doesNotMatch(
     registrySource,
     /createCloudProjectOverviewClient|createLocalProjectOverviewClient/u,
   );
+  assert.match(
+    appSource,
+    /const desktopProjectOverviewOperationsV2 = useMemo\([\s\S]*createDesktopProjectOverviewOperationsV2\([\s\S]*desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*\[\],?\s*\);/u,
+  );
+  assert.match(
+    appSource,
+    /projectOverviewOperationsV2:\s*desktopProjectOverviewOperationsV2/u,
+  );
+  assert.doesNotMatch(appSource, /createLocalProjectOverviewClient/u);
   assert.match(
     registrySource,
     /PROJECT_SEARCH_ROUTE_ID[\s\S]*createProjectSearchRouteModuleLoader\(\{[\s\S]*projectSearchRouteBindingProviderV2\.resolve\(context\)[\s\S]*projectSearchOperationsV2/u,

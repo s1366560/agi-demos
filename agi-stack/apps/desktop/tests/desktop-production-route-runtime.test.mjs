@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -168,23 +169,21 @@ test('deployment capability resolution binds the optional instance route context
   assert.equal(entry.scope.instance_id, null);
 });
 
-test('cloud project overview binding constructs only cloud authority', () => {
+test('cloud project overview binding injects the V2 authority client', () => {
   const calls = [];
   const cloudClient = Object.freeze({ kind: 'cloud-client' });
   const controller = Object.freeze({ kind: 'controller' });
   const config = runtimeConfig('cloud');
+  const operations = projectOverviewOperationsV2Fixture();
 
   const binding = createProjectOverviewRouteBindingForRuntime(
     config,
     routeContext,
+    operations,
     {
-      createCloudClient(receivedConfig) {
-        calls.push(['cloud', receivedConfig]);
+      createClient(receivedOperations, receivedConfig) {
+        calls.push(['client', receivedOperations, receivedConfig]);
         return cloudClient;
-      },
-      createLocalClient() {
-        calls.push(['local']);
-        throw new Error('local adapter must not be constructed');
       },
       createController(options) {
         calls.push(['controller', options]);
@@ -200,34 +199,32 @@ test('cloud project overview binding constructs only cloud authority', () => {
     projectId,
   });
   assert.deepEqual(calls, [
-    ['cloud', config],
+    ['client', operations, config],
     [
       'controller',
       {
         authority: 'cloud',
-        cloudClient,
+        client: cloudClient,
         initialScope: binding.scope,
       },
     ],
   ]);
 });
 
-test('local project overview binding constructs only local authority', () => {
+test('local project overview binding injects the V2 authority client', () => {
   const calls = [];
   const localClient = Object.freeze({ kind: 'local-client' });
   const controller = Object.freeze({ kind: 'controller' });
   const config = runtimeConfig('local');
+  const operations = projectOverviewOperationsV2Fixture();
 
   const binding = createProjectOverviewRouteBindingForRuntime(
     config,
     routeContext,
+    operations,
     {
-      createCloudClient() {
-        calls.push(['cloud']);
-        throw new Error('cloud adapter must not be constructed');
-      },
-      createLocalClient(receivedConfig) {
-        calls.push(['local', receivedConfig]);
+      createClient(receivedOperations, receivedConfig) {
+        calls.push(['client', receivedOperations, receivedConfig]);
         return localClient;
       },
       createController(options) {
@@ -244,12 +241,12 @@ test('local project overview binding constructs only local authority', () => {
     projectId,
   });
   assert.deepEqual(calls, [
-    ['local', config],
+    ['client', operations, config],
     [
       'controller',
       {
         authority: 'local',
-        localClient,
+        client: localClient,
         initialScope: binding.scope,
       },
     ],
@@ -266,24 +263,37 @@ test('project overview scope mismatch fails before constructing any authority', 
     const calls = [];
     assert.throws(
       () =>
-        createProjectOverviewRouteBindingForRuntime(config, context, {
-          createCloudClient() {
-            calls.push('cloud');
-            return {};
-          },
-          createLocalClient() {
-            calls.push('local');
+        createProjectOverviewRouteBindingForRuntime(
+          config,
+          context,
+          projectOverviewOperationsV2Fixture(),
+          {
+          createClient() {
+            calls.push('client');
             return {};
           },
           createController() {
             calls.push('controller');
             return {};
           },
-        }),
+          },
+        ),
       /project_overview_runtime_scope_mismatch/u,
     );
     assert.deepEqual(calls, []);
   }
+});
+
+test('project overview binding fails closed without the V2 authority', () => {
+  assert.throws(
+    () =>
+      createProjectOverviewRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        routeContext,
+        undefined,
+      ),
+    /desktop_project_overview_authority_required/u,
+  );
 });
 
 test('Tenant Tasks binding keeps Cloud tenant-wide and Local project-scoped', () => {

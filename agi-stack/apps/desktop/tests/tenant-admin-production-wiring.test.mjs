@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
+import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -102,6 +103,7 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
       unavailableAutomation,
       cloudConfig,
       {
+        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
@@ -183,6 +185,7 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
       unavailableAutomation,
       { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
       {
+        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),

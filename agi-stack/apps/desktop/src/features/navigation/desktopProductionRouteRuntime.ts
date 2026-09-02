@@ -1,16 +1,15 @@
 import type { AuthState, DesktopRuntimeConfig } from '../../types';
 import { isIdentityAuthenticated } from '../auth/authContextModel';
-import type { CloudProjectOverviewClient } from '../project/projectOverviewClient';
-import { createCloudProjectOverviewClient } from '../project/projectOverviewCloudClient';
+import type { ProjectOverviewClient } from '../project/projectOverviewClient';
 import {
   createProjectOverviewController,
   type ProjectOverviewController,
   type ProjectOverviewControllerOptions,
 } from '../project/projectOverviewController';
 import {
-  createLocalProjectOverviewClient,
-  type LocalProjectOverviewClient,
-} from '../project/projectOverviewLocalClient';
+  createDesktopProjectOverviewClientV2,
+  type DesktopProjectOverviewOperationsV2,
+} from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
 import type {
   ProjectOverviewRouteBinding,
   ProjectOverviewRouteContext,
@@ -79,12 +78,10 @@ import {
 import type { DesktopRouteContext } from './desktopRouteRegistry';
 
 export type ProjectOverviewRouteRuntimeDependencies = Readonly<{
-  createCloudClient?: (
+  createClient?: (
+    operations: Pick<DesktopProjectOverviewOperationsV2, 'loadProjectOverview'>,
     config: DesktopRuntimeConfig,
-  ) => CloudProjectOverviewClient;
-  createLocalClient?: (
-    config: DesktopRuntimeConfig,
-  ) => LocalProjectOverviewClient;
+  ) => ProjectOverviewClient;
   createController?: (
     options: ProjectOverviewControllerOptions,
   ) => ProjectOverviewController;
@@ -156,6 +153,7 @@ export function resolveDesktopRouteCapability(
 export function createProjectOverviewRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ProjectOverviewRouteContext,
+  operations: Pick<DesktopProjectOverviewOperationsV2, 'loadProjectOverview'>,
   dependencies: ProjectOverviewRouteRuntimeDependencies = {},
 ): ProjectOverviewRouteBinding {
   if (
@@ -165,39 +163,22 @@ export function createProjectOverviewRouteBindingForRuntime(
     throw new Error('project_overview_runtime_scope_mismatch');
   }
 
-  const createCloudClient =
-    dependencies.createCloudClient ?? createCloudProjectOverviewClient;
-  const createLocalClient =
-    dependencies.createLocalClient ?? createLocalProjectOverviewClient;
+  if (typeof operations?.loadProjectOverview !== 'function') {
+    throw new Error('desktop_project_overview_authority_required');
+  }
+  const createClient = dependencies.createClient ?? createDesktopProjectOverviewClientV2;
   const createController =
     dependencies.createController ?? createProjectOverviewController;
-  if (config.mode === 'cloud') {
-    const scope = Object.freeze({
-      authority: config.mode,
-      tenantId: context.tenantId,
-      projectId: context.projectId,
-    });
-    const cloudClient = createCloudClient(config);
-    return Object.freeze({
-      controller: createController({
-        authority: 'cloud',
-        cloudClient,
-        initialScope: scope,
-      }),
-      scope,
-    });
-  }
-
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
     projectId: context.projectId,
   });
-  const localClient = createLocalClient(config);
+  const client = createClient(operations, config);
   return Object.freeze({
     controller: createController({
-      authority: 'local',
-      localClient,
+      authority: config.mode,
+      client,
       initialScope: scope,
     }),
     scope,
