@@ -46,7 +46,8 @@ import type { TenantOverviewClient } from '../tenant/tenantOverviewClient';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { TenantAnalyticsRouteBinding } from '../tenant/tenantAnalyticsRouteModule';
 import { createTenantAnalyticsController } from '../tenant/tenantAnalyticsController';
-import { createTenantAnalyticsHttpClient } from '../tenant/tenantAnalyticsHttpClient';
+import type { TenantAnalyticsClient } from '../tenant/tenantAnalyticsClient';
+import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { TenantAgentDashboardRouteBinding } from '../tenant/tenantAgentDashboardRouteModule';
 import { createTenantAgentDashboardController } from '../tenant/tenantAgentDashboardController';
 import { createTenantAgentDashboardHttpClient } from '../tenant/tenantAgentDashboardHttpClient';
@@ -231,6 +232,10 @@ export function createTenantAnalyticsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
   tenantPlan: string | null,
+  tenantAnalyticsOperationsV2: Pick<
+    DesktopTenantAnalyticsOperationsV2,
+    'loadTenantAnalytics'
+  >,
 ): TenantAnalyticsRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('tenant_analytics_runtime_scope_mismatch');
@@ -240,7 +245,15 @@ export function createTenantAnalyticsRouteBindingForRuntime(
     tenantId: context.tenantId,
     period: '30d' as const,
   });
-  const client = createTenantAnalyticsHttpClient(config);
+  const client: TenantAnalyticsClient = Object.freeze({
+    async load(requestScope, options) {
+      return tenantAnalyticsOperationsV2.loadTenantAnalytics({
+        config,
+        scope: requestScope,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
+  });
   return Object.freeze({
     controller: createTenantAnalyticsController({
       authority: config.mode,

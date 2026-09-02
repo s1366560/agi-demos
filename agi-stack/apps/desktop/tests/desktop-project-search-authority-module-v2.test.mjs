@@ -32,6 +32,7 @@ const authorityModules = [
   'desktopSessionRunControlAuthorityModuleV2',
   'desktopSessionRunChangesAuthorityModuleV2',
   'desktopSessionTimelineAuthorityModuleV2',
+  'desktopTenantAnalyticsAuthorityModuleV2',
   'desktopTenantCatalogAuthorityModuleV2',
   'desktopTenantOverviewAuthorityModuleV2',
   'desktopTerminalLifecycleAuthorityModuleV2',

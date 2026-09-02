@@ -94,6 +94,7 @@ import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapabili
 import { loadTenantAgentDashboardCapability } from '../tenant/tenantAgentDashboardCapability';
 import { loadTenantAgentBindingsCapability } from '../tenant/tenantAgentBindingsCapability';
 import { loadTenantOverviewCapability } from '../tenant/tenantOverviewCapability';
+import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability';
 import { tenantTasksCapability } from '../tenant/tenantTasksCapability';
@@ -146,6 +147,10 @@ type ManagementRouteCapabilityClients = Readonly<
 >;
 
 export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
+  tenantAnalyticsOperationsV2: Pick<
+    DesktopTenantAnalyticsOperationsV2,
+    'loadTenantAnalytics'
+  >;
   tenantOverviewOperationsV2: Pick<
     DesktopTenantOverviewOperationsV2,
     'loadTenantOverview'
@@ -330,7 +335,11 @@ export function createDesktopWorkbenchCapabilityClient(
           options.tenantOverviewOperationsV2,
           signal,
         ),
-        loadTenantAnalyticsCapability(config, signal),
+        loadTenantAnalyticsCapability(
+          config,
+          options.tenantAnalyticsOperationsV2,
+          signal,
+        ),
         loadTenantAgentDashboardCapability(config, signal),
         loadTenantAgentBindingsCapability(config, signal),
         loadTenantProjectsCapability(config, signal),

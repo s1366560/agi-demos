@@ -234,6 +234,7 @@ import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/
 import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
+import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type {
@@ -250,6 +251,7 @@ export type AppRouteRegistryRefs = {
     DesktopPluginMarketplaceCatalogOperationsV2,
     'projectMarketplacePlugins'
   >;
+  tenantAnalyticsOperationsV2: DesktopTenantAnalyticsOperationsV2;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
   tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
   desktopWorkspaceCatalogOperationsV2: DesktopWorkspaceCatalogOperationsV2;
@@ -293,6 +295,7 @@ export type AppTenantCoreRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   | 'authRef'
   | 'configRef'
+  | 'tenantAnalyticsOperationsV2'
   | 'tenantOverviewOperationsV2'
   | 'desktopWorkspaceCatalogOperationsV2'
   | 'desktopWorkspaceLifecycleOperationsV2'
@@ -860,6 +863,7 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
   const {
     authRef,
     configRef,
+    tenantAnalyticsOperationsV2,
     tenantOverviewOperationsV2,
     desktopWorkspaceCatalogOperationsV2,
     desktopWorkspaceLifecycleOperationsV2,
@@ -896,6 +900,7 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
             configRef.current,
             context,
             authRef.current.tenants.find((tenant) => tenant.id === context.tenantId)?.plan ?? null,
+            tenantAnalyticsOperationsV2,
           ),
       }),
     }),

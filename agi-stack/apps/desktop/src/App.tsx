@@ -100,6 +100,7 @@ import { createDesktopSessionRunControlOperationsV2 } from './plugins/desktopSes
 import { createDesktopSessionRunChangesOperationsV2 } from './plugins/desktopSessionRunChangesAuthorityModuleV2';
 import { createDesktopSessionRunInputOperationsV2 } from './plugins/desktopSessionRunInputAuthorityModuleV2';
 import { createDesktopSessionTimelineOperationsV2 } from './plugins/desktopSessionTimelineAuthorityModuleV2';
+import { createDesktopTenantAnalyticsOperationsV2 } from './plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
 import { createDesktopTenantOverviewOperationsV2 } from './plugins/desktopTenantOverviewAuthorityModuleV2';
 import {
@@ -824,6 +825,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantAnalyticsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAnalyticsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopConversationConfigOperationsV2 = useMemo(
     () =>
       createDesktopConversationConfigOperationsV2(
@@ -1112,6 +1120,7 @@ export function App() {
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+      tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
       tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
       tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
@@ -1129,6 +1138,7 @@ export function App() {
     [
       desktopPluginMarketplaceOperationsV2,
       desktopProjectSearchOperationsV2,
+      desktopTenantAnalyticsOperationsV2,
       desktopTenantCatalogOperationsV2,
       desktopTenantOverviewOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
@@ -1164,12 +1174,14 @@ export function App() {
         automationApi: desktopAutomationApiV2,
         config,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
         tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
       }),
     [
       config,
       desktopAutomationApiV2,
       desktopPluginMarketplaceOperationsV2,
+      desktopTenantAnalyticsOperationsV2,
       desktopTenantOverviewOperationsV2,
       desktopWorkbenchCapabilityClientProviderV2,
     ],
