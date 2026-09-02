@@ -21,6 +21,9 @@ const {
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/navigation/desktopProductionRouteRuntime.js'
 );
+const {
+  RuntimePoolUnavailableError,
+} = require('/tmp/agistack-desktop-test-dist/src/features/runtime-pool/runtimePoolClient.js');
 
 const tenantId = 'tenant-1';
 const projectId = 'project-1';
@@ -348,6 +351,7 @@ test('Runtime Pool binding preserves exact Cloud and Local tenant authority', as
   const cloud = createRuntimePoolRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimePoolOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
   assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
@@ -355,6 +359,7 @@ test('Runtime Pool binding preserves exact Cloud and Local tenant authority', as
   const local = createRuntimePoolRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
+    runtimePoolOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, { authority: 'local', tenantId });
   await local.controller.load(local.scope);
@@ -368,9 +373,11 @@ test('Runtime Pool binding preserves exact Cloud and Local tenant authority', as
 test('Runtime Pool binding rejects tenant scope drift before client authority', () => {
   assert.throws(
     () =>
-      createRuntimePoolRouteBindingForRuntime(runtimeConfig('cloud'), {
-        tenantId: 'tenant-other',
-      }),
+      createRuntimePoolRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId: 'tenant-other' },
+        runtimePoolOperationsV2Fixture(),
+      ),
     /runtime_pool_runtime_scope_mismatch/u,
   );
 });
@@ -513,6 +520,7 @@ test('Unified Runtimes binding preserves exact Cloud and Local scope authority',
   const cloud = createUnifiedRuntimesRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimePoolOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, {
     authority: 'cloud',
@@ -524,6 +532,7 @@ test('Unified Runtimes binding preserves exact Cloud and Local scope authority',
   const local = createUnifiedRuntimesRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
+    runtimePoolOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, {
     authority: 'local',
@@ -544,6 +553,7 @@ test('Unified Runtimes binding rejects tenant and project scope drift', () => {
       createUnifiedRuntimesRouteBindingForRuntime(
         runtimeConfig('cloud', { tenantId: 'tenant-other' }),
         { tenantId },
+        runtimePoolOperationsV2Fixture(),
       ),
     /unified_runtimes_runtime_scope_mismatch/u,
   );
@@ -552,6 +562,7 @@ test('Unified Runtimes binding rejects tenant and project scope drift', () => {
       createUnifiedRuntimesRouteBindingForRuntime(
         runtimeConfig('local', { projectId: ' ' }),
         { tenantId },
+        runtimePoolOperationsV2Fixture(),
       ),
     /unified_runtimes_runtime_scope_mismatch/u,
   );
@@ -621,5 +632,69 @@ function runtimeConfig(mode, overrides = {}) {
     mode,
     workspaceRoot: '/workspace',
     ...overrides,
+  };
+}
+
+function runtimePoolOperationsV2Fixture() {
+  const localUnavailable = (input) => {
+    if (input.scope.authority === 'local') {
+      throw new RuntimePoolUnavailableError('cloud_runtime_pool_not_applicable');
+    }
+  };
+  return {
+    async getRuntimePoolStatus(input) {
+      localUnavailable(input);
+      return {
+        enabled: true,
+        status: 'running',
+        totalInstances: 0,
+        hotInstances: 0,
+        warmInstances: 0,
+        coldInstances: 0,
+        readyInstances: 0,
+        executingInstances: 0,
+        unhealthyInstances: 0,
+        prewarmPool: null,
+        resourceUsage: null,
+        reasonCode: 'global_pool_capacity_not_available_in_tenant_scope',
+      };
+    },
+    async listRuntimePoolInstances(input) {
+      localUnavailable(input);
+      return { instances: [], total: 0, page: 1, pageSize: 20 };
+    },
+    async getRuntimePoolMetrics(input) {
+      localUnavailable(input);
+      return {
+        instances: {
+          total: 0,
+          byTier: { hot: 0, warm: 0, cold: 0 },
+          byStatus: { ready: 0, executing: 0, unhealthy: 0 },
+        },
+        unhealthyCount: 0,
+        prewarm: null,
+        reasonCode: 'global_pool_capacity_not_available_in_tenant_scope',
+      };
+    },
+    pauseRuntimePoolInstance: async () => undefined,
+    resumeRuntimePoolInstance: async () => undefined,
+    terminateRuntimePoolInstance: async () => undefined,
+    probeRuntimePool: async (input) => ({
+      availability: input.scope.authority === 'local' ? 'not_applicable' : 'degraded',
+      reason_code:
+        input.scope.authority === 'local'
+          ? 'cloud_runtime_pool_not_applicable'
+          : 'global_pool_capacity_not_available_in_tenant_scope',
+      service_version: input.scope.authority === 'local' ? null : '0.1.0',
+      contract_version: input.scope.authority === 'local' ? null : '3.0.0',
+      allowed_actions: [],
+      scope: {
+        tenant_id: input.scope.tenantId,
+        project_id: null,
+        workspace_id: null,
+        instance_id: null,
+      },
+      authority_revision: null,
+    }),
   };
 }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -456,6 +457,7 @@ function createClient(config) {
     config,
     {
       projectOverviewOperationsV2: projectOverviewOperationsV2(),
+      runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
       tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
       tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),

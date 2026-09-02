@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -175,6 +176,25 @@ test('workbench capability client requires the Project Overview V2 authority', (
         },
       ),
     /desktop_project_overview_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Runtime Pool V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_runtime_pool_authority_required/u,
   );
 });
 
@@ -459,25 +479,12 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-pool'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'global_pool_capacity_not_available_in_tenant_scope',
+      withObservedAuthority({
+        availability: 'unavailable',
+        reason_code: 'capability_authority_revision_unavailable',
         service_version: '0.1.0',
         contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'refresh',
-          'toggle-auto-refresh',
-          'list-instances',
-          'search-current-page',
-          'filter-by-tier',
-          'paginate-instances',
-          'pause-instance',
-          'resume-instance',
-          'terminate-instance',
-          'retry-list-instances',
-          'inspect-pool-status',
-        ],
+        allowed_actions: [],
         scope: {
           tenant_id: 'default',
           project_id: null,
@@ -485,7 +492,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
           instance_id: null,
         },
         authority_revision: null,
-      }),
+      }, 'cloud_service'),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-instances'],
@@ -1577,6 +1584,7 @@ test('local Electron Workspace Collaboration reports permanent Core cutover outa
 function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
   return createDesktopWorkbenchCapabilityClient(automationApi, config, {
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
     tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),

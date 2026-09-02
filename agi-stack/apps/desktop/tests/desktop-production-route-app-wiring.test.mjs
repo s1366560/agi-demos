@@ -592,7 +592,7 @@ test('auxiliary V2 route factory wires Project Support through scoped Cloud auth
 test('App wires the native Runtime Pool loader through the scoped runtime binding', () => {
   assert.match(
     registrySource,
-    /TENANT_POOL_ROUTE_ID[\s\S]*createRuntimePoolRouteModuleLoader\(\{[\s\S]*createRuntimePoolRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+    /TENANT_POOL_ROUTE_ID[\s\S]*createRuntimePoolRouteModuleLoader\(\{[\s\S]*createRuntimePoolRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*runtimePoolOperationsV2,?\s*\)/u,
   );
 });
 
@@ -627,7 +627,7 @@ test('App wires Instance Templates through one tenant-scoped Cloud or Local bind
 test('App wires Unified Runtimes through one scoped Cloud or Local binding', () => {
   assert.match(
     registrySource,
-    /TENANT_RUNTIMES_ROUTE_ID[\s\S]*createUnifiedRuntimesRouteModuleLoader\(\{[\s\S]*createUnifiedRuntimesRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+    /TENANT_RUNTIMES_ROUTE_ID[\s\S]*createUnifiedRuntimesRouteModuleLoader\(\{[\s\S]*createUnifiedRuntimesRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*runtimePoolOperationsV2,?\s*\)/u,
   );
 });
 

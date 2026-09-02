@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -98,6 +99,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
         config,
         {
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
           tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
@@ -146,6 +148,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
     cloudConfig,
     {
       projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+      runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
       tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
       tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
@@ -199,6 +202,7 @@ test('Workbench default production journey authority supports tenant-level scope
       config,
       {
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+        runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
@@ -252,6 +256,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
     cloudConfig,
     {
       projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+      runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
       tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
       tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),

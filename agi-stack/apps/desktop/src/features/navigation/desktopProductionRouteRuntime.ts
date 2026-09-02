@@ -10,6 +10,10 @@ import {
   createDesktopProjectOverviewClientV2,
   type DesktopProjectOverviewOperationsV2,
 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
+import {
+  createDesktopRuntimePoolClientV2,
+  type DesktopRuntimePoolOperationsV2,
+} from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type {
   ProjectOverviewRouteBinding,
   ProjectOverviewRouteContext,
@@ -19,7 +23,6 @@ import { createDeadLetterQueueController } from '../governance/deadLetterQueueCo
 import { createDeadLetterQueueHttpClient } from '../governance/deadLetterQueueHttpClient';
 import type { RuntimePoolRouteBinding } from '../runtime-pool/runtimePoolRouteModule';
 import { createRuntimePoolController } from '../runtime-pool/runtimePoolController';
-import { createRuntimePoolHttpClient } from '../runtime-pool/runtimePoolClient';
 import type { RuntimeInstancesRouteBinding } from '../runtime-instances/runtimeInstancesRouteModule';
 import { createRuntimeInstancesController } from '../runtime-instances/runtimeInstancesController';
 import { createRuntimeInstancesClient } from '../runtime-instances/runtimeInstancesClient';
@@ -439,15 +442,17 @@ export function createDeadLetterQueueRouteBindingForRuntime(
 export function createRuntimePoolRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2,
 ): RuntimePoolRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('runtime_pool_runtime_scope_mismatch');
   }
+  requireRuntimePoolOperationsV2(runtimePoolOperationsV2);
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createRuntimePoolHttpClient(config);
+  const client = createDesktopRuntimePoolClientV2(runtimePoolOperationsV2, config);
   return Object.freeze({
     controller: createRuntimePoolController({
       authority: config.mode,
@@ -550,6 +555,7 @@ export function createInstanceTemplatesRouteBindingForRuntime(
 export function createUnifiedRuntimesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2,
 ): UnifiedRuntimesRouteBinding {
   if (
     config.tenantId !== context.tenantId ||
@@ -558,12 +564,15 @@ export function createUnifiedRuntimesRouteBindingForRuntime(
   ) {
     throw new Error('unified_runtimes_runtime_scope_mismatch');
   }
+  requireRuntimePoolOperationsV2(runtimePoolOperationsV2);
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
     projectId: config.projectId,
   });
-  const client = createUnifiedRuntimesClient(config);
+  const client = createUnifiedRuntimesClient(config, {
+    poolClient: createDesktopRuntimePoolClientV2(runtimePoolOperationsV2, config),
+  });
   return Object.freeze({
     controller: createUnifiedRuntimesController({
       authority: config.mode,
@@ -572,4 +581,18 @@ export function createUnifiedRuntimesRouteBindingForRuntime(
     }),
     scope,
   });
+}
+
+function requireRuntimePoolOperationsV2(operations: DesktopRuntimePoolOperationsV2): void {
+  if (
+    typeof operations?.getRuntimePoolStatus !== 'function' ||
+    typeof operations.listRuntimePoolInstances !== 'function' ||
+    typeof operations.getRuntimePoolMetrics !== 'function' ||
+    typeof operations.pauseRuntimePoolInstance !== 'function' ||
+    typeof operations.resumeRuntimePoolInstance !== 'function' ||
+    typeof operations.terminateRuntimePoolInstance !== 'function' ||
+    typeof operations.probeRuntimePool !== 'function'
+  ) {
+    throw new Error('desktop_runtime_pool_authority_required');
+  }
 }

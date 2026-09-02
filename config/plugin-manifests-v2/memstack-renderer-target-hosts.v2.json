@@ -700,6 +700,37 @@
       "contract_digest": "sha256:3318905149a179a3b47ff6b47d23f1bba694997a9a08698f186884055dacbc61"
     },
     {
+      "module_ref": "builtin://memstack/desktop/runtime-pool-authority",
+      "entrypoint": "applyDesktopRuntimePoolAuthorityV2",
+      "artifact": {
+        "digest": "sha256:a29f15a68c1e27fbf5839ed68473f91d0ec6875c7d69cdb53f745c3bf17ac904",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopRuntimePoolAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.runtime-pool-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:76777c7033e843edad11d229ee87fabe5fa66bdcc0b5c5f402b87c60ed0d73ae"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/session-artifact-action-authority",
       "entrypoint": "applyDesktopSessionArtifactActionAuthorityV2",
       "artifact": {

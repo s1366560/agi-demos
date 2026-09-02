@@ -232,6 +232,7 @@ import { createSkillsRouteModuleLoader } from '../settings-routes/skillsRouteMod
 import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRouteModule';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
+import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
@@ -272,6 +273,7 @@ export type AppRouteRegistryRefs = {
   }>;
   projectCronJobsRouteBindingProviderV2: ProjectCronJobsRouteBindingProviderV2;
   projectOverviewOperationsV2: DesktopProjectOverviewOperationsV2;
+  runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
@@ -292,7 +294,10 @@ export type AppProjectAdministrationRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   'configRef' | 'projectCronJobsRouteBindingProviderV2'
 >;
-export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
+export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  'configRef' | 'runtimePoolOperationsV2'
+>;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   'configRef' | 'desktopProductionRouteNavigation' | 'projectOverviewOperationsV2'
@@ -765,12 +770,16 @@ export function createAppProjectAdministrationRouteRegistry(
 export function createAppRuntimeInfrastructureRouteRegistry(
   refs: AppRuntimeInfrastructureRouteRegistryRefs,
 ) {
-  const { configRef } = refs;
+  const { configRef, runtimePoolOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_POOL_ROUTE_ID]: createRuntimePoolRouteModuleLoader({
         createBinding: (context) =>
-          createRuntimePoolRouteBindingForRuntime(configRef.current, context),
+          createRuntimePoolRouteBindingForRuntime(
+            configRef.current,
+            context,
+            runtimePoolOperationsV2,
+          ),
       }),
       [TENANT_INSTANCES_ROUTE_ID]: createRuntimeInstancesRouteModuleLoader({
         createBinding: (context) =>
@@ -790,7 +799,11 @@ export function createAppRuntimeInfrastructureRouteRegistry(
       }),
       [TENANT_RUNTIMES_ROUTE_ID]: createUnifiedRuntimesRouteModuleLoader({
         createBinding: (context) =>
-          createUnifiedRuntimesRouteBindingForRuntime(configRef.current, context),
+          createUnifiedRuntimesRouteBindingForRuntime(
+            configRef.current,
+            context,
+            runtimePoolOperationsV2,
+          ),
       }),
       [TENANT_GENES_ROUTE_ID]: createTenantGenesRouteModuleLoader({
         createBinding: (context) =>

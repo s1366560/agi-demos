@@ -6,10 +6,7 @@ import {
 } from '../../api/client';
 import { desktopApiFetch } from '../../api/cloudRequestBroker';
 import type { DesktopRuntimeConfig } from '../../types';
-import {
-  createRuntimePoolHttpClient,
-  type RuntimePoolClient,
-} from '../runtime-pool/runtimePoolClient';
+import type { RuntimePoolClient } from '../runtime-pool/runtimePoolClient';
 import type {
   UnifiedCapabilityAvailability,
   UnifiedLocalSidecar,
@@ -27,7 +24,7 @@ type LocalRuntimeStatusReader = () => Promise<unknown>;
 
 export type UnifiedRuntimesClientDependencies = Readonly<{
   fetch?: Fetch;
-  poolClient?: Pick<RuntimePoolClient, 'getStatus' | 'listInstances'>;
+  poolClient: Pick<RuntimePoolClient, 'getStatus' | 'listInstances'>;
   readLocalRuntimeStatus?: LocalRuntimeStatusReader;
 }>;
 
@@ -43,14 +40,13 @@ export class UnifiedRuntimesUnavailableError extends Error {
 
 export function createUnifiedRuntimesClient(
   config: DesktopRuntimeConfig,
-  dependencies: UnifiedRuntimesClientDependencies = {},
+  dependencies: UnifiedRuntimesClientDependencies,
 ): UnifiedRuntimesClient {
   const runtimeConfig = Object.freeze({ ...config });
   const fetchPath: FetchPath = dependencies.fetch
     ? (path, init) => dependencies.fetch!(absoluteUrl(runtimeConfig.apiBaseUrl, path), init)
     : (path, init) => desktopApiFetch(runtimeConfig, path, init);
-  const poolClient =
-    dependencies.poolClient ?? createRuntimePoolHttpClient(runtimeConfig);
+  const poolClient = dependencies.poolClient;
   const readLocalRuntimeStatus =
     dependencies.readLocalRuntimeStatus ?? defaultLocalRuntimeStatusReader;
 

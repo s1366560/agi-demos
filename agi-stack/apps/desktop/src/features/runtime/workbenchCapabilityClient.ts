@@ -1,3 +1,5 @@
+import { RuntimeV2Error } from '@agistack/plugin-runtime';
+
 import {
   DesktopApiError,
   desktopApiCredential,
@@ -34,7 +36,6 @@ import { instanceTemplatesCapability } from '../instance-templates/instanceTempl
 import { runtimeClustersCapability } from '../runtime-clusters/runtimeClustersCapability';
 import { runtimeDeploymentsCapability } from '../runtime-deployments/runtimeDeploymentsCapability';
 import { runtimeInstancesCapability } from '../runtime-instances/runtimeInstancesCapability';
-import { runtimePoolCapability } from '../runtime-pool/runtimePoolCapability';
 import { createAgentDefinitionsRouteClient } from '../settings-routes/agentDefinitionsRouteClient';
 import type { ChannelsRouteClient } from '../settings-routes/channelsRouteClient';
 import type { EvolutionRouteClient } from '../settings-routes/evolutionRouteClient';
@@ -120,6 +121,7 @@ import {
   type DesktopPluginMarketplaceCatalogOperationsV2,
 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
+import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_MINIMUM_CONTRACT_VERSION,
@@ -175,6 +177,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     DesktopProjectOverviewOperationsV2,
     'probeProjectOverview'
   >;
+  runtimePoolOperationsV2: Pick<DesktopRuntimePoolOperationsV2, 'probeRuntimePool'>;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -302,6 +305,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof projectOverviewOperationsV2?.probeProjectOverview !== 'function') {
     throw new Error('desktop_project_overview_authority_required');
   }
+  const runtimePoolOperationsV2 = options?.runtimePoolOperationsV2;
+  if (typeof runtimePoolOperationsV2?.probeRuntimePool !== 'function') {
+    throw new Error('desktop_runtime_pool_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -355,6 +362,7 @@ export function createDesktopWorkbenchCapabilityClient(
         automationCapabilities,
         workspaceCollaboration,
         projectOverview,
+        runtimePool,
         tenantOverview,
         tenantAnalytics,
         tenantAgentDashboard,
@@ -377,6 +385,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadAutomationCapabilities(automationApi, config.projectId, signal),
         loadWorkspaceCollaborationCapability(config, signal),
         loadProjectOverviewCapability(config, projectOverviewOperationsV2, signal),
+        loadRuntimePoolCapability(config, runtimePoolOperationsV2, signal),
         loadTenantOverviewCapability(
           config,
           options.tenantOverviewOperationsV2,
@@ -586,7 +595,9 @@ export function createDesktopWorkbenchCapabilityClient(
           'tenant-tenant-workspaces': declared(tenantWorkspacesCapability(config)),
           'tenant-tenant-tasks': observed(tenantTasks),
           'tenant-tenant-runtimes': declared(unifiedRuntimesCapability(config)),
-          'tenant-tenant-pool': declared(runtimePoolCapability(config)),
+          'tenant-tenant-pool': (config.mode === 'local' ? declared : observed)(
+            withCapabilityScope(runtimePool, tenantScope),
+          ),
           'tenant-tenant-instances': declared(runtimeInstancesCapability(config)),
           'tenant-tenant-clusters': declared(runtimeClustersCapability(config)),
           'tenant-tenant-deploy': declared(runtimeDeploymentsCapability(config)),
@@ -1731,6 +1742,35 @@ async function loadProjectOverviewCapability(
       return unavailable('project_overview_contract_invalid');
     }
     return unavailable('project_overview_authority_unavailable');
+  }
+}
+
+async function loadRuntimePoolCapability(
+  config: DesktopRuntimeConfig,
+  operations: Pick<DesktopRuntimePoolOperationsV2, 'probeRuntimePool'>,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const tenantId = scopeIdentifier(config.tenantId);
+  if (!tenantId) return unavailable('runtime_pool_scope_unavailable');
+
+  try {
+    return await operations.probeRuntimePool({
+      config,
+      scope: { authority: config.mode, tenantId },
+      ...(signal === undefined ? {} : { signal }),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (error instanceof DesktopApiError && error.status === 403) {
+      return unavailable('runtime_pool_forbidden');
+    }
+    if (
+      error instanceof RuntimeV2Error &&
+      error.code === 'desktop_runtime_pool_service_contract_invalid'
+    ) {
+      return unavailable('runtime_pool_contract_invalid');
+    }
+    return unavailable('runtime_pool_authority_unavailable');
   }
 }
 
