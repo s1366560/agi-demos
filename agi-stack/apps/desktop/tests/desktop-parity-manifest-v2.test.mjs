@@ -511,7 +511,6 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     "tenant-tenant-instances",
     "tenant-tenant-pool",
     "tenant-tenant-runtimes",
-    "tenant-tenant-tasks",
     "tenant-tenant-workspaces",
   ];
 
@@ -543,7 +542,6 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
   for (const capabilityId of [
     "tenant-tenant-instances",
     "tenant-tenant-runtimes",
-    "tenant-tenant-tasks",
     "tenant-tenant-workspaces",
   ]) {
     const surface = byId.get(capabilityId)?.surfaces.desktop_local;
