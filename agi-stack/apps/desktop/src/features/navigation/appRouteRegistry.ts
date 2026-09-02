@@ -235,6 +235,12 @@ import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
+import type {
+  DesktopWorkspaceCatalogOperationsV2,
+} from '../../plugins/desktopWorkspaceCatalogAuthorityModuleV2';
+import type {
+  DesktopWorkspaceLifecycleOperationsV2,
+} from '../../plugins/desktopWorkspaceLifecycleAuthorityModuleV2';
 
 export type AppRouteRegistryRefs = {
   authRef: RefObject<AuthState>;
@@ -244,6 +250,8 @@ export type AppRouteRegistryRefs = {
     'projectMarketplacePlugins'
   >;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
+  desktopWorkspaceCatalogOperationsV2: DesktopWorkspaceCatalogOperationsV2;
+  desktopWorkspaceLifecycleOperationsV2: DesktopWorkspaceLifecycleOperationsV2;
   desktopProductionRouteLocation: DesktopHashLocationPort;
   desktopProductionRouteNavigation: Readonly<{
     clearHash: () => void;
@@ -279,7 +287,13 @@ export type AppProjectDiscoveryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   'projectSearchOperationsV2' | 'projectSearchRouteBindingProviderV2'
 >;
-export type AppTenantCoreRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'authRef' | 'configRef'>;
+export type AppTenantCoreRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  | 'authRef'
+  | 'configRef'
+  | 'desktopWorkspaceCatalogOperationsV2'
+  | 'desktopWorkspaceLifecycleOperationsV2'
+>;
 type AppSettingsRouteContentRefs = Pick<
   AppRouteRegistryRefs,
   | 'desktopProductionRouteNavigation'
@@ -840,7 +854,12 @@ export function createAppProjectDiscoveryRouteRegistry(refs: AppProjectDiscovery
 }
 
 export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistryRefs) {
-  const { authRef, configRef } = refs;
+  const {
+    authRef,
+    configRef,
+    desktopWorkspaceCatalogOperationsV2,
+    desktopWorkspaceLifecycleOperationsV2,
+  } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [AGENT_WORKSPACE_ROUTE_ID]: createAgentWorkspaceRouteModuleLoader(),
@@ -854,7 +873,10 @@ export function createAppTenantCoreRouteRegistry(refs: AppTenantCoreRouteRegistr
       }),
       [TENANT_WORKSPACES_ROUTE_ID]: createTenantWorkspacesRouteModuleLoader({
         createBinding: (context) =>
-          createTenantWorkspacesRouteBindingForRuntime(configRef.current, context),
+          createTenantWorkspacesRouteBindingForRuntime(configRef.current, context, {
+            catalogOperations: desktopWorkspaceCatalogOperationsV2,
+            lifecycleOperations: desktopWorkspaceLifecycleOperationsV2,
+          }),
       }),
       [TENANT_TASKS_ROUTE_ID]: createTenantTasksRouteModuleLoader({
         createBinding: (context) =>

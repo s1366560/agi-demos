@@ -40,6 +40,7 @@ const authorityModules = [
   'desktopTerminalLifecycleAuthorityModuleV2',
   'desktopWorkspaceAgentBindingAuthorityModuleV2',
   'desktopWorkspaceCatalogAuthorityModuleV2',
+  'desktopWorkspaceLifecycleAuthorityModuleV2',
   'desktopWorkspaceContextAuthorityModuleV2',
   'desktopWorkspaceConversationCatalogAuthorityModuleV2',
   'desktopWorkspaceExecutionSnapshotAuthorityModuleV2',

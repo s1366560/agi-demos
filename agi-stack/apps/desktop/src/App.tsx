@@ -122,6 +122,9 @@ import {
   createDesktopWorkspaceCatalogOperationsV2,
 } from './plugins/desktopWorkspaceCatalogAuthorityModuleV2';
 import {
+  createDesktopWorkspaceLifecycleOperationsV2,
+} from './plugins/desktopWorkspaceLifecycleAuthorityModuleV2';
+import {
   createDesktopWorkspaceExecutionSnapshotOperationsV2,
 } from './plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2';
 import type { DesktopRendererGenerationActionsV2 } from './plugins/desktopRendererGenerationContextV2';
@@ -352,9 +355,6 @@ import {
 import {
   createDesktopWorkspaceRosterClientProviderV2,
 } from './features/workspace/desktopWorkspaceRosterClientProviderV2';
-import {
-  createDesktopWorkspaceLifecycleClientProviderV2,
-} from './features/workspace/desktopWorkspaceLifecycleClientProviderV2';
 import { createWorkspaceCollaborationClientProviderV2 } from './features/workspace/workspaceCollaborationClientProviderV2';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
 import type {
@@ -877,6 +877,13 @@ export function App() {
       ),
     [],
   );
+  const desktopWorkspaceLifecycleOperationsV2 = useMemo(
+    () =>
+      createDesktopWorkspaceLifecycleOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopWorkspaceExecutionSnapshotOperationsV2 = useMemo(
     () =>
       createDesktopWorkspaceExecutionSnapshotOperationsV2(
@@ -965,10 +972,6 @@ export function App() {
   );
   const desktopWorkspaceRosterClientProviderV2 = useMemo(
     () => createDesktopWorkspaceRosterClientProviderV2(),
-    [],
-  );
-  const desktopWorkspaceLifecycleClientProviderV2 = useMemo(
-    () => createDesktopWorkspaceLifecycleClientProviderV2(),
     [],
   );
   const desktopNewThreadComposerCatalogClientProviderV2 = useMemo(
@@ -1101,6 +1104,8 @@ export function App() {
       desktopProductionRouteNavigation,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
+      desktopWorkspaceCatalogOperationsV2,
+      desktopWorkspaceLifecycleOperationsV2,
       projectCronJobsRouteBindingProviderV2,
       projectSearchOperationsV2: desktopProjectSearchOperationsV2,
       projectSearchRouteBindingProviderV2,
@@ -1115,6 +1120,8 @@ export function App() {
       desktopPluginMarketplaceOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopTenantCatalogOperationsV2,
+      desktopWorkspaceCatalogOperationsV2,
+      desktopWorkspaceLifecycleOperationsV2,
     ],
   );
   const desktopRendererCompositionV2 = useMemo(
@@ -1147,10 +1154,6 @@ export function App() {
   const desktopWorkspaceRosterClientV2 = useMemo(
     () => desktopWorkspaceRosterClientProviderV2.publish({ config }),
     [config, desktopWorkspaceRosterClientProviderV2],
-  );
-  const desktopWorkspaceLifecycleClientV2 = useMemo(
-    () => desktopWorkspaceLifecycleClientProviderV2.publish({ config }),
-    [config, desktopWorkspaceLifecycleClientProviderV2],
   );
   const desktopWorkbenchCapabilityClientV2 = useMemo(
     () =>
@@ -3568,16 +3571,6 @@ export function App() {
     void refreshRuntime(nextConfig);
   };
 
-  const workspaceLifecycleClient = (
-    scope: Readonly<{ tenantId: string; projectId: string; workspaceId: string }>,
-  ) =>
-    desktopWorkspaceLifecycleClientV2.bindOperation({
-      ...configRef.current,
-      tenantId: scope.tenantId,
-      projectId: scope.projectId,
-      workspaceId: scope.workspaceId,
-    });
-
   const createWorkspaceFromDialog = async (
     input: WorkspaceCreateInput,
     submittedScope: WorkspaceCreateScope,
@@ -3592,17 +3585,16 @@ export function App() {
     if (!workspaceCreateScopeIsCurrent(submittedScope, currentScope)) {
       throw new WorkspaceCreateScopeChangedError();
     }
-    const creationClient = workspaceLifecycleClient({
-      tenantId: submittedScope.tenantId,
-      projectId: submittedScope.projectId,
-      workspaceId: '',
-    });
-    const created = await creationClient.createWorkspaceForProject(
-      submittedScope.projectId,
+    const created = await desktopWorkspaceLifecycleOperationsV2.createWorkspace({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: '',
+      },
       input,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     const committedScope = {
       tenantId: configRef.current.tenantId,
       projectId: configRef.current.projectId,
@@ -3645,14 +3637,17 @@ export function App() {
     if (!scopedWorkspace || !workspaceSettingsScopeIsCurrent(submittedScope, currentScope)) {
       throw new WorkspaceSettingsScopeChangedError();
     }
-    const settingsClient = workspaceLifecycleClient(submittedScope);
-    const updated = await settingsClient.updateWorkspaceForProject(
-      submittedScope.projectId,
-      submittedScope.workspaceId,
+    const updated = await desktopWorkspaceLifecycleOperationsV2.updateWorkspace({
+      config: {
+        ...configRef.current,
+        tenantId: submittedScope.tenantId,
+        projectId: submittedScope.projectId,
+        workspaceId: submittedScope.workspaceId,
+      },
+      workspaceId: submittedScope.workspaceId,
       input,
-      submittedScope.tenantId,
       signal,
-    );
+    });
     const committedScope = {
       tenantId: configRef.current.tenantId,
       projectId: configRef.current.projectId,

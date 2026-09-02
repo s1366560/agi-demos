@@ -43,6 +43,7 @@ import { desktopWorkspaceAutonomyAttentionAuthorityDefinitionV2 } from './deskto
 import { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } from './desktopWorkspaceMemberMutationAuthorityModuleV2';
 import { desktopWorkspaceContextAuthorityDefinitionV2 } from './desktopWorkspaceContextAuthorityModuleV2';
 import { desktopWorkspaceCatalogAuthorityDefinitionV2 } from './desktopWorkspaceCatalogAuthorityModuleV2';
+import { desktopWorkspaceLifecycleAuthorityDefinitionV2 } from './desktopWorkspaceLifecycleAuthorityModuleV2';
 import { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } from './desktopWorkspaceExecutionSnapshotAuthorityModuleV2';
 import {
   desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
@@ -78,6 +79,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopWorkspaceMemberMutationAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
     desktopWorkspaceCatalogAuthorityDefinitionV2,
+    desktopWorkspaceLifecycleAuthorityDefinitionV2,
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,

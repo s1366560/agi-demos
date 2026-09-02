@@ -13,12 +13,14 @@ const {
   RuntimeV2Error,
 } = require('@agistack/plugin-runtime');
 const {
-  DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_MODULE_REF_V2,
-  DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_SERVICE_V2,
-  DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_VERSION_V2,
-  applyDesktopWorkspaceConversationCatalogAuthorityV2,
-  desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
-} = require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js');
+  DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_MODULE_REF_V2,
+  DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_SERVICE_V2,
+  DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_VERSION_V2,
+  applyDesktopWorkspaceLifecycleAuthorityV2,
+  desktopWorkspaceLifecycleAuthorityDefinitionV2,
+} = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.js'
+);
 const authorityModules = [
   'desktopArtifactContentAuthorityModuleV2',
   'desktopAutomationAuthorityModuleV2',
@@ -38,11 +40,11 @@ const authorityModules = [
   'desktopTerminalLifecycleAuthorityModuleV2',
   'desktopWorkspaceAgentBindingAuthorityModuleV2',
   'desktopWorkspaceAutonomyAttentionAuthorityModuleV2',
-  'desktopWorkspaceMemberMutationAuthorityModuleV2',
   'desktopWorkspaceCatalogAuthorityModuleV2',
-  'desktopWorkspaceLifecycleAuthorityModuleV2',
   'desktopWorkspaceContextAuthorityModuleV2',
+  'desktopWorkspaceConversationCatalogAuthorityModuleV2',
   'desktopWorkspaceExecutionSnapshotAuthorityModuleV2',
+  'desktopWorkspaceMemberMutationAuthorityModuleV2',
   'desktopWorkspaceMessageCatalogAuthorityModuleV2',
 ].flatMap((moduleName) =>
   Object.values(require(`${COMPILED_ROOT}/src/plugins/${moduleName}.js`)).filter(
@@ -50,7 +52,7 @@ const authorityModules = [
   ),
 );
 const marketplace = require(
-  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js'
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
@@ -78,72 +80,77 @@ function rendererDefinitions() {
     ...authorityModules,
     marketplace.desktopPluginMarketplaceCatalogDefinitionV2,
     marketplace.desktopPluginMarketplaceManagementDefinitionV2,
-    desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
+    desktopWorkspaceLifecycleAuthorityDefinitionV2,
   ];
 }
 
 function runtimeConfig(overrides = {}) {
   return {
     ...DEFAULT_CONFIG,
-    apiBaseUrl: 'http://127.0.0.1:46931',
-    apiKey: 'workspace-conversation-session',
-    localApiToken: 'workspace-conversation-launch',
+    apiBaseUrl: 'http://127.0.0.1:46971',
+    apiKey: 'workspace-lifecycle-session',
+    localApiToken: 'workspace-lifecycle-launch',
     mode: 'local',
     tenantId: 'tenant / one',
     projectId: 'project / one',
-    workspaceId: 'workspace / one',
+    workspaceId: '',
     workspaceRoot: '/workspace/project-one',
     ...overrides,
   };
 }
 
-function conversation(id, workspaceId) {
+function createInput() {
   return {
-    id,
+    name: 'Created workspace',
+    description: 'Created through V2',
+    useCase: 'conversation',
+    collaborationMode: 'multi_agent_shared',
+    metadata: { source: 'desktop' },
+  };
+}
+
+function updateInput() {
+  return {
+    name: 'Updated workspace',
+    description: 'Updated through V2',
+    isArchived: true,
+    metadata: { source: 'desktop-v2' },
+  };
+}
+
+function workspace(overrides = {}) {
+  return {
+    id: 'workspace / one',
     tenant_id: 'tenant / one',
     project_id: 'project / one',
-    user_id: 'user-1',
-    title: `Conversation ${id}`,
+    name: 'Updated workspace',
+    created_by: 'user-1',
+    description: 'Updated through V2',
     status: 'active',
-    message_count: 2,
+    is_archived: true,
+    office_status: 'idle',
+    hex_layout_config: {},
     created_at: '2026-09-02T00:00:00Z',
-    workspace_id: workspaceId,
+    updated_at: null,
+    metadata: {},
+    ...overrides,
   };
 }
 
-function page(item) {
-  return {
-    items: [item],
-    total: 1,
-    has_more: false,
-    offset: 0,
-    limit: 500,
-    next_offset: null,
-  };
-}
-
-function json(payload) {
-  return new Response(JSON.stringify(payload), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  });
-}
-
-test('generated contract declares one credential-free root conversation catalog Provider', () => {
+test('generated contract declares one credential-free root workspace lifecycle Provider', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
     ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_MODULE_REF_V2,
+      moduleRef === DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
     ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_MODULE_REF_V2,
+      moduleRef === DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-workspace-conversation-catalog-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-lifecycle-authority',
   );
 
   assert.ok(module);
@@ -153,8 +160,8 @@ test('generated contract declares one credential-free root conversation catalog 
   assert.deepEqual(module.contract.services, {
     provides: [
       {
-        service: DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_SERVICE_V2,
-        version: DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_VERSION_V2,
+        service: DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_SERVICE_V2,
+        version: DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_VERSION_V2,
       },
     ],
     requires: [],
@@ -166,41 +173,37 @@ test('generated contract declares one credential-free root conversation catalog 
   assert.equal(module.contract_digest, catalog.contract_digest);
   assert.equal(
     module.contract_digest,
-    desktopWorkspaceConversationCatalogAuthorityDefinitionV2.contractDigest,
+    desktopWorkspaceLifecycleAuthorityDefinitionV2.contractDigest,
   );
-  assert.equal(catalog.entrypoint, 'applyDesktopWorkspaceConversationCatalogAuthorityV2');
+  assert.equal(catalog.entrypoint, 'applyDesktopWorkspaceLifecycleAuthorityV2');
   assert.equal(
     catalog.artifact_source,
     'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
-      'desktopWorkspaceConversationCatalogAuthorityModuleV2.ts',
+      'desktopWorkspaceLifecycleAuthorityModuleV2.ts',
   );
-  assert.equal(entry.module_ref, DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_MODULE_REF_V2);
+  assert.equal(entry.module_ref, DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
   assert.deepEqual(entry.scope, { kind: 'root' });
   assert.deepEqual(entry.config, { strategy: 'desktop-api-client' });
   assert.deepEqual(entry.inject, {});
   assert.equal(entry.enabled, true);
-  assert.match(profile, /entry_id: builtin-desktop-workspace-conversation-catalog-authority/u);
+  assert.match(profile, /entry_id: builtin-desktop-workspace-lifecycle-authority/u);
   for (const value of [module, catalog, entry]) {
     assert.doesNotMatch(
       JSON.stringify(value),
-      /apiKey|localApiToken|Authorization|workspace-conversation-session/iu,
+      /apiKey|localApiToken|Authorization|workspace-lifecycle-session/iu,
     );
   }
 });
 
-test('Loader activation and Profile disable remove conversation catalog without fallback', async () => {
+test('Loader activation and Profile disable remove workspace lifecycle without fallback', async () => {
   const bootstrap = loadBootstrap();
   const loader = new LoaderV2(rendererDefinitions(), 'desktop-renderer');
   const generation = await loader.stage(bootstrap);
   const service = generation.resolve(
-    DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_SERVICE_V2,
-    {
-      kind: 'project',
-      tenant_id: 'tenant / one',
-      project_id: 'project / one',
-    },
-    { version: DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_VERSION_V2 },
+    DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_SERVICE_V2,
+    { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
+    { version: DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
@@ -209,31 +212,26 @@ test('Loader activation and Profile disable remove conversation catalog without 
   assert.equal('client' in service, false);
   assert.throws(
     () =>
-      applyDesktopWorkspaceConversationCatalogAuthorityV2(
+      applyDesktopWorkspaceLifecycleAuthorityV2(
         { provide: () => assert.fail('invalid config must not provide') },
         { strategy: 'legacy-client' },
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_workspace_conversation_catalog_authority_config_invalid',
+      error.code === 'desktop_workspace_lifecycle_authority_config_invalid',
   );
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-workspace-conversation-catalog-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-lifecycle-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>
       disabledGeneration.resolve(
-        DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_SERVICE_V2,
-        {
-          kind: 'project',
-          tenant_id: 'tenant / one',
-          project_id: 'project / one',
-        },
-        { version: DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_VERSION_V2 },
+        DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_SERVICE_V2,
+        { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
+        { version: DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_VERSION_V2 },
       ),
     (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
@@ -241,10 +239,10 @@ test('Loader activation and Profile disable remove conversation catalog without 
   const manager = new GenerationManagerV2();
   await manager.publish(generation);
   const wrongDefinitionLoader = new LoaderV2(
-    rendererDefinitions().map((definition) =>
-      definition.moduleRef === DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_MODULE_REF_V2
-        ? { ...definition, contractDigest: `sha256:${'0'.repeat(64)}` }
-        : definition,
+    rendererDefinitions().map((candidate) =>
+      candidate.moduleRef === DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_MODULE_REF_V2
+        ? { ...candidate, contractDigest: `sha256:${'0'.repeat(64)}` }
+        : candidate,
     ),
     'desktop-renderer',
   );
@@ -257,90 +255,93 @@ test('Loader activation and Profile disable remove conversation catalog without 
   await manager.close();
 });
 
-test('Local and Cloud transports keep scope filters exact without exposing credentials', async () => {
+test('Local and vault-bound Cloud transports preserve exact scope, signals and bodies', async () => {
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
   const fetchCalls = [];
   const cloudCommands = [];
+  const controller = new AbortController();
   globalThis.fetch = async (input, init) => {
     fetchCalls.push({ input: String(input), init });
-    return json(page(conversation('local-conversation', 'workspace / one')));
+    return new Response(
+      JSON.stringify(workspace({ id: 'workspace-created', name: 'Created workspace' })),
+      { status: 201, headers: { 'content-type': 'application/json' } },
+    );
   };
   globalThis.window = {
     __MEMSTACK_DESKTOP__: {
       core: {
         async invoke(command, args) {
           cloudCommands.push({ command, args });
-          return {
-            status: 200,
-            body: page(conversation('cloud-conversation', null)),
-          };
+          return { status: 200, body: workspace() };
         },
       },
     },
   };
 
   try {
-    const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
-      loadBootstrap(),
+    let service;
+    applyDesktopWorkspaceLifecycleAuthorityV2(
+      { provide: (_key, provided) => (service = provided) },
+      { strategy: 'desktop-api-client' },
     );
-    const service = generation.resolve(
-      DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_SERVICE_V2,
-      {
-        kind: 'project',
-        tenant_id: 'tenant / one',
-        project_id: 'project / one',
-      },
-      { version: DESKTOP_WORKSPACE_CONVERSATION_CATALOG_AUTHORITY_VERSION_V2 },
-    );
-    const controller = new AbortController();
     const localConfig = runtimeConfig();
     const local = service.bindOperation(localConfig);
-    localConfig.apiBaseUrl = 'http://127.0.0.1:46999';
-    localConfig.apiKey = 'mutated-session';
+    localConfig.apiBaseUrl = 'http://127.0.0.1:49999';
+    const created = await local.createWorkspace(createInput(), controller.signal);
     const cloud = service.bindOperation(
       runtimeConfig({
         apiBaseUrl: 'https://cloud.example.test',
         apiKey: '',
         localApiToken: '',
         mode: 'cloud',
+        workspaceId: 'workspace / one',
       }),
     );
+    const updated = await cloud.updateWorkspace(
+      'workspace / one',
+      updateInput(),
+      controller.signal,
+    );
 
-    const localResult = await local.listConversations({
-      workspaceId: 'workspace / one',
-      unboundOnly: false,
-      signal: controller.signal,
-    });
-    const cloudResult = await cloud.listConversations({
-      workspaceId: null,
-      unboundOnly: true,
-      signal: controller.signal,
-    });
-
-    assert.equal(localResult.items[0].id, 'local-conversation');
-    assert.equal(cloudResult.items[0].id, 'cloud-conversation');
-    assert.equal(Object.isFrozen(local), true);
-    assert.equal(Object.isFrozen(cloud), true);
-    assert.deepEqual(Object.keys(local), ['listConversations']);
+    assert.equal(created.id, 'workspace-created');
+    assert.equal(updated.id, 'workspace / one');
+    assert.equal(Object.isFrozen(created), true);
+    assert.equal(Object.isFrozen(updated), true);
     assert.equal(fetchCalls.length, 1);
-    const localUrl = new URL(fetchCalls[0].input);
-    assert.equal(localUrl.origin, 'http://127.0.0.1:46931');
-    assert.equal(localUrl.pathname, '/api/v1/agent/conversations');
-    assert.equal(localUrl.searchParams.get('project_id'), 'project / one');
-    assert.equal(localUrl.searchParams.get('workspace_id'), 'workspace / one');
-    assert.equal(localUrl.searchParams.get('unbound_only'), null);
+    assert.equal(
+      fetchCalls[0].input,
+      'http://127.0.0.1:46971/api/v1/tenants/tenant%20%2F%20one/' +
+        'projects/project%20%2F%20one/workspaces',
+    );
+    assert.equal(fetchCalls[0].init.method, 'POST');
     assert.equal(fetchCalls[0].init.signal, controller.signal);
-    const headers = new Headers(fetchCalls[0].init.headers);
-    assert.equal(headers.get('Authorization'), 'Bearer workspace-conversation-session');
-    assert.equal(headers.get('X-Agistack-Launch'), 'workspace-conversation-launch');
+    assert.deepEqual(JSON.parse(String(fetchCalls[0].init.body)), {
+      name: 'Created workspace',
+      description: 'Created through V2',
+      metadata: { source: 'desktop' },
+      use_case: 'conversation',
+      collaboration_mode: 'multi_agent_shared',
+    });
     assert.equal(cloudCommands.length, 1);
     assert.equal(cloudCommands[0].command, 'cloud_request');
-    assert.equal(cloudCommands[0].args.request.method, 'GET');
-    assert.equal(cloudCommands[0].args.request.path.includes('unbound_only=true'), true);
-    assert.equal(JSON.stringify(cloudCommands).includes('Bearer'), false);
-    assert.equal(JSON.stringify(cloudCommands).includes('workspace-conversation-session'), false);
-    await generation.dispose();
+    assert.equal(typeof cloudCommands[0].args.requestId, 'string');
+    assert.deepEqual(cloudCommands[0].args.request, {
+      path:
+        '/api/v1/tenants/tenant%20%2F%20one/projects/project%20%2F%20one/' +
+        'workspaces/workspace%20%2F%20one',
+      method: 'PATCH',
+      body: {
+        name: 'Updated workspace',
+        description: 'Updated through V2',
+        is_archived: true,
+        metadata: { source: 'desktop-v2' },
+      },
+    });
+    assert.doesNotMatch(
+      JSON.stringify(cloudCommands),
+      /Authorization|workspace-lifecycle-session|workspace-lifecycle-launch/u,
+    );
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow === undefined) delete globalThis.window;

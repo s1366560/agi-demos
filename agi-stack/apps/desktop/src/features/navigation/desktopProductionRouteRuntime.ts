@@ -60,7 +60,10 @@ import { createTenantTasksController } from '../tenant/tenantTasksController';
 import { createTenantTasksHttpClient } from '../tenant/tenantTasksHttpClient';
 import type { TenantWorkspacesRouteBinding } from '../tenant/tenantWorkspacesRouteModule';
 import { createTenantWorkspacesController } from '../tenant/tenantWorkspacesController';
-import { createTenantWorkspacesHttpClient } from '../tenant/tenantWorkspacesHttpClient';
+import {
+  createTenantWorkspacesV2Client,
+  type TenantWorkspacesV2ClientDependencies,
+} from '../tenant/tenantWorkspacesV2Client';
 import type { DesktopRouteContext } from './desktopRouteRegistry';
 
 export type ProjectOverviewRouteRuntimeDependencies = Readonly<{
@@ -305,6 +308,7 @@ export function createTenantProjectsRouteBindingForRuntime(
 export function createTenantWorkspacesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  dependencies: TenantWorkspacesV2ClientDependencies,
 ): TenantWorkspacesRouteBinding {
   if (
     config.tenantId !== context.tenantId ||
@@ -318,7 +322,7 @@ export function createTenantWorkspacesRouteBindingForRuntime(
     tenantId: context.tenantId,
     projectId: config.projectId,
   });
-  const client = createTenantWorkspacesHttpClient(config);
+  const client = createTenantWorkspacesV2Client(config, dependencies);
   return Object.freeze({
     controller: createTenantWorkspacesController({
       authority: config.mode,

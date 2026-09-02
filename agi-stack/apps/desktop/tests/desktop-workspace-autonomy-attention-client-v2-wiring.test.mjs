@@ -11,8 +11,8 @@ const app = source('src/App.tsx');
 const authorityModule = source(
   'src/plugins/desktopWorkspaceAutonomyAttentionAuthorityModuleV2.ts',
 );
-const lifecycleProvider = source(
-  'src/features/workspace/desktopWorkspaceLifecycleClientProviderV2.ts',
+const lifecycleAuthority = source(
+  'src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.ts',
 );
 const legacyProviderPath = new URL(
   '../src/features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2.ts',
@@ -125,7 +125,7 @@ test('authority module owns four transports, project lease and no App state poli
     /resolveWorkspaceAutonomyAttentionAttempt|retainOpenWorkspaceAutonomyAttentionResolveAttempts|discardWorkspaceAutonomyAttentionResolveAttempt|randomUUID|setWorkspaceAutonomyAttentionState/u,
   );
   assert.doesNotMatch(
-    lifecycleProvider,
+    lifecycleAuthority,
     /listWorkspaceAutonomyAttentions|getWorkspaceAuthorityRevision|retryWorkspaceAutonomyAttention|resolveWorkspaceAutonomyAttention/u,
   );
 });

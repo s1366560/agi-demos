@@ -522,7 +522,7 @@
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant/TenantWorkspacesPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesController.ts",
-        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesHttpClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesV2Client.ts",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceSettingsDialog.tsx",
@@ -544,7 +544,7 @@
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesRouteModule.tsx",
         "agi-stack/apps/desktop/src/features/tenant/TenantWorkspacesPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesController.ts",
-        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesHttpClient.ts",
+        "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesV2Client.ts",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"

@@ -150,6 +150,8 @@ function rendererDefinitions() {
     desktopTenantCatalogAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
     desktopWorkspaceCatalogAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.js')
+      .desktopWorkspaceLifecycleAuthorityDefinitionV2,
   ];
 }
 
