@@ -145,21 +145,26 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_cluster_control_not_applicable",
       "local_deviation": "Cluster and ACP runner-pool administration remain visible as a native route contract in Local mode but require Cloud authority; registration tokens are never synthesized or cached by the renderer.",
-      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. Cloud Desktop has a real native loader, App binding, typed client and controller for paginated list reads, current-page search, filtering, refresh and health inspection, but workbenchCapabilityClient still wraps runtimeClustersCapability with declared renderer provenance. Snapshot v4 therefore closes Cloud to renderer_capability_authority_unobserved and promotes no action. Local Desktop keeps the native route shell but returns the stable not-applicable authority instead of simulating a cluster topology.",
+      "judgment_rationale": "Cluster list and detail pages are direct sources for the canonical cluster control plane. Reads require tenant membership while cluster create, update, delete, ACP runner-pool creation and registration-token actions require tenant administration; the uncalled runner-pool update service method is not surface authority, and no cluster:read permission exists. At fc8ad4442, the production Desktop route and workbench consumer resolve `service:desktop-renderer.runtime-clusters-authority@1.0.0` through tenant-scoped generation leases. List, health and probe operations freeze config, scope, query, cluster identity and signal before admission, validate exact response contracts, revoke escaped authorities after release, and preserve the primary operation error if release fails. Cloud transport remains vault-bound through desktopApiFetch, but its observed capability has no authority revision, so Snapshot v4 must fail closed to capability_authority_revision_unavailable and promote no action. Local Desktop is cloud-only, returns the stable not-applicable authority without network access, and does not simulate cluster topology. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement.",
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersCapability.ts",
-        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersContract.ts",
         "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersController.ts",
         "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/runtime-clusters/RuntimeClustersPage.tsx"
+        "agi-stack/apps/desktop/src/features/runtime-clusters/RuntimeClustersPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "cloud_reason_code": "renderer_capability_authority_unobserved"
+      "cloud_reason_code": "capability_authority_revision_unavailable"
     },
     {
       "id": "tenant-tenant-deploy",
