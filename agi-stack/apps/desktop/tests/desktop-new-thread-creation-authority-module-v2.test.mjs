@@ -147,6 +147,8 @@ function rendererDefinitions() {
       .desktopProjectBlackboardAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopSessionRunInputAuthorityModuleV2.js')
       .desktopSessionRunInputAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.js')
+      .desktopProjectAgentLogsAuthorityDefinitionV2,
     desktopArtifactContentAuthorityDefinitionV2,
     desktopAutomationAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,

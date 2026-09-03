@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
@@ -124,6 +125,7 @@ async function loadSnapshot(config, projectAdministrationClients) {
       config,
       {
         projectAdministrationClients,
+        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),

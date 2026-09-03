@@ -112,7 +112,6 @@ import { createProjectOverviewRouteModuleLoader } from '../project/projectOvervi
 import { createProjectAgentDashboardClient } from '../project-agent/projectAgentDashboardClient';
 import { createProjectAgentDashboardController } from '../project-agent/projectAgentDashboardController';
 import { createProjectAgentDashboardRouteModuleLoader } from '../project-agent/projectAgentDashboardRouteModule';
-import { createProjectAgentLogsClient } from '../project-agent/projectAgentLogsClient';
 import { createProjectAgentLogsController } from '../project-agent/projectAgentLogsController';
 import { createProjectAgentLogsRouteModuleLoader } from '../project-agent/projectAgentLogsRouteModule';
 import { createProjectAgentPatternsClient } from '../project-agent/projectAgentPatternsClient';
@@ -230,6 +229,10 @@ import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRo
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
 import {
+  createDesktopProjectAgentLogsClientV2,
+  type DesktopProjectAgentLogsOperationsV2,
+} from '../../plugins/desktopProjectAgentLogsAuthorityModuleV2';
+import {
   createDesktopWorkspaceCollaborationClientV2,
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -275,6 +278,7 @@ export type AppRouteRegistryRefs = {
   projectCronJobsRouteBindingProviderV2: ProjectCronJobsRouteBindingProviderV2;
   projectBlackboardOperationsV2: DesktopProjectBlackboardOperationsV2;
   projectOverviewOperationsV2: DesktopProjectOverviewOperationsV2;
+  projectAgentLogsOperationsV2: DesktopProjectAgentLogsOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
@@ -291,7 +295,10 @@ export type AppAuxiliaryRouteRegistryRefs = Pick<
   'configRef' | 'setAuth'
 >;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
-export type AppProjectAgentRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
+export type AppProjectAgentRouteRegistryRefs = Pick<
+  AppRouteRegistryRefs,
+  'configRef' | 'projectAgentLogsOperationsV2'
+>;
 export type AppProjectAdministrationRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   'configRef' | 'projectCronJobsRouteBindingProviderV2'
@@ -645,7 +652,7 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
 }
 
 export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteRegistryRefs) {
-  const { configRef } = refs;
+  const { configRef, projectAgentLogsOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_AGENT_DASHBOARD_ROUTE_ID]: createProjectAgentDashboardRouteModuleLoader({
@@ -677,7 +684,10 @@ export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteReg
           return Object.freeze({
             controller: createProjectAgentLogsController({
               authority: currentConfig.mode,
-              client: createProjectAgentLogsClient(currentConfig),
+              client: createDesktopProjectAgentLogsClientV2(
+                projectAgentLogsOperationsV2,
+                currentConfig,
+              ),
               initialScope: scope,
             }),
             scope,

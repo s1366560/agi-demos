@@ -27,6 +27,7 @@ import {
   desktopNewThreadCreationAuthorityDefinitionV2,
 } from './desktopNewThreadCreationAuthorityModuleV2';
 import { desktopProjectBlackboardAuthorityDefinitionV2 } from './desktopProjectBlackboardAuthorityModuleV2';
+import { desktopProjectAgentLogsAuthorityDefinitionV2 } from './desktopProjectAgentLogsAuthorityModuleV2';
 import { desktopProjectOverviewAuthorityDefinitionV2 } from './desktopProjectOverviewAuthorityModuleV2';
 import { desktopProjectSearchAuthorityDefinitionV2 } from './desktopProjectSearchAuthorityModuleV2';
 import { desktopRuntimePoolAuthorityDefinitionV2 } from './desktopRuntimePoolAuthorityModuleV2';
@@ -78,6 +79,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopNewTaskFlowAuthorityDefinitionV2,
     desktopNewThreadCreationAuthorityDefinitionV2,
     desktopProjectBlackboardAuthorityDefinitionV2,
+    desktopProjectAgentLogsAuthorityDefinitionV2,
     desktopProjectOverviewAuthorityDefinitionV2,
     desktopProjectSearchAuthorityDefinitionV2,
     desktopRuntimePoolAuthorityDefinitionV2,

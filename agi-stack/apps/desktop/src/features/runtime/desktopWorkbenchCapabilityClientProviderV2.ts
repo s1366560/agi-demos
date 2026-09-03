@@ -2,6 +2,7 @@ import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
+import type { DesktopProjectAgentLogsOperationsV2 } from '../../plugins/desktopProjectAgentLogsAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
@@ -44,6 +45,10 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   projectOverviewOperationsV2: Pick<
     DesktopProjectOverviewOperationsV2,
     'probeProjectOverview'
+  >;
+  projectAgentLogsOperationsV2: Pick<
+    DesktopProjectAgentLogsOperationsV2,
+    'loadProjectAgentLogs'
   >;
   projectBlackboardOperationsV2: Pick<
     DesktopProjectBlackboardOperationsV2,
@@ -120,6 +125,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
   const client = createDesktopWorkbenchCapabilityClient(input.automationApi, config, {
     pluginMarketplaceOperationsV2: input.pluginMarketplaceOperationsV2,
     projectBlackboardOperationsV2: input.projectBlackboardOperationsV2,
+    projectAgentLogsOperationsV2: input.projectAgentLogsOperationsV2,
     projectOverviewOperationsV2: input.projectOverviewOperationsV2,
     runtimePoolOperationsV2: input.runtimePoolOperationsV2,
     projectWorkspacesClient: createProjectWorkspacesV2Client(config, {

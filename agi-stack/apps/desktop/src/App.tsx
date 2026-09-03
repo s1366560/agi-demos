@@ -93,6 +93,9 @@ import {
   createDesktopProjectOverviewOperationsV2,
 } from './plugins/desktopProjectOverviewAuthorityModuleV2';
 import {
+  createDesktopProjectAgentLogsOperationsV2,
+} from './plugins/desktopProjectAgentLogsAuthorityModuleV2';
+import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
 } from './plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -895,6 +898,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectAgentLogsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectAgentLogsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopRuntimePoolOperationsV2 = useMemo(
     () =>
       createDesktopRuntimePoolOperationsV2(
@@ -1187,6 +1197,7 @@ export function App() {
       desktopProductionRouteNavigation,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       projectBlackboardOperationsV2: desktopProjectBlackboardOperationsV2,
+      projectAgentLogsOperationsV2: desktopProjectAgentLogsOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
@@ -1211,6 +1222,7 @@ export function App() {
     [
       desktopPluginMarketplaceOperationsV2,
       desktopProjectBlackboardOperationsV2,
+      desktopProjectAgentLogsOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopRuntimePoolOperationsV2,
@@ -1255,6 +1267,7 @@ export function App() {
         config,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         projectBlackboardOperationsV2: desktopProjectBlackboardOperationsV2,
+        projectAgentLogsOperationsV2: desktopProjectAgentLogsOperationsV2,
         projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
@@ -1271,6 +1284,7 @@ export function App() {
       desktopAutomationApiV2,
       desktopPluginMarketplaceOperationsV2,
       desktopProjectBlackboardOperationsV2,
+      desktopProjectAgentLogsOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopRuntimePoolOperationsV2,
       desktopWorkspaceCatalogOperationsV2,

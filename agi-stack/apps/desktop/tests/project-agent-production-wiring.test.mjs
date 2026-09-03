@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
@@ -72,6 +73,15 @@ test('Project Agent production routes own native loaders and App bindings', asyn
     assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
     assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
   }
+  assert.match(registrySource, /createDesktopProjectAgentLogsClientV2/u);
+  assert.match(registrySource, /projectAgentLogsOperationsV2/u);
+  assert.match(appSource, /createDesktopProjectAgentLogsOperationsV2/u);
+  assert.match(
+    appSource,
+    /projectAgentLogsOperationsV2:\s*desktopProjectAgentLogsOperationsV2/u,
+  );
+  assert.doesNotMatch(registrySource, /createProjectAgentLogsClient/u);
+  assert.doesNotMatch(appSource, /createProjectAgentLogsClient/u);
 });
 
 test('Project Agent Snapshot observes Cloud and declares Local authority', async () => {
@@ -126,6 +136,7 @@ async function loadSnapshot(config, projectAgentClients) {
       config,
       {
         projectAgentClients,
+        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),

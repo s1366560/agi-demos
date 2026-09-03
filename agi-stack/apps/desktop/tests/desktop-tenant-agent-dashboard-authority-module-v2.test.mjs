@@ -32,6 +32,7 @@ const authorityModuleNames = [
   'desktopNewThreadCreationAuthorityModuleV2',
   'desktopPluginMarketplaceAuthorityModulesV2',
   'desktopProjectOverviewAuthorityModuleV2',
+  'desktopProjectAgentLogsAuthorityModuleV2',
   'desktopProjectBlackboardAuthorityModuleV2',
   'desktopRuntimePoolAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',

@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import Module, { createRequire } from 'node:module';
+import { delimiter } from 'node:path';
 import { test } from 'node:test';
 
-process.env.NODE_PATH = new URL('../node_modules', import.meta.url).pathname;
+process.env.NODE_PATH = [
+  '/tmp/agistack-desktop-test-dist/test-node-modules',
+  new URL('../node_modules', import.meta.url).pathname,
+].join(delimiter);
 Module._initPaths();
 
 const require = createRequire(import.meta.url);
@@ -14,9 +18,13 @@ const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 const { createProjectAgentDashboardClient, PROJECT_AGENT_DASHBOARD_LOCAL_REASON } = require(
   `${compiled}/projectAgentDashboardClient.js`,
 );
-const { createProjectAgentLogsClient, PROJECT_AGENT_LOGS_LOCAL_REASON } = require(
-  `${compiled}/projectAgentLogsClient.js`,
-);
+const { PROJECT_AGENT_LOGS_LOCAL_REASON } = require(`${compiled}/projectAgentLogsClient.js`);
+const {
+  createDesktopProjectAgentLogsClientV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.js');
+const {
+  createDesktopProjectAgentLogsHttpAuthorityV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentLogsHttpProjectionV2.js');
 const { createProjectAgentPatternsClient, PROJECT_AGENT_PATTERNS_LOCAL_REASON } = require(
   `${compiled}/projectAgentPatternsClient.js`,
 );
@@ -100,7 +108,7 @@ test('Project Agent Cloud clients use trusted-session project authorities and ex
   };
   try {
     const dashboard = await createProjectAgentDashboardClient(cloudConfig).load(cloudScope);
-    const logs = await createProjectAgentLogsClient(cloudConfig).load(cloudScope, {
+    const logs = await projectAgentLogsClientV2Fixture(cloudConfig).load(cloudScope, {
       status: 'completed',
     });
     const patterns = await createProjectAgentPatternsClient(cloudConfig).load(cloudScope);
@@ -131,7 +139,7 @@ test('Project Agent Local clients fail closed with stable reasons before network
   try {
     const cases = [
       [createProjectAgentDashboardClient(localConfig), PROJECT_AGENT_DASHBOARD_LOCAL_REASON],
-      [createProjectAgentLogsClient(localConfig), PROJECT_AGENT_LOGS_LOCAL_REASON],
+      [projectAgentLogsClientV2Fixture(localConfig), PROJECT_AGENT_LOGS_LOCAL_REASON],
       [createProjectAgentPatternsClient(localConfig), PROJECT_AGENT_PATTERNS_LOCAL_REASON],
     ];
     for (const [client, reasonCode] of cases) {
@@ -167,7 +175,7 @@ test('Project Agent clients reject mismatched authority responses', async () => 
   };
   try {
     await assert.rejects(
-      createProjectAgentLogsClient(cloudConfig).load(cloudScope),
+      projectAgentLogsClientV2Fixture(cloudConfig).load(cloudScope),
       /project_agent_logs_scope_conflict/u,
     );
   } finally {
@@ -225,7 +233,7 @@ test('Project Agent controllers map backend-shaped plain 403 responses to stable
       'project_agent_dashboard_forbidden',
     ],
     [
-      createProjectAgentLogsClient,
+      projectAgentLogsClientV2Fixture,
       createProjectAgentLogsController,
       'project_agent_logs_forbidden',
     ],
@@ -276,7 +284,7 @@ test('Project Agent controllers map unstructured outages to stable unavailable r
       'project_agent_dashboard_authority_unavailable',
     ],
     [
-      createProjectAgentLogsClient,
+      projectAgentLogsClientV2Fixture,
       createProjectAgentLogsController,
       'project_agent_logs_authority_unavailable',
     ],
@@ -363,6 +371,21 @@ function run(title = 'Run') {
     trace_id: null,
     parent_span_id: null,
   };
+}
+
+function projectAgentLogsClientV2Fixture(config) {
+  return createDesktopProjectAgentLogsClientV2(
+    {
+      loadProjectAgentLogs({ config: operationConfig, scope, status, limit, signal }) {
+        return createDesktopProjectAgentLogsHttpAuthorityV2(operationConfig, scope).load(
+          status,
+          limit,
+          signal,
+        );
+      },
+    },
+    config,
+  );
 }
 
 function pattern() {

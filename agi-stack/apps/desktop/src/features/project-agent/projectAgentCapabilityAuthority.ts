@@ -8,9 +8,9 @@ import {
   PROJECT_AGENT_DASHBOARD_ROUTE_ID,
 } from './projectAgentDashboardClient';
 import {
-  createProjectAgentLogsClient,
   PROJECT_AGENT_LOGS_LOCAL_REASON,
   PROJECT_AGENT_LOGS_ROUTE_ID,
+  type ProjectAgentLogsClient,
 } from './projectAgentLogsClient';
 import {
   createProjectAgentPatternsClient,
@@ -51,11 +51,15 @@ const REASON_PREFIXES: Readonly<Record<ProjectAgentCapabilityId, string>> = Obje
 
 export function createProjectAgentCapabilityClients(
   config: DesktopRuntimeConfig,
+  logsClient: ProjectAgentLogsClient,
+  overrides?: ProjectAgentCapabilityClients,
 ): ProjectAgentCapabilityClients {
   return {
-    [PROJECT_AGENT_DASHBOARD_ROUTE_ID]: createProjectAgentDashboardClient(config),
-    [PROJECT_AGENT_LOGS_ROUTE_ID]: createProjectAgentLogsClient(config),
-    [PROJECT_AGENT_PATTERNS_ROUTE_ID]: createProjectAgentPatternsClient(config),
+    [PROJECT_AGENT_DASHBOARD_ROUTE_ID]:
+      overrides?.[PROJECT_AGENT_DASHBOARD_ROUTE_ID] ?? createProjectAgentDashboardClient(config),
+    [PROJECT_AGENT_LOGS_ROUTE_ID]: logsClient,
+    [PROJECT_AGENT_PATTERNS_ROUTE_ID]:
+      overrides?.[PROJECT_AGENT_PATTERNS_ROUTE_ID] ?? createProjectAgentPatternsClient(config),
   };
 }
 
