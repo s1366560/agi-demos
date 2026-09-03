@@ -340,6 +340,25 @@ test('project administration V2 route composition binds its five configuration l
     rendererAppCompositionSource,
     /DESKTOP_PROJECT_ADMINISTRATION_ROUTE_ARTIFACT_ID_V2[\s\S]*createAppProjectAdministrationRouteRegistry/u,
   );
+  assert.match(
+    projectAdministrationFactorySource,
+    /PROJECT_SCHEMA_ROUTE_ID[\s\S]*createProjectSchemaRouteModuleLoader\(\{[\s\S]*createDesktopProjectSchemaClientV2\(\s*projectSchemaOperationsV2,\s*currentConfig,?\s*\)/u,
+  );
+  assert.doesNotMatch(
+    projectAdministrationFactorySource,
+    /createProjectSchemaClient\(/u,
+  );
+  assert.match(
+    appSource,
+    /const desktopProjectSchemaOperationsV2 = useMemo\([\s\S]*createDesktopProjectSchemaOperationsV2\([\s\S]*desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*\[\],?\s*\);/u,
+  );
+  assert.equal(
+    appSource.match(
+      /projectSchemaOperationsV2:\s*desktopProjectSchemaOperationsV2/gu,
+    )?.length,
+    2,
+  );
+  assert.doesNotMatch(appSource, /createProjectSchemaClient\(/u);
 });
 
 test('runtime infrastructure V2 route composition binds its seven canonical loaders', () => {

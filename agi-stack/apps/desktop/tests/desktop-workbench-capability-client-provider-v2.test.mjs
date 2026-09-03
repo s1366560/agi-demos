@@ -10,6 +10,7 @@ import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsO
 import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
 import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
 import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -69,6 +70,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
@@ -93,6 +95,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
@@ -129,6 +132,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
@@ -162,6 +166,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
@@ -213,6 +218,10 @@ test('App consumes the published V2 workbench capability client', () => {
   );
   assert.match(
     appSource,
+    /projectSchemaOperationsV2:\s*desktopProjectSchemaOperationsV2/u,
+  );
+  assert.match(
+    appSource,
     /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/u,
   );
   assert.match(
@@ -252,6 +261,10 @@ test('App consumes the published V2 workbench capability client', () => {
   assert.match(
     providerSource,
     /projectTeamOperationsV2:\s*input\.projectTeamOperationsV2/u,
+  );
+  assert.match(
+    providerSource,
+    /projectSchemaOperationsV2:\s*input\.projectSchemaOperationsV2/u,
   );
   assert.match(
     providerSource,

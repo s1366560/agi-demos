@@ -29,6 +29,7 @@ const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const authorityModules = [
   'desktopArtifactContentAuthorityModuleV2',
+  'desktopProjectSchemaAuthorityModuleV2',
   'desktopAutomationAuthorityModuleV2',
   'desktopConversationConfigAuthorityModuleV2',
   'desktopConversationLifecycleAuthorityModuleV2',

@@ -76,6 +76,7 @@ import {
   loadProjectAdministrationCapabilities,
   type ProjectAdministrationCapabilityClients,
 } from '../project-administration/projectAdministrationCapabilityAuthority';
+import { PROJECT_SCHEMA_ROUTE_ID } from '../project-administration/projectSchemaClient';
 import type {
   ProjectWorkspacesClient,
   ProjectWorkspacesScope,
@@ -146,6 +147,10 @@ import {
   createDesktopProjectTeamClientV2,
   type DesktopProjectTeamOperationsV2,
 } from '../../plugins/desktopProjectTeamAuthorityModuleV2';
+import {
+  createDesktopProjectSchemaClientV2,
+  type DesktopProjectSchemaOperationsV2,
+} from '../../plugins/desktopProjectSchemaAuthorityModuleV2';
 import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
@@ -230,6 +235,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     'loadProjectMemories'
   >;
   projectTeamOperationsV2: Pick<DesktopProjectTeamOperationsV2, 'loadProjectTeam'>;
+  projectSchemaOperationsV2: Pick<
+    DesktopProjectSchemaOperationsV2,
+    'loadProjectSchema'
+  >;
   projectEntitiesOperationsV2: Pick<
     DesktopProjectEntitiesOperationsV2,
     'loadProjectEntities' | 'loadProjectEntityRelationships'
@@ -396,6 +405,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof projectTeamOperationsV2?.loadProjectTeam !== 'function') {
     throw new Error('desktop_project_team_authority_required');
   }
+  const projectSchemaOperationsV2 = options?.projectSchemaOperationsV2;
+  if (typeof projectSchemaOperationsV2?.loadProjectSchema !== 'function') {
+    throw new Error('desktop_project_schema_authority_required');
+  }
   const projectEntitiesOperationsV2 = options?.projectEntitiesOperationsV2;
   if (
     typeof projectEntitiesOperationsV2?.loadProjectEntities !== 'function' ||
@@ -433,8 +446,16 @@ export function createDesktopWorkbenchCapabilityClient(
     createDesktopProjectAgentLogsClientV2(projectAgentLogsOperationsV2, config),
     createDesktopProjectAgentPatternsClientV2(projectAgentPatternsOperationsV2, config),
   );
-  const projectAdministrationClients =
-    options.projectAdministrationClients ?? createProjectAdministrationCapabilityClients(config);
+  const projectSchemaClientV2 = createDesktopProjectSchemaClientV2(
+    projectSchemaOperationsV2,
+    config,
+  );
+  const projectAdministrationClients = options.projectAdministrationClients
+    ? Object.freeze({
+        ...options.projectAdministrationClients,
+        [PROJECT_SCHEMA_ROUTE_ID]: projectSchemaClientV2,
+      })
+    : createProjectAdministrationCapabilityClients(config, projectSchemaClientV2);
   const tenantAdminCapabilityClient =
     options.tenantAdminCapabilityClient ??
     createTenantAdminCapabilityClient(config, {

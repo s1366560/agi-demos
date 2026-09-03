@@ -10,6 +10,7 @@ import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsO
 import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
 import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
 import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
+import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -79,6 +80,15 @@ test('Project Administration production routes own native loaders and App bindin
     assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
     assert.doesNotMatch(appSource, new RegExp(symbol, 'u'), symbol);
   }
+  assert.match(
+    registrySource,
+    /createDesktopProjectSchemaClientV2\(\s*projectSchemaOperationsV2,\s*currentConfig,?\s*\)/u,
+  );
+  assert.match(
+    appSource,
+    /projectSchemaOperationsV2:\s*desktopProjectSchemaOperationsV2/gu,
+  );
+  assert.doesNotMatch(registrySource, /createProjectSchemaClient/u);
 });
 
 test('Project Administration Snapshot observes Cloud and declares Local authority', async () => {
@@ -87,6 +97,27 @@ test('Project Administration Snapshot observes Cloud and declares Local authorit
     const capability = cloud.capabilities[routeId];
     assert.equal(capability.provenance, 'observed', routeId);
     assert.equal(capability.authority_source, 'cloud_service', routeId);
+  }
+  assert.deepEqual(cloud.capabilities['project-project-schema'], {
+    availability: 'degraded',
+    reason_code: 'desktop_project_schema_actions_and_export_unwired',
+    service_version: '0.1.0',
+    contract_version: '4.0.0',
+    allowed_actions: ['view', 'list-entity-types'],
+    provenance: 'observed',
+    authority_source: 'cloud_service',
+    authority_revision: 67,
+    retryable: false,
+    supporting_authority_sources: [],
+    scope: {
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      workspace_id: null,
+      instance_id: null,
+    },
+  });
+  for (const routeId of ['project-project-maintenance', 'project-project-settings']) {
+    const capability = cloud.capabilities[routeId];
     assert.equal(capability.availability, 'available', routeId);
     assert.equal(capability.authority_revision, 31, routeId);
   }
@@ -138,6 +169,7 @@ async function loadSnapshot(config, projectAdministrationClients) {
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),

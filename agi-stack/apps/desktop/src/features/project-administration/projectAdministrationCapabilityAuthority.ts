@@ -11,9 +11,9 @@ import {
   PROJECT_MAINTENANCE_ROUTE_ID,
 } from './projectMaintenanceClient';
 import {
-  createProjectSchemaClient,
   PROJECT_SCHEMA_LOCAL_REASON,
   PROJECT_SCHEMA_ROUTE_ID,
+  type ProjectSchemaClient,
 } from './projectSchemaClient';
 import {
   createProjectSettingsClient,
@@ -62,9 +62,10 @@ const REASON_PREFIXES: Readonly<Record<ProjectAdministrationCapabilityId, string
 
 export function createProjectAdministrationCapabilityClients(
   config: DesktopRuntimeConfig,
+  projectSchemaClient: Pick<ProjectSchemaClient, 'load'>,
 ): ProjectAdministrationCapabilityClients {
   return Object.freeze({
-    [PROJECT_SCHEMA_ROUTE_ID]: createProjectSchemaClient(config),
+    [PROJECT_SCHEMA_ROUTE_ID]: projectSchemaClient,
     [PROJECT_MAINTENANCE_ROUTE_ID]: createProjectMaintenanceClient(config),
     [PROJECT_SETTINGS_ROUTE_ID]: createProjectSettingsClient(config),
   });
