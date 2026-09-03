@@ -24,9 +24,6 @@ const { createProjectEntitiesClient } = require(
 const { createProjectCommunitiesClient } = require(
   `${compiled}/projectCommunitiesClient.js`,
 );
-const { createProjectGraphClient } = require(
-  `${compiled}/projectGraphClient.js`,
-);
 const {
   createProjectKnowledgeCapabilityClients,
   loadProjectKnowledgeCapabilities,
@@ -143,17 +140,15 @@ test('project knowledge cloud clients use trusted-session transport and validate
       createProjectMemoriesClient(cloudConfig).load(cloudScope),
       createProjectEntitiesClient(cloudConfig).load(cloudScope),
       createProjectCommunitiesClient(cloudConfig).load(cloudScope),
-      createProjectGraphClient(cloudConfig).load(cloudScope),
     ]);
     assert.deepEqual(
       snapshots.map((snapshot) => snapshot.scopeRevision),
-      [7, 7, 7, 7, 7],
+      [7, 7, 7, 7],
     );
     assert.equal(snapshots[0].allowedActions.includes('update-role'), true);
     assert.equal(snapshots[1].availability, 'degraded');
     assert.equal(snapshots[2].availability, 'available');
     assert.equal(snapshots[3].availability, 'degraded');
-    assert.equal(snapshots[4].availability, 'degraded');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -189,10 +184,6 @@ test('project knowledge local clients fail closed with stable reason codes befor
       [
         createProjectCommunitiesClient(localConfig),
         'local_project_communities_authority_unavailable',
-      ],
-      [
-        createProjectGraphClient(localConfig),
-        'local_project_graph_authority_unavailable',
       ],
     ];
     for (const [client, reasonCode] of cases) {
@@ -268,7 +259,10 @@ test('project knowledge capability authority observes Cloud and never probes sta
   };
   try {
     const cloud = await loadProjectKnowledgeCapabilities(
-      createProjectKnowledgeCapabilityClients(cloudConfig),
+      createProjectKnowledgeCapabilityClients(
+        cloudConfig,
+        injectedProjectGraphClient(11),
+      ),
       cloudConfig,
     );
     assert.equal(cloud['project-project-team'].availability, 'available');
@@ -309,6 +303,19 @@ test('project knowledge capability authority observes Cloud and never probes sta
     globalThis.fetch = originalFetch;
   }
   assert.ok(requests.length > 0);
+});
+
+test('project knowledge client overrides cannot replace the injected Graph V2 authority', () => {
+  const graphClient = injectedProjectGraphClient(13);
+  const clients = createProjectKnowledgeCapabilityClients(cloudConfig, graphClient, {
+    'project-project-graph': {
+      async load() {
+        throw new Error('graph override must not be selected');
+      },
+    },
+  });
+
+  assert.equal(clients['project-project-graph'], graphClient);
 });
 
 test('project knowledge clients reject stale observed scope and accept only structured reason codes', async () => {
@@ -469,6 +476,24 @@ function memorySnapshot(scope, title) {
     ],
     total: 1,
   };
+}
+
+function injectedProjectGraphClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_graph_actions_partial',
+        allowedActions: Object.freeze(['view']),
+        nodes: Object.freeze([]),
+        edges: Object.freeze([]),
+      });
+    },
+  });
 }
 
 function readyController(scope, routeId) {

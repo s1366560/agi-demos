@@ -7,6 +7,7 @@ import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV
 import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspaceOperationsV2Fixture } from './projectWorkspaceOperationsV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
@@ -61,6 +62,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
@@ -79,6 +81,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
@@ -109,6 +112,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
@@ -136,6 +140,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+        projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
@@ -171,6 +176,10 @@ test('App consumes the published V2 workbench capability client', () => {
   );
   assert.match(
     appSource,
+    /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/u,
+  );
+  assert.match(
+    appSource,
     /useDesktopCapabilitySnapshot\(\s*desktopWorkbenchCapabilityClientV2\.client/u,
   );
   assert.doesNotMatch(appSource, /createDesktopWorkbenchCapabilityClient\(/u);
@@ -190,6 +199,10 @@ test('App consumes the published V2 workbench capability client', () => {
   assert.match(
     providerSource,
     /projectAgentPatternsOperationsV2:\s*input\.projectAgentPatternsOperationsV2/u,
+  );
+  assert.match(
+    providerSource,
+    /projectGraphOperationsV2:\s*input\.projectGraphOperationsV2/u,
   );
   assert.match(providerSource, /projectOverviewOperationsV2:\s*input\.projectOverviewOperationsV2/u);
   assert.match(

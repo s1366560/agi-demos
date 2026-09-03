@@ -67,7 +67,7 @@ import type {
 import {
   createProjectKnowledgeCapabilityClients,
   loadProjectKnowledgeCapabilities,
-  type ProjectKnowledgeCapabilityClients,
+  type ProjectKnowledgeCapabilityClientOverrides,
 } from '../project-knowledge/projectKnowledgeCapabilityAuthority';
 import {
   createProjectAgentCapabilityClients,
@@ -128,6 +128,10 @@ import {
   createDesktopProjectAgentPatternsClientV2,
   type DesktopProjectAgentPatternsOperationsV2,
 } from '../../plugins/desktopProjectAgentPatternsAuthorityModuleV2';
+import {
+  createDesktopProjectGraphClientV2,
+  type DesktopProjectGraphOperationsV2,
+} from '../../plugins/desktopProjectGraphAuthorityModuleV2';
 import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import {
@@ -202,6 +206,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     DesktopProjectAgentPatternsOperationsV2,
     'loadProjectAgentPatterns'
   >;
+  projectGraphOperationsV2: Pick<DesktopProjectGraphOperationsV2, 'loadProjectGraph'>;
   runtimePoolOperationsV2: Pick<DesktopRuntimePoolOperationsV2, 'probeRuntimePool'>;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
@@ -215,7 +220,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     DesktopProjectBlackboardOperationsV2,
     'probeProjectBlackboard' | 'probeWorkspaceCollaborationCapability'
   >;
-  projectKnowledgeClients?: ProjectKnowledgeCapabilityClients;
+  projectKnowledgeClientOverrides?: ProjectKnowledgeCapabilityClientOverrides;
   projectAdministrationClients?: ProjectAdministrationCapabilityClients;
   tenantGovernanceClient?: Pick<TenantGovernanceClient, 'load'>;
   tenantBillingClient?: Pick<TenantBillingClient, 'load'>;
@@ -342,6 +347,10 @@ export function createDesktopWorkbenchCapabilityClient(
   ) {
     throw new Error('desktop_project_agent_patterns_authority_required');
   }
+  const projectGraphOperationsV2 = options?.projectGraphOperationsV2;
+  if (typeof projectGraphOperationsV2?.loadProjectGraph !== 'function') {
+    throw new Error('desktop_project_graph_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -356,8 +365,11 @@ export function createDesktopWorkbenchCapabilityClient(
   const agentWorkspaceClient =
     injectedAgentWorkspaceClient ??
     (agentWorkspaceJourneyClient ? null : createAgentWorkspaceClient(config));
-  const projectKnowledgeClients =
-    options.projectKnowledgeClients ?? createProjectKnowledgeCapabilityClients(config);
+  const projectKnowledgeClients = createProjectKnowledgeCapabilityClients(
+    config,
+    createDesktopProjectGraphClientV2(projectGraphOperationsV2, config),
+    options.projectKnowledgeClientOverrides,
+  );
   const projectAgentClients = createProjectAgentCapabilityClients(
     createDesktopProjectAgentDashboardClientV2(projectAgentDashboardOperationsV2, config),
     createDesktopProjectAgentLogsClientV2(projectAgentLogsOperationsV2, config),
