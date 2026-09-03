@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
 import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
@@ -88,14 +89,25 @@ test('Project Agent production routes own native loaders and App bindings', asyn
     appSource,
     /projectAgentLogsOperationsV2:\s*desktopProjectAgentLogsOperationsV2/u,
   );
+  assert.match(registrySource, /createDesktopProjectAgentPatternsClientV2/u);
+  assert.match(registrySource, /projectAgentPatternsOperationsV2/u);
+  assert.match(appSource, /createDesktopProjectAgentPatternsOperationsV2/u);
+  assert.match(
+    appSource,
+    /projectAgentPatternsOperationsV2:\s*desktopProjectAgentPatternsOperationsV2/u,
+  );
   assert.doesNotMatch(registrySource, /createProjectAgentDashboardClient/u);
   assert.doesNotMatch(appSource, /createProjectAgentDashboardClient/u);
   assert.doesNotMatch(registrySource, /createProjectAgentLogsClient/u);
   assert.doesNotMatch(appSource, /createProjectAgentLogsClient/u);
+  assert.doesNotMatch(registrySource, /createProjectAgentPatternsClient/u);
+  assert.doesNotMatch(appSource, /createProjectAgentPatternsClient/u);
+  assert.doesNotMatch(registrySource, /projectAgentClients\?/u);
+  assert.doesNotMatch(appSource, /projectAgentClients\?/u);
 });
 
 test('Project Agent Snapshot observes Cloud and declares Local authority', async () => {
-  const cloud = await loadSnapshot(cloudConfig, clients('cloud'));
+  const cloud = await loadSnapshot(cloudConfig);
   for (const routeId of routeIds) {
     const capability = cloud.capabilities[routeId];
     assert.equal(capability.provenance, 'observed', routeId);
@@ -104,23 +116,11 @@ test('Project Agent Snapshot observes Cloud and declares Local authority', async
     assert.equal(capability.authority_revision, 23, routeId);
   }
 
-  let calls = 0;
-  const localClients = Object.fromEntries(
-    routeIds.map((routeId) => [
-      routeId,
-      {
-        async load() {
-          calls += 1;
-          throw new Error(routeId);
-        },
-      },
-    ]),
-  );
-  const local = await loadSnapshot(
-    { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
-    localClients,
-  );
-  assert.equal(calls, 0);
+  const local = await loadSnapshot({
+    ...cloudConfig,
+    mode: 'local',
+    localApiToken: 'private-launch',
+  });
   for (const routeId of routeIds) {
     const capability = local.capabilities[routeId];
     assert.equal(capability.provenance, 'declared', routeId);
@@ -129,7 +129,7 @@ test('Project Agent Snapshot observes Cloud and declares Local authority', async
   }
 });
 
-async function loadSnapshot(config, projectAgentClients) {
+async function loadSnapshot(config) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ reason_code: 'unrelated_authority_unavailable' }), {
@@ -145,11 +145,13 @@ async function loadSnapshot(config, projectAgentClients) {
       },
       config,
       {
-        projectAgentClients,
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture({
           scopeRevision: 23,
         }),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture({
+          scopeRevision: 23,
+        }),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
@@ -165,31 +167,6 @@ async function loadSnapshot(config, projectAgentClients) {
   } finally {
     globalThis.fetch = originalFetch;
   }
-}
-
-function clients(authority) {
-  return Object.fromEntries(
-    routeIds.map((routeId) => [
-      routeId,
-      {
-        async load(scope) {
-          assert.deepEqual(scope, {
-            authority,
-            tenantId: 'tenant-1',
-            projectId: 'project-1',
-          });
-          return {
-            scope,
-            scopeRevision: 23,
-            authority,
-            availability: 'available',
-            reasonCode: null,
-            allowedActions: ['view'],
-          };
-        },
-      },
-    ]),
-  );
 }
 
 function implementedLoader(routeId) {

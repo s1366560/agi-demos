@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
 import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
+import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
@@ -285,6 +286,30 @@ test('workbench capability client requires the Project Agent Logs V2 authority',
         },
       ),
     /desktop_project_agent_logs_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Project Agent Patterns V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+          projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+          projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+          projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_agent_patterns_authority_required/u,
   );
 });
 
@@ -1675,6 +1700,7 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
   return createDesktopWorkbenchCapabilityClient(automationApi, config, {
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),

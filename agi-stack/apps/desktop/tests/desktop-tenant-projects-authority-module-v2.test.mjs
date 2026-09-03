@@ -32,6 +32,7 @@ const authorityModuleNames = [
   'desktopProjectOverviewAuthorityModuleV2',
   'desktopProjectAgentDashboardAuthorityModuleV2',
   'desktopProjectAgentLogsAuthorityModuleV2',
+  'desktopProjectAgentPatternsAuthorityModuleV2',
   'desktopProjectBlackboardAuthorityModuleV2',
   'desktopRuntimePoolAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',

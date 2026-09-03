@@ -151,6 +151,8 @@ function rendererDefinitions() {
       .desktopProjectAgentDashboardAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.js')
       .desktopProjectAgentLogsAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopProjectAgentPatternsAuthorityModuleV2.js')
+      .desktopProjectAgentPatternsAuthorityDefinitionV2,
     desktopArtifactContentAuthorityDefinitionV2,
     desktopAutomationAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,

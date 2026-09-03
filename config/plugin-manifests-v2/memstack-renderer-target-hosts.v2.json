@@ -700,6 +700,37 @@
       "contract_digest": "sha256:77729b1dab7d1ef6cf48c3fd3b84d98d4aa6f337fb6fa07c961c4009e31dd8f1"
     },
     {
+      "module_ref": "builtin://memstack/desktop/project-agent-patterns-authority",
+      "entrypoint": "applyDesktopProjectAgentPatternsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:32db57ada48426fa080b5eb9cea920648d956d87c22d37499c5f6079e8b5813b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectAgentPatternsAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-agent-patterns-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8abee960bc09a63689caaf3deb26a3721ae212bf3774f1a0f13d3f36c4d3bb15"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-agent-logs-authority",
       "entrypoint": "applyDesktopProjectAgentLogsAuthorityV2",
       "artifact": {

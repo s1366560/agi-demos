@@ -13,9 +13,9 @@ import {
   type ProjectAgentLogsClient,
 } from './projectAgentLogsClient';
 import {
-  createProjectAgentPatternsClient,
   PROJECT_AGENT_PATTERNS_LOCAL_REASON,
   PROJECT_AGENT_PATTERNS_ROUTE_ID,
+  type ProjectAgentPatternsClient,
 } from './projectAgentPatternsClient';
 
 export const PROJECT_AGENT_CAPABILITY_IDS = Object.freeze([
@@ -50,16 +50,14 @@ const REASON_PREFIXES: Readonly<Record<ProjectAgentCapabilityId, string>> = Obje
 });
 
 export function createProjectAgentCapabilityClients(
-  config: DesktopRuntimeConfig,
   dashboardClient: ProjectAgentDashboardClient,
   logsClient: ProjectAgentLogsClient,
-  overrides?: ProjectAgentCapabilityClients,
+  patternsClient: ProjectAgentPatternsClient,
 ): ProjectAgentCapabilityClients {
   return {
     [PROJECT_AGENT_DASHBOARD_ROUTE_ID]: dashboardClient,
     [PROJECT_AGENT_LOGS_ROUTE_ID]: logsClient,
-    [PROJECT_AGENT_PATTERNS_ROUTE_ID]:
-      overrides?.[PROJECT_AGENT_PATTERNS_ROUTE_ID] ?? createProjectAgentPatternsClient(config),
+    [PROJECT_AGENT_PATTERNS_ROUTE_ID]: patternsClient,
   };
 }
 
