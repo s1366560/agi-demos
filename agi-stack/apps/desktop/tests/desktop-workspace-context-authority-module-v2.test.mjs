@@ -147,6 +147,8 @@ function rendererDefinitions() {
       .desktopProjectCommunitiesAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectMemoriesAuthorityModuleV2.js')
       .desktopProjectMemoriesAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopProjectTeamAuthorityModuleV2.js')
+      .desktopProjectTeamAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectGraphAuthorityModuleV2.js')
       .desktopProjectGraphAuthorityDefinitionV2,
     desktopArtifactContentAuthorityDefinitionV2,

@@ -138,7 +138,6 @@ import { createProjectGraphController } from '../project-knowledge/projectGraphC
 import { createProjectGraphRouteModuleLoader } from '../project-knowledge/projectGraphRouteModule';
 import { createProjectMemoriesController } from '../project-knowledge/projectMemoriesController';
 import { createProjectMemoriesRouteModuleLoader } from '../project-knowledge/projectMemoriesRouteModule';
-import { createProjectTeamClient } from '../project-knowledge/projectTeamClient';
 import { createProjectTeamController } from '../project-knowledge/projectTeamController';
 import { createProjectTeamRouteModuleLoader } from '../project-knowledge/projectTeamRouteModule';
 import { createProjectWorkspacesController } from '../project-workspaces/projectWorkspacesController';
@@ -251,6 +250,10 @@ import {
   type DesktopProjectMemoriesOperationsV2,
 } from '../../plugins/desktopProjectMemoriesAuthorityModuleV2';
 import {
+  createDesktopProjectTeamClientV2,
+  type DesktopProjectTeamOperationsV2,
+} from '../../plugins/desktopProjectTeamAuthorityModuleV2';
+import {
   createDesktopWorkspaceCollaborationClientV2,
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -304,6 +307,7 @@ export type AppRouteRegistryRefs = {
   projectEntitiesOperationsV2: DesktopProjectEntitiesOperationsV2;
   projectGraphOperationsV2: DesktopProjectGraphOperationsV2;
   projectMemoriesOperationsV2: DesktopProjectMemoriesOperationsV2;
+  projectTeamOperationsV2: DesktopProjectTeamOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
@@ -327,6 +331,7 @@ export type AppProjectKnowledgeRouteRegistryRefs = Pick<
   | 'projectEntitiesOperationsV2'
   | 'projectGraphOperationsV2'
   | 'projectMemoriesOperationsV2'
+  | 'projectTeamOperationsV2'
 >;
 export type AppProjectAgentRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -596,6 +601,7 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
     projectEntitiesOperationsV2,
     projectGraphOperationsV2,
     projectMemoriesOperationsV2,
+    projectTeamOperationsV2,
   } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
@@ -610,7 +616,7 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
           return Object.freeze({
             controller: createProjectTeamController({
               authority: currentConfig.mode,
-              client: createProjectTeamClient(currentConfig),
+              client: createDesktopProjectTeamClientV2(projectTeamOperationsV2, currentConfig),
               initialScope: scope,
             }),
             scope,

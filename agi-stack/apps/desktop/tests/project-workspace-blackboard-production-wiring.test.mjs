@@ -9,6 +9,7 @@ import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperation
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
 import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
 import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -213,8 +214,9 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
           projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
           projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
-          projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
-          projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
           projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
           projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -306,8 +308,9 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
-        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
-        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),

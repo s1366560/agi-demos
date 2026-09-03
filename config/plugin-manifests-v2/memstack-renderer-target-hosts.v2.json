@@ -824,6 +824,37 @@
       "contract_digest": "sha256:d870fa6642c19da2faf3c6518c8065cd2e66be2c0b2456a7405def53823e0ff5"
     },
     {
+      "module_ref": "builtin://memstack/desktop/project-team-authority",
+      "entrypoint": "applyDesktopProjectTeamAuthorityV2",
+      "artifact": {
+        "digest": "sha256:feebb5a0c390ac0357025c536ce2d37b9a0cc4d9d26309c1b48e723b878a803e",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectTeamAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-team-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:14e3ffbf0cb78151a5f3ece44f79d55794c32ef15509b6d4276e4dc38d40ab9a"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-entities-authority",
       "entrypoint": "applyDesktopProjectEntitiesAuthorityV2",
       "artifact": {

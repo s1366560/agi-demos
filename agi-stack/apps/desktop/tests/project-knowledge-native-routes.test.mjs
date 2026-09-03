@@ -18,7 +18,10 @@ const {
   I18nProvider,
 } = require('/tmp/agistack-project-knowledge-test-dist/src/i18n.js');
 
-const { createProjectTeamClient } = require(`${compiled}/projectTeamClient.js`);
+const { createDesktopProjectTeamHttpAuthorityV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/' +
+    'desktopProjectTeamHttpProjectionV2.js',
+);
 const { createDesktopProjectMemoriesHttpAuthorityV2 } = require(
   '/tmp/agistack-desktop-test-dist/src/plugins/' +
     'desktopProjectMemoriesHttpProjectionV2.js',
@@ -126,13 +129,19 @@ test('project knowledge cloud clients use trusted-session transport and validate
   };
   try {
     const snapshots = await Promise.all([
-      createProjectTeamClient(cloudConfig).load(cloudScope),
+      createDesktopProjectTeamHttpAuthorityV2(cloudConfig, cloudScope).load(),
     ]);
     assert.deepEqual(
       snapshots.map((snapshot) => snapshot.scopeRevision),
       [7],
     );
-    assert.equal(snapshots[0].allowedActions.includes('update-role'), true);
+    assert.equal(snapshots[0].availability, 'degraded');
+    assert.equal(snapshots[0].reasonCode, 'desktop_project_team_actions_partial');
+    assert.deepEqual(snapshots[0].allowedActions, [
+      'view',
+      'list-members',
+      'list-agent-teammates',
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -154,12 +163,12 @@ test('project knowledge local clients fail closed with stable reason codes befor
   try {
     const cases = [
       [
-        createProjectTeamClient(localConfig),
+        createDesktopProjectTeamHttpAuthorityV2(localConfig, localScope),
         'local_project_team_authority_unavailable',
       ],
     ];
     for (const [client, reasonCode] of cases) {
-      await assert.rejects(client.load(localScope), (error) => {
+      await assert.rejects(client.load(), (error) => {
         assert.equal(error.status, 501);
         assert.equal(error.payload.reason_code, reasonCode);
         return true;
@@ -171,7 +180,7 @@ test('project knowledge local clients fail closed with stable reason codes befor
   assert.equal(fetchCalls, 0);
 });
 
-test('project knowledge capability authority observes Cloud and never probes static clients in Local', async () => {
+test('project knowledge capability authority uses injected Cloud clients and never probes Local', async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (url, init = {}) => {
@@ -223,7 +232,7 @@ test('project knowledge capability authority observes Cloud and never probes sta
   try {
     const cloud = await loadProjectKnowledgeCapabilities(
       createProjectKnowledgeCapabilityClients(
-        cloudConfig,
+        injectedProjectTeamClient(11),
         injectedProjectMemoriesClient(11),
         injectedProjectEntitiesClient(11),
         injectedProjectCommunitiesClient(11),
@@ -231,7 +240,7 @@ test('project knowledge capability authority observes Cloud and never probes sta
       ),
       cloudConfig,
     );
-    assert.equal(cloud['project-project-team'].availability, 'available');
+    assert.equal(cloud['project-project-team'].availability, 'degraded');
     assert.equal(cloud['project-project-memories'].availability, 'degraded');
     assert.equal(cloud['project-project-graph'].authority_revision, 11);
 
@@ -268,44 +277,24 @@ test('project knowledge capability authority observes Cloud and never probes sta
   } finally {
     globalThis.fetch = originalFetch;
   }
-  assert.ok(requests.length > 0);
+  assert.equal(requests.length, 0);
 });
 
-test('project knowledge overrides cannot replace injected V2 authorities', () => {
+test('project knowledge capability clients require and preserve injected V2 authorities', () => {
+  const teamClient = injectedProjectTeamClient(13);
   const memoriesClient = injectedProjectMemoriesClient(13);
   const entitiesClient = injectedProjectEntitiesClient(13);
   const communitiesClient = injectedProjectCommunitiesClient(13);
   const graphClient = injectedProjectGraphClient(13);
   const clients = createProjectKnowledgeCapabilityClients(
-    cloudConfig,
+    teamClient,
     memoriesClient,
     entitiesClient,
     communitiesClient,
     graphClient,
-    {
-      'project-project-memories': {
-        async load() {
-          throw new Error('memories override must not be selected');
-        },
-      },
-      'project-project-entities': {
-        async load() {
-          throw new Error('entities override must not be selected');
-        },
-      },
-      'project-project-graph': {
-        async load() {
-          throw new Error('graph override must not be selected');
-        },
-      },
-      'project-project-communities': {
-        async load() {
-          throw new Error('communities override must not be selected');
-        },
-      },
-    },
   );
 
+  assert.equal(clients['project-project-team'], teamClient);
   assert.equal(clients['project-project-memories'], memoriesClient);
   assert.equal(clients['project-project-entities'], entitiesClient);
   assert.equal(clients['project-project-communities'], communitiesClient);
@@ -485,6 +474,25 @@ function injectedProjectGraphClient(scopeRevision) {
         allowedActions: Object.freeze(['view']),
         nodes: Object.freeze([]),
         edges: Object.freeze([]),
+      });
+    },
+  });
+}
+
+function injectedProjectTeamClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_team_actions_partial',
+        allowedActions: Object.freeze(['view', 'list-members', 'list-agent-teammates']),
+        members: Object.freeze([]),
+        agents: Object.freeze([]),
+        currentUserRole: 'member',
       });
     },
   });

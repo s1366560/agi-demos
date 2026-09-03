@@ -259,6 +259,19 @@ test('project knowledge V2 route composition binds only its five native loaders'
     appSource,
     /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/u,
   );
+  assert.match(
+    projectKnowledgeFactorySource,
+    /PROJECT_TEAM_ROUTE_ID[\s\S]*createProjectTeamRouteModuleLoader\(\{[\s\S]*createDesktopProjectTeamClientV2\(\s*projectTeamOperationsV2,\s*currentConfig,?\s*\)/u,
+  );
+  assert.doesNotMatch(projectKnowledgeFactorySource, /createProjectTeamClient\(/u);
+  assert.match(
+    appSource,
+    /const desktopProjectTeamOperationsV2 = useMemo\([\s\S]*createDesktopProjectTeamOperationsV2\([\s\S]*desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*\[\],?\s*\);/u,
+  );
+  assert.match(
+    appSource,
+    /projectTeamOperationsV2:\s*desktopProjectTeamOperationsV2/u,
+  );
 });
 
 test('project agent V2 route composition binds only its three native loaders', () => {

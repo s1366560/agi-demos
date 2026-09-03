@@ -38,6 +38,7 @@ const authorityModuleNames = [
   'desktopProjectEntitiesAuthorityModuleV2',
   'desktopProjectCommunitiesAuthorityModuleV2',
   'desktopProjectMemoriesAuthorityModuleV2',
+  'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
   'desktopProjectBlackboardAuthorityModuleV2',
   'desktopRuntimePoolAuthorityModuleV2',

@@ -9,6 +9,7 @@ import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperation
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
 import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
 import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
+import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -48,16 +49,6 @@ const ROUTE_IDS = Object.freeze([
   'project-project-communities',
   'project-project-graph',
 ]);
-const STATIC_ROUTE_IDS = Object.freeze(
-  ROUTE_IDS.filter(
-    (routeId) =>
-      routeId !== 'project-project-communities' &&
-      routeId !== 'project-project-entities' &&
-      routeId !== 'project-project-graph' &&
-      routeId !== 'project-project-memories',
-  ),
-);
-
 const cloudConfig = Object.freeze({
   apiBaseUrl: 'https://cloud.memstack.test',
   deviceAuthorizationBaseUrl: 'https://cloud.memstack.test',
@@ -109,10 +100,12 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
   assert.match(registrySource, /createDesktopProjectCommunitiesClientV2/u);
   assert.match(registrySource, /createDesktopProjectEntitiesClientV2/u);
   assert.match(registrySource, /createDesktopProjectMemoriesClientV2/u);
+  assert.match(registrySource, /createDesktopProjectTeamClientV2/u);
   assert.match(registrySource, /projectCommunitiesOperationsV2/u);
   assert.match(registrySource, /projectEntitiesOperationsV2/u);
   assert.match(registrySource, /projectGraphOperationsV2/u);
   assert.match(registrySource, /projectMemoriesOperationsV2/u);
+  assert.match(registrySource, /projectTeamOperationsV2/u);
   assert.match(
     appSource,
     /projectCommunitiesOperationsV2:\s*desktopProjectCommunitiesOperationsV2/gu,
@@ -129,17 +122,21 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     appSource,
     /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/gu,
   );
+  assert.match(
+    appSource,
+    /projectTeamOperationsV2:\s*desktopProjectTeamOperationsV2/gu,
+  );
   assert.doesNotMatch(registrySource, /createProjectGraphClient/u);
   assert.doesNotMatch(registrySource, /createProjectCommunitiesClient/u);
   assert.doesNotMatch(registrySource, /createProjectEntitiesClient/u);
   assert.doesNotMatch(registrySource, /createProjectMemoriesClient/u);
+  assert.doesNotMatch(registrySource, /createProjectTeamClient/u);
 });
 
 test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities', async () => {
-  const clientOverrides = projectKnowledgeClientOverrides('cloud');
   const snapshot = await loadSnapshot(
     cloudConfig,
-    clientOverrides,
+    projectTeamOperationsV2Fixture({ scopeRevision: 7 }),
     projectMemoriesOperationsV2Fixture({ scopeRevision: 7 }),
     projectEntitiesOperationsV2Fixture({ scopeRevision: 7 }),
     projectCommunitiesOperationsV2Fixture({ scopeRevision: 7 }),
@@ -155,9 +152,9 @@ test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities',
     assert.equal(capability.contract_version, '4.0.0', routeId);
   }
   assert.deepEqual(pick(snapshot, 'project-project-team'), {
-    availability: 'available',
-    reason_code: null,
-    allowed_actions: ['view', 'list'],
+    availability: 'degraded',
+    reason_code: 'desktop_project_team_actions_partial',
+    allowed_actions: ['view', 'list-members', 'list-agent-teammates'],
   });
   assert.deepEqual(pick(snapshot, 'project-project-memories'), {
     availability: 'degraded',
@@ -183,17 +180,12 @@ test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities',
 
 test('Local Snapshot keeps Project Knowledge unavailable until sidecar authority is observed', async () => {
   let loadCalls = 0;
-  const clients = Object.fromEntries(
-    STATIC_ROUTE_IDS.map((routeId) => [
-      routeId,
-      {
-        async load() {
-          loadCalls += 1;
-          throw new Error('Local static clients must not manufacture observed authority');
-        },
-      },
-    ]),
-  );
+  const teamOperations = {
+    async loadProjectTeam() {
+      loadCalls += 1;
+      throw new Error('Local Team V2 authority must not be probed');
+    },
+  };
   const graphOperations = {
     async loadProjectGraph() {
       loadCalls += 1;
@@ -224,7 +216,7 @@ test('Local Snapshot keeps Project Knowledge unavailable until sidecar authority
   };
   const snapshot = await loadSnapshot(
     { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
-    clients,
+    teamOperations,
     memoriesOperations,
     entitiesOperations,
     communitiesOperations,
@@ -256,7 +248,7 @@ test('Capability catalog contains every Project Knowledge ID exactly once per de
 
 async function loadSnapshot(
   config,
-  projectKnowledgeClientOverrides,
+  projectTeamOperationsV2,
   projectMemoriesOperationsV2,
   projectEntitiesOperationsV2,
   projectCommunitiesOperationsV2,
@@ -277,11 +269,11 @@ async function loadSnapshot(
       },
       config,
       {
-        projectKnowledgeClientOverrides,
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
         projectCommunitiesOperationsV2,
+        projectTeamOperationsV2,
         projectMemoriesOperationsV2,
         projectEntitiesOperationsV2,
         projectGraphOperationsV2,
@@ -301,31 +293,6 @@ async function loadSnapshot(
   } finally {
     globalThis.fetch = originalFetch;
   }
-}
-
-function projectKnowledgeClientOverrides(authority) {
-  return Object.fromEntries(
-    STATIC_ROUTE_IDS.map((routeId) => [
-      routeId,
-      {
-        async load(scope) {
-          assert.deepEqual(scope, {
-            authority,
-            tenantId: 'tenant-1',
-            projectId: 'project-1',
-          });
-          return {
-            scope,
-            scopeRevision: 7,
-            authority,
-            availability: 'available',
-            reasonCode: null,
-            allowedActions: ['view', 'list'],
-          };
-        },
-      },
-    ]),
-  );
 }
 
 function implementedLoader(routeId) {
