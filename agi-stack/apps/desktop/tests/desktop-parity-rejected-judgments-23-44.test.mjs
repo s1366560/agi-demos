@@ -464,6 +464,7 @@ test("Project Blackboard Cloud contract covers every production Canvas tab", () 
   ]);
   assert.deepEqual(contractKeys(blackboard, "desktop_cloud"), [
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority",
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/capabilities",
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/objectives",
     "GET /api/v1/workspaces/{workspace_id}/tasks",
     "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard/execution-diagnostics",
@@ -476,6 +477,12 @@ test("Project Blackboard Cloud contract covers every production Canvas tab", () 
     "GET /api/v1/workspaces/{workspace_id}/topology/nodes",
     "GET /api/v1/workspaces/{workspace_id}/topology/edges",
     "POST /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/mutations",
+  ]);
+  assert.deepEqual(contractKeys(blackboard, "desktop_local"), [
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/capabilities",
+    "GET /api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/collaboration/authority",
+    "GET /api/v1/workspaces/{workspace_id}/tasks",
+    "GET /api/v1/workspaces/{workspace_id}/plan",
   ]);
   assert.deepEqual(
     permissionActions(blackboard, "desktop_cloud", "workspace_member"),

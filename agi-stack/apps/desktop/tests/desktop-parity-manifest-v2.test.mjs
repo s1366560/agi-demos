@@ -946,13 +946,13 @@ test("project capabilities preserve audited Local authority and per-surface acti
   );
   assert.equal(
     blackboard.surfaces.desktop_local.reason_code,
-    "local_workspace_plan_read_only",
+    "capability_authority_revision_unavailable",
   );
-  assert.deepEqual(blackboard.surfaces.desktop_local.allowed_actions, [
-    "view",
-    "select-workspace",
-    "review-plan",
-  ]);
+  assert.equal(
+    blackboard.surfaces.desktop_local.availability,
+    "unavailable",
+  );
+  assert.deepEqual(blackboard.surfaces.desktop_local.allowed_actions, []);
   assert.deepEqual(search.surfaces.desktop_cloud.allowed_actions, [
     "view",
     "search",
