@@ -87,7 +87,6 @@ import type {
   ProjectWorkspacesScope,
   ProjectWorkspacesSnapshot,
 } from '../project-workspaces/projectWorkspacesClient';
-import { createProjectWorkspacesHttpClient } from '../project-workspaces/projectWorkspacesHttpClient';
 import { projectSupportCapability } from '../project-support/projectSupportCapability';
 import { loadTenantAnalyticsCapability } from '../tenant/tenantAnalyticsCapability';
 import { loadTenantAgentDashboardCapability } from '../tenant/tenantAgentDashboardCapability';
@@ -185,7 +184,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   >;
   agentWorkspaceClient?: AgentWorkspaceAuthorityClient;
   agentWorkspaceJourneyClient?: AgentWorkspaceJourneyAuthorityClient;
-  projectWorkspacesClient?: Pick<ProjectWorkspacesClient, 'list'>;
+  projectWorkspacesClient: Pick<ProjectWorkspacesClient, 'list'>;
   projectBlackboardClient?: ProjectBlackboardClient;
   projectKnowledgeClients?: ProjectKnowledgeCapabilityClients;
   projectAgentClients?: ProjectAgentCapabilityClients;
@@ -309,6 +308,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof runtimePoolOperationsV2?.probeRuntimePool !== 'function') {
     throw new Error('desktop_runtime_pool_authority_required');
   }
+  const projectWorkspacesClient = options?.projectWorkspacesClient;
+  if (typeof projectWorkspacesClient?.list !== 'function') {
+    throw new Error('desktop_project_workspaces_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -323,8 +326,6 @@ export function createDesktopWorkbenchCapabilityClient(
   const agentWorkspaceClient =
     injectedAgentWorkspaceClient ??
     (agentWorkspaceJourneyClient ? null : createAgentWorkspaceClient(config));
-  const projectWorkspacesClient =
-    options.projectWorkspacesClient ?? createProjectWorkspacesClient(config);
   const projectBlackboardClient =
     options.projectBlackboardClient ?? createProjectBlackboardClient(config);
   const projectKnowledgeClients =
@@ -930,16 +931,6 @@ function agentWorkspaceCapabilityScope(
     workspace_id: scope.workspaceId,
     instance_id: null,
   };
-}
-
-function createProjectWorkspacesClient(
-  config: DesktopRuntimeConfig,
-): Pick<ProjectWorkspacesClient, 'list'> | null {
-  try {
-    return createProjectWorkspacesHttpClient(config);
-  } catch {
-    return null;
-  }
 }
 
 function createProjectBlackboardClient(

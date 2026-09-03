@@ -383,7 +383,7 @@
     "src/features/project/projectOverviewRouteModule.tsx",
     "src/features/project/useProjectOverviewController.ts",
     "src/features/project-workspaces/projectWorkspacesClient.ts",
-    "src/features/project-workspaces/projectWorkspacesHttpClient.ts",
+    "src/features/project-workspaces/projectWorkspacesV2Client.ts",
     "src/features/project-workspaces/projectWorkspacesController.ts",
     "src/features/project-workspaces/projectWorkspacesPresentationModel.ts",
     "src/features/project-workspaces/ProjectWorkspacesPage.tsx",

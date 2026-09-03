@@ -152,7 +152,7 @@ import { createProjectTeamClient } from '../project-knowledge/projectTeamClient'
 import { createProjectTeamController } from '../project-knowledge/projectTeamController';
 import { createProjectTeamRouteModuleLoader } from '../project-knowledge/projectTeamRouteModule';
 import { createProjectWorkspacesController } from '../project-workspaces/projectWorkspacesController';
-import { createProjectWorkspacesHttpClient } from '../project-workspaces/projectWorkspacesHttpClient';
+import { createProjectWorkspacesV2Client } from '../project-workspaces/projectWorkspacesV2Client';
 import { createProjectWorkspacesRouteModuleLoader } from '../project-workspaces/projectWorkspacesRouteModule';
 import { createProjectSupportRouteModuleLoader } from '../project-support/projectSupportRouteModule';
 import { createProjectSupportRouteBindingForRuntime } from '../project-support/projectSupportRuntime';
@@ -300,7 +300,11 @@ export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
 >;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'desktopProductionRouteNavigation' | 'projectOverviewOperationsV2'
+  | 'configRef'
+  | 'desktopProductionRouteNavigation'
+  | 'desktopWorkspaceCatalogOperationsV2'
+  | 'desktopWorkspaceLifecycleOperationsV2'
+  | 'projectOverviewOperationsV2'
 >;
 export type AppProjectDiscoveryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -816,7 +820,13 @@ export function createAppRuntimeInfrastructureRouteRegistry(
 export function createAppProjectWorkspaceRouteRegistry(
   refs: AppProjectWorkspaceRouteRegistryRefs,
 ) {
-  const { configRef, desktopProductionRouteNavigation, projectOverviewOperationsV2 } = refs;
+  const {
+    configRef,
+    desktopProductionRouteNavigation,
+    desktopWorkspaceCatalogOperationsV2,
+    desktopWorkspaceLifecycleOperationsV2,
+    projectOverviewOperationsV2,
+  } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_OVERVIEW_ROUTE_ID]: createProjectOverviewRouteModuleLoader({
@@ -835,7 +845,10 @@ export function createAppProjectWorkspaceRouteRegistry(
             tenantId: context.tenantId,
             projectId: context.projectId,
           });
-          const client = createProjectWorkspacesHttpClient(currentConfig);
+          const client = createProjectWorkspacesV2Client(currentConfig, {
+            catalogOperations: desktopWorkspaceCatalogOperationsV2,
+            lifecycleOperations: desktopWorkspaceLifecycleOperationsV2,
+          });
           return Object.freeze({
             controller: createProjectWorkspacesController({
               authority: currentConfig.mode,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -45,6 +45,21 @@ const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8
 const registrySource = readFileSync(
   new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
   'utf8',
+);
+const workbenchSource = readFileSync(
+  new URL('../src/features/runtime/workbenchCapabilityClient.ts', import.meta.url),
+  'utf8',
+);
+const providerSource = readFileSync(
+  new URL(
+    '../src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts',
+    import.meta.url,
+  ),
+  'utf8',
+);
+const legacyProjectWorkspacesClientPath = new URL(
+  '../src/features/project-workspaces/projectWorkspacesHttpClient.ts',
+  import.meta.url,
 );
 
 const cloudConfig = Object.freeze({
@@ -330,7 +345,15 @@ test('App binds both typed route modules without browser handoff or DesktopApiCl
     registrySource,
     /\[PROJECT_BLACKBOARD_ROUTE_ID\]:\s*createProjectBlackboardRouteModuleLoader\(/,
   );
-  assert.match(registrySource, /createProjectWorkspacesHttpClient\(/);
+  assert.match(registrySource, /createProjectWorkspacesV2Client\(/);
+  assert.match(registrySource, /desktopWorkspaceCatalogOperationsV2/u);
+  assert.match(registrySource, /desktopWorkspaceLifecycleOperationsV2/u);
+  assert.doesNotMatch(registrySource, /createProjectWorkspacesHttpClient\(/u);
+  assert.match(providerSource, /createProjectWorkspacesV2Client\(config,\s*\{/u);
+  assert.match(workbenchSource, /projectWorkspacesClient:\s*Pick<ProjectWorkspacesClient/u);
+  assert.doesNotMatch(workbenchSource, /projectWorkspacesClient\?\s*:/u);
+  assert.doesNotMatch(workbenchSource, /createProjectWorkspacesHttpClient/u);
+  assert.equal(existsSync(legacyProjectWorkspacesClientPath), false);
   assert.match(registrySource, /createProjectBlackboardCloudClient\(/);
   assert.match(registrySource, /createProjectBlackboardLocalClient\(/);
   assert.match(registrySource, /buildProjectBlackboardCanonicalPath\(/);

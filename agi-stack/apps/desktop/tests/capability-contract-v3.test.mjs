@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
@@ -417,6 +418,7 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
       {
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+        projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),

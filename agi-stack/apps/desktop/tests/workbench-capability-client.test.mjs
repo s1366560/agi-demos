@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
@@ -195,6 +196,26 @@ test('workbench capability client requires the Runtime Pool V2 authority', () =>
         },
       ),
     /desktop_runtime_pool_authority_required/u,
+  );
+});
+
+test('workbench capability client requires an injected Project Workspaces V2 client', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_workspaces_authority_required/u,
   );
 });
 
@@ -1585,6 +1606,7 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
   return createDesktopWorkbenchCapabilityClient(automationApi, config, {
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
     tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),

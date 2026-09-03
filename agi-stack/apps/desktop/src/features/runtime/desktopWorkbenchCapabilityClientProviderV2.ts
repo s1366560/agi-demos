@@ -8,6 +8,13 @@ import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desk
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type { DesktopTenantTasksOperationsV2 } from '../../plugins/desktopTenantTasksAuthorityModuleV2';
+import type {
+  DesktopWorkspaceCatalogOperationsV2,
+} from '../../plugins/desktopWorkspaceCatalogAuthorityModuleV2';
+import type {
+  DesktopWorkspaceLifecycleOperationsV2,
+} from '../../plugins/desktopWorkspaceLifecycleAuthorityModuleV2';
+import { createProjectWorkspacesV2Client } from '../project-workspaces/projectWorkspacesV2Client';
 import {
   createDesktopWorkbenchCapabilityClient,
   type DesktopWorkbenchCapabilityClient,
@@ -38,6 +45,14 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     'probeProjectOverview'
   >;
   runtimePoolOperationsV2: Pick<DesktopRuntimePoolOperationsV2, 'probeRuntimePool'>;
+  desktopWorkspaceCatalogOperationsV2: Pick<
+    DesktopWorkspaceCatalogOperationsV2,
+    'listWorkspacesForProject'
+  >;
+  desktopWorkspaceLifecycleOperationsV2: Pick<
+    DesktopWorkspaceLifecycleOperationsV2,
+    'createWorkspace'
+  >;
   tenantAnalyticsOperationsV2: Pick<
     DesktopTenantAnalyticsOperationsV2,
     'loadTenantAnalytics'
@@ -101,6 +116,10 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
     pluginMarketplaceOperationsV2: input.pluginMarketplaceOperationsV2,
     projectOverviewOperationsV2: input.projectOverviewOperationsV2,
     runtimePoolOperationsV2: input.runtimePoolOperationsV2,
+    projectWorkspacesClient: createProjectWorkspacesV2Client(config, {
+      catalogOperations: input.desktopWorkspaceCatalogOperationsV2,
+      lifecycleOperations: input.desktopWorkspaceLifecycleOperationsV2,
+    }),
     tenantAgentBindingsOperationsV2: input.tenantAgentBindingsOperationsV2,
     tenantAgentDashboardOperationsV2: input.tenantAgentDashboardOperationsV2,
     tenantAnalyticsOperationsV2: input.tenantAnalyticsOperationsV2,

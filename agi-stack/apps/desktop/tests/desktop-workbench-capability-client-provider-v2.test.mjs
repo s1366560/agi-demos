@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectWorkspaceOperationsV2Fixture } from './projectWorkspaceOperationsV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -55,6 +56,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
@@ -68,6 +70,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
@@ -93,6 +96,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
@@ -115,6 +119,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+        ...projectWorkspaceOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
@@ -130,6 +135,8 @@ test('failed capability client publication keeps the last-good binding', () => {
 test('App consumes the published V2 workbench capability client', () => {
   assert.match(appSource, /desktopWorkbenchCapabilityClientProviderV2\.publish\(\{/u);
   assert.match(appSource, /automationApi:\s*desktopAutomationApiV2/u);
+  assert.match(appSource, /desktopWorkspaceCatalogOperationsV2,/u);
+  assert.match(appSource, /desktopWorkspaceLifecycleOperationsV2,/u);
   assert.match(
     appSource,
     /useDesktopCapabilitySnapshot\(\s*desktopWorkbenchCapabilityClientV2\.client/u,
@@ -142,6 +149,15 @@ test('App consumes the published V2 workbench capability client', () => {
   assert.match(providerSource, /pluginMarketplaceOperationsV2:\s*input\.pluginMarketplaceOperationsV2/u);
   assert.match(providerSource, /projectOverviewOperationsV2:\s*input\.projectOverviewOperationsV2/u);
   assert.match(providerSource, /runtimePoolOperationsV2:\s*input\.runtimePoolOperationsV2/u);
+  assert.match(providerSource, /createProjectWorkspacesV2Client\(config,\s*\{/u);
+  assert.match(
+    providerSource,
+    /catalogOperations:\s*input\.desktopWorkspaceCatalogOperationsV2/u,
+  );
+  assert.match(
+    providerSource,
+    /lifecycleOperations:\s*input\.desktopWorkspaceLifecycleOperationsV2/u,
+  );
   assert.match(
     providerSource,
     /tenantAgentBindingsOperationsV2:\s*input\.tenantAgentBindingsOperationsV2/u,
