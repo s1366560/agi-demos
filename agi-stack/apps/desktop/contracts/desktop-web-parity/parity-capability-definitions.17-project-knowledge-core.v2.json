@@ -158,10 +158,8 @@
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
-        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
-        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -515,8 +513,10 @@
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
