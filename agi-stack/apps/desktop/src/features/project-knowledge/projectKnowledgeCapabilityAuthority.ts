@@ -7,7 +7,7 @@ import {
   PROJECT_COMMUNITIES_ROUTE_ID,
 } from './projectCommunitiesClient';
 import {
-  createProjectEntitiesClient,
+  type ProjectEntitiesClient,
   PROJECT_ENTITIES_LOCAL_REASON,
   PROJECT_ENTITIES_ROUTE_ID,
 } from './projectEntitiesClient';
@@ -52,7 +52,12 @@ export type ProjectKnowledgeCapabilityClients = Readonly<
   Record<ProjectKnowledgeCapabilityId, CapabilityClient>
 >;
 export type ProjectKnowledgeCapabilityClientOverrides = Readonly<
-  Partial<Omit<ProjectKnowledgeCapabilityClients, typeof PROJECT_GRAPH_ROUTE_ID>>
+  Partial<
+    Omit<
+      ProjectKnowledgeCapabilityClients,
+      typeof PROJECT_ENTITIES_ROUTE_ID | typeof PROJECT_GRAPH_ROUTE_ID
+    >
+  >
 >;
 
 export type ProjectKnowledgeCapabilityProjection = Readonly<
@@ -82,9 +87,13 @@ const REASON_PREFIXES: Readonly<Record<ProjectKnowledgeCapabilityId, string>> =
 
 export function createProjectKnowledgeCapabilityClients(
   config: DesktopRuntimeConfig,
+  projectEntitiesClient: Pick<ProjectEntitiesClient, 'load'>,
   projectGraphClient: Pick<ProjectGraphClient, 'load'>,
   overrides: ProjectKnowledgeCapabilityClientOverrides = {},
 ): ProjectKnowledgeCapabilityClients {
+  if (typeof projectEntitiesClient?.load !== 'function') {
+    throw new Error('desktop_project_entities_authority_required');
+  }
   if (typeof projectGraphClient?.load !== 'function') {
     throw new Error('desktop_project_graph_authority_required');
   }
@@ -93,8 +102,7 @@ export function createProjectKnowledgeCapabilityClients(
       overrides[PROJECT_TEAM_ROUTE_ID] ?? createProjectTeamClient(config),
     [PROJECT_MEMORIES_ROUTE_ID]:
       overrides[PROJECT_MEMORIES_ROUTE_ID] ?? createProjectMemoriesClient(config),
-    [PROJECT_ENTITIES_ROUTE_ID]:
-      overrides[PROJECT_ENTITIES_ROUTE_ID] ?? createProjectEntitiesClient(config),
+    [PROJECT_ENTITIES_ROUTE_ID]: projectEntitiesClient,
     [PROJECT_COMMUNITIES_ROUTE_ID]:
       overrides[PROJECT_COMMUNITIES_ROUTE_ID] ?? createProjectCommunitiesClient(config),
     [PROJECT_GRAPH_ROUTE_ID]: projectGraphClient,

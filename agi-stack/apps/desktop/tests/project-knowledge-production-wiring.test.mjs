@@ -7,6 +7,7 @@ import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV
 import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
@@ -45,7 +46,10 @@ const ROUTE_IDS = Object.freeze([
   'project-project-graph',
 ]);
 const STATIC_ROUTE_IDS = Object.freeze(
-  ROUTE_IDS.filter((routeId) => routeId !== 'project-project-graph'),
+  ROUTE_IDS.filter(
+    (routeId) =>
+      routeId !== 'project-project-entities' && routeId !== 'project-project-graph',
+  ),
 );
 
 const cloudConfig = Object.freeze({
@@ -96,12 +100,19 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     /project-knowledge[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
   );
   assert.match(registrySource, /createDesktopProjectGraphClientV2/u);
+  assert.match(registrySource, /createDesktopProjectEntitiesClientV2/u);
+  assert.match(registrySource, /projectEntitiesOperationsV2/u);
   assert.match(registrySource, /projectGraphOperationsV2/u);
+  assert.match(
+    appSource,
+    /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/gu,
+  );
   assert.match(
     appSource,
     /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/gu,
   );
   assert.doesNotMatch(registrySource, /createProjectGraphClient/u);
+  assert.doesNotMatch(registrySource, /createProjectEntitiesClient/u);
 });
 
 test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities', async () => {
@@ -109,6 +120,7 @@ test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities',
   const snapshot = await loadSnapshot(
     cloudConfig,
     clientOverrides,
+    projectEntitiesOperationsV2Fixture({ scopeRevision: 7 }),
     projectGraphOperationsV2Fixture({ scopeRevision: 7 }),
   );
 
@@ -131,8 +143,8 @@ test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities',
     allowed_actions: ['view', 'list'],
   });
   assert.deepEqual(pick(snapshot, 'project-project-entities'), {
-    availability: 'available',
-    reason_code: null,
+    availability: 'degraded',
+    reason_code: 'desktop_project_entities_actions_partial',
     allowed_actions: ['view', 'list'],
   });
   assert.deepEqual(pick(snapshot, 'project-project-graph'), {
@@ -161,9 +173,20 @@ test('Local Snapshot keeps Project Knowledge unavailable until sidecar authority
       throw new Error('Local Graph V2 authority must not be probed');
     },
   };
+  const entitiesOperations = {
+    async loadProjectEntities() {
+      loadCalls += 1;
+      throw new Error('Local Entities V2 authority must not be probed');
+    },
+    async loadProjectEntityRelationships() {
+      loadCalls += 1;
+      throw new Error('Local Entities V2 authority must not be probed');
+    },
+  };
   const snapshot = await loadSnapshot(
     { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
     clients,
+    entitiesOperations,
     graphOperations,
   );
   const reasons = {
@@ -193,6 +216,7 @@ test('Capability catalog contains every Project Knowledge ID exactly once per de
 async function loadSnapshot(
   config,
   projectKnowledgeClientOverrides,
+  projectEntitiesOperationsV2,
   projectGraphOperationsV2,
 ) {
   const originalFetch = globalThis.fetch;
@@ -214,6 +238,7 @@ async function loadSnapshot(
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+        projectEntitiesOperationsV2,
         projectGraphOperationsV2,
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),

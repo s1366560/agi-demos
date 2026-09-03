@@ -102,6 +102,9 @@ import {
   createDesktopProjectAgentPatternsOperationsV2,
 } from './plugins/desktopProjectAgentPatternsAuthorityModuleV2';
 import {
+  createDesktopProjectEntitiesOperationsV2,
+} from './plugins/desktopProjectEntitiesAuthorityModuleV2';
+import {
   createDesktopProjectGraphOperationsV2,
 } from './plugins/desktopProjectGraphAuthorityModuleV2';
 import {
@@ -928,6 +931,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectEntitiesOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectEntitiesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopProjectGraphOperationsV2 = useMemo(
     () =>
       createDesktopProjectGraphOperationsV2(
@@ -1230,6 +1240,7 @@ export function App() {
       projectAgentDashboardOperationsV2: desktopProjectAgentDashboardOperationsV2,
       projectAgentLogsOperationsV2: desktopProjectAgentLogsOperationsV2,
       projectAgentPatternsOperationsV2: desktopProjectAgentPatternsOperationsV2,
+      projectEntitiesOperationsV2: desktopProjectEntitiesOperationsV2,
       projectGraphOperationsV2: desktopProjectGraphOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
@@ -1258,6 +1269,7 @@ export function App() {
       desktopProjectAgentDashboardOperationsV2,
       desktopProjectAgentLogsOperationsV2,
       desktopProjectAgentPatternsOperationsV2,
+      desktopProjectEntitiesOperationsV2,
       desktopProjectGraphOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
@@ -1306,6 +1318,7 @@ export function App() {
         projectAgentDashboardOperationsV2: desktopProjectAgentDashboardOperationsV2,
         projectAgentLogsOperationsV2: desktopProjectAgentLogsOperationsV2,
         projectAgentPatternsOperationsV2: desktopProjectAgentPatternsOperationsV2,
+        projectEntitiesOperationsV2: desktopProjectEntitiesOperationsV2,
         projectGraphOperationsV2: desktopProjectGraphOperationsV2,
         projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
@@ -1326,6 +1339,7 @@ export function App() {
       desktopProjectAgentDashboardOperationsV2,
       desktopProjectAgentLogsOperationsV2,
       desktopProjectAgentPatternsOperationsV2,
+      desktopProjectEntitiesOperationsV2,
       desktopProjectGraphOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopRuntimePoolOperationsV2,

@@ -129,6 +129,10 @@ import {
   type DesktopProjectAgentPatternsOperationsV2,
 } from '../../plugins/desktopProjectAgentPatternsAuthorityModuleV2';
 import {
+  createDesktopProjectEntitiesClientV2,
+  type DesktopProjectEntitiesOperationsV2,
+} from '../../plugins/desktopProjectEntitiesAuthorityModuleV2';
+import {
   createDesktopProjectGraphClientV2,
   type DesktopProjectGraphOperationsV2,
 } from '../../plugins/desktopProjectGraphAuthorityModuleV2';
@@ -205,6 +209,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   projectAgentPatternsOperationsV2: Pick<
     DesktopProjectAgentPatternsOperationsV2,
     'loadProjectAgentPatterns'
+  >;
+  projectEntitiesOperationsV2: Pick<
+    DesktopProjectEntitiesOperationsV2,
+    'loadProjectEntities' | 'loadProjectEntityRelationships'
   >;
   projectGraphOperationsV2: Pick<DesktopProjectGraphOperationsV2, 'loadProjectGraph'>;
   runtimePoolOperationsV2: Pick<DesktopRuntimePoolOperationsV2, 'probeRuntimePool'>;
@@ -347,6 +355,13 @@ export function createDesktopWorkbenchCapabilityClient(
   ) {
     throw new Error('desktop_project_agent_patterns_authority_required');
   }
+  const projectEntitiesOperationsV2 = options?.projectEntitiesOperationsV2;
+  if (
+    typeof projectEntitiesOperationsV2?.loadProjectEntities !== 'function' ||
+    typeof projectEntitiesOperationsV2.loadProjectEntityRelationships !== 'function'
+  ) {
+    throw new Error('desktop_project_entities_authority_required');
+  }
   const projectGraphOperationsV2 = options?.projectGraphOperationsV2;
   if (typeof projectGraphOperationsV2?.loadProjectGraph !== 'function') {
     throw new Error('desktop_project_graph_authority_required');
@@ -367,6 +382,7 @@ export function createDesktopWorkbenchCapabilityClient(
     (agentWorkspaceJourneyClient ? null : createAgentWorkspaceClient(config));
   const projectKnowledgeClients = createProjectKnowledgeCapabilityClients(
     config,
+    createDesktopProjectEntitiesClientV2(projectEntitiesOperationsV2, config),
     createDesktopProjectGraphClientV2(projectGraphOperationsV2, config),
     options.projectKnowledgeClientOverrides,
   );

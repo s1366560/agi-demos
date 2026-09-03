@@ -6,6 +6,7 @@ import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV
 import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
@@ -319,6 +320,7 @@ test('workbench capability client requires the Project Graph V2 authority', () =
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
@@ -348,6 +350,39 @@ test('workbench capability client requires the Project Graph V2 authority', () =
       ),
     /desktop_project_graph_authority_required/u,
   );
+});
+
+test('workbench capability client requires both Project Entities V2 operations', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectEntitiesOperationsV2 of [
+    undefined,
+    {},
+    { loadProjectEntities: async () => ({}) },
+  ]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectEntitiesOperationsV2 },
+        ),
+      /desktop_project_entities_authority_required/u,
+    );
+  }
 });
 
 const workspaceCollaborationContract = {
@@ -1738,6 +1773,7 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
