@@ -509,7 +509,6 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     "tenant-tenant-deploy",
     "tenant-tenant-instance-templates",
     "tenant-tenant-instances",
-    "tenant-tenant-pool",
     "tenant-tenant-runtimes",
     "tenant-tenant-workspaces",
   ];
@@ -538,6 +537,36 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
       `${capabilityId}: native loader/source entries must remain auditable`,
     );
   }
+
+  const runtimePool = byId.get("tenant-tenant-pool");
+  assert.ok(runtimePool);
+  assert.deepEqual(runtimePool.surfaces.desktop_cloud, {
+    disposition: "native_equivalent",
+    implementation_status: "partial",
+    availability: "unavailable",
+    reason_code: "capability_authority_revision_unavailable",
+    authority: "cloud_service",
+    allowed_actions: [],
+    intentional_deviation: null,
+  });
+  assert.equal(
+    runtimePool.production_entries.desktop_cloud.some(
+      (entry) =>
+        entry.entry_type === "source" &&
+        entry.path ===
+          "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolAuthorityModuleV2.ts",
+    ),
+    true,
+  );
+  assert.equal(
+    runtimePool.production_entries.desktop_cloud.some(
+      (entry) =>
+        entry.entry_type === "source" &&
+        entry.path ===
+          "agi-stack/apps/desktop/src/features/runtime-pool/runtimePoolCapability.ts",
+    ),
+    false,
+  );
 
   for (const capabilityId of [
     "tenant-tenant-instances",
