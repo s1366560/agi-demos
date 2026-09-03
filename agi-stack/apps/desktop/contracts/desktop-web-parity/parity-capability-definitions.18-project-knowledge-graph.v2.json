@@ -145,8 +145,10 @@
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -156,7 +158,11 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectCommunitiesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectCommunitiesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectCommunitiesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -165,8 +171,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -176,9 +184,13 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectCommunitiesPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectCommunitiesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectCommunitiesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectCommunitiesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "judgment_rationale": "The auditable routed module CommunitiesList.tsx re-exports communities/index.tsx, which lists communities, inspects members, starts a project-scoped rebuild, streams progress from the returned task ID, and cancels that active task. The selected-community detail also embeds TaskList.tsx with entity_id=selectedCommunity.uuid and entity_type=community, so it still calls /tasks/recent on mount and every five seconds. Project-wide rebuild_communities task records have no entity_id and /tasks/recent applies both filters, leaving an empty history whose retry and stop controls are unreachable from this page; Web is therefore partial and degraded. The structured dependency graph still proves both implementation files are reachable from the routed wrapper, and the inventory binds every reviewed path node to the audited revision with SHA-256; source-content integrity remains distinct from execution evidence. Desktop now has a real production loader, App binding, typed client, controller and revision-bound Cloud authority, but ProjectKnowledgePage only renders the community list and exposes none of the inspect, rebuild, stream or cancellation controls. Cloud therefore remains partial with view and list only. Local binds the real route but the renderer-declared result stays closed with local_project_communities_authority_unavailable."
+      "judgment_rationale": "The auditable routed module CommunitiesList.tsx re-exports communities/index.tsx, which lists communities, inspects members, starts a project-scoped rebuild, streams progress from the returned task ID, and cancels that active task. The selected-community detail also embeds TaskList.tsx with entity_id=selectedCommunity.uuid and entity_type=community, so it still calls /tasks/recent on mount and every five seconds. Project-wide rebuild_communities task records have no entity_id and /tasks/recent applies both filters, leaving an empty history whose retry and stop controls are unreachable from this page; Web is therefore partial and degraded. The structured dependency graph still proves both implementation files are reachable from the routed wrapper, and the inventory binds every reviewed path node to the audited revision with SHA-256; source-content integrity remains distinct from execution evidence. At fefdd55f5, production Desktop route and workbench consumers resolve `service:desktop-renderer.project-communities-authority@1.0.0` through project-scoped generation leases. Each list operation freezes config, scope, and signal before admission, keeps workspace-context observation and the community-page read within one pinned generation, validates exact scope and response contracts, revokes escaped authorities after release, and preserves the primary operation error if release fails. Cloud transport remains vault-bound through desktopApiFetch and stays partial with view and list only because ProjectKnowledgePage exposes none of the inspect, rebuild, stream, cancellation, or task-history controls. Local has no sidecar Communities authority and fails closed before transport as unavailable with no actions. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement."
     },
     {
       "id": "project-project-graph",
