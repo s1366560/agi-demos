@@ -55,6 +55,7 @@ import {
   SettingsPage,
   WorkspaceSettingsPage,
   type SettingsResourceCounts,
+  type WorkspaceContextProjectLoaderV2,
 } from './SettingsCorePages';
 import {
   filterSettingsSections,
@@ -88,6 +89,7 @@ type SettingsWindowProps = {
   runtimeDisabledReason: string | null;
   agentDefinitionEvent: AgentWsEvent | null;
   rendererRouteRegistry?: DesktopRouteRegistry<DesktopRouteModule>;
+  listWorkspaceContextProjects: WorkspaceContextProjectLoaderV2;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -107,6 +109,7 @@ export function SettingsWindow({
   runtimeDisabledReason,
   agentDefinitionEvent,
   rendererRouteRegistry,
+  listWorkspaceContextProjects,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -644,6 +647,7 @@ export function SettingsWindow({
                 <WorkspaceSettingsPage
                   auth={auth}
                   config={config}
+                  listWorkspaceContextProjects={listWorkspaceContextProjects}
                   onContextChange={onContextChange}
                   onApplied={onClose}
                 />

@@ -13,7 +13,6 @@ import {
   ReloadIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient } from '../../api/client';
 import { useI18n } from '../../i18n';
 import { useThemePreference, type ThemePreference } from '../../theme';
 import type {
@@ -36,6 +35,11 @@ type ResourceSection = Extract<
   'models' | 'mcp' | 'skills' | 'plugins' | 'agents' | 'subagents'
 >;
 export type SettingsResourceCounts = Record<ResourceSection, number | null>;
+
+export type WorkspaceContextProjectLoaderV2 = (
+  tenantId: string,
+  signal: AbortSignal,
+) => Promise<ProjectSummary[]>;
 
 export function SettingsPage({
   eyebrow,
@@ -184,11 +188,13 @@ export function AccountSettingsPage({
 export function WorkspaceSettingsPage({
   auth,
   config,
+  listWorkspaceContextProjects,
   onContextChange,
   onApplied,
 }: {
   auth: AuthState;
   config: DesktopRuntimeConfig;
+  listWorkspaceContextProjects: WorkspaceContextProjectLoaderV2;
   onContextChange: (tenantId: string, projectId: string) => Promise<void>;
   onApplied: () => void;
 }) {
@@ -252,16 +258,9 @@ export function WorkspaceSettingsPage({
   useEffect(() => {
     if (!tenantId) return;
     const controller = new AbortController();
-    const client = new DesktopApiClient({
-      ...config,
-      tenantId,
-      projectId: '',
-      workspaceId: '',
-    });
     setLoading(true);
     setError(null);
-    void client
-      .listProjects(tenantId, controller.signal)
+    void listWorkspaceContextProjects(tenantId, controller.signal)
       .then((items) => {
         const scopedItems = projectsForTenant(items, tenantId);
         setProjects(scopedItems);
@@ -281,7 +280,7 @@ export function WorkspaceSettingsPage({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [config, tenantId]);
+  }, [auth.projects, config.projectId, config.tenantId, listWorkspaceContextProjects, tenantId]);
 
   const selectedTenant = auth.tenants.find((tenant) => tenant.id === tenantId) ?? null;
   const selectedProject = projects.find((project) => project.id === projectId) ?? null;

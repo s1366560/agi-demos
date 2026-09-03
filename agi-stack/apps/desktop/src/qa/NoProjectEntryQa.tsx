@@ -77,6 +77,16 @@ const projectsByTenant: Record<string, ProjectSummary[]> = {
   ],
 };
 
+async function listNoProjectQaWorkspaceContextProjects(
+  tenantId: string,
+  signal: AbortSignal,
+): Promise<ProjectSummary[]> {
+  if (signal.aborted) {
+    throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+  }
+  return projectsByTenant[tenantId] ?? [];
+}
+
 const initialConfig: DesktopRuntimeConfig = {
   apiBaseUrl: QA_API_ORIGIN,
   deviceAuthorizationBaseUrl: QA_API_ORIGIN,
@@ -311,6 +321,7 @@ function NoProjectEntryQa() {
           wsError={null}
           runtimeDisabledReason={newTaskDisabledReason}
           agentDefinitionEvent={null}
+          listWorkspaceContextProjects={listNoProjectQaWorkspaceContextProjects}
           onClose={() => setSettingsOpen(false)}
           onConfigChange={setConfig}
           onRuntimeStatusRefresh={async () => undefined}

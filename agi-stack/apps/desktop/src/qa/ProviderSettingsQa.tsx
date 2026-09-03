@@ -549,6 +549,10 @@ const qaAuth: AuthState = {
   error: null,
 };
 
+async function listProviderQaWorkspaceContextProjects(tenantId: string) {
+  return qaAuth.projects.filter((project) => project.tenant_id === tenantId);
+}
+
 const qaConfig: DesktopRuntimeConfig = {
   ...DEFAULT_CONFIG,
   apiBaseUrl: QA_API_ORIGIN,
@@ -1785,6 +1789,7 @@ function ProviderSettingsQa() {
       wsError={null}
       runtimeDisabledReason={null}
       agentDefinitionEvent={agentDefinitionEvent}
+      listWorkspaceContextProjects={listProviderQaWorkspaceContextProjects}
       onClose={() => undefined}
       onConfigChange={setConfig}
       onRuntimeStatusRefresh={async () => undefined}

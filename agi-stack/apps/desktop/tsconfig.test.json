@@ -464,6 +464,7 @@
     "src/features/workspace/desktopWorkspaceAutonomyAttentionClientProviderV2.ts",
     "src/features/workspace/desktopWorkspaceCatalogClientProviderV2.ts",
     "src/features/workspace/desktopWorkspaceConversationCatalogClientProviderV2.ts",
+    "src/features/workspace/desktopWorkspaceContextTransactionClientProviderV2.ts",
     "src/features/workspace/desktopWorkspaceExecutionSnapshotClientProviderV2.ts",
     "src/features/workspace/desktopWorkspaceMessageCatalogClientProviderV2.ts",
     "src/features/workspace/desktopWorkspaceRosterClientProviderV2.ts",
