@@ -171,7 +171,11 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectTeamAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectTeamHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectTeamOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -180,8 +184,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -191,10 +197,14 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectTeamPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectTeamAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectTeamHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectTeamOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_deviation": "A Local implementation may manage local agent teammates; human invitation and organization membership actions must remain structurally unavailable when no cloud membership authority exists.",
-      "judgment_rationale": "The Web Team page combines project human membership with project-scoped agent teammates. Its UserManager lists, updates and removes project members, but the visible invitation form sends POST /tenants/{tenant_id}/invitations through invitationService rather than adding a project member. Invitation therefore requires tenant-admin authority, while role changes and removal retain project-admin authority. Desktop now has a real production loader, App binding and revision-bound Cloud authority, but ProjectKnowledgePage only renders the member and Agent teammate lists and exposes no invitation, role, removal or start-chat control. Cloud is therefore partial with only view, list-members and list-agent-teammates. Local uses the same real route but workbenchCapabilityClient deliberately treats the static Local result as a renderer declaration, so it remains closed with local_project_team_authority_unavailable and no action authority."
+      "judgment_rationale": "The Web Team page combines project human membership with project-scoped agent teammates. Its UserManager lists, updates and removes project members, but the visible invitation form sends POST /tenants/{tenant_id}/invitations through invitationService rather than adding a project member. Invitation therefore requires tenant-admin authority, while role changes and removal retain project-admin authority. At bb487b613, production Desktop route and workbench consumers resolve `service:desktop-renderer.project-team-authority@1.0.0` through project-scoped generation leases. Each load freezes config, scope and signal before admission; keeps workspace-context, current-user, member and agent reads within one pinned generation; validates exact service, authority, scope and result shapes; rejects duplicate member or agent IDs; revokes escaped authorities after release; and preserves a primary operation failure over disposer failure. Cloud transport remains vault-bound through desktopApiFetch and is explicitly degraded to view, list-members and list-agent-teammates because the Desktop surface exposes no invitation, role, removal or start-chat control. Local has no sidecar Team authority and fails closed before transport with local_project_team_authority_unavailable and no actions. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement."
     },
     {
       "id": "project-project-memories",
