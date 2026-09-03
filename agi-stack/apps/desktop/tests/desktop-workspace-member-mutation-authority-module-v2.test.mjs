@@ -22,6 +22,7 @@ const {
 const authorityModules = [
   'desktopArtifactContentAuthorityModuleV2',
   'desktopProjectSchemaAuthorityModuleV2',
+  'desktopProjectMaintenanceAuthorityModuleV2',
   'desktopAutomationAuthorityModuleV2',
   'desktopConversationConfigAuthorityModuleV2',
   'desktopConversationLifecycleAuthorityModuleV2',

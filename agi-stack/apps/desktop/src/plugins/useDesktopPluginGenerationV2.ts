@@ -38,6 +38,7 @@ import { desktopProjectOverviewAuthorityDefinitionV2 } from './desktopProjectOve
 import { desktopProjectSearchAuthorityDefinitionV2 } from './desktopProjectSearchAuthorityModuleV2';
 import { desktopProjectTeamAuthorityDefinitionV2 } from './desktopProjectTeamAuthorityModuleV2';
 import { desktopProjectSchemaAuthorityDefinitionV2 } from './desktopProjectSchemaAuthorityModuleV2';
+import { desktopProjectMaintenanceAuthorityDefinitionV2 } from './desktopProjectMaintenanceAuthorityModuleV2';
 import { desktopRuntimePoolAuthorityDefinitionV2 } from './desktopRuntimePoolAuthorityModuleV2';
 import { desktopRuntimeClustersAuthorityDefinitionV2 } from './desktopRuntimeClustersAuthorityModuleV2';
 import { desktopSessionArtifactActionAuthorityDefinitionV2 } from './desktopSessionArtifactActionAuthorityModuleV2';
@@ -99,6 +100,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopProjectSearchAuthorityDefinitionV2,
     desktopProjectTeamAuthorityDefinitionV2,
     desktopProjectSchemaAuthorityDefinitionV2,
+    desktopProjectMaintenanceAuthorityDefinitionV2,
     desktopRuntimePoolAuthorityDefinitionV2,
     desktopRuntimeClustersAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,

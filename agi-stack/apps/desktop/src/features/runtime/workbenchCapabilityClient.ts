@@ -151,6 +151,11 @@ import {
   createDesktopProjectSchemaClientV2,
   type DesktopProjectSchemaOperationsV2,
 } from '../../plugins/desktopProjectSchemaAuthorityModuleV2';
+import {
+  createDesktopProjectMaintenanceClientV2,
+  type DesktopProjectMaintenanceOperationsV2,
+} from '../../plugins/desktopProjectMaintenanceAuthorityModuleV2';
+import { PROJECT_MAINTENANCE_ROUTE_ID } from '../project-administration/projectMaintenanceClient';
 import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
@@ -238,6 +243,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   projectSchemaOperationsV2: Pick<
     DesktopProjectSchemaOperationsV2,
     'loadProjectSchema'
+  >;
+  projectMaintenanceOperationsV2: Pick<
+    DesktopProjectMaintenanceOperationsV2,
+    'loadProjectMaintenance'
   >;
   projectEntitiesOperationsV2: Pick<
     DesktopProjectEntitiesOperationsV2,
@@ -409,6 +418,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof projectSchemaOperationsV2?.loadProjectSchema !== 'function') {
     throw new Error('desktop_project_schema_authority_required');
   }
+  const projectMaintenanceOperationsV2 = options?.projectMaintenanceOperationsV2;
+  if (typeof projectMaintenanceOperationsV2?.loadProjectMaintenance !== 'function') {
+    throw new Error('desktop_project_maintenance_authority_required');
+  }
   const projectEntitiesOperationsV2 = options?.projectEntitiesOperationsV2;
   if (
     typeof projectEntitiesOperationsV2?.loadProjectEntities !== 'function' ||
@@ -450,12 +463,21 @@ export function createDesktopWorkbenchCapabilityClient(
     projectSchemaOperationsV2,
     config,
   );
+  const projectMaintenanceClientV2 = createDesktopProjectMaintenanceClientV2(
+    projectMaintenanceOperationsV2,
+    config,
+  );
   const projectAdministrationClients = options.projectAdministrationClients
     ? Object.freeze({
         ...options.projectAdministrationClients,
         [PROJECT_SCHEMA_ROUTE_ID]: projectSchemaClientV2,
+        [PROJECT_MAINTENANCE_ROUTE_ID]: projectMaintenanceClientV2,
       })
-    : createProjectAdministrationCapabilityClients(config, projectSchemaClientV2);
+    : createProjectAdministrationCapabilityClients(
+        config,
+        projectSchemaClientV2,
+        projectMaintenanceClientV2,
+      );
   const tenantAdminCapabilityClient =
     options.tenantAdminCapabilityClient ??
     createTenantAdminCapabilityClient(config, {

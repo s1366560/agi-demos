@@ -10,6 +10,7 @@ import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOpera
 import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
 import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
 import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
+import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -116,6 +117,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
           projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
           projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
@@ -177,6 +179,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
       projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
       projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
@@ -243,6 +246,7 @@ test('Workbench default production journey authority supports tenant-level scope
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
@@ -309,6 +313,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
     projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
       projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
       projectGraphOperationsV2: projectGraphOperationsV2Fixture(),

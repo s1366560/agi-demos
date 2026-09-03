@@ -6,9 +6,9 @@ import type {
   ProjectAdministrationSnapshotBase,
 } from './projectAdministrationClient';
 import {
-  createProjectMaintenanceClient,
   PROJECT_MAINTENANCE_LOCAL_REASON,
   PROJECT_MAINTENANCE_ROUTE_ID,
+  type ProjectMaintenanceClient,
 } from './projectMaintenanceClient';
 import {
   PROJECT_SCHEMA_LOCAL_REASON,
@@ -63,10 +63,11 @@ const REASON_PREFIXES: Readonly<Record<ProjectAdministrationCapabilityId, string
 export function createProjectAdministrationCapabilityClients(
   config: DesktopRuntimeConfig,
   projectSchemaClient: Pick<ProjectSchemaClient, 'load'>,
+  projectMaintenanceClient: Pick<ProjectMaintenanceClient, 'load'>,
 ): ProjectAdministrationCapabilityClients {
   return Object.freeze({
     [PROJECT_SCHEMA_ROUTE_ID]: projectSchemaClient,
-    [PROJECT_MAINTENANCE_ROUTE_ID]: createProjectMaintenanceClient(config),
+    [PROJECT_MAINTENANCE_ROUTE_ID]: projectMaintenanceClient,
     [PROJECT_SETTINGS_ROUTE_ID]: createProjectSettingsClient(config),
   });
 }

@@ -14,9 +14,6 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require(`${distRoot}/src/i18n.js`);
 const { DesktopApiError } = require(`${distRoot}/src/api/client.js`);
-const {
-  createProjectMaintenanceClient,
-} = require(`${compiled}/projectMaintenanceClient.js`);
 const { createProjectSettingsClient } = require(`${compiled}/projectSettingsClient.js`);
 const {
   createProjectSchemaController,
@@ -76,7 +73,7 @@ const cloudScope = Object.freeze({
 });
 const localScope = Object.freeze({ ...cloudScope, authority: 'local' });
 
-test('remaining project administration clients use trusted-session authority and role-scoped actions', async () => {
+test('remaining static project administration client uses trusted-session authority', async () => {
   const requests = [];
   await withFetch(
     async (url, init = {}) => {
@@ -84,21 +81,7 @@ test('remaining project administration clients use trusted-session authority and
       return authorityResponse(String(url), init);
     },
     async () => {
-      const [maintenance, settings] = await Promise.all([
-        createProjectMaintenanceClient(cloudConfig).load(cloudScope),
-        createProjectSettingsClient(cloudConfig).load(cloudScope),
-      ]);
-      assert.equal(maintenance.scopeRevision, 11);
-      assert.equal(maintenance.availability, 'degraded');
-      assert.equal(
-        maintenance.reasonCode,
-        'project_maintenance_export_file_ipc_unavailable',
-      );
-      assert.equal(maintenance.allowedActions.includes('deduplicate'), true);
-      assert.equal(maintenance.allowedActions.includes('export'), false);
-      assert.equal(maintenance.stats.entityCount, 3);
-      assert.equal(maintenance.embeddingStatus.currentDimension, 1536);
-
+      const settings = await createProjectSettingsClient(cloudConfig).load(cloudScope);
       assert.equal(settings.scopeRevision, 11);
       assert.equal(settings.availability, 'available');
       assert.equal(settings.reasonCode, null);
@@ -128,10 +111,7 @@ test('project administration rejects the legacy id-only auth identity contract',
       return authorityResponse(String(url), init);
     },
     async () => {
-      for (const client of [
-        createProjectMaintenanceClient(cloudConfig),
-        createProjectSettingsClient(cloudConfig),
-      ]) {
+      for (const client of [createProjectSettingsClient(cloudConfig)]) {
         await assert.rejects(client.load(cloudScope), (error) => {
           assert.equal(error instanceof DesktopApiError, true);
           assert.equal(reasonCode(error), 'project_administration_scope_contract_invalid');
@@ -151,14 +131,7 @@ test('remaining Local project administration clients fail closed before network 
     },
     async () => {
       const cases = [
-        [
-          createProjectMaintenanceClient(localConfig),
-          'local_project_maintenance_authority_unavailable',
-        ],
-        [
-          createProjectSettingsClient(localConfig),
-          'local_project_settings_authority_unavailable',
-        ],
+        [createProjectSettingsClient(localConfig), 'local_project_settings_authority_unavailable'],
       ];
       for (const [client, expectedReason] of cases) {
         await assert.rejects(client.load(localScope), (error) => {
@@ -176,6 +149,8 @@ test('remaining Local project administration clients fail closed before network 
 test('Project Administration capability authority observes scoped Cloud clients', async () => {
   const factoryClients = createProjectAdministrationCapabilityClients(cloudConfig, {
     load: async () => schemaSnapshot(),
+  }, {
+    load: async () => maintenanceSnapshot(),
   });
   assert.deepEqual(
     Object.keys(factoryClients).sort(),
@@ -614,8 +589,8 @@ function maintenanceSnapshot(scope = cloudScope) {
   return snapshotBase(data, {
     scope,
     availability: 'degraded',
-    reasonCode: 'project_maintenance_export_file_ipc_unavailable',
-    allowedActions: ['view', 'deduplicate'],
+    reasonCode: 'desktop_project_maintenance_surface_and_endpoints_incomplete',
+    allowedActions: ['view'],
   });
 }
 

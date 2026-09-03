@@ -349,6 +349,14 @@ test('project administration V2 route composition binds its five configuration l
     /createProjectSchemaClient\(/u,
   );
   assert.match(
+    projectAdministrationFactorySource,
+    /PROJECT_MAINTENANCE_ROUTE_ID[\s\S]*createProjectMaintenanceRouteModuleLoader\(\{[\s\S]*createDesktopProjectMaintenanceClientV2\(\s*projectMaintenanceOperationsV2,\s*currentConfig,?\s*\)/u,
+  );
+  assert.doesNotMatch(
+    projectAdministrationFactorySource,
+    /createProjectMaintenanceClient\(/u,
+  );
+  assert.match(
     appSource,
     /const desktopProjectSchemaOperationsV2 = useMemo\([\s\S]*createDesktopProjectSchemaOperationsV2\([\s\S]*desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*\[\],?\s*\);/u,
   );
@@ -359,6 +367,17 @@ test('project administration V2 route composition binds its five configuration l
     2,
   );
   assert.doesNotMatch(appSource, /createProjectSchemaClient\(/u);
+  assert.match(
+    appSource,
+    /const desktopProjectMaintenanceOperationsV2 = useMemo\([\s\S]*createDesktopProjectMaintenanceOperationsV2\([\s\S]*desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*\[\],?\s*\);/u,
+  );
+  assert.equal(
+    appSource.match(
+      /projectMaintenanceOperationsV2:\s*desktopProjectMaintenanceOperationsV2/gu,
+    )?.length,
+    2,
+  );
+  assert.doesNotMatch(appSource, /createProjectMaintenanceClient\(/u);
 });
 
 test('runtime infrastructure V2 route composition binds its seven canonical loaders', () => {

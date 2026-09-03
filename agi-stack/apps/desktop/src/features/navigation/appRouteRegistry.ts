@@ -115,7 +115,6 @@ import { createProjectAgentLogsController } from '../project-agent/projectAgentL
 import { createProjectAgentLogsRouteModuleLoader } from '../project-agent/projectAgentLogsRouteModule';
 import { createProjectAgentPatternsController } from '../project-agent/projectAgentPatternsController';
 import { createProjectAgentPatternsRouteModuleLoader } from '../project-agent/projectAgentPatternsRouteModule';
-import { createProjectMaintenanceClient } from '../project-administration/projectMaintenanceClient';
 import { createProjectMaintenanceController } from '../project-administration/projectMaintenanceController';
 import { createProjectMaintenanceRouteModuleLoader } from '../project-administration/projectMaintenanceRouteModule';
 import { createProjectSchemaController } from '../project-administration/projectSchemaController';
@@ -257,6 +256,10 @@ import {
   type DesktopProjectSchemaOperationsV2,
 } from '../../plugins/desktopProjectSchemaAuthorityModuleV2';
 import {
+  createDesktopProjectMaintenanceClientV2,
+  type DesktopProjectMaintenanceOperationsV2,
+} from '../../plugins/desktopProjectMaintenanceAuthorityModuleV2';
+import {
   createDesktopWorkspaceCollaborationClientV2,
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -312,6 +315,7 @@ export type AppRouteRegistryRefs = {
   projectMemoriesOperationsV2: DesktopProjectMemoriesOperationsV2;
   projectTeamOperationsV2: DesktopProjectTeamOperationsV2;
   projectSchemaOperationsV2: DesktopProjectSchemaOperationsV2;
+  projectMaintenanceOperationsV2: DesktopProjectMaintenanceOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
@@ -346,7 +350,10 @@ export type AppProjectAgentRouteRegistryRefs = Pick<
 >;
 export type AppProjectAdministrationRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'projectCronJobsRouteBindingProviderV2' | 'projectSchemaOperationsV2'
+  | 'configRef'
+  | 'projectCronJobsRouteBindingProviderV2'
+  | 'projectMaintenanceOperationsV2'
+  | 'projectSchemaOperationsV2'
 >;
 export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -794,7 +801,12 @@ export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteReg
 export function createAppProjectAdministrationRouteRegistry(
   refs: AppProjectAdministrationRouteRegistryRefs,
 ) {
-  const { configRef, projectCronJobsRouteBindingProviderV2, projectSchemaOperationsV2 } = refs;
+  const {
+    configRef,
+    projectCronJobsRouteBindingProviderV2,
+    projectMaintenanceOperationsV2,
+    projectSchemaOperationsV2,
+  } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_SCHEMA_ROUTE_ID]: createProjectSchemaRouteModuleLoader({
@@ -831,7 +843,10 @@ export function createAppProjectAdministrationRouteRegistry(
           });
           return Object.freeze({
             controller: createProjectMaintenanceController({
-              client: createProjectMaintenanceClient(currentConfig),
+              client: createDesktopProjectMaintenanceClientV2(
+                projectMaintenanceOperationsV2,
+                currentConfig,
+              ),
               initialScope: scope,
             }),
             scope,
