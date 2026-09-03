@@ -33,6 +33,7 @@ import { desktopProjectAgentPatternsAuthorityDefinitionV2 } from './desktopProje
 import { desktopProjectCommunitiesAuthorityDefinitionV2 } from './desktopProjectCommunitiesAuthorityModuleV2';
 import { desktopProjectEntitiesAuthorityDefinitionV2 } from './desktopProjectEntitiesAuthorityModuleV2';
 import { desktopProjectGraphAuthorityDefinitionV2 } from './desktopProjectGraphAuthorityModuleV2';
+import { desktopProjectMemoriesAuthorityDefinitionV2 } from './desktopProjectMemoriesAuthorityModuleV2';
 import { desktopProjectOverviewAuthorityDefinitionV2 } from './desktopProjectOverviewAuthorityModuleV2';
 import { desktopProjectSearchAuthorityDefinitionV2 } from './desktopProjectSearchAuthorityModuleV2';
 import { desktopRuntimePoolAuthorityDefinitionV2 } from './desktopRuntimePoolAuthorityModuleV2';
@@ -91,6 +92,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopProjectCommunitiesAuthorityDefinitionV2,
     desktopProjectEntitiesAuthorityDefinitionV2,
     desktopProjectGraphAuthorityDefinitionV2,
+    desktopProjectMemoriesAuthorityDefinitionV2,
     desktopProjectOverviewAuthorityDefinitionV2,
     desktopProjectSearchAuthorityDefinitionV2,
     desktopRuntimePoolAuthorityDefinitionV2,

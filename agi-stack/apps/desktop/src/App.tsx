@@ -111,6 +111,9 @@ import {
   createDesktopProjectGraphOperationsV2,
 } from './plugins/desktopProjectGraphAuthorityModuleV2';
 import {
+  createDesktopProjectMemoriesOperationsV2,
+} from './plugins/desktopProjectMemoriesAuthorityModuleV2';
+import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
 } from './plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -942,6 +945,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectMemoriesOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectMemoriesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopProjectEntitiesOperationsV2 = useMemo(
     () =>
       createDesktopProjectEntitiesOperationsV2(
@@ -1261,6 +1271,7 @@ export function App() {
       projectCommunitiesOperationsV2: desktopProjectCommunitiesOperationsV2,
       projectEntitiesOperationsV2: desktopProjectEntitiesOperationsV2,
       projectGraphOperationsV2: desktopProjectGraphOperationsV2,
+      projectMemoriesOperationsV2: desktopProjectMemoriesOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1292,6 +1303,7 @@ export function App() {
       desktopProjectCommunitiesOperationsV2,
       desktopProjectEntitiesOperationsV2,
       desktopProjectGraphOperationsV2,
+      desktopProjectMemoriesOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopRuntimePoolOperationsV2,
@@ -1343,6 +1355,7 @@ export function App() {
         projectCommunitiesOperationsV2: desktopProjectCommunitiesOperationsV2,
         projectEntitiesOperationsV2: desktopProjectEntitiesOperationsV2,
         projectGraphOperationsV2: desktopProjectGraphOperationsV2,
+        projectMemoriesOperationsV2: desktopProjectMemoriesOperationsV2,
         projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
         runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1366,6 +1379,7 @@ export function App() {
       desktopProjectCommunitiesOperationsV2,
       desktopProjectEntitiesOperationsV2,
       desktopProjectGraphOperationsV2,
+      desktopProjectMemoriesOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopRuntimePoolOperationsV2,
       desktopRuntimeClustersOperationsV2,

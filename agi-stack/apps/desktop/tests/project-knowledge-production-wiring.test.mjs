@@ -8,6 +8,7 @@ import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboar
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
 import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -52,7 +53,8 @@ const STATIC_ROUTE_IDS = Object.freeze(
     (routeId) =>
       routeId !== 'project-project-communities' &&
       routeId !== 'project-project-entities' &&
-      routeId !== 'project-project-graph',
+      routeId !== 'project-project-graph' &&
+      routeId !== 'project-project-memories',
   ),
 );
 
@@ -106,9 +108,11 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
   assert.match(registrySource, /createDesktopProjectGraphClientV2/u);
   assert.match(registrySource, /createDesktopProjectCommunitiesClientV2/u);
   assert.match(registrySource, /createDesktopProjectEntitiesClientV2/u);
+  assert.match(registrySource, /createDesktopProjectMemoriesClientV2/u);
   assert.match(registrySource, /projectCommunitiesOperationsV2/u);
   assert.match(registrySource, /projectEntitiesOperationsV2/u);
   assert.match(registrySource, /projectGraphOperationsV2/u);
+  assert.match(registrySource, /projectMemoriesOperationsV2/u);
   assert.match(
     appSource,
     /projectCommunitiesOperationsV2:\s*desktopProjectCommunitiesOperationsV2/gu,
@@ -121,9 +125,14 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     appSource,
     /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/gu,
   );
+  assert.match(
+    appSource,
+    /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/gu,
+  );
   assert.doesNotMatch(registrySource, /createProjectGraphClient/u);
   assert.doesNotMatch(registrySource, /createProjectCommunitiesClient/u);
   assert.doesNotMatch(registrySource, /createProjectEntitiesClient/u);
+  assert.doesNotMatch(registrySource, /createProjectMemoriesClient/u);
 });
 
 test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities', async () => {
@@ -131,6 +140,7 @@ test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities',
   const snapshot = await loadSnapshot(
     cloudConfig,
     clientOverrides,
+    projectMemoriesOperationsV2Fixture({ scopeRevision: 7 }),
     projectEntitiesOperationsV2Fixture({ scopeRevision: 7 }),
     projectCommunitiesOperationsV2Fixture({ scopeRevision: 7 }),
     projectGraphOperationsV2Fixture({ scopeRevision: 7 }),
@@ -151,7 +161,7 @@ test('Cloud Snapshot v4 observes all five scoped Project Knowledge authorities',
   });
   assert.deepEqual(pick(snapshot, 'project-project-memories'), {
     availability: 'degraded',
-    reason_code: 'project_memories_export_file_ipc_unavailable',
+    reason_code: 'desktop_project_memories_actions_partial',
     allowed_actions: ['view', 'list'],
   });
   assert.deepEqual(pick(snapshot, 'project-project-entities'), {
@@ -206,9 +216,16 @@ test('Local Snapshot keeps Project Knowledge unavailable until sidecar authority
       throw new Error('Local Communities V2 authority must not be probed');
     },
   };
+  const memoriesOperations = {
+    async loadProjectMemories() {
+      loadCalls += 1;
+      throw new Error('Local Memories V2 authority must not be probed');
+    },
+  };
   const snapshot = await loadSnapshot(
     { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
     clients,
+    memoriesOperations,
     entitiesOperations,
     communitiesOperations,
     graphOperations,
@@ -240,6 +257,7 @@ test('Capability catalog contains every Project Knowledge ID exactly once per de
 async function loadSnapshot(
   config,
   projectKnowledgeClientOverrides,
+  projectMemoriesOperationsV2,
   projectEntitiesOperationsV2,
   projectCommunitiesOperationsV2,
   projectGraphOperationsV2,
@@ -264,6 +282,7 @@ async function loadSnapshot(
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
         projectCommunitiesOperationsV2,
+        projectMemoriesOperationsV2,
         projectEntitiesOperationsV2,
         projectGraphOperationsV2,
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -285,9 +304,6 @@ async function loadSnapshot(
 }
 
 function projectKnowledgeClientOverrides(authority) {
-  const degradedReasons = {
-    'project-project-memories': 'project_memories_export_file_ipc_unavailable',
-  };
   return Object.fromEntries(
     STATIC_ROUTE_IDS.map((routeId) => [
       routeId,
@@ -298,13 +314,12 @@ function projectKnowledgeClientOverrides(authority) {
             tenantId: 'tenant-1',
             projectId: 'project-1',
           });
-          const reasonCode = degradedReasons[routeId] ?? null;
           return {
             scope,
             scopeRevision: 7,
             authority,
-            availability: reasonCode ? 'degraded' : 'available',
-            reasonCode,
+            availability: 'available',
+            reasonCode: null,
             allowedActions: ['view', 'list'],
           };
         },

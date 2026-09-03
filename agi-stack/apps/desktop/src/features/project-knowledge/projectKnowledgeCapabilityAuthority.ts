@@ -22,7 +22,7 @@ import type {
   ProjectKnowledgeSnapshotBase,
 } from './projectKnowledgeClient';
 import {
-  createProjectMemoriesClient,
+  type ProjectMemoriesClient,
   PROJECT_MEMORIES_LOCAL_REASON,
   PROJECT_MEMORIES_ROUTE_ID,
 } from './projectMemoriesClient';
@@ -57,6 +57,7 @@ export type ProjectKnowledgeCapabilityClientOverrides = Readonly<
       ProjectKnowledgeCapabilityClients,
       | typeof PROJECT_ENTITIES_ROUTE_ID
       | typeof PROJECT_COMMUNITIES_ROUTE_ID
+      | typeof PROJECT_MEMORIES_ROUTE_ID
       | typeof PROJECT_GRAPH_ROUTE_ID
     >
   >
@@ -89,11 +90,15 @@ const REASON_PREFIXES: Readonly<Record<ProjectKnowledgeCapabilityId, string>> =
 
 export function createProjectKnowledgeCapabilityClients(
   config: DesktopRuntimeConfig,
+  projectMemoriesClient: Pick<ProjectMemoriesClient, 'load'>,
   projectEntitiesClient: Pick<ProjectEntitiesClient, 'load'>,
   projectCommunitiesClient: Pick<ProjectCommunitiesClient, 'load'>,
   projectGraphClient: Pick<ProjectGraphClient, 'load'>,
   overrides: ProjectKnowledgeCapabilityClientOverrides = {},
 ): ProjectKnowledgeCapabilityClients {
+  if (typeof projectMemoriesClient?.load !== 'function') {
+    throw new Error('desktop_project_memories_authority_required');
+  }
   if (typeof projectEntitiesClient?.load !== 'function') {
     throw new Error('desktop_project_entities_authority_required');
   }
@@ -106,8 +111,7 @@ export function createProjectKnowledgeCapabilityClients(
   return Object.freeze({
     [PROJECT_TEAM_ROUTE_ID]:
       overrides[PROJECT_TEAM_ROUTE_ID] ?? createProjectTeamClient(config),
-    [PROJECT_MEMORIES_ROUTE_ID]:
-      overrides[PROJECT_MEMORIES_ROUTE_ID] ?? createProjectMemoriesClient(config),
+    [PROJECT_MEMORIES_ROUTE_ID]: projectMemoriesClient,
     [PROJECT_ENTITIES_ROUTE_ID]: projectEntitiesClient,
     [PROJECT_COMMUNITIES_ROUTE_ID]: projectCommunitiesClient,
     [PROJECT_GRAPH_ROUTE_ID]: projectGraphClient,

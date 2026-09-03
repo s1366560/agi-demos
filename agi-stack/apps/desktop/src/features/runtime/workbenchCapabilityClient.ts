@@ -139,6 +139,10 @@ import {
   createDesktopProjectGraphClientV2,
   type DesktopProjectGraphOperationsV2,
 } from '../../plugins/desktopProjectGraphAuthorityModuleV2';
+import {
+  createDesktopProjectMemoriesClientV2,
+  type DesktopProjectMemoriesOperationsV2,
+} from '../../plugins/desktopProjectMemoriesAuthorityModuleV2';
 import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
@@ -217,6 +221,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   projectCommunitiesOperationsV2: Pick<
     DesktopProjectCommunitiesOperationsV2,
     'loadProjectCommunities'
+  >;
+  projectMemoriesOperationsV2: Pick<
+    DesktopProjectMemoriesOperationsV2,
+    'loadProjectMemories'
   >;
   projectEntitiesOperationsV2: Pick<
     DesktopProjectEntitiesOperationsV2,
@@ -377,6 +385,10 @@ export function createDesktopWorkbenchCapabilityClient(
   ) {
     throw new Error('desktop_project_communities_authority_required');
   }
+  const projectMemoriesOperationsV2 = options?.projectMemoriesOperationsV2;
+  if (typeof projectMemoriesOperationsV2?.loadProjectMemories !== 'function') {
+    throw new Error('desktop_project_memories_authority_required');
+  }
   const projectEntitiesOperationsV2 = options?.projectEntitiesOperationsV2;
   if (
     typeof projectEntitiesOperationsV2?.loadProjectEntities !== 'function' ||
@@ -404,6 +416,7 @@ export function createDesktopWorkbenchCapabilityClient(
     (agentWorkspaceJourneyClient ? null : createAgentWorkspaceClient(config));
   const projectKnowledgeClients = createProjectKnowledgeCapabilityClients(
     config,
+    createDesktopProjectMemoriesClientV2(projectMemoriesOperationsV2, config),
     createDesktopProjectEntitiesClientV2(projectEntitiesOperationsV2, config),
     createDesktopProjectCommunitiesClientV2(projectCommunitiesOperationsV2, config),
     createDesktopProjectGraphClientV2(projectGraphOperationsV2, config),

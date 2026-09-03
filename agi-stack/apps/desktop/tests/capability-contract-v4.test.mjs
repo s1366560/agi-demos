@@ -8,6 +8,7 @@ import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboar
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
 import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -347,6 +348,7 @@ test('workbench v4 marks transport authority observed and renderer declarations 
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
         projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),

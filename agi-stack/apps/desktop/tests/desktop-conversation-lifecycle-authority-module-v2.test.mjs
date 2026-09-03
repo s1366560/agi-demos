@@ -153,6 +153,8 @@ function rendererDefinitions() {
       .desktopProjectEntitiesAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectCommunitiesAuthorityModuleV2.js')
       .desktopProjectCommunitiesAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopProjectMemoriesAuthorityModuleV2.js')
+      .desktopProjectMemoriesAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectGraphAuthorityModuleV2.js')
       .desktopProjectGraphAuthorityDefinitionV2,
     desktopArtifactContentAuthorityDefinitionV2,

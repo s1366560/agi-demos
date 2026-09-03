@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import Module, { createRequire } from 'node:module';
+import { delimiter } from 'node:path';
 import { test } from 'node:test';
 
-process.env.NODE_PATH = new URL('../node_modules', import.meta.url).pathname;
+process.env.NODE_PATH = [
+  '/tmp/agistack-desktop-test-dist/test-node-modules',
+  new URL('../node_modules', import.meta.url).pathname,
+].join(delimiter);
 Module._initPaths();
 
 const require = createRequire(import.meta.url);
@@ -15,8 +19,9 @@ const {
 } = require('/tmp/agistack-project-knowledge-test-dist/src/i18n.js');
 
 const { createProjectTeamClient } = require(`${compiled}/projectTeamClient.js`);
-const { createProjectMemoriesClient } = require(
-  `${compiled}/projectMemoriesClient.js`,
+const { createDesktopProjectMemoriesHttpAuthorityV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/' +
+    'desktopProjectMemoriesHttpProjectionV2.js',
 );
 const {
   createProjectKnowledgeCapabilityClients,
@@ -122,14 +127,12 @@ test('project knowledge cloud clients use trusted-session transport and validate
   try {
     const snapshots = await Promise.all([
       createProjectTeamClient(cloudConfig).load(cloudScope),
-      createProjectMemoriesClient(cloudConfig).load(cloudScope),
     ]);
     assert.deepEqual(
       snapshots.map((snapshot) => snapshot.scopeRevision),
-      [7, 7],
+      [7],
     );
     assert.equal(snapshots[0].allowedActions.includes('update-role'), true);
-    assert.equal(snapshots[1].availability, 'degraded');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -153,10 +156,6 @@ test('project knowledge local clients fail closed with stable reason codes befor
       [
         createProjectTeamClient(localConfig),
         'local_project_team_authority_unavailable',
-      ],
-      [
-        createProjectMemoriesClient(localConfig),
-        'local_project_memories_authority_unavailable',
       ],
     ];
     for (const [client, reasonCode] of cases) {
@@ -225,6 +224,7 @@ test('project knowledge capability authority observes Cloud and never probes sta
     const cloud = await loadProjectKnowledgeCapabilities(
       createProjectKnowledgeCapabilityClients(
         cloudConfig,
+        injectedProjectMemoriesClient(11),
         injectedProjectEntitiesClient(11),
         injectedProjectCommunitiesClient(11),
         injectedProjectGraphClient(11),
@@ -271,16 +271,23 @@ test('project knowledge capability authority observes Cloud and never probes sta
   assert.ok(requests.length > 0);
 });
 
-test('project knowledge overrides cannot replace injected Entities, Communities and Graph', () => {
+test('project knowledge overrides cannot replace injected V2 authorities', () => {
+  const memoriesClient = injectedProjectMemoriesClient(13);
   const entitiesClient = injectedProjectEntitiesClient(13);
   const communitiesClient = injectedProjectCommunitiesClient(13);
   const graphClient = injectedProjectGraphClient(13);
   const clients = createProjectKnowledgeCapabilityClients(
     cloudConfig,
+    memoriesClient,
     entitiesClient,
     communitiesClient,
     graphClient,
     {
+      'project-project-memories': {
+        async load() {
+          throw new Error('memories override must not be selected');
+        },
+      },
       'project-project-entities': {
         async load() {
           throw new Error('entities override must not be selected');
@@ -299,6 +306,7 @@ test('project knowledge overrides cannot replace injected Entities, Communities 
     },
   );
 
+  assert.equal(clients['project-project-memories'], memoriesClient);
   assert.equal(clients['project-project-entities'], entitiesClient);
   assert.equal(clients['project-project-communities'], communitiesClient);
   assert.equal(clients['project-project-graph'], graphClient);
@@ -327,7 +335,7 @@ test('project knowledge clients reject stale observed scope and accept only stru
   };
   try {
     await assert.rejects(
-      createProjectMemoriesClient(cloudConfig).load(cloudScope),
+      createDesktopProjectMemoriesHttpAuthorityV2(cloudConfig, cloudScope).load(),
       (error) =>
         error.payload.reason_code === 'project_knowledge_scope_conflict',
     );
@@ -351,7 +359,7 @@ test('project knowledge clients reject stale observed scope and accept only stru
       );
     };
     await assert.rejects(
-      createProjectMemoriesClient(cloudConfig).load(cloudScope),
+      createDesktopProjectMemoriesHttpAuthorityV2(cloudConfig, cloudScope).load(),
       (error) => error.message === 'project_memories_forbidden',
     );
   } finally {
@@ -444,8 +452,8 @@ function memorySnapshot(scope, title) {
     scopeRevision: 1,
     authority: 'cloud',
     availability: 'degraded',
-    reasonCode: 'project_memories_export_file_ipc_unavailable',
-    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'reprocess'],
+    reasonCode: 'desktop_project_memories_actions_partial',
+    allowedActions: ['view', 'list'],
     memories: [
       {
         id: `memory-${title}`,
@@ -477,6 +485,24 @@ function injectedProjectGraphClient(scopeRevision) {
         allowedActions: Object.freeze(['view']),
         nodes: Object.freeze([]),
         edges: Object.freeze([]),
+      });
+    },
+  });
+}
+
+function injectedProjectMemoriesClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_memories_actions_partial',
+        allowedActions: Object.freeze(['view', 'list']),
+        memories: Object.freeze([]),
+        total: 0,
       });
     },
   });

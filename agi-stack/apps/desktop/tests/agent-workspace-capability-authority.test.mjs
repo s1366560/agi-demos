@@ -7,6 +7,7 @@ import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboar
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
 import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
+import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -111,6 +112,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
           projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
           projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
           projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+          projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
           projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
           projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -169,6 +171,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
       projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+      projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
       projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
       projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
       projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -232,6 +235,7 @@ test('Workbench default production journey authority supports tenant-level scope
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
         projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -295,6 +299,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
       projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+      projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
       projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
       projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
       projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
