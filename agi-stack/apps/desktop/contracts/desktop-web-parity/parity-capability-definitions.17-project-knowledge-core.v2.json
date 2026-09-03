@@ -158,8 +158,10 @@
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -524,7 +526,11 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -533,8 +539,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -544,9 +552,13 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectEntitiesPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "judgment_rationale": "The Web Entities page is a distinct project-scoped graph projection. It lists entities and types, uses the selected list record for detail presentation, and loads that record's relationships without calling the standalone entity detail service method. Desktop now has a real production loader, App binding, typed client, controller and revision-bound Cloud authority. ProjectKnowledgePage renders only the entity list and does not expose filtering or relationship inspection, so Cloud remains partial with view and list only. Local binds the real route but workbenchCapabilityClient closes its renderer-declared result to local_project_entities_authority_unavailable until a sidecar authority is observed."
+      "judgment_rationale": "The Web Entities page is a distinct project-scoped graph projection. It lists entities and types, uses the selected list record for detail presentation, and loads that record's relationships without calling the standalone entity detail service method. At 7b24548f7, production Desktop route and workbench consumers resolve `service:desktop-renderer.project-entities-authority@1.0.0` through project-scoped generation leases. A list load freezes config, scope, and signal before admission and keeps workspace-context observation, entity-page retrieval, and entity-type retrieval within one pinned generation; relationship reads use their own lease and canonical entity identity. The operation boundary validates exact tenant/project scope plus entity, type, and relationship contracts, revokes escaped authorities after release, and preserves the primary error if disposal fails. Cloud remains partial with view and list only because the production page exposes neither filtering nor relationship inspection; the typed relationship operation is not advertised as a Desktop surface action without a production UI consumer. Local has no sidecar Entities authority and fails closed before transport as unavailable with no actions. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement."
     }
   ],
   "source_ownership": {
