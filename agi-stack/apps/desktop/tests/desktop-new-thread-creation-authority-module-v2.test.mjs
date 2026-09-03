@@ -159,6 +159,8 @@ function rendererDefinitions() {
       .desktopProjectAgentPatternsAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectEntitiesAuthorityModuleV2.js')
       .desktopProjectEntitiesAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopProjectCommunitiesAuthorityModuleV2.js')
+      .desktopProjectCommunitiesAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectGraphAuthorityModuleV2.js')
       .desktopProjectGraphAuthorityDefinitionV2,
     desktopArtifactContentAuthorityDefinitionV2,

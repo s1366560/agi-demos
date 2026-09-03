@@ -6,6 +6,7 @@ import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV
 import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -341,11 +342,42 @@ test('workbench capability client requires the Project Agent Patterns V2 authori
   );
 });
 
+test('workbench capability client requires the Project Communities V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectCommunitiesOperationsV2 of [undefined, {}]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectCommunitiesOperationsV2 },
+        ),
+      /desktop_project_communities_authority_required/u,
+    );
+  }
+});
+
 test('workbench capability client requires the Project Graph V2 authority', () => {
   const requiredOptions = {
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
@@ -384,6 +416,7 @@ test('workbench capability client requires both Project Entities V2 operations',
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
@@ -1793,6 +1826,7 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),

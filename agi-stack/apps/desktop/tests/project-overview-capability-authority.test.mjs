@@ -5,6 +5,7 @@ import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperati
 import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
@@ -467,6 +468,7 @@ function createClient(config) {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+      projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
       projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
       projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
       projectOverviewOperationsV2: projectOverviewOperationsV2(),

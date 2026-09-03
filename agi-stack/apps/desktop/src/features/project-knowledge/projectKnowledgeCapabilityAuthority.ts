@@ -2,7 +2,7 @@ import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import {
-  createProjectCommunitiesClient,
+  type ProjectCommunitiesClient,
   PROJECT_COMMUNITIES_LOCAL_REASON,
   PROJECT_COMMUNITIES_ROUTE_ID,
 } from './projectCommunitiesClient';
@@ -55,7 +55,9 @@ export type ProjectKnowledgeCapabilityClientOverrides = Readonly<
   Partial<
     Omit<
       ProjectKnowledgeCapabilityClients,
-      typeof PROJECT_ENTITIES_ROUTE_ID | typeof PROJECT_GRAPH_ROUTE_ID
+      | typeof PROJECT_ENTITIES_ROUTE_ID
+      | typeof PROJECT_COMMUNITIES_ROUTE_ID
+      | typeof PROJECT_GRAPH_ROUTE_ID
     >
   >
 >;
@@ -88,6 +90,7 @@ const REASON_PREFIXES: Readonly<Record<ProjectKnowledgeCapabilityId, string>> =
 export function createProjectKnowledgeCapabilityClients(
   config: DesktopRuntimeConfig,
   projectEntitiesClient: Pick<ProjectEntitiesClient, 'load'>,
+  projectCommunitiesClient: Pick<ProjectCommunitiesClient, 'load'>,
   projectGraphClient: Pick<ProjectGraphClient, 'load'>,
   overrides: ProjectKnowledgeCapabilityClientOverrides = {},
 ): ProjectKnowledgeCapabilityClients {
@@ -97,14 +100,16 @@ export function createProjectKnowledgeCapabilityClients(
   if (typeof projectGraphClient?.load !== 'function') {
     throw new Error('desktop_project_graph_authority_required');
   }
+  if (typeof projectCommunitiesClient?.load !== 'function') {
+    throw new Error('desktop_project_communities_authority_required');
+  }
   return Object.freeze({
     [PROJECT_TEAM_ROUTE_ID]:
       overrides[PROJECT_TEAM_ROUTE_ID] ?? createProjectTeamClient(config),
     [PROJECT_MEMORIES_ROUTE_ID]:
       overrides[PROJECT_MEMORIES_ROUTE_ID] ?? createProjectMemoriesClient(config),
     [PROJECT_ENTITIES_ROUTE_ID]: projectEntitiesClient,
-    [PROJECT_COMMUNITIES_ROUTE_ID]:
-      overrides[PROJECT_COMMUNITIES_ROUTE_ID] ?? createProjectCommunitiesClient(config),
+    [PROJECT_COMMUNITIES_ROUTE_ID]: projectCommunitiesClient,
     [PROJECT_GRAPH_ROUTE_ID]: projectGraphClient,
   });
 }

@@ -18,9 +18,6 @@ const { createProjectTeamClient } = require(`${compiled}/projectTeamClient.js`);
 const { createProjectMemoriesClient } = require(
   `${compiled}/projectMemoriesClient.js`,
 );
-const { createProjectCommunitiesClient } = require(
-  `${compiled}/projectCommunitiesClient.js`,
-);
 const {
   createProjectKnowledgeCapabilityClients,
   loadProjectKnowledgeCapabilities,
@@ -117,9 +114,6 @@ test('project knowledge cloud clients use trusted-session transport and validate
     if (path === '/api/v1/memories/') {
       return jsonResponse({ memories: [], total: 0, page: 1, page_size: 50 });
     }
-    if (path === '/api/v1/graph/communities/') {
-      return jsonResponse({ communities: [], total: 0, limit: 50, offset: 0 });
-    }
     if (path === '/api/v1/graph/memory/graph') {
       return jsonResponse({ elements: { nodes: [], edges: [] } });
     }
@@ -129,15 +123,13 @@ test('project knowledge cloud clients use trusted-session transport and validate
     const snapshots = await Promise.all([
       createProjectTeamClient(cloudConfig).load(cloudScope),
       createProjectMemoriesClient(cloudConfig).load(cloudScope),
-      createProjectCommunitiesClient(cloudConfig).load(cloudScope),
     ]);
     assert.deepEqual(
       snapshots.map((snapshot) => snapshot.scopeRevision),
-      [7, 7, 7],
+      [7, 7],
     );
     assert.equal(snapshots[0].allowedActions.includes('update-role'), true);
     assert.equal(snapshots[1].availability, 'degraded');
-    assert.equal(snapshots[2].availability, 'degraded');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -165,10 +157,6 @@ test('project knowledge local clients fail closed with stable reason codes befor
       [
         createProjectMemoriesClient(localConfig),
         'local_project_memories_authority_unavailable',
-      ],
-      [
-        createProjectCommunitiesClient(localConfig),
-        'local_project_communities_authority_unavailable',
       ],
     ];
     for (const [client, reasonCode] of cases) {
@@ -228,9 +216,6 @@ test('project knowledge capability authority observes Cloud and never probes sta
     if (path === '/api/v1/memories/') {
       return jsonResponse({ memories: [], total: 0, page: 1, page_size: 50 });
     }
-    if (path === '/api/v1/graph/communities/') {
-      return jsonResponse({ communities: [], total: 0, limit: 50, offset: 0 });
-    }
     if (path === '/api/v1/graph/memory/graph') {
       return jsonResponse({ elements: { nodes: [], edges: [] } });
     }
@@ -241,6 +226,7 @@ test('project knowledge capability authority observes Cloud and never probes sta
       createProjectKnowledgeCapabilityClients(
         cloudConfig,
         injectedProjectEntitiesClient(11),
+        injectedProjectCommunitiesClient(11),
         injectedProjectGraphClient(11),
       ),
       cloudConfig,
@@ -285,12 +271,14 @@ test('project knowledge capability authority observes Cloud and never probes sta
   assert.ok(requests.length > 0);
 });
 
-test('project knowledge client overrides cannot replace injected Entities and Graph V2 authorities', () => {
+test('project knowledge overrides cannot replace injected Entities, Communities and Graph', () => {
   const entitiesClient = injectedProjectEntitiesClient(13);
+  const communitiesClient = injectedProjectCommunitiesClient(13);
   const graphClient = injectedProjectGraphClient(13);
   const clients = createProjectKnowledgeCapabilityClients(
     cloudConfig,
     entitiesClient,
+    communitiesClient,
     graphClient,
     {
       'project-project-entities': {
@@ -303,10 +291,16 @@ test('project knowledge client overrides cannot replace injected Entities and Gr
           throw new Error('graph override must not be selected');
         },
       },
+      'project-project-communities': {
+        async load() {
+          throw new Error('communities override must not be selected');
+        },
+      },
     },
   );
 
   assert.equal(clients['project-project-entities'], entitiesClient);
+  assert.equal(clients['project-project-communities'], communitiesClient);
   assert.equal(clients['project-project-graph'], graphClient);
 });
 
@@ -506,6 +500,24 @@ function injectedProjectEntitiesClient(scopeRevision) {
     },
     async relationships() {
       return Object.freeze([]);
+    },
+  });
+}
+
+function injectedProjectCommunitiesClient(scopeRevision) {
+  return Object.freeze({
+    async load(scope, options = {}) {
+      if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return Object.freeze({
+        scope: Object.freeze({ ...scope }),
+        scopeRevision,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'desktop_project_communities_actions_partial',
+        allowedActions: Object.freeze(['view', 'list']),
+        communities: Object.freeze([]),
+        total: 0,
+      });
     },
   });
 }

@@ -7,6 +7,7 @@ import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV
 import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectAgentPatternsOperationsV2Fixture } from './projectAgentPatternsOperationsV2Fixture.mjs';
+import { projectCommunitiesOperationsV2Fixture } from './projectCommunitiesOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -64,6 +65,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -85,6 +87,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -118,6 +121,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -148,6 +152,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -186,6 +191,10 @@ test('App consumes the published V2 workbench capability client', () => {
   );
   assert.match(
     appSource,
+    /projectCommunitiesOperationsV2:\s*desktopProjectCommunitiesOperationsV2/u,
+  );
+  assert.match(
+    appSource,
     /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/u,
   );
   assert.match(
@@ -213,6 +222,10 @@ test('App consumes the published V2 workbench capability client', () => {
   assert.match(
     providerSource,
     /projectAgentPatternsOperationsV2:\s*input\.projectAgentPatternsOperationsV2/u,
+  );
+  assert.match(
+    providerSource,
+    /projectCommunitiesOperationsV2:\s*input\.projectCommunitiesOperationsV2/u,
   );
   assert.match(
     providerSource,

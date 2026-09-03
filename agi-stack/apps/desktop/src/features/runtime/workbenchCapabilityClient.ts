@@ -128,6 +128,10 @@ import {
   type DesktopProjectAgentPatternsOperationsV2,
 } from '../../plugins/desktopProjectAgentPatternsAuthorityModuleV2';
 import {
+  createDesktopProjectCommunitiesClientV2,
+  type DesktopProjectCommunitiesOperationsV2,
+} from '../../plugins/desktopProjectCommunitiesAuthorityModuleV2';
+import {
   createDesktopProjectEntitiesClientV2,
   type DesktopProjectEntitiesOperationsV2,
 } from '../../plugins/desktopProjectEntitiesAuthorityModuleV2';
@@ -209,6 +213,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   projectAgentPatternsOperationsV2: Pick<
     DesktopProjectAgentPatternsOperationsV2,
     'loadProjectAgentPatterns'
+  >;
+  projectCommunitiesOperationsV2: Pick<
+    DesktopProjectCommunitiesOperationsV2,
+    'loadProjectCommunities'
   >;
   projectEntitiesOperationsV2: Pick<
     DesktopProjectEntitiesOperationsV2,
@@ -363,6 +371,12 @@ export function createDesktopWorkbenchCapabilityClient(
   ) {
     throw new Error('desktop_project_agent_patterns_authority_required');
   }
+  const projectCommunitiesOperationsV2 = options?.projectCommunitiesOperationsV2;
+  if (
+    typeof projectCommunitiesOperationsV2?.loadProjectCommunities !== 'function'
+  ) {
+    throw new Error('desktop_project_communities_authority_required');
+  }
   const projectEntitiesOperationsV2 = options?.projectEntitiesOperationsV2;
   if (
     typeof projectEntitiesOperationsV2?.loadProjectEntities !== 'function' ||
@@ -391,6 +405,7 @@ export function createDesktopWorkbenchCapabilityClient(
   const projectKnowledgeClients = createProjectKnowledgeCapabilityClients(
     config,
     createDesktopProjectEntitiesClientV2(projectEntitiesOperationsV2, config),
+    createDesktopProjectCommunitiesClientV2(projectCommunitiesOperationsV2, config),
     createDesktopProjectGraphClientV2(projectGraphOperationsV2, config),
     options.projectKnowledgeClientOverrides,
   );

@@ -130,7 +130,6 @@ import {
 } from '../project-blackboard/projectBlackboardRouteModule';
 import { createProjectBlackboardV2Client } from '../project-blackboard/projectBlackboardClient';
 import { createProjectBlackboardController } from '../project-blackboard/projectBlackboardController';
-import { createProjectCommunitiesClient } from '../project-knowledge/projectCommunitiesClient';
 import { createProjectCommunitiesController } from '../project-knowledge/projectCommunitiesController';
 import { createProjectCommunitiesRouteModuleLoader } from '../project-knowledge/projectCommunitiesRouteModule';
 import { createProjectEntitiesController } from '../project-knowledge/projectEntitiesController';
@@ -237,6 +236,10 @@ import {
   type DesktopProjectAgentPatternsOperationsV2,
 } from '../../plugins/desktopProjectAgentPatternsAuthorityModuleV2';
 import {
+  createDesktopProjectCommunitiesClientV2,
+  type DesktopProjectCommunitiesOperationsV2,
+} from '../../plugins/desktopProjectCommunitiesAuthorityModuleV2';
+import {
   createDesktopProjectEntitiesClientV2,
   type DesktopProjectEntitiesOperationsV2,
 } from '../../plugins/desktopProjectEntitiesAuthorityModuleV2';
@@ -294,6 +297,7 @@ export type AppRouteRegistryRefs = {
   projectAgentDashboardOperationsV2: DesktopProjectAgentDashboardOperationsV2;
   projectAgentLogsOperationsV2: DesktopProjectAgentLogsOperationsV2;
   projectAgentPatternsOperationsV2: DesktopProjectAgentPatternsOperationsV2;
+  projectCommunitiesOperationsV2: DesktopProjectCommunitiesOperationsV2;
   projectEntitiesOperationsV2: DesktopProjectEntitiesOperationsV2;
   projectGraphOperationsV2: DesktopProjectGraphOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
@@ -314,7 +318,10 @@ export type AppAuxiliaryRouteRegistryRefs = Pick<
 >;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'projectEntitiesOperationsV2' | 'projectGraphOperationsV2'
+  | 'configRef'
+  | 'projectCommunitiesOperationsV2'
+  | 'projectEntitiesOperationsV2'
+  | 'projectGraphOperationsV2'
 >;
 export type AppProjectAgentRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -578,7 +585,12 @@ export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryR
 }
 
 export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledgeRouteRegistryRefs) {
-  const { configRef, projectEntitiesOperationsV2, projectGraphOperationsV2 } = refs;
+  const {
+    configRef,
+    projectCommunitiesOperationsV2,
+    projectEntitiesOperationsV2,
+    projectGraphOperationsV2,
+  } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_TEAM_ROUTE_ID]: createProjectTeamRouteModuleLoader({
@@ -649,7 +661,10 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
           return Object.freeze({
             controller: createProjectCommunitiesController({
               authority: currentConfig.mode,
-              client: createProjectCommunitiesClient(currentConfig),
+              client: createDesktopProjectCommunitiesClientV2(
+                projectCommunitiesOperationsV2,
+                currentConfig,
+              ),
               initialScope: scope,
             }),
             scope,
