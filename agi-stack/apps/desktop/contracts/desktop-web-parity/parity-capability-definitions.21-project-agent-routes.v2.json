@@ -130,6 +130,9 @@
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
         "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectAgentLogsOperationContractV2.ts",
@@ -142,17 +145,23 @@
       "local_deviation": "Local preserves the native Project Agent Dashboard route but has no sidecar trace or active-count authority, so it fails closed before network access.",
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
-        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/ProjectAgentPage.tsx",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardClient.ts",
         "agi-stack/apps/desktop/src/features/project-agent/projectAgentDashboardRouteModule.ts",
-        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx"
+        "agi-stack/apps/desktop/src/features/project-agent/projectAgentRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectAgentDashboardOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "judgment_rationale": "Web has a registered project Dashboard route and authenticated project trace/count authority with scope validation and stable errors. Cloud Desktop has a real native loader, typed client/controller/presentation, trusted-session transport, observed workspace-context revision and fail-closed scope checks, but its native page lacks the Web canonical navigation and success-state refresh and has no route-specific current-commit Electron proof. Local has no sidecar trace/count authority and correctly returns the stable local unavailable reason before network access."
+      "judgment_rationale": "At 041cbc2b0, App route and workbench consumers resolve service:desktop-renderer.project-agent-dashboard-authority@1.0.0 through project-scoped generation leases. Each load freezes config, scope and signal before admission; workspace-context observation plus trace and active-count requests remain inside one pinned generation, escaped authorities revoke after release, and Local still fails closed before any network request. Cloud therefore keeps its existing partial product status and only view/list-runs/inspect-active-count actions because the native presentation still exposes neither success-state refresh nor navigation to Logs or Patterns. Local remains unavailable with no sidecar trace/count authority and no actions. These source and contract facts establish renderer authority wiring only, not native Electron QA, globally-ready publication, ACK readiness, release readiness or V1 retirement."
     },
     {
       "id": "project-agent-logs",
