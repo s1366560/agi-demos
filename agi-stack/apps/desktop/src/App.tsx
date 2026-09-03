@@ -92,6 +92,10 @@ import {
 import {
   createDesktopProjectOverviewOperationsV2,
 } from './plugins/desktopProjectOverviewAuthorityModuleV2';
+import {
+  createDesktopProjectBlackboardOperationsV2,
+  createDesktopWorkspaceCollaborationClientV2,
+} from './plugins/desktopProjectBlackboardAuthorityModuleV2';
 import { createDesktopRuntimePoolOperationsV2 } from './plugins/desktopRuntimePoolAuthorityModuleV2';
 import {
   createDesktopProjectSearchOperationsV2,
@@ -283,6 +287,7 @@ import { useCompletionNotifications } from './features/activity/useCompletionNot
 import {
   createDesktopWorkbenchCapabilityClientProviderV2,
 } from './features/runtime/desktopWorkbenchCapabilityClientProviderV2';
+import { desktopCapability } from './features/runtime/capabilitySnapshot';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
 import { createProjectSearchRouteBindingProviderV2 } from './features/search/projectSearchRouteBindingProviderV2';
 import {
@@ -359,7 +364,7 @@ import {
   retainOpenWorkspaceAutonomyAttentionResolveAttempts,
   type WorkspaceAutonomyAttentionResolveAttempt,
 } from './features/workspace/autonomyAttentionResolveAttemptModel';
-import { createWorkspaceCollaborationClientProviderV2 } from './features/workspace/workspaceCollaborationClientProviderV2';
+import { createCapabilityWorkspaceCollaborationClient } from './features/workspace/capabilityWorkspaceCollaborationClient';
 import { workspaceCollaborationAuthorityEvent } from './features/workspace/workspaceCollaborationAuthorityEvent';
 import type {
   WorkspaceAuthorityInvalidation,
@@ -795,6 +800,22 @@ export function App() {
   );
   const desktopPluginMarketplaceGenerationActionsRefV2 =
     useRef<DesktopRendererGenerationActionsV2 | null>(null);
+  const desktopProjectBlackboardOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectBlackboardOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
+  const desktopWorkspaceCollaborationClientV2 = useMemo(
+    () =>
+      createDesktopWorkspaceCollaborationClientV2(
+        desktopProjectBlackboardOperationsV2,
+        () => configRef.current,
+        'workspace-collaboration',
+      ),
+    [desktopProjectBlackboardOperationsV2],
+  );
   const desktopArtifactClientV2 = useMemo(
     () =>
       createDesktopArtifactContentClientV2(
@@ -1048,10 +1069,6 @@ export function App() {
     () => createDesktopNewThreadComposerCatalogClientProviderV2(),
     [],
   );
-  const workspaceCollaborationClientProviderV2 = useMemo(
-    () => createWorkspaceCollaborationClientProviderV2(),
-    [],
-  );
   const desktopBrowserHashLocation = useMemo(() => createBrowserDesktopHashLocationPort(), []);
   const desktopProductionRouteLocation = useMemo(
     () => createProfileGenerationHashLocationPort(desktopBrowserHashLocation),
@@ -1169,6 +1186,7 @@ export function App() {
       desktopProductionRouteLocation,
       desktopProductionRouteNavigation,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+      projectBlackboardOperationsV2: desktopProjectBlackboardOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
@@ -1192,6 +1210,7 @@ export function App() {
     }),
     [
       desktopPluginMarketplaceOperationsV2,
+      desktopProjectBlackboardOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopRuntimePoolOperationsV2,
@@ -1235,6 +1254,7 @@ export function App() {
         automationApi: desktopAutomationApiV2,
         config,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        projectBlackboardOperationsV2: desktopProjectBlackboardOperationsV2,
         projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
@@ -1250,6 +1270,7 @@ export function App() {
       config,
       desktopAutomationApiV2,
       desktopPluginMarketplaceOperationsV2,
+      desktopProjectBlackboardOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopRuntimePoolOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
@@ -1385,14 +1406,15 @@ export function App() {
   });
   const workspaceCollaborationClientV2 = useMemo(
     () =>
-      workspaceCollaborationClientProviderV2.publish({
-        config,
-        capabilitySnapshot: desktopCapabilityState.snapshot,
-      }),
+      createCapabilityWorkspaceCollaborationClient(
+        desktopWorkspaceCollaborationClientV2,
+        desktopCapability(desktopCapabilityState.snapshot, 'workspace_collaboration'),
+        config.mode,
+      ),
     [
-      config,
+      config.mode,
       desktopCapabilityState.snapshot,
-      workspaceCollaborationClientProviderV2,
+      desktopWorkspaceCollaborationClientV2,
     ],
   );
   const runtimeModelRole: LlmRoutingRole =
@@ -6471,7 +6493,7 @@ export function App() {
       selectedWorkspace && config.workspaceId.trim()
         ? {
             workspaceId: config.workspaceId,
-            client: workspaceCollaborationClientV2.client,
+            client: workspaceCollaborationClientV2,
             authorityInvalidation: workspaceCollaborationAuthorityInvalidation,
           }
         : null,

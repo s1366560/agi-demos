@@ -88,6 +88,8 @@ function loadBootstrap() {
 function rendererDefinitions() {
   return [
     ...createDesktopRendererDefinitionsV2(),
+    require(COMPILED_ROOT + '/src/plugins/desktopProjectBlackboardAuthorityModuleV2.js')
+      .desktopProjectBlackboardAuthorityDefinitionV2,
     ...authorityModules,
     marketplace.desktopPluginMarketplaceCatalogDefinitionV2,
     marketplace.desktopPluginMarketplaceManagementDefinitionV2,

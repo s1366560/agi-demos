@@ -16,9 +16,7 @@ const localSlotTypes = source('src/plugins/uiSlotRegistry.ts');
 const sharedSlotTypes = source('../../packages/plugin-slots/src/types.ts');
 const surface = source('src/plugins/DesktopWorkspaceCollaborationSurfaceV2.tsx');
 const workbench = source('src/plugins/DesktopWorkbenchSurfaceV2.tsx');
-const clientProvider = source(
-  'src/features/workspace/workspaceCollaborationClientProviderV2.ts',
-);
+const authorityModule = source('src/plugins/desktopProjectBlackboardAuthorityModuleV2.ts');
 const profile = readFileSync(
   new URL(
     '../../../../config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
@@ -59,26 +57,22 @@ test('workspace collaboration is selected from one typed V2 surface', () => {
     /ComponentProps<typeof WorkspaceCollaborationCanvas>|<WorkspaceCollaborationCanvas\b|features\/workspace\/WorkspaceCollaborationCanvas/u,
   );
 
-  assert.match(app, /workspaceCollaborationClientProviderV2\.publish\(\{/u);
-  assert.match(
-    app,
-    /capabilitySnapshot:\s*desktopCapabilityState\.snapshot/u,
-  );
+  assert.match(app, /createDesktopProjectBlackboardOperationsV2/u);
+  assert.match(app, /createDesktopWorkspaceCollaborationClientV2/u);
   assert.match(app, /workspaceId:\s*config\.workspaceId/u);
-  assert.match(app, /client:\s*workspaceCollaborationClientV2\.client/u);
+  assert.match(app, /client:\s*workspaceCollaborationClientV2/u);
+  assert.match(app, /authorityInvalidation:\s*workspaceCollaborationAuthorityInvalidation/u);
+  assert.doesNotMatch(app, /createHttpWorkspaceCollaborationClient\(/u);
+  assert.match(app, /createCapabilityWorkspaceCollaborationClient\(/u);
   assert.match(
     app,
-    /authorityInvalidation:\s*workspaceCollaborationAuthorityInvalidation/u,
+    /desktopCapability\(desktopCapabilityState\.snapshot, 'workspace_collaboration'\)/u,
   );
-  assert.doesNotMatch(app, /desktopCapability\(/u);
-  assert.doesNotMatch(app, /createHttpWorkspaceCollaborationClient\(/u);
-  assert.doesNotMatch(app, /createCapabilityWorkspaceCollaborationClient\(/u);
+  assert.match(authorityModule, /acquireServiceOperationLease/u);
   assert.match(
-    clientProvider,
-    /desktopCapability\(input\.capabilitySnapshot, 'workspace_collaboration'\)/u,
+    app,
+    /createDesktopWorkspaceCollaborationClientV2\([^]{0,300}'workspace-collaboration'/u,
   );
-  assert.match(clientProvider, /createHttpWorkspaceCollaborationClient\(config\)/u);
-  assert.match(clientProvider, /createCapabilityWorkspaceCollaborationClient\(/u);
   assert.doesNotMatch(app, /<WorkspaceCollaborationCanvas\b/u);
 });
 

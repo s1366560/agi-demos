@@ -638,6 +638,37 @@
       "contract_digest": "sha256:9401877965af6ff73c82e7fafb9bddf6d0ad730fff5e86060a1c344bdea7a998"
     },
     {
+      "module_ref": "builtin://memstack/desktop/project-blackboard-authority",
+      "entrypoint": "applyDesktopProjectBlackboardAuthorityV2",
+      "artifact": {
+        "digest": "sha256:c7f7ad4ea54580660ada225f8b277c3be2ebd1a0660b19986a82e11d5b096453",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectBlackboardAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-blackboard-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:c1f2a054c19c93918dab9478e155e92eb3fdcd10b7e790345e7505faef3f5d88"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-search-authority",
       "entrypoint": "applyDesktopProjectSearchAuthorityV2",
       "artifact": {

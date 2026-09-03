@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
@@ -202,6 +203,23 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
         config,
         {
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture({
+            async probeProjectBlackboard({ scope }) {
+              assert.deepEqual(scope, blackboardScope);
+              return {
+                scope,
+                authority: mode,
+                availability: mode === 'cloud' ? 'available' : 'degraded',
+                reasonCode: mode === 'cloud' ? null : 'local_workspace_plan_read_only',
+                initialSurface: mode === 'cloud' ? 'goals' : 'status',
+                allowedActions:
+                  mode === 'cloud'
+                    ? ['view', 'read-surfaces', 'mutate-surfaces']
+                    : ['view', 'review-plan'],
+                authorityRevision: null,
+              };
+            },
+          }),
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
@@ -225,23 +243,6 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
                     ? ['view', 'list', 'create', 'open-blackboard']
                     : ['view', 'list', 'open-blackboard'],
                 workspaces: [],
-              };
-            },
-          },
-          projectBlackboardClient: {
-            async probe(scope) {
-              assert.deepEqual(scope, blackboardScope);
-              return {
-                scope,
-                authority: mode,
-                availability: mode === 'cloud' ? 'available' : 'degraded',
-                reasonCode: mode === 'cloud' ? null : 'local_workspace_plan_read_only',
-                initialSurface: mode === 'cloud' ? 'goals' : 'status',
-                allowedActions:
-                  mode === 'cloud'
-                    ? ['view', 'read-surfaces', 'mutate-surfaces']
-                    : ['view', 'review-plan'],
-                collaborationClient: inertCollaborationClient,
               };
             },
           },
@@ -287,6 +288,12 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
       config,
       {
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+        projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture({
+          async probeProjectBlackboard() {
+            blackboardProbeCount += 1;
+            throw new Error('must not probe without workspace scope');
+          },
+        }),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
@@ -297,12 +304,6 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
         projectWorkspacesClient: {
           async list() {
             throw new Error('workspace authority unavailable');
-          },
-        },
-        projectBlackboardClient: {
-          async probe() {
-            blackboardProbeCount += 1;
-            throw new Error('must not probe without workspace scope');
           },
         },
       },
@@ -354,8 +355,9 @@ test('App binds both typed route modules without browser handoff or DesktopApiCl
   assert.doesNotMatch(workbenchSource, /projectWorkspacesClient\?\s*:/u);
   assert.doesNotMatch(workbenchSource, /createProjectWorkspacesHttpClient/u);
   assert.equal(existsSync(legacyProjectWorkspacesClientPath), false);
-  assert.match(registrySource, /createProjectBlackboardCloudClient\(/);
-  assert.match(registrySource, /createProjectBlackboardLocalClient\(/);
+  assert.match(registrySource, /createProjectBlackboardV2Client\(/);
+  assert.match(registrySource, /projectBlackboardOperationsV2/u);
+  assert.doesNotMatch(registrySource, /createProjectBlackboard(?:Cloud|Local)Client\(/u);
   assert.match(registrySource, /buildProjectBlackboardCanonicalPath\(/);
   assert.doesNotMatch(
     registrySource,
@@ -405,15 +407,3 @@ function capabilityScope(config, workspace) {
     instance_id: null,
   };
 }
-
-const inertCollaborationClient = Object.freeze({
-  async getSurface() {
-    throw new Error('unused');
-  },
-  async refetchAuthority() {
-    throw new Error('unused');
-  },
-  async mutateSurface() {
-    throw new Error('unused');
-  },
-});

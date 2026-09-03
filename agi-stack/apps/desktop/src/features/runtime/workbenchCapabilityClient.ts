@@ -60,12 +60,9 @@ import { createProviderRouteClient } from '../settings-routes/providerRouteClien
 import { createSkillsRouteClient } from '../settings-routes/skillsRouteClient';
 import type { TemplatesRouteClient } from '../settings-routes/templatesRouteClient';
 import { unifiedRuntimesCapability } from '../unified-runtimes/unifiedRuntimesCapability';
-import {
-  createProjectBlackboardCloudClient,
-  createProjectBlackboardLocalClient,
-  type ProjectBlackboardClient,
-  type ProjectBlackboardScope,
-  type ProjectBlackboardSnapshot,
+import type {
+  ProjectBlackboardScope,
+  ProjectBlackboardSnapshot,
 } from '../project-blackboard/projectBlackboardClient';
 import {
   createProjectKnowledgeCapabilityClients,
@@ -113,13 +110,14 @@ import {
   createTenantRemainingCapabilityClient,
   type TenantRemainingCapabilityClient,
 } from '../tenant-admin/tenantRemainingCapabilityClient';
-import { WORKSPACE_HTTP_MUTATION_ACTIONS } from '../workspace/workspaceCollaborationHttpMutations';
 import type { DesktopRuntimeConfig } from '../../types';
+import type { WorkspaceCollaborationCapabilityScope } from '../workspace/workspaceCollaborationCapabilityContract';
 import {
   createDesktopPluginMarketplaceOperationsV2,
   type DesktopPluginMarketplaceCatalogOperationsV2,
 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
+import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
@@ -139,6 +137,11 @@ import {
 export type DesktopWorkbenchCapabilityClient = {
   loadSnapshot(signal?: AbortSignal): Promise<DesktopCapabilitySnapshot>;
 };
+
+export {
+  normalizeWorkspaceCollaborationAuthorityContract,
+  normalizeWorkspaceCollaborationCapabilityContract,
+} from '../workspace/workspaceCollaborationCapabilityContract';
 
 type AuxiliaryCloudCapabilities = Readonly<{
   backendStores: DesktopCapabilityAvailability;
@@ -185,7 +188,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   agentWorkspaceClient?: AgentWorkspaceAuthorityClient;
   agentWorkspaceJourneyClient?: AgentWorkspaceJourneyAuthorityClient;
   projectWorkspacesClient: Pick<ProjectWorkspacesClient, 'list'>;
-  projectBlackboardClient?: ProjectBlackboardClient;
+  projectBlackboardOperationsV2: Pick<
+    DesktopProjectBlackboardOperationsV2,
+    'probeProjectBlackboard' | 'probeWorkspaceCollaborationCapability'
+  >;
   projectKnowledgeClients?: ProjectKnowledgeCapabilityClients;
   projectAgentClients?: ProjectAgentCapabilityClients;
   projectAdministrationClients?: ProjectAdministrationCapabilityClients;
@@ -210,14 +216,6 @@ type SearchCapabilityDeclaration = {
   parameters?: Readonly<Record<string, string>>;
 };
 
-type WorkspaceCollaborationCapabilityScope = {
-  tenantId: string;
-  projectId: string;
-  workspaceId: string;
-};
-
-const WORKSPACE_COLLABORATION_DEGRADED_REASON =
-  'workspace_collaboration_mutation_guards_unavailable';
 const LOCAL_SEARCH_SUPPORTED_TYPES = ['advanced', 'temporal', 'faceted'] as const;
 const LOCAL_SEARCH_UNAVAILABLE_TYPES = ['graph_traversal', 'community'] as const;
 
@@ -236,19 +234,6 @@ const PROJECT_WORKSPACES_SERVICE_VERSION = '0.1.0';
 const PROJECT_WORKSPACES_CONTRACT_VERSION = '4.0.0';
 const PROJECT_BLACKBOARD_SERVICE_VERSION = '0.1.0';
 const PROJECT_BLACKBOARD_CONTRACT_VERSION = '4.0.0';
-
-const WORKSPACE_COLLABORATION_READ_SURFACES = [
-  'goals',
-  'discussion',
-  'status',
-  'collaboration',
-  'members',
-  'genes',
-  'files',
-  'notes',
-  'topology',
-  'settings',
-] as const;
 
 const SEARCH_CONTRACT: Readonly<Record<string, SearchCapabilityDeclaration>> = {
   semantic: { endpoint: '/api/v1/memory/search' },
@@ -312,6 +297,13 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof projectWorkspacesClient?.list !== 'function') {
     throw new Error('desktop_project_workspaces_authority_required');
   }
+  const projectBlackboardOperationsV2 = options?.projectBlackboardOperationsV2;
+  if (
+    typeof projectBlackboardOperationsV2?.probeProjectBlackboard !== 'function' ||
+    typeof projectBlackboardOperationsV2.probeWorkspaceCollaborationCapability !== 'function'
+  ) {
+    throw new Error('desktop_project_blackboard_authority_required');
+  }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
   const managementRouteClients =
     options.managementRouteClients ??
@@ -326,8 +318,6 @@ export function createDesktopWorkbenchCapabilityClient(
   const agentWorkspaceClient =
     injectedAgentWorkspaceClient ??
     (agentWorkspaceJourneyClient ? null : createAgentWorkspaceClient(config));
-  const projectBlackboardClient =
-    options.projectBlackboardClient ?? createProjectBlackboardClient(config);
   const projectKnowledgeClients =
     options.projectKnowledgeClients ?? createProjectKnowledgeCapabilityClients(config);
   const projectAgentClients =
@@ -384,7 +374,7 @@ export function createDesktopWorkbenchCapabilityClient(
       ] = await Promise.all([
         loadSearchCapability(config, signal),
         loadAutomationCapabilities(automationApi, config.projectId, signal),
-        loadWorkspaceCollaborationCapability(config, signal),
+        loadWorkspaceCollaborationCapability(config, projectBlackboardOperationsV2, signal),
         loadProjectOverviewCapability(config, projectOverviewOperationsV2, signal),
         loadRuntimePoolCapability(config, runtimePoolOperationsV2, signal),
         loadTenantOverviewCapability(
@@ -411,7 +401,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadTenantTasksCapability(config, tenantTasksOperationsV2, signal),
         loadManagementRouteCapabilities(managementRouteClients, config, signal),
         loadProjectWorkspacesCapability(projectWorkspacesClient, config, signal),
-        loadProjectBlackboardCapability(projectBlackboardClient, config, signal),
+        loadProjectBlackboardCapability(projectBlackboardOperationsV2, config, signal),
         loadProjectKnowledgeCapabilities(projectKnowledgeClients, config, signal),
         loadProjectAgentCapabilities(projectAgentClients, config, signal),
         loadProjectAdministrationCapabilities(projectAdministrationClients, config, signal),
@@ -933,18 +923,6 @@ function agentWorkspaceCapabilityScope(
   };
 }
 
-function createProjectBlackboardClient(
-  config: DesktopRuntimeConfig,
-): ProjectBlackboardClient | null {
-  try {
-    return config.mode === 'local'
-      ? createProjectBlackboardLocalClient(config)
-      : createProjectBlackboardCloudClient(config);
-  } catch {
-    return null;
-  }
-}
-
 async function loadProjectWorkspacesCapability(
   client: Pick<ProjectWorkspacesClient, 'list'> | null,
   config: DesktopRuntimeConfig,
@@ -977,7 +955,7 @@ async function loadProjectWorkspacesCapability(
 }
 
 async function loadProjectBlackboardCapability(
-  client: ProjectBlackboardClient | null,
+  operations: Pick<DesktopProjectBlackboardOperationsV2, 'probeProjectBlackboard'>,
   config: DesktopRuntimeConfig,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
@@ -989,14 +967,12 @@ async function loadProjectBlackboardCapability(
       capabilityScope,
     );
   }
-  if (!client) {
-    return withCapabilityScope(
-      unavailable('project_blackboard_authority_unavailable'),
-      capabilityScope,
-    );
-  }
   try {
-    const snapshot = await client.probe(scope, signal);
+    const snapshot = await operations.probeProjectBlackboard({
+      config,
+      scope,
+      ...(signal === undefined ? {} : { signal }),
+    });
     return projectBlackboardCapability(snapshot, scope);
   } catch (error) {
     if (signal?.aborted) throw error;
@@ -1056,7 +1032,7 @@ function projectBlackboardCapability(
     contract_version: PROJECT_BLACKBOARD_CONTRACT_VERSION,
     allowed_actions: [...snapshot.allowedActions],
     scope: blackboardScope(scope),
-    authority_revision: null,
+    authority_revision: snapshot.authorityRevision,
   };
 }
 
@@ -1382,145 +1358,6 @@ export function normalizeProjectCronJobsCapabilityContract(
   });
 }
 
-export function normalizeWorkspaceCollaborationCapabilityContract(
-  input: unknown,
-  scope: WorkspaceCollaborationCapabilityScope,
-  expectedAuthority: DesktopRuntimeConfig['mode'] = 'cloud',
-): DesktopCapabilityAvailability {
-  const negotiation = negotiateCapabilityContract(input, DESKTOP_MINIMUM_CONTRACT_VERSION);
-  if (!negotiation.compatible) {
-    return unavailable(
-      negotiation.reason_code ?? 'capability_contract_version_invalid',
-      negotiation,
-    );
-  }
-  if (!isRecord(input)) {
-    return unavailable('workspace_collaboration_capability_contract_invalid', negotiation);
-  }
-  if (
-    input.authority !== expectedAuthority ||
-    input.canonical_read !== true ||
-    !matchesExactStringArray(input.read_surfaces, WORKSPACE_COLLABORATION_READ_SURFACES) ||
-    input.tenant_id !== scope.tenantId ||
-    input.project_id !== scope.projectId ||
-    input.workspace_id !== scope.workspaceId
-  ) {
-    return unavailable(
-      input.tenant_id !== scope.tenantId ||
-        input.project_id !== scope.projectId ||
-        input.workspace_id !== scope.workspaceId
-        ? 'workspace_collaboration_capability_scope_mismatch'
-        : 'workspace_collaboration_capability_contract_invalid',
-      negotiation,
-    );
-  }
-  const capabilityKeys = [
-    'service_version',
-    'contract_version',
-    'authority',
-    'tenant_id',
-    'project_id',
-    'workspace_id',
-    'status',
-    'reason_code',
-    'canonical_read',
-    'read_surfaces',
-    'mutations',
-    'allowed_actions',
-  ];
-  if (
-    input.status === 'available' &&
-    isExactRecord(input, capabilityKeys) &&
-    input.reason_code === null &&
-    isExactRecord(input.mutations, [
-      'allowed',
-      'revision_guarded',
-      'idempotency_guarded',
-      'actions',
-    ]) &&
-    input.mutations.allowed === true &&
-    input.mutations.revision_guarded === true &&
-    input.mutations.idempotency_guarded === true &&
-    matchesWorkspaceMutationActions(input.mutations.actions) &&
-    JSON.stringify(input.allowed_actions) === JSON.stringify(input.mutations.actions)
-  ) {
-    return available(negotiation, {
-      allowedActions: mergeWorkspaceActions(
-        workspaceReadActions(),
-        flattenWorkspaceMutationActions(input.mutations.actions),
-      ),
-    });
-  }
-  if (
-    !isExactRecord(input, capabilityKeys) ||
-    input.status !== 'degraded' ||
-    input.reason_code !== WORKSPACE_COLLABORATION_DEGRADED_REASON ||
-    !isExactRecord(input.mutations, ['allowed', 'revision_guarded', 'idempotency_guarded']) ||
-    input.mutations.allowed !== false ||
-    input.mutations.revision_guarded !== false ||
-    input.mutations.idempotency_guarded !== false
-  ) {
-    return unavailable('workspace_collaboration_capability_contract_invalid', negotiation);
-  }
-  return degraded(WORKSPACE_COLLABORATION_DEGRADED_REASON, negotiation, {
-    allowedActions: workspaceReadActions(),
-  });
-}
-
-export function normalizeWorkspaceCollaborationAuthorityContract(
-  input: unknown,
-  scope: WorkspaceCollaborationCapabilityScope,
-): number | null {
-  if (
-    !isExactRecord(input, [
-      'contract_version',
-      'tenant_id',
-      'project_id',
-      'workspace_id',
-      'revision',
-      'cursor',
-    ]) ||
-    input.contract_version !== '2.0.0' ||
-    input.tenant_id !== scope.tenantId ||
-    input.project_id !== scope.projectId ||
-    input.workspace_id !== scope.workspaceId ||
-    !Number.isSafeInteger(input.revision) ||
-    Number(input.revision) < 0 ||
-    typeof input.cursor !== 'string' ||
-    input.cursor.length === 0 ||
-    input.cursor !== input.cursor.trim()
-  ) {
-    return null;
-  }
-  return Number(input.revision);
-}
-
-function workspaceReadActions(): string[] {
-  return WORKSPACE_COLLABORATION_READ_SURFACES.map((surface) => `${surface}:view`);
-}
-
-function mergeWorkspaceActions(...actionGroups: readonly string[][]): string[] {
-  return [...new Set(actionGroups.flat())];
-}
-
-function matchesWorkspaceMutationActions(input: unknown): boolean {
-  const surfaces = Object.keys(WORKSPACE_HTTP_MUTATION_ACTIONS);
-  if (!isExactRecord(input, surfaces)) return false;
-  return surfaces.every((surface) =>
-    matchesExactStringArray(
-      input[surface],
-      WORKSPACE_HTTP_MUTATION_ACTIONS[surface as keyof typeof WORKSPACE_HTTP_MUTATION_ACTIONS],
-    ),
-  );
-}
-
-function flattenWorkspaceMutationActions(input: unknown): string[] {
-  if (!isRecord(input) || !matchesWorkspaceMutationActions(input)) return [];
-  return Object.keys(WORKSPACE_HTTP_MUTATION_ACTIONS).flatMap((surface) =>
-    (input[surface] as string[]).map((action) => `${surface}:${action}`),
-  );
-}
-
 async function loadSearchCapability(
   config: DesktopRuntimeConfig,
   signal?: AbortSignal,
@@ -1584,123 +1421,24 @@ async function loadAutomationCapabilities(
 
 async function loadWorkspaceCollaborationCapability(
   config: DesktopRuntimeConfig,
+  operations: Pick<
+    DesktopProjectBlackboardOperationsV2,
+    'probeWorkspaceCollaborationCapability'
+  >,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
-  const scope = readWorkspaceCollaborationCapabilityScope(config);
-  if (!scope) {
+  if (readWorkspaceCollaborationCapabilityScope(config) === null) {
     return unavailable('workspace_collaboration_capability_scope_unavailable');
   }
-
-  if (
-    config.mode === 'local' &&
-    typeof window !== 'undefined' &&
-    window.__MEMSTACK_DESKTOP__?.runtime === 'electron'
-  ) {
-    const invoke = window.__MEMSTACK_DESKTOP__.core?.invoke;
-    if (!invoke) {
-      return unavailable('workspace_core_status_unavailable');
-    }
-    try {
-      const helper = await invoke<DesktopWorkspaceCoreHelperStatus>('workspace_core_status');
-      const validCutoverState = [
-        'legacy-only',
-        'importing',
-        'core-authoritative',
-        'core-unavailable',
-      ].includes(helper?.cutoverState);
-      if (!validCutoverState) {
-        return unavailable('workspace_core_status_invalid');
-      }
-      if (helper.cutoverState !== 'legacy-only' && helper.state !== 'running') {
-        return unavailable('workspace_core_cutover_unavailable');
-      }
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      return unavailable('workspace_core_status_unavailable');
-    }
-  }
-
   try {
-    const headers = new Headers({ Accept: 'application/json' });
-    const credential = desktopApiCredential(config);
-    if (credential) headers.set('Authorization', `Bearer ${credential}`);
-    const launchCapability = desktopLaunchCapability(config);
-    if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-    const scopedPath =
-      `/api/v1/tenants/${encodeURIComponent(scope.tenantId)}/projects/` +
-      `${encodeURIComponent(scope.projectId)}/workspaces/` +
-      `${encodeURIComponent(scope.workspaceId)}/collaboration`;
-    const response = await desktopApiFetch(config, `${scopedPath}/capabilities`, {
-      headers,
-      signal,
-    });
-    if (!response.ok) {
-      return unavailable('workspace_collaboration_capability_contract_unavailable');
-    }
-    const contentType = response.headers.get('content-type') ?? '';
-    if (!contentType.includes('application/json')) {
-      return unavailable('workspace_collaboration_capability_contract_invalid');
-    }
-    const payload = await response.json().catch(() => null);
-    const capability = normalizeWorkspaceCollaborationCapabilityContract(
-      payload,
-      scope,
-      config.mode,
-    );
-    if (capability.availability !== 'available' && capability.availability !== 'degraded') {
-      return capability;
-    }
-
-    const authorityResponse = await desktopApiFetch(
+    return await operations.probeWorkspaceCollaborationCapability({
       config,
-      `${scopedPath}/authority`,
-      {
-        headers,
-        signal,
-      },
-    );
-    if (!authorityResponse.ok) {
-      return closeCapabilityAuthority(
-        capability,
-        'workspace_collaboration_authority_contract_unavailable',
-      );
-    }
-    const authorityContentType = authorityResponse.headers.get('content-type') ?? '';
-    if (!authorityContentType.includes('application/json')) {
-      return closeCapabilityAuthority(
-        capability,
-        'workspace_collaboration_authority_contract_invalid',
-      );
-    }
-    const authorityPayload = await authorityResponse.json().catch(() => null);
-    const authorityRevision = normalizeWorkspaceCollaborationAuthorityContract(
-      authorityPayload,
-      scope,
-    );
-    if (authorityRevision === null) {
-      return closeCapabilityAuthority(
-        capability,
-        'workspace_collaboration_authority_contract_invalid',
-      );
-    }
-    return { ...capability, authority_revision: authorityRevision };
+      ...(signal === undefined ? {} : { signal }),
+    });
   } catch (error) {
     if (signal?.aborted) throw error;
     return unavailable('workspace_collaboration_capability_contract_unavailable');
   }
-}
-
-function closeCapabilityAuthority(
-  capability: DesktopCapabilityAvailability,
-  reasonCode: string,
-): DesktopCapabilityAvailability {
-  return {
-    ...capability,
-    availability: 'unavailable',
-    reason_code: reasonCode,
-    allowed_actions: [],
-    authority_revision: null,
-  };
 }
 
 async function loadProjectOverviewCapability(

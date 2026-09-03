@@ -131,10 +131,7 @@ import {
   buildProjectBlackboardCanonicalPath,
   createProjectBlackboardRouteModuleLoader,
 } from '../project-blackboard/projectBlackboardRouteModule';
-import {
-  createProjectBlackboardCloudClient,
-  createProjectBlackboardLocalClient,
-} from '../project-blackboard/projectBlackboardClient';
+import { createProjectBlackboardV2Client } from '../project-blackboard/projectBlackboardClient';
 import { createProjectBlackboardController } from '../project-blackboard/projectBlackboardController';
 import { createProjectCommunitiesClient } from '../project-knowledge/projectCommunitiesClient';
 import { createProjectCommunitiesController } from '../project-knowledge/projectCommunitiesController';
@@ -232,6 +229,10 @@ import { createSkillsRouteModuleLoader } from '../settings-routes/skillsRouteMod
 import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRouteModule';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
+import {
+  createDesktopWorkspaceCollaborationClientV2,
+  type DesktopProjectBlackboardOperationsV2,
+} from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
@@ -272,6 +273,7 @@ export type AppRouteRegistryRefs = {
     openPath: (path: string) => void;
   }>;
   projectCronJobsRouteBindingProviderV2: ProjectCronJobsRouteBindingProviderV2;
+  projectBlackboardOperationsV2: DesktopProjectBlackboardOperationsV2;
   projectOverviewOperationsV2: DesktopProjectOverviewOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
@@ -304,6 +306,7 @@ export type AppProjectWorkspaceRouteRegistryRefs = Pick<
   | 'desktopProductionRouteNavigation'
   | 'desktopWorkspaceCatalogOperationsV2'
   | 'desktopWorkspaceLifecycleOperationsV2'
+  | 'projectBlackboardOperationsV2'
   | 'projectOverviewOperationsV2'
 >;
 export type AppProjectDiscoveryRouteRegistryRefs = Pick<
@@ -825,8 +828,14 @@ export function createAppProjectWorkspaceRouteRegistry(
     desktopProductionRouteNavigation,
     desktopWorkspaceCatalogOperationsV2,
     desktopWorkspaceLifecycleOperationsV2,
+    projectBlackboardOperationsV2,
     projectOverviewOperationsV2,
   } = refs;
+  const projectBlackboardCollaborationClientV2 = createDesktopWorkspaceCollaborationClientV2(
+    projectBlackboardOperationsV2,
+    () => configRef.current,
+    'project-blackboard',
+  );
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_OVERVIEW_ROUTE_ID]: createProjectOverviewRouteModuleLoader({
@@ -876,14 +885,15 @@ export function createAppProjectWorkspaceRouteRegistry(
             projectId: context.projectId,
             workspaceId: context.workspaceId,
           });
-          const client =
-            currentConfig.mode === 'local'
-              ? createProjectBlackboardLocalClient(currentConfig)
-              : createProjectBlackboardCloudClient(currentConfig);
+          const client = createProjectBlackboardV2Client(
+            currentConfig,
+            projectBlackboardOperationsV2,
+          );
           return Object.freeze({
             controller: createProjectBlackboardController({
               authority: currentConfig.mode,
               client,
+              collaborationClient: projectBlackboardCollaborationClientV2,
               initialScope: scope,
             }),
             scope,
