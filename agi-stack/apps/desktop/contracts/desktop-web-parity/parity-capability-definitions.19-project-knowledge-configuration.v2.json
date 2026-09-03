@@ -626,8 +626,10 @@
       "cloud_actions": ["view"],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
@@ -637,7 +639,11 @@
         "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceController.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectMaintenancePresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -646,8 +652,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
@@ -657,9 +665,13 @@
         "agi-stack/apps/desktop/src/features/project-administration/projectMaintenanceController.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectMaintenancePresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "judgment_rationale": "Project Maintenance reads maintenance, graph and embedding status and the Web page exposes incremental refresh, duplicate dry-run/merge, stale-edge dry-run/delete, community rebuild, data export and embedding rebuild. Desktop now binds the production user_id identity contract and a revision-bound project scope, so the controller loads its three status payloads. The generic ProjectAdministrationPage does not render those maintenance models and exposes no maintenance mutations or export, so client-only POST methods are excluded from the Desktop Cloud API projection. Those latent client methods also call /maintenance/incremental-refresh instead of /maintenance/refresh/incremental and /maintenance/communities/rebuild instead of /graph/communities/rebuild; these endpoint mismatches remain explicit completion gaps while Cloud stays partial with route view only. Local binds the same real route but remains renderer-declared and closed with local_project_maintenance_authority_unavailable."
+      "judgment_rationale": "Accepted after reviewing the Project Maintenance V2 authority module, service contract, strict project-operation boundary, Cloud HTTP projection, App and route wiring, required workbench injection, and focused tests at c4fbfb9ee. The production Desktop read path now acquires one project-scoped generation lease and validates maintenance status, data statistics, and embedding status under the same generation; Local rejects before transport because no sidecar maintenance authority exists. Cloud remains partial/degraded with view only because the generic ProjectAdministrationPage does not render maintenance actions or export. The canonical Web surface alone continues to call /maintenance/refresh/incremental and /graph/communities/rebuild and to export downloaded graph data; those Web-only mutations and export are not Desktop capabilities. The old Desktop static factory and its latent mutation methods have been removed, so the previous rationale about Desktop calling mismatched mutation endpoints is no longer applicable. Source, contract, build, and unit evidence does not establish native Electron QA, globally-ready publication, ACK or release readiness, or V1 retirement."
     }
   ],
   "source_ownership": {
