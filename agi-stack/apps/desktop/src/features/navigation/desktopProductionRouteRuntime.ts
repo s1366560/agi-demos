@@ -14,6 +14,10 @@ import {
   createDesktopRuntimePoolClientV2,
   type DesktopRuntimePoolOperationsV2,
 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
+import {
+  createDesktopRuntimeClustersClientV2,
+  type DesktopRuntimeClustersOperationsV2,
+} from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
 import type {
   ProjectOverviewRouteBinding,
   ProjectOverviewRouteContext,
@@ -28,7 +32,6 @@ import { createRuntimeInstancesController } from '../runtime-instances/runtimeIn
 import { createRuntimeInstancesClient } from '../runtime-instances/runtimeInstancesClient';
 import type { RuntimeClustersRouteBinding } from '../runtime-clusters/runtimeClustersRouteModule';
 import { createRuntimeClustersController } from '../runtime-clusters/runtimeClustersController';
-import { createRuntimeClustersClient } from '../runtime-clusters/runtimeClustersClient';
 import type { RuntimeDeploymentsRouteBinding } from '../runtime-deployments/runtimeDeploymentsRouteModule';
 import { createRuntimeDeploymentsController } from '../runtime-deployments/runtimeDeploymentsController';
 import { createRuntimeDeploymentsClient } from '../runtime-deployments/runtimeDeploymentsClient';
@@ -488,15 +491,17 @@ export function createRuntimeInstancesRouteBindingForRuntime(
 export function createRuntimeClustersRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2,
 ): RuntimeClustersRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('runtime_clusters_runtime_scope_mismatch');
   }
+  requireRuntimeClustersOperationsV2(runtimeClustersOperationsV2);
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createRuntimeClustersClient(config);
+  const client = createDesktopRuntimeClustersClientV2(runtimeClustersOperationsV2, config);
   return Object.freeze({
     controller: createRuntimeClustersController({
       authority: config.mode,
@@ -594,5 +599,17 @@ function requireRuntimePoolOperationsV2(operations: DesktopRuntimePoolOperations
     typeof operations.probeRuntimePool !== 'function'
   ) {
     throw new Error('desktop_runtime_pool_authority_required');
+  }
+}
+
+function requireRuntimeClustersOperationsV2(
+  operations: DesktopRuntimeClustersOperationsV2,
+): void {
+  if (
+    typeof operations?.listRuntimeClusters !== 'function' ||
+    typeof operations.getRuntimeClusterHealth !== 'function' ||
+    typeof operations.probeRuntimeClusters !== 'function'
+  ) {
+    throw new Error('desktop_runtime_clusters_authority_required');
   }
 }

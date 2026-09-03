@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -412,6 +413,7 @@ test('Runtime Clusters binding preserves Cloud and Local tenant authority', asyn
   const cloud = createRuntimeClustersRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimeClustersOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
   assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
@@ -419,6 +421,7 @@ test('Runtime Clusters binding preserves Cloud and Local tenant authority', asyn
   const local = createRuntimeClustersRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
+    runtimeClustersOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, { authority: 'local', tenantId });
   await local.controller.load(local.scope);
@@ -432,10 +435,24 @@ test('Runtime Clusters binding preserves Cloud and Local tenant authority', asyn
 test('Runtime Clusters binding rejects tenant scope drift before client authority', () => {
   assert.throws(
     () =>
-      createRuntimeClustersRouteBindingForRuntime(runtimeConfig('cloud'), {
-        tenantId: 'tenant-other',
-      }),
+      createRuntimeClustersRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId: 'tenant-other' },
+        runtimeClustersOperationsV2Fixture(),
+      ),
     /runtime_clusters_runtime_scope_mismatch/u,
+  );
+});
+
+test('Runtime Clusters binding requires the complete V2 operations facade', () => {
+  assert.throws(
+    () =>
+      createRuntimeClustersRouteBindingForRuntime(
+        runtimeConfig('cloud'),
+        { tenantId },
+        {},
+      ),
+    /desktop_runtime_clusters_authority_required/u,
   );
 });
 

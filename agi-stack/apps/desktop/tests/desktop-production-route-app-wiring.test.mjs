@@ -606,7 +606,7 @@ test('App wires Runtime Instances through one scoped Cloud or Local binding', ()
 test('App wires Runtime Clusters through one scoped Cloud or Local binding', () => {
   assert.match(
     registrySource,
-    /TENANT_CLUSTERS_ROUTE_ID[\s\S]*createRuntimeClustersRouteModuleLoader\(\{[\s\S]*createRuntimeClustersRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+    /TENANT_CLUSTERS_ROUTE_ID[\s\S]*createRuntimeClustersRouteModuleLoader\(\{[\s\S]*createRuntimeClustersRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*runtimeClustersOperationsV2,?\s*\)/u,
   );
 });
 

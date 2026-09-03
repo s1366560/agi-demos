@@ -33,7 +33,6 @@ import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapab
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
 import { deadLetterQueueCapability } from '../governance/deadLetterQueueCapability';
 import { instanceTemplatesCapability } from '../instance-templates/instanceTemplatesCapability';
-import { runtimeClustersCapability } from '../runtime-clusters/runtimeClustersCapability';
 import { runtimeDeploymentsCapability } from '../runtime-deployments/runtimeDeploymentsCapability';
 import { runtimeInstancesCapability } from '../runtime-instances/runtimeInstancesCapability';
 import { createAgentDefinitionsRouteClient } from '../settings-routes/agentDefinitionsRouteClient';
@@ -138,6 +137,7 @@ import {
 } from '../../plugins/desktopProjectGraphAuthorityModuleV2';
 import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
+import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
 import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_MINIMUM_CONTRACT_VERSION,
@@ -216,6 +216,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   >;
   projectGraphOperationsV2: Pick<DesktopProjectGraphOperationsV2, 'loadProjectGraph'>;
   runtimePoolOperationsV2: Pick<DesktopRuntimePoolOperationsV2, 'probeRuntimePool'>;
+  runtimeClustersOperationsV2: Pick<
+    DesktopRuntimeClustersOperationsV2,
+    'probeRuntimeClusters'
+  >;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -328,6 +332,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof runtimePoolOperationsV2?.probeRuntimePool !== 'function') {
     throw new Error('desktop_runtime_pool_authority_required');
   }
+  const runtimeClustersOperationsV2 = options?.runtimeClustersOperationsV2;
+  if (typeof runtimeClustersOperationsV2?.probeRuntimeClusters !== 'function') {
+    throw new Error('desktop_runtime_clusters_authority_required');
+  }
   const projectWorkspacesClient = options?.projectWorkspacesClient;
   if (typeof projectWorkspacesClient?.list !== 'function') {
     throw new Error('desktop_project_workspaces_authority_required');
@@ -423,6 +431,7 @@ export function createDesktopWorkbenchCapabilityClient(
         workspaceCollaboration,
         projectOverview,
         runtimePool,
+        runtimeClusters,
         tenantOverview,
         tenantAnalytics,
         tenantAgentDashboard,
@@ -446,6 +455,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadWorkspaceCollaborationCapability(config, projectBlackboardOperationsV2, signal),
         loadProjectOverviewCapability(config, projectOverviewOperationsV2, signal),
         loadRuntimePoolCapability(config, runtimePoolOperationsV2, signal),
+        loadRuntimeClustersCapability(config, runtimeClustersOperationsV2, signal),
         loadTenantOverviewCapability(
           config,
           options.tenantOverviewOperationsV2,
@@ -659,7 +669,9 @@ export function createDesktopWorkbenchCapabilityClient(
             withCapabilityScope(runtimePool, tenantScope),
           ),
           'tenant-tenant-instances': declared(runtimeInstancesCapability(config)),
-          'tenant-tenant-clusters': declared(runtimeClustersCapability(config)),
+          'tenant-tenant-clusters': (config.mode === 'local' ? declared : observed)(
+            withCapabilityScope(runtimeClusters, tenantScope),
+          ),
           'tenant-tenant-deploy': declared(runtimeDeploymentsCapability(config)),
           'tenant-tenant-instance-templates': declared(instanceTemplatesCapability(config)),
           'tenant-tenant-dead-letter-queue': declared(deadLetterQueueCapability(config)),
@@ -1569,6 +1581,35 @@ async function loadRuntimePoolCapability(
       return unavailable('runtime_pool_contract_invalid');
     }
     return unavailable('runtime_pool_authority_unavailable');
+  }
+}
+
+async function loadRuntimeClustersCapability(
+  config: DesktopRuntimeConfig,
+  operations: Pick<DesktopRuntimeClustersOperationsV2, 'probeRuntimeClusters'>,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const tenantId = scopeIdentifier(config.tenantId);
+  if (!tenantId) return unavailable('runtime_clusters_tenant_scope_unavailable');
+
+  try {
+    return await operations.probeRuntimeClusters({
+      config,
+      scope: { authority: config.mode, tenantId },
+      ...(signal === undefined ? {} : { signal }),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (error instanceof DesktopApiError && error.status === 403) {
+      return unavailable('runtime_clusters_forbidden');
+    }
+    if (
+      error instanceof RuntimeV2Error &&
+      error.code === 'desktop_runtime_clusters_service_contract_invalid'
+    ) {
+      return unavailable('runtime_clusters_contract_invalid');
+    }
+    return unavailable('runtime_clusters_authority_unavailable');
   }
 }
 

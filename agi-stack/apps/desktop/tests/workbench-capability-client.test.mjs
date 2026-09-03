@@ -11,6 +11,7 @@ import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixtu
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -205,6 +206,26 @@ test('workbench capability client requires the Runtime Pool V2 authority', () =>
   );
 });
 
+test('workbench capability client requires the Runtime Clusters V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_runtime_clusters_authority_required/u,
+  );
+});
+
 test('workbench capability client requires an injected Project Workspaces V2 client', () => {
   assert.throws(
     () =>
@@ -214,6 +235,7 @@ test('workbench capability client requires an injected Project Workspaces V2 cli
         {
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
           tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
@@ -234,6 +256,7 @@ test('workbench capability client requires the Project Blackboard V2 authority',
         {
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -255,6 +278,7 @@ test('workbench capability client requires the Project Agent Dashboard V2 author
         {
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
@@ -277,6 +301,7 @@ test('workbench capability client requires the Project Agent Logs V2 authority',
         {
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
@@ -300,6 +325,7 @@ test('workbench capability client requires the Project Agent Patterns V2 authori
         {
           projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
@@ -325,6 +351,7 @@ test('workbench capability client requires the Project Graph V2 authority', () =
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -361,6 +388,7 @@ test('workbench capability client requires both Project Entities V2 operations',
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -709,20 +737,12 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-clusters'],
-      withDeclaredAuthority({
-        availability: 'degraded',
-        reason_code: 'runtime_clusters_detail_and_mutations_partial',
+      withObservedAuthority({
+        availability: 'unavailable',
+        reason_code: 'capability_authority_revision_unavailable',
         service_version: '0.1.0',
         contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'refresh',
-          'search-current-page',
-          'filter-status-current-page',
-          'paginate',
-          'inspect-health',
-        ],
+        allowed_actions: [],
         scope: {
           tenant_id: 'default',
           project_id: null,
@@ -730,7 +750,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
           instance_id: null,
         },
         authority_revision: null,
-      }),
+      }, 'cloud_service'),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-deploy'],
@@ -1778,6 +1798,7 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 

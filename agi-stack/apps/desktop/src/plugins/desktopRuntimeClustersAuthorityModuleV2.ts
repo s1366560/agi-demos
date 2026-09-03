@@ -1,0 +1,360 @@
+import {
+  PLUGIN_MODULE_CATALOG_V2,
+  RuntimeV2Error,
+  type ContextV2,
+  type PluginDefinitionV2,
+} from '@agistack/plugin-runtime';
+
+import type {
+  RuntimeClusterHealth,
+  RuntimeClustersClient,
+  RuntimeClustersPage,
+  RuntimeClustersQuery,
+  RuntimeClustersScope,
+} from '../features/runtime-clusters/runtimeClustersTypes';
+import type { DesktopCapabilityAvailability } from '../features/runtime/capabilitySnapshot';
+import type { DesktopRuntimeConfig } from '../types';
+import {
+  createDesktopRuntimeClustersHttpAuthorityV2,
+} from './desktopRuntimeClustersHttpProjectionV2';
+import {
+  cloneDesktopRuntimeClustersConfigV2,
+  prepareDesktopRuntimeClustersAuthorityOperationV2,
+  requireDesktopRuntimeClusterHealthV2,
+  requireDesktopRuntimeClustersCapabilityV2,
+  requireDesktopRuntimeClustersPageV2,
+  type DesktopRuntimeClusterHealthOperationInputV2,
+  type DesktopRuntimeClustersAuthorityOperationInputV2,
+  type DesktopRuntimeClustersListOperationInputV2,
+  type DesktopRuntimeClustersOperationInputV2,
+  type PreparedDesktopRuntimeClustersAuthorityOperationV2,
+} from './desktopRuntimeClustersOperationContractV2';
+import type {
+  DesktopRendererGenerationActionsV2,
+  DesktopRendererServiceOperationLeaseAdmissionV2,
+} from './desktopRendererGenerationContextV2';
+
+export type {
+  DesktopRuntimeClusterHealthOperationInputV2,
+  DesktopRuntimeClustersAuthorityOperationInputV2,
+  DesktopRuntimeClustersListOperationInputV2,
+  DesktopRuntimeClustersOperationInputV2,
+} from './desktopRuntimeClustersOperationContractV2';
+
+export const DESKTOP_RUNTIME_CLUSTERS_AUTHORITY_MODULE_REF_V2 =
+  'builtin://memstack/desktop/runtime-clusters-authority';
+export const DESKTOP_RUNTIME_CLUSTERS_AUTHORITY_SERVICE_V2 =
+  'service:desktop-renderer.runtime-clusters-authority';
+export const DESKTOP_RUNTIME_CLUSTERS_AUTHORITY_VERSION_V2 = '1.0.0';
+
+export interface DesktopRuntimeClustersAuthorityV2 {
+  readonly list: (
+    query: Required<RuntimeClustersQuery>,
+    signal?: AbortSignal,
+  ) => Promise<RuntimeClustersPage>;
+  readonly getHealth: (
+    clusterId: string,
+    signal?: AbortSignal,
+  ) => Promise<RuntimeClusterHealth>;
+  readonly probe: (signal?: AbortSignal) => Promise<DesktopCapabilityAvailability>;
+}
+
+export interface DesktopRuntimeClustersAuthorityServiceV2 {
+  readonly bindOperation: (
+    config: DesktopRuntimeConfig,
+    scope: RuntimeClustersScope,
+  ) => DesktopRuntimeClustersAuthorityV2;
+}
+
+export interface DesktopRuntimeClustersOperationsV2 {
+  readonly listRuntimeClusters: (
+    input: DesktopRuntimeClustersListOperationInputV2,
+  ) => Promise<RuntimeClustersPage>;
+  readonly getRuntimeClusterHealth: (
+    input: DesktopRuntimeClusterHealthOperationInputV2,
+  ) => Promise<RuntimeClusterHealth>;
+  readonly probeRuntimeClusters: (
+    input: DesktopRuntimeClustersOperationInputV2,
+  ) => Promise<DesktopCapabilityAvailability>;
+}
+
+type ServiceAdmissionRejectionV2 = Extract<
+  DesktopRendererServiceOperationLeaseAdmissionV2<never>,
+  { status: 'rejected' }
+>;
+type GenerationActionsUnavailableV2 = Readonly<{
+  reasonCode: 'desktop_renderer_generation_actions_unavailable';
+  runtimeCode?: undefined;
+}>;
+type AuthorityAdmissionRejectionV2 =
+  | ServiceAdmissionRejectionV2
+  | GenerationActionsUnavailableV2;
+
+const AUTHORITY_KEYS_V2 = new Set(['list', 'getHealth', 'probe']);
+
+export class DesktopRuntimeClustersAuthorityUnavailableErrorV2 extends Error {
+  readonly reasonCode: AuthorityAdmissionRejectionV2['reasonCode'];
+  readonly runtimeCode: string | undefined;
+
+  constructor(rejection: AuthorityAdmissionRejectionV2) {
+    super(rejection.reasonCode);
+    this.name = 'DesktopRuntimeClustersAuthorityUnavailableErrorV2';
+    this.reasonCode = rejection.reasonCode;
+    this.runtimeCode = rejection.runtimeCode;
+  }
+}
+
+export function applyDesktopRuntimeClustersAuthorityV2(
+  context: ContextV2,
+  config: Readonly<Record<string, unknown>>,
+): void {
+  if (Object.keys(config).length !== 1 || config.strategy !== 'desktop-api-fetch') {
+    throw new RuntimeV2Error(
+      'desktop_runtime_clusters_authority_config_invalid',
+      'desktop runtime clusters authority requires desktop-api-fetch strategy',
+    );
+  }
+  const service: DesktopRuntimeClustersAuthorityServiceV2 = Object.freeze({
+    bindOperation: createDesktopRuntimeClustersHttpAuthorityV2,
+  });
+  context.provide(DESKTOP_RUNTIME_CLUSTERS_AUTHORITY_SERVICE_V2, service);
+}
+
+export const desktopRuntimeClustersAuthorityDefinitionV2: PluginDefinitionV2 = Object.freeze({
+  moduleRef: DESKTOP_RUNTIME_CLUSTERS_AUTHORITY_MODULE_REF_V2,
+  contractDigest: generatedContractDigestV2(),
+  apply: applyDesktopRuntimeClustersAuthorityV2,
+});
+
+export function createDesktopRuntimeClustersOperationsV2(
+  resolveActions: () => DesktopRendererGenerationActionsV2 | null,
+): DesktopRuntimeClustersOperationsV2 {
+  return Object.freeze({
+    listRuntimeClusters(input: DesktopRuntimeClustersListOperationInputV2) {
+      const prepared = prepareDesktopRuntimeClustersAuthorityOperationV2({
+        kind: 'list',
+        ...input,
+      });
+      if (prepared.kind !== 'list') throw invalidInputV2();
+      return runDesktopRuntimeClustersAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) => authority.list(prepared.query, prepared.signal),
+      );
+    },
+    getRuntimeClusterHealth(input: DesktopRuntimeClusterHealthOperationInputV2) {
+      const prepared = prepareDesktopRuntimeClustersAuthorityOperationV2({
+        kind: 'health',
+        ...input,
+      });
+      if (prepared.kind !== 'health') throw invalidInputV2();
+      return runDesktopRuntimeClustersAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) => authority.getHealth(prepared.clusterId, prepared.signal),
+      );
+    },
+    probeRuntimeClusters(input: DesktopRuntimeClustersOperationInputV2) {
+      const prepared = prepareDesktopRuntimeClustersAuthorityOperationV2({
+        kind: 'probe',
+        ...input,
+      });
+      return runDesktopRuntimeClustersAuthorityOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (authority) => authority.probe(prepared.signal),
+      );
+    },
+  });
+}
+
+export function createDesktopRuntimeClustersClientV2(
+  operations: Pick<
+    DesktopRuntimeClustersOperationsV2,
+    'listRuntimeClusters' | 'getRuntimeClusterHealth'
+  >,
+  config: DesktopRuntimeConfig,
+): RuntimeClustersClient {
+  const operationConfig = cloneDesktopRuntimeClustersConfigV2(config);
+  return Object.freeze({
+    list(scope, query, options) {
+      return operations.listRuntimeClusters({
+        config: operationConfig,
+        scope,
+        ...(query === undefined ? {} : { query }),
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
+    getHealth(scope, clusterId, options) {
+      return operations.getRuntimeClusterHealth({
+        config: operationConfig,
+        scope,
+        clusterId,
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      });
+    },
+  });
+}
+
+export function withDesktopRuntimeClustersAuthorityOperationV2<TResult>(
+  actions: DesktopRendererGenerationActionsV2,
+  input: DesktopRuntimeClustersAuthorityOperationInputV2,
+  operation: (authority: DesktopRuntimeClustersAuthorityV2) => TResult | Promise<TResult>,
+): Promise<TResult> {
+  return runDesktopRuntimeClustersAuthorityOperationV2(
+    actions,
+    prepareDesktopRuntimeClustersAuthorityOperationV2(input),
+    operation,
+  );
+}
+
+async function runDesktopRuntimeClustersAuthorityOperationV2<TResult>(
+  actions: DesktopRendererGenerationActionsV2,
+  prepared: PreparedDesktopRuntimeClustersAuthorityOperationV2,
+  operation: (authority: DesktopRuntimeClustersAuthorityV2) => TResult | Promise<TResult>,
+): Promise<TResult> {
+  const admission =
+    await actions.acquireServiceOperationLease<DesktopRuntimeClustersAuthorityServiceV2>({
+      service: DESKTOP_RUNTIME_CLUSTERS_AUTHORITY_SERVICE_V2,
+      version: DESKTOP_RUNTIME_CLUSTERS_AUTHORITY_VERSION_V2,
+      scope: Object.freeze({ kind: 'tenant', tenant_id: prepared.scope.tenantId }),
+    });
+  if (admission.status === 'rejected') {
+    throw new DesktopRuntimeClustersAuthorityUnavailableErrorV2(admission);
+  }
+
+  let operationFailed = false;
+  let operationActive = true;
+  try {
+    return await admission.useService((candidate) => {
+      const service = requireRuntimeClustersServiceV2(candidate);
+      const authority = requireRuntimeClustersAuthorityV2(
+        service.bindOperation(prepared.config, prepared.scope),
+      );
+      return operation(
+        createRevocableRuntimeClustersAuthorityV2(
+          authority,
+          prepared.scope,
+          () => operationActive,
+        ),
+      );
+    });
+  } catch (error) {
+    operationFailed = true;
+    throw error;
+  } finally {
+    operationActive = false;
+    try {
+      await admission.release();
+    } catch (releaseError) {
+      if (!operationFailed) throw releaseError;
+    }
+  }
+}
+
+function createRevocableRuntimeClustersAuthorityV2(
+  authority: DesktopRuntimeClustersAuthorityV2,
+  scope: RuntimeClustersScope,
+  isOperationActive: () => boolean,
+): DesktopRuntimeClustersAuthorityV2 {
+  const active = () => requireOperationActiveV2(isOperationActive);
+  return Object.freeze({
+    async list(query: Required<RuntimeClustersQuery>, signal?: AbortSignal) {
+      active();
+      const result = await authority.list(query, signal);
+      active();
+      return requireDesktopRuntimeClustersPageV2(result);
+    },
+    async getHealth(clusterId: string, signal?: AbortSignal) {
+      active();
+      const result = await authority.getHealth(clusterId, signal);
+      active();
+      return requireDesktopRuntimeClusterHealthV2(result);
+    },
+    async probe(signal?: AbortSignal) {
+      active();
+      const result = await authority.probe(signal);
+      active();
+      return requireDesktopRuntimeClustersCapabilityV2(result, scope);
+    },
+  });
+}
+
+function requireRuntimeClustersServiceV2(
+  value: unknown,
+): DesktopRuntimeClustersAuthorityServiceV2 {
+  if (
+    !isPlainRecordV2(value) ||
+    Object.keys(value).length !== 1 ||
+    typeof value.bindOperation !== 'function'
+  ) {
+    throw invalidServiceV2();
+  }
+  return value as unknown as DesktopRuntimeClustersAuthorityServiceV2;
+}
+
+function requireRuntimeClustersAuthorityV2(value: unknown): DesktopRuntimeClustersAuthorityV2 {
+  if (
+    !isPlainRecordV2(value) ||
+    !hasExactKeysV2(value, AUTHORITY_KEYS_V2) ||
+    [...AUTHORITY_KEYS_V2].some((key) => typeof value[key] !== 'function')
+  ) {
+    throw invalidServiceV2();
+  }
+  return value as unknown as DesktopRuntimeClustersAuthorityV2;
+}
+
+function requireGenerationActionsV2(
+  actions: DesktopRendererGenerationActionsV2 | null,
+): DesktopRendererGenerationActionsV2 {
+  if (actions !== null) return actions;
+  throw new DesktopRuntimeClustersAuthorityUnavailableErrorV2({
+    reasonCode: 'desktop_renderer_generation_actions_unavailable',
+  });
+}
+
+function requireOperationActiveV2(isOperationActive: () => boolean): void {
+  if (isOperationActive()) return;
+  throw new RuntimeV2Error(
+    'desktop_runtime_clusters_operation_released',
+    'desktop runtime clusters operation has been released',
+  );
+}
+
+function invalidInputV2(): RuntimeV2Error {
+  return new RuntimeV2Error(
+    'desktop_runtime_clusters_operation_input_invalid',
+    'desktop runtime clusters operation input is invalid',
+  );
+}
+
+function invalidServiceV2(): RuntimeV2Error {
+  return new RuntimeV2Error(
+    'desktop_runtime_clusters_service_invalid',
+    'desktop runtime clusters authority service is invalid',
+  );
+}
+
+function hasExactKeysV2(value: Record<string, unknown>, expected: ReadonlySet<string>): boolean {
+  const keys = Object.keys(value);
+  return keys.length === expected.size && keys.every((key) => expected.has(key));
+}
+
+function isPlainRecordV2(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function generatedContractDigestV2(): string {
+  const entry = PLUGIN_MODULE_CATALOG_V2.modules.find(
+    (candidate) => candidate.module_ref === DESKTOP_RUNTIME_CLUSTERS_AUTHORITY_MODULE_REF_V2,
+  );
+  if (entry === undefined) {
+    throw new RuntimeV2Error(
+      'desktop_runtime_clusters_authority_catalog_missing',
+      'desktop runtime clusters authority is absent from the generated catalog',
+    );
+  }
+  return entry.contract_digest;
+}

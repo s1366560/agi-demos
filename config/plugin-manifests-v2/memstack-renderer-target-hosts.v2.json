@@ -886,6 +886,37 @@
       "contract_digest": "sha256:3318905149a179a3b47ff6b47d23f1bba694997a9a08698f186884055dacbc61"
     },
     {
+      "module_ref": "builtin://memstack/desktop/runtime-clusters-authority",
+      "entrypoint": "applyDesktopRuntimeClustersAuthorityV2",
+      "artifact": {
+        "digest": "sha256:c1c13312d62c11e89a58f50e30958b26a07f8274eae392087660995a6cf950f3",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.runtime-clusters-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:c1451e90c31d5babc92be72be0a2e0c07248f1bb6e929961eb82df0b7cc00b4f"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/runtime-pool-authority",
       "entrypoint": "applyDesktopRuntimePoolAuthorityV2",
       "artifact": {

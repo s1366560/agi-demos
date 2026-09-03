@@ -11,6 +11,7 @@ import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
+import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -231,6 +232,7 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
             },
           }),
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
           tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
@@ -310,6 +312,7 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
           },
         }),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+        runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
