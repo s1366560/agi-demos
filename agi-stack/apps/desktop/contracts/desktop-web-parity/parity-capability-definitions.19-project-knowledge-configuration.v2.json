@@ -172,8 +172,10 @@
       "cloud_actions": ["view", "list-entity-types"],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
@@ -183,7 +185,11 @@
         "agi-stack/apps/desktop/src/features/project-administration/projectSchemaController.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectSchemaPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -192,8 +198,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectAdministrationClient.ts",
@@ -203,9 +211,13 @@
         "agi-stack/apps/desktop/src/features/project-administration/projectSchemaController.ts",
         "agi-stack/apps/desktop/src/features/project-administration/projectSchemaPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-administration/ProjectAdministrationPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts"
+        "agi-stack/apps/desktop/src/features/project-administration/useProjectAdministrationController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "judgment_rationale": "SchemaLayout and its overview, entity, edge, and mapping children are one canonical Web capability, and SchemaOverview performs client-side JSON copy and download export without a separate export API. Desktop now binds the production user_id identity contract, project membership and workspace-context scope revision, so the native route can load entity, edge and mapping data. ProjectAdministrationPage renders only the entity-type list; it does not render edge types or mappings and exposes none of the schema mutations, copy or export actions, so Cloud remains partial with view and entity-list actions only. Local uses the same real route but its renderer-declared static result remains closed with local_project_schema_authority_unavailable until a sidecar authority is observed."
+      "judgment_rationale": "Accepted after reviewing the checked-in Project Schema definition, generation-backed authority module, strict operation boundary, HTTP projection, App composition, route injection, required workbench injection, and focused tests at 42b60c723. The migration replaces the production read path with one project-scoped generation lease. The canonical Web surface retains client-side JSON copy and download export, while Desktop does not add schema mutations, edge/mapping management, copy, or export UI. Cloud therefore remains partial/degraded with only view and the entity-type list action (list-entity-types) under cloud_service authority. Local rejects before transport because no sidecar schema authority exists and remains unavailable with no actions. Source, contract, build, and unit evidence does not establish native Electron QA, globally-ready publication, ACK or release readiness, or V1 retirement."
     },
     {
       "id": "project-project-channels",
