@@ -158,8 +158,10 @@
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -377,7 +379,11 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -386,8 +392,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -397,9 +405,13 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectMemoriesPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "judgment_rationale": "Memory list, creation, detail, client-side JSON export, copy-link and reprocessing are one canonical project knowledge capability. The visible detail-page control uses navigator.clipboard to copy window.location.href; the routed production pages do not call the memory-share APIs, so no server sharing authority is claimed. Project viewers can read but cannot create memories; creation requires a project contributor. The production Web page has no memory-import action. Desktop now has a real production loader, App binding, typed client, controller and revision-bound Cloud authority, but ProjectKnowledgePage only renders the memory list and exposes no create, update, delete, reprocess, export or copy-link interaction. Cloud therefore retains only view and list and remains partial. Local binds the same native route but its renderer-declared static result is closed to local_project_memories_authority_unavailable until a sidecar observation exists."
+      "judgment_rationale": "Memory list, creation, detail, client-side JSON export, copy-link and reprocessing are one canonical project knowledge capability. The visible detail-page control uses navigator.clipboard to copy window.location.href; the routed production pages do not call the memory-share APIs, so no server sharing authority is claimed. Project viewers can read but cannot create memories; creation requires a project contributor. The production Web page has no memory-import action. At 63c7c25fc, production Desktop route and workbench consumers resolve `service:desktop-renderer.project-memories-authority@1.0.0` through project-scoped generation leases. Each load operation freezes config, scope and signal before admission, keeps workspace-context observation and the memory-page read within one pinned generation, validates exact scope and response contracts, rejects duplicate memory IDs, revokes escaped authorities after release, and preserves the primary operation error if release fails. Cloud transport remains vault-bound through desktopApiFetch and stays partial with view and list only because ProjectKnowledgePage exposes none of the create, update, delete, reprocess, export or copy-link controls. Local has no sidecar Memories authority and fails closed before transport as unavailable with no actions. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement."
     },
     {
       "id": "project-project-entities",
