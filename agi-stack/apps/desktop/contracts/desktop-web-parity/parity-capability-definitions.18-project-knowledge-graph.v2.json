@@ -275,8 +275,10 @@
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -286,7 +288,11 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectGraphAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectGraphHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectGraphOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -295,8 +301,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeCapabilityAuthority.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectKnowledgeClient.ts",
@@ -306,9 +314,13 @@
         "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphController.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/projectGraphPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/project-knowledge/ProjectKnowledgePage.tsx",
-        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts"
+        "agi-stack/apps/desktop/src/features/project-knowledge/useProjectKnowledgeController.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectGraphAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectGraphHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectGraphOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "judgment_rationale": "The Web MemoryGraph source provides a project knowledge-graph explorer. Its Cytoscape toolbar is enabled by default and downloads a client-side PNG through exportImage, so export-png is a project-member action with no server API contract. Session execution graphs in Desktop have a different authority and data model, so they are not evidence of this capability. Desktop now has a real production loader, App binding, typed graph client, controller and revision-bound Cloud authority, but ProjectKnowledgePage renders only a flat node list and exposes no navigation, node/edge inspection or PNG export interaction. Cloud therefore remains partial with view only. Local binds the real route but its renderer-declared result stays unavailable with local_project_graph_authority_unavailable until a sidecar graph authority is observed."
+      "judgment_rationale": "At ef97fb55b, the production route and workbench consumers resolve service:desktop-renderer.project-graph-authority@1.0.0 through project-scoped generation leases. Each load freezes config, scope and signal before admission; workspace-context observation and the graph request remain inside one pinned generation, exact tenant/project scope plus graph node and edge contracts are validated, escaped authorities revoke after release, and Local fails closed before graph transport. Cloud preserves the existing view-only product surface and remains partial because navigation, node/edge inspection and PNG export are still absent. Local has no sidecar graph authority and remains unavailable with no actions. These source and contract facts establish renderer authority wiring only, not native Electron QA, globally-ready publication, ACK readiness, release readiness or V1 retirement."
     },
     {
       "id": "project-project-search",
