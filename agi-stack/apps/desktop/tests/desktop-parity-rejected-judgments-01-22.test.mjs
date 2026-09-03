@@ -907,11 +907,6 @@ test("renderer-declared Cloud route slices retain entries but expose no actions"
       "tenant-tenant-instances",
       true,
     ],
-    [
-      "parity-capability-definitions.11-runtime-deployment.v2.json",
-      "tenant-tenant-clusters",
-      false,
-    ],
   ];
 
   for (const [fragment, capabilityId, localDeclared] of cases) {
@@ -990,6 +985,40 @@ test("observed Runtime Pool authority fails closed without a revision", () => {
   assert.equal(
     capability.local_reason_code,
     "cloud_runtime_pool_not_applicable",
+  );
+});
+
+test("observed Runtime Clusters authority fails closed without a revision", () => {
+  const capability = readCapability(
+    "parity-capability-definitions.11-runtime-deployment.v2.json",
+    "tenant-tenant-clusters",
+  );
+
+  assert.equal(capability.cloud_status, "unavailable");
+  assert.equal(
+    capability.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(capability.cloud_actions, []);
+  assert.ok(
+    capability.cloud_entries.includes(
+      "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts",
+    ),
+  );
+  for (const retiredPath of [
+    "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersCapability.ts",
+    "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersClient.ts",
+  ]) {
+    assert.equal(capability.cloud_entries.includes(retiredPath), false);
+  }
+  assert.match(
+    capability.judgment_rationale,
+    /capability_authority_revision_unavailable/u,
+  );
+  assert.equal(capability.local_status, "not_applicable");
+  assert.equal(
+    capability.local_reason_code,
+    "cloud_cluster_control_not_applicable",
   );
 });
 

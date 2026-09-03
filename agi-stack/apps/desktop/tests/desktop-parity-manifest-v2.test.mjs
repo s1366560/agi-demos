@@ -504,7 +504,6 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     "invitation-acceptance",
     "project-support",
     "tenant-creation",
-    "tenant-tenant-clusters",
     "tenant-tenant-dead-letter-queue",
     "tenant-tenant-deploy",
     "tenant-tenant-instance-templates",
@@ -567,6 +566,38 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     ),
     false,
   );
+
+  const runtimeClusters = byId.get("tenant-tenant-clusters");
+  assert.ok(runtimeClusters);
+  assert.deepEqual(runtimeClusters.surfaces.desktop_cloud, {
+    disposition: "native_equivalent",
+    implementation_status: "partial",
+    availability: "unavailable",
+    reason_code: "capability_authority_revision_unavailable",
+    authority: "cloud_service",
+    allowed_actions: [],
+    intentional_deviation: null,
+  });
+  assert.equal(
+    runtimeClusters.production_entries.desktop_cloud.some(
+      (entry) =>
+        entry.entry_type === "source" &&
+        entry.path ===
+          "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts",
+    ),
+    true,
+  );
+  for (const retiredPath of [
+    "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersCapability.ts",
+    "agi-stack/apps/desktop/src/features/runtime-clusters/runtimeClustersClient.ts",
+  ]) {
+    assert.equal(
+      runtimeClusters.production_entries.desktop_cloud.some(
+        (entry) => entry.entry_type === "source" && entry.path === retiredPath,
+      ),
+      false,
+    );
+  }
 
   for (const capabilityId of [
     "tenant-tenant-instances",
