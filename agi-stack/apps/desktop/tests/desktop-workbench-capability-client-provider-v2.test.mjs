@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspaceOperationsV2Fixture } from './projectWorkspaceOperationsV2Fixture.mjs';
@@ -56,6 +57,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'local', projectId: 'project-local' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
@@ -72,6 +74,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-cloud' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
@@ -100,6 +103,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     automationApi: automationApi(),
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
@@ -125,6 +129,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         automationApi: automationApi(),
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
         projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
@@ -149,6 +154,10 @@ test('App consumes the published V2 workbench capability client', () => {
   assert.match(appSource, /desktopWorkspaceLifecycleOperationsV2,/u);
   assert.match(
     appSource,
+    /projectAgentDashboardOperationsV2:\s*desktopProjectAgentDashboardOperationsV2/u,
+  );
+  assert.match(
+    appSource,
     /projectAgentLogsOperationsV2:\s*desktopProjectAgentLogsOperationsV2/u,
   );
   assert.match(
@@ -161,6 +170,10 @@ test('App consumes the published V2 workbench capability client', () => {
     /createDesktopWorkbenchCapabilityClient\(input\.automationApi, config, \{/u,
   );
   assert.match(providerSource, /pluginMarketplaceOperationsV2:\s*input\.pluginMarketplaceOperationsV2/u);
+  assert.match(
+    providerSource,
+    /projectAgentDashboardOperationsV2:\s*input\.projectAgentDashboardOperationsV2/u,
+  );
   assert.match(
     providerSource,
     /projectAgentLogsOperationsV2:\s*input\.projectAgentLogsOperationsV2/u,

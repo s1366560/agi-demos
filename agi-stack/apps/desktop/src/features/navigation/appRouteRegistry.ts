@@ -109,7 +109,6 @@ import {
   createTenantWorkspacesRouteBindingForRuntime,
 } from './desktopProductionRouteRuntime';
 import { createProjectOverviewRouteModuleLoader } from '../project/projectOverviewRouteModule';
-import { createProjectAgentDashboardClient } from '../project-agent/projectAgentDashboardClient';
 import { createProjectAgentDashboardController } from '../project-agent/projectAgentDashboardController';
 import { createProjectAgentDashboardRouteModuleLoader } from '../project-agent/projectAgentDashboardRouteModule';
 import { createProjectAgentLogsController } from '../project-agent/projectAgentLogsController';
@@ -229,6 +228,10 @@ import { createTemplatesRouteModuleLoader } from '../settings-routes/templatesRo
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
 import {
+  createDesktopProjectAgentDashboardClientV2,
+  type DesktopProjectAgentDashboardOperationsV2,
+} from '../../plugins/desktopProjectAgentDashboardAuthorityModuleV2';
+import {
   createDesktopProjectAgentLogsClientV2,
   type DesktopProjectAgentLogsOperationsV2,
 } from '../../plugins/desktopProjectAgentLogsAuthorityModuleV2';
@@ -278,6 +281,7 @@ export type AppRouteRegistryRefs = {
   projectCronJobsRouteBindingProviderV2: ProjectCronJobsRouteBindingProviderV2;
   projectBlackboardOperationsV2: DesktopProjectBlackboardOperationsV2;
   projectOverviewOperationsV2: DesktopProjectOverviewOperationsV2;
+  projectAgentDashboardOperationsV2: DesktopProjectAgentDashboardOperationsV2;
   projectAgentLogsOperationsV2: DesktopProjectAgentLogsOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
@@ -297,7 +301,7 @@ export type AppAuxiliaryRouteRegistryRefs = Pick<
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<AppRouteRegistryRefs, 'configRef'>;
 export type AppProjectAgentRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'projectAgentLogsOperationsV2'
+  'configRef' | 'projectAgentDashboardOperationsV2' | 'projectAgentLogsOperationsV2'
 >;
 export type AppProjectAdministrationRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -652,7 +656,7 @@ export function createAppProjectKnowledgeRouteRegistry(refs: AppProjectKnowledge
 }
 
 export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteRegistryRefs) {
-  const { configRef, projectAgentLogsOperationsV2 } = refs;
+  const { configRef, projectAgentDashboardOperationsV2, projectAgentLogsOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [PROJECT_AGENT_DASHBOARD_ROUTE_ID]: createProjectAgentDashboardRouteModuleLoader({
@@ -666,7 +670,10 @@ export function createAppProjectAgentRouteRegistry(refs: AppProjectAgentRouteReg
           return Object.freeze({
             controller: createProjectAgentDashboardController({
               authority: currentConfig.mode,
-              client: createProjectAgentDashboardClient(currentConfig),
+              client: createDesktopProjectAgentDashboardClientV2(
+                projectAgentDashboardOperationsV2,
+                currentConfig,
+              ),
               initialScope: scope,
             }),
             scope,

@@ -34,6 +34,7 @@ const authorityModules = [
   'desktopNewTaskFlowAuthorityModuleV2',
   'desktopNewThreadCreationAuthorityModuleV2',
   'desktopProjectOverviewAuthorityModuleV2',
+  'desktopProjectAgentDashboardAuthorityModuleV2',
   'desktopProjectAgentLogsAuthorityModuleV2',
   'desktopRuntimePoolAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',

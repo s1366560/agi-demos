@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
+import { projectAgentDashboardOperationsV2Fixture } from './projectAgentDashboardOperationsV2Fixture.mjs';
 import { projectAgentLogsOperationsV2Fixture } from './projectAgentLogsOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
@@ -242,6 +243,28 @@ test('workbench capability client requires the Project Blackboard V2 authority',
   );
 });
 
+test('workbench capability client requires the Project Agent Dashboard V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+          runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+          projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+          projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+        },
+      ),
+    /desktop_project_agent_dashboard_authority_required/u,
+  );
+});
+
 test('workbench capability client requires the Project Agent Logs V2 authority', () => {
   assert.throws(
     () =>
@@ -253,6 +276,7 @@ test('workbench capability client requires the Project Agent Logs V2 authority',
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+          projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
           tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
@@ -1649,6 +1673,7 @@ test('local Electron Workspace Collaboration reports permanent Core cutover outa
 
 function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
   return createDesktopWorkbenchCapabilityClient(automationApi, config, {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),

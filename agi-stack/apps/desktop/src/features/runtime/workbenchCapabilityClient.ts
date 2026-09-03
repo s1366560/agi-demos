@@ -118,6 +118,10 @@ import {
 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectOverviewOperationsV2 } from '../../plugins/desktopProjectOverviewAuthorityModuleV2';
 import {
+  createDesktopProjectAgentDashboardClientV2,
+  type DesktopProjectAgentDashboardOperationsV2,
+} from '../../plugins/desktopProjectAgentDashboardAuthorityModuleV2';
+import {
   createDesktopProjectAgentLogsClientV2,
   type DesktopProjectAgentLogsOperationsV2,
 } from '../../plugins/desktopProjectAgentLogsAuthorityModuleV2';
@@ -182,6 +186,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   projectOverviewOperationsV2: Pick<
     DesktopProjectOverviewOperationsV2,
     'probeProjectOverview'
+  >;
+  projectAgentDashboardOperationsV2: Pick<
+    DesktopProjectAgentDashboardOperationsV2,
+    'loadProjectAgentDashboard'
   >;
   projectAgentLogsOperationsV2: Pick<
     DesktopProjectAgentLogsOperationsV2,
@@ -312,6 +320,12 @@ export function createDesktopWorkbenchCapabilityClient(
   ) {
     throw new Error('desktop_project_blackboard_authority_required');
   }
+  const projectAgentDashboardOperationsV2 = options?.projectAgentDashboardOperationsV2;
+  if (
+    typeof projectAgentDashboardOperationsV2?.loadProjectAgentDashboard !== 'function'
+  ) {
+    throw new Error('desktop_project_agent_dashboard_authority_required');
+  }
   const projectAgentLogsOperationsV2 = options?.projectAgentLogsOperationsV2;
   if (typeof projectAgentLogsOperationsV2?.loadProjectAgentLogs !== 'function') {
     throw new Error('desktop_project_agent_logs_authority_required');
@@ -334,6 +348,7 @@ export function createDesktopWorkbenchCapabilityClient(
     options.projectKnowledgeClients ?? createProjectKnowledgeCapabilityClients(config);
   const projectAgentClients = createProjectAgentCapabilityClients(
     config,
+    createDesktopProjectAgentDashboardClientV2(projectAgentDashboardOperationsV2, config),
     createDesktopProjectAgentLogsClientV2(projectAgentLogsOperationsV2, config),
     options.projectAgentClients,
   );

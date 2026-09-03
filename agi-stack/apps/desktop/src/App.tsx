@@ -93,6 +93,9 @@ import {
   createDesktopProjectOverviewOperationsV2,
 } from './plugins/desktopProjectOverviewAuthorityModuleV2';
 import {
+  createDesktopProjectAgentDashboardOperationsV2,
+} from './plugins/desktopProjectAgentDashboardAuthorityModuleV2';
+import {
   createDesktopProjectAgentLogsOperationsV2,
 } from './plugins/desktopProjectAgentLogsAuthorityModuleV2';
 import {
@@ -898,6 +901,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectAgentDashboardOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectAgentDashboardOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopProjectAgentLogsOperationsV2 = useMemo(
     () =>
       createDesktopProjectAgentLogsOperationsV2(
@@ -1197,6 +1207,7 @@ export function App() {
       desktopProductionRouteNavigation,
       pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
       projectBlackboardOperationsV2: desktopProjectBlackboardOperationsV2,
+      projectAgentDashboardOperationsV2: desktopProjectAgentDashboardOperationsV2,
       projectAgentLogsOperationsV2: desktopProjectAgentLogsOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
@@ -1222,6 +1233,7 @@ export function App() {
     [
       desktopPluginMarketplaceOperationsV2,
       desktopProjectBlackboardOperationsV2,
+      desktopProjectAgentDashboardOperationsV2,
       desktopProjectAgentLogsOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
@@ -1267,6 +1279,7 @@ export function App() {
         config,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         projectBlackboardOperationsV2: desktopProjectBlackboardOperationsV2,
+        projectAgentDashboardOperationsV2: desktopProjectAgentDashboardOperationsV2,
         projectAgentLogsOperationsV2: desktopProjectAgentLogsOperationsV2,
         projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
@@ -1284,6 +1297,7 @@ export function App() {
       desktopAutomationApiV2,
       desktopPluginMarketplaceOperationsV2,
       desktopProjectBlackboardOperationsV2,
+      desktopProjectAgentDashboardOperationsV2,
       desktopProjectAgentLogsOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopRuntimePoolOperationsV2,

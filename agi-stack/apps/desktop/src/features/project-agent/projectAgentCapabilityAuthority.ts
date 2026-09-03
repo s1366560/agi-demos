@@ -3,9 +3,9 @@ import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import type { ProjectAgentScope, ProjectAgentSnapshotBase } from './projectAgentClient';
 import {
-  createProjectAgentDashboardClient,
   PROJECT_AGENT_DASHBOARD_LOCAL_REASON,
   PROJECT_AGENT_DASHBOARD_ROUTE_ID,
+  type ProjectAgentDashboardClient,
 } from './projectAgentDashboardClient';
 import {
   PROJECT_AGENT_LOGS_LOCAL_REASON,
@@ -51,12 +51,12 @@ const REASON_PREFIXES: Readonly<Record<ProjectAgentCapabilityId, string>> = Obje
 
 export function createProjectAgentCapabilityClients(
   config: DesktopRuntimeConfig,
+  dashboardClient: ProjectAgentDashboardClient,
   logsClient: ProjectAgentLogsClient,
   overrides?: ProjectAgentCapabilityClients,
 ): ProjectAgentCapabilityClients {
   return {
-    [PROJECT_AGENT_DASHBOARD_ROUTE_ID]:
-      overrides?.[PROJECT_AGENT_DASHBOARD_ROUTE_ID] ?? createProjectAgentDashboardClient(config),
+    [PROJECT_AGENT_DASHBOARD_ROUTE_ID]: dashboardClient,
     [PROJECT_AGENT_LOGS_ROUTE_ID]: logsClient,
     [PROJECT_AGENT_PATTERNS_ROUTE_ID]:
       overrides?.[PROJECT_AGENT_PATTERNS_ROUTE_ID] ?? createProjectAgentPatternsClient(config),

@@ -15,10 +15,16 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 
-const { createProjectAgentDashboardClient, PROJECT_AGENT_DASHBOARD_LOCAL_REASON } = require(
+const { PROJECT_AGENT_DASHBOARD_LOCAL_REASON } = require(
   `${compiled}/projectAgentDashboardClient.js`,
 );
 const { PROJECT_AGENT_LOGS_LOCAL_REASON } = require(`${compiled}/projectAgentLogsClient.js`);
+const {
+  createDesktopProjectAgentDashboardClientV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentDashboardAuthorityModuleV2.js');
+const {
+  createDesktopProjectAgentDashboardHttpAuthorityV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentDashboardHttpProjectionV2.js');
 const {
   createDesktopProjectAgentLogsClientV2,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectAgentLogsAuthorityModuleV2.js');
@@ -107,7 +113,7 @@ test('Project Agent Cloud clients use trusted-session project authorities and ex
     throw new Error(`unexpected request: ${String(input)}`);
   };
   try {
-    const dashboard = await createProjectAgentDashboardClient(cloudConfig).load(cloudScope);
+    const dashboard = await projectAgentDashboardClientV2Fixture(cloudConfig).load(cloudScope);
     const logs = await projectAgentLogsClientV2Fixture(cloudConfig).load(cloudScope, {
       status: 'completed',
     });
@@ -138,7 +144,7 @@ test('Project Agent Local clients fail closed with stable reasons before network
   };
   try {
     const cases = [
-      [createProjectAgentDashboardClient(localConfig), PROJECT_AGENT_DASHBOARD_LOCAL_REASON],
+      [projectAgentDashboardClientV2Fixture(localConfig), PROJECT_AGENT_DASHBOARD_LOCAL_REASON],
       [projectAgentLogsClientV2Fixture(localConfig), PROJECT_AGENT_LOGS_LOCAL_REASON],
       [createProjectAgentPatternsClient(localConfig), PROJECT_AGENT_PATTERNS_LOCAL_REASON],
     ];
@@ -228,7 +234,7 @@ test('Project Agent controllers map backend-shaped plain 403 responses to stable
   const originalFetch = globalThis.fetch;
   const cases = [
     [
-      createProjectAgentDashboardClient,
+      projectAgentDashboardClientV2Fixture,
       createProjectAgentDashboardController,
       'project_agent_dashboard_forbidden',
     ],
@@ -279,7 +285,7 @@ test('Project Agent controllers map unstructured outages to stable unavailable r
   const originalFetch = globalThis.fetch;
   const cases = [
     [
-      createProjectAgentDashboardClient,
+      projectAgentDashboardClientV2Fixture,
       createProjectAgentDashboardController,
       'project_agent_dashboard_authority_unavailable',
     ],
@@ -380,6 +386,19 @@ function projectAgentLogsClientV2Fixture(config) {
         return createDesktopProjectAgentLogsHttpAuthorityV2(operationConfig, scope).load(
           status,
           limit,
+          signal,
+        );
+      },
+    },
+    config,
+  );
+}
+
+function projectAgentDashboardClientV2Fixture(config) {
+  return createDesktopProjectAgentDashboardClientV2(
+    {
+      loadProjectAgentDashboard({ config: operationConfig, scope, signal }) {
+        return createDesktopProjectAgentDashboardHttpAuthorityV2(operationConfig, scope).load(
           signal,
         );
       },
