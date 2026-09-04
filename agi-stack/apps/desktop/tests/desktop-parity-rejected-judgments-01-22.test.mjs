@@ -912,7 +912,7 @@ test("renderer-declared Cloud route slices retain entries but expose no actions"
   for (const [fragment, capabilityId, localDeclared] of cases) {
     const capability = readCapability(fragment, capabilityId);
     const expectedReason =
-      capabilityId === "tenant-tenant-instances"
+      capabilityId === "tenant-tenant-instances" || capabilityId === "tenant-tenant-runtimes"
         ? "capability_authority_revision_unavailable"
         : "renderer_capability_authority_unobserved";
     assert.equal(capability.cloud_status, "unavailable", capabilityId);

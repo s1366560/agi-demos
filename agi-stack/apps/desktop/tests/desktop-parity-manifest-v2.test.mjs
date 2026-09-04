@@ -519,7 +519,8 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
       capabilityId === "tenant-tenant-instances" ||
       capabilityId === "tenant-tenant-deploy" ||
       capabilityId === "tenant-tenant-dead-letter-queue" ||
-      capabilityId === "tenant-tenant-instance-templates"
+      capabilityId === "tenant-tenant-instance-templates" ||
+      capabilityId === "tenant-tenant-runtimes"
         ? "capability_authority_revision_unavailable"
         : "renderer_capability_authority_unobserved";
     assert.deepEqual(
@@ -617,7 +618,7 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     assert.equal(surface.availability, "unavailable", capabilityId);
     assert.equal(
       surface.reason_code,
-      capabilityId === "tenant-tenant-instances"
+      capabilityId === "tenant-tenant-instances" || capabilityId === "tenant-tenant-runtimes"
         ? "capability_authority_revision_unavailable"
         : "renderer_capability_authority_unobserved",
       capabilityId,
