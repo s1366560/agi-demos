@@ -86,7 +86,6 @@ import {
   TENANT_BILLING_ROUTE_ID,
   TENANT_WORKSPACES_ROUTE_ID,
 } from './desktopProductionRouteRegistry';
-import { createProjectPlaybooksClient } from '../project-playbooks/projectPlaybooksClient';
 import { createProjectPlaybooksController } from '../project-playbooks/projectPlaybooksController';
 import { createCloudProjectPlaybooksEventSource } from '../project-playbooks/projectPlaybooksEventSource';
 import { createProjectPlaybooksRouteModuleLoader } from '../project-playbooks/projectPlaybooksRouteModule';
@@ -266,6 +265,10 @@ import {
   type DesktopProjectSupportOperationsV2,
 } from '../../plugins/desktopProjectSupportAuthorityModuleV2';
 import {
+  createDesktopProjectPlaybooksReadClientV2,
+  type DesktopProjectPlaybooksReadOperationsV2,
+} from '../../plugins/desktopProjectPlaybooksReadAuthorityModuleV2';
+import {
   createDesktopWorkspaceCollaborationClientV2,
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -329,6 +332,7 @@ export type AppRouteRegistryRefs = {
   projectMaintenanceOperationsV2: DesktopProjectMaintenanceOperationsV2;
   projectSettingsOperationsV2: DesktopProjectSettingsOperationsV2;
   projectSupportOperationsV2: DesktopProjectSupportOperationsV2;
+  projectPlaybooksReadOperationsV2: DesktopProjectPlaybooksReadOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
@@ -343,7 +347,10 @@ export type AppRouteRegistryRefs = {
 
 export type AppAuxiliaryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'projectSupportOperationsV2' | 'setAuth'
+  | 'configRef'
+  | 'projectPlaybooksReadOperationsV2'
+  | 'projectSupportOperationsV2'
+  | 'setAuth'
 >;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -577,9 +584,9 @@ export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryR
           return Object.freeze({
             controller: createProjectPlaybooksController({
               authority: 'cloud',
-              client: createProjectPlaybooksClient(
+              client: createDesktopProjectPlaybooksReadClientV2(
+                refs.projectPlaybooksReadOperationsV2,
                 currentConfig,
-                desktopVaultBoundCloudRequestBroker(),
               ),
               initialScope: scope,
             }),

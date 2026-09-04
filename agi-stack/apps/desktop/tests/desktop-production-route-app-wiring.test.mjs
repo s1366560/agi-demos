@@ -146,8 +146,9 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
   assert.match(
     registrySource,
-    /PROJECT_PLAYBOOKS_ROUTE_ID[\s\S]*createProjectPlaybooksRouteModuleLoader\(\{[\s\S]*createProjectPlaybooksController\(\{[\s\S]*createProjectPlaybooksClient\([\s\S]*desktopVaultBoundCloudRequestBroker\(\)/u,
+    /PROJECT_PLAYBOOKS_ROUTE_ID[\s\S]*createProjectPlaybooksRouteModuleLoader\(\{[\s\S]*createProjectPlaybooksController\(\{[\s\S]*createDesktopProjectPlaybooksReadClientV2\([\s\S]*refs\.projectPlaybooksReadOperationsV2/u,
   );
+  assert.doesNotMatch(registrySource, /createProjectPlaybooksClient/u);
   assert.match(
     registrySource,
     /BACKEND_STORES_ROUTE_ID[\s\S]*authority:\s*['"]cloud['"][\s\S]*PROJECT_PLAYBOOKS_ROUTE_ID[\s\S]*authority:\s*['"]cloud['"]/u,

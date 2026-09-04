@@ -1008,6 +1008,38 @@
       "contract_digest": "sha256:88a20deabaf21c9d699991f6d25b892c843be07504eecad76495da070bb7de12"
     },
     {
+      "module_ref": "builtin://memstack/desktop/project-playbooks-read-authority",
+      "entrypoint": "applyDesktopProjectPlaybooksReadAuthorityV2",
+      "artifact": {
+        "digest": "sha256:358f6a42ca0f67af0b04f2d3aad7a9de1c96c00b40146e21fa9f89886f39b2ec",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.project-playbooks-read-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": {
+              "const": "vault-bound-cloud-request-broker",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:4e9ddb0ddd4a40ff9bc4502ee01cd57ebaa7bb3b389008a8e6dd71ec82ae0899"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-entities-authority",
       "entrypoint": "applyDesktopProjectEntitiesAuthorityV2",
       "artifact": {

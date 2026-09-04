@@ -120,6 +120,7 @@ import { createDesktopProjectSchemaOperationsV2 } from './plugins/desktopProject
 import { createDesktopProjectMaintenanceOperationsV2 } from './plugins/desktopProjectMaintenanceAuthorityModuleV2';
 import { createDesktopProjectSettingsOperationsV2 } from './plugins/desktopProjectSettingsAuthorityModuleV2';
 import { createDesktopProjectSupportOperationsV2 } from './plugins/desktopProjectSupportAuthorityModuleV2';
+import { createDesktopProjectPlaybooksReadOperationsV2 } from './plugins/desktopProjectPlaybooksReadAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
@@ -995,6 +996,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectPlaybooksReadOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectPlaybooksReadOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantCreationOperationsV2 = useMemo(
     () =>
       createDesktopTenantCreationOperationsV2(
@@ -1327,6 +1335,7 @@ export function App() {
       projectMaintenanceOperationsV2: desktopProjectMaintenanceOperationsV2,
       projectSettingsOperationsV2: desktopProjectSettingsOperationsV2,
       projectSupportOperationsV2: desktopProjectSupportOperationsV2,
+      projectPlaybooksReadOperationsV2: desktopProjectPlaybooksReadOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1365,6 +1374,7 @@ export function App() {
       desktopProjectMaintenanceOperationsV2,
       desktopProjectSettingsOperationsV2,
       desktopProjectSupportOperationsV2,
+      desktopProjectPlaybooksReadOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopRuntimePoolOperationsV2,

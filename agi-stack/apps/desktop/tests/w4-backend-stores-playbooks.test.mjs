@@ -24,8 +24,11 @@ const { createBackendStoresController } = require(
 const { createBackendStoresRouteModuleLoader } = require(
   `${compiledRoot}/features/backend-stores/backendStoresRouteModule.js`,
 );
-const { PROJECT_PLAYBOOKS_ROUTE_ID, createProjectPlaybooksClient } = require(
+const { PROJECT_PLAYBOOKS_ROUTE_ID } = require(
   `${compiledRoot}/features/project-playbooks/projectPlaybooksClient.js`,
+);
+const { createDesktopProjectPlaybooksReadHttpAuthorityV2 } = require(
+  `${compiledRoot}/plugins/desktopProjectPlaybooksReadHttpProjectionV2.js`,
 );
 const { createProjectPlaybooksController } = require(
   `${compiledRoot}/features/project-playbooks/projectPlaybooksController.js`,
@@ -2000,7 +2003,10 @@ test('Project Playbooks validates project scope and parses playbooks plus verdic
       ],
     };
   });
-  const snapshot = await createProjectPlaybooksClient(cloudConfig, broker).load(projectScope);
+  const snapshot = await createDesktopProjectPlaybooksReadHttpAuthorityV2(
+    cloudConfig,
+    broker,
+  ).load(projectScope);
   assert.equal(snapshot.scopeRevision, 12);
   assert.equal(snapshot.playbooks[0].name, 'Recover runtime');
   assert.equal(snapshot.verdicts[0].action, 'create');
@@ -2013,7 +2019,7 @@ test('Project Playbooks validates project scope and parses playbooks plus verdic
 });
 
 test('Project Playbooks fails closed in Local and ignores stale project responses', async () => {
-  const localClient = createProjectPlaybooksClient(localConfig);
+  const localClient = createDesktopProjectPlaybooksReadHttpAuthorityV2(localConfig, null);
   await assert.rejects(
     localClient.load({
       authority: 'local',
@@ -2267,7 +2273,10 @@ test('Project Playbooks uses Cloud authority from Local-online through the vault
     return { items: [] };
   });
 
-  const snapshot = await createProjectPlaybooksClient(localConfig, broker).load(projectScope);
+  const snapshot = await createDesktopProjectPlaybooksReadHttpAuthorityV2(
+    localConfig,
+    broker,
+  ).load(projectScope);
 
   assert.equal(snapshot.authority, 'cloud');
   assert.equal(snapshot.scopeRevision, 14);

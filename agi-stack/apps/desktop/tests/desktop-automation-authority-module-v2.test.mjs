@@ -157,6 +157,8 @@ function rendererDefinitions() {
       .desktopTenantCreationAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectSupportAuthorityModuleV2.js')
       .desktopProjectSupportAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopProjectPlaybooksReadAuthorityModuleV2.js')
+      .desktopProjectPlaybooksReadAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectGraphAuthorityModuleV2.js')
       .desktopProjectGraphAuthorityDefinitionV2,
     desktopArtifactContentAuthorityDefinitionV2,
