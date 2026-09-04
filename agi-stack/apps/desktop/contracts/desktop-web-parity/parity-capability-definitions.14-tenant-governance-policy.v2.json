@@ -146,13 +146,17 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantTrustPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantTrustPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantTrustPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTrustAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTrustHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantTrustOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_trust_governance_not_applicable",
       "local_deviation": "Local execution permissions remain governed by explicit sidecar and Electron capability contracts; they do not create an offline copy of tenant trust policy authority.",
-      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Web remains degraded because its empty workspace filter becomes the invalid workspace_id 'default'. Desktop now has a real Cloud loader, App binding, typed policy client, controller and create/revoke page that require an explicit workspace scope. The observation still omits authorityRevision, so snapshot v4 closes the active result to capability_authority_revision_unavailable and no Cloud action is currently route-reachable. Local tenant trust governance remains intentionally not applicable."
+      "judgment_rationale": "TrustPolicies is the canonical tenant policy administration surface. Web remains degraded because its empty workspace filter becomes the invalid workspace_id 'default'. Desktop Cloud list, create and revoke now resolve through the declared tenant-trust V2 service under a tenant operation lease while requiring an explicit workspace scope. The backend remains the permission authority and mutations are never retried automatically. The observation still omits authorityRevision, so snapshot v4 closes the active result to capability_authority_revision_unavailable and no Cloud action is currently route-reachable. Local tenant trust governance rejects before network access and remains intentionally not applicable."
     },
     {
       "id": "tenant-tenant-decision-records",
