@@ -361,6 +361,7 @@ export type AppRouteRegistryRefs = {
   tenantWebhooksOperationsV2: import('../../plugins/desktopTenantWebhooksAuthorityModuleV2').DesktopTenantWebhooksOperationsV2;
   tenantBillingOperationsV2: import('../../plugins/desktopTenantBillingAuthorityModuleV2').DesktopTenantBillingOperationsV2;
   tenantAuditOperationsV2: import('../../plugins/desktopTenantAuditAuthorityModuleV2').DesktopTenantAuditOperationsV2;
+  tenantGovernanceOperationsV2: import('../../plugins/desktopTenantGovernanceAuthorityModuleV2').DesktopTenantGovernanceOperationsV2;
   tenantTrustOperationsV2: import('../../plugins/desktopTenantTrustAuthorityModuleV2').DesktopTenantTrustOperationsV2;
   unifiedRuntimesOperationsV2: DesktopUnifiedRuntimesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
@@ -469,6 +470,7 @@ export type AppTenantGovernanceRouteRegistryRefs = Pick<
   | 'tenantSettingsOperationsV2'
   | 'tenantBillingOperationsV2'
   | 'tenantAuditOperationsV2'
+  | 'tenantGovernanceOperationsV2'
   | 'tenantTrustOperationsV2'
   | 'desktopProductionRouteLocation'
 >;
@@ -1311,12 +1313,12 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
 export function createAppTenantGovernanceRouteRegistry(
   refs: AppTenantGovernanceRouteRegistryRefs,
 ) {
-  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2, tenantSettingsOperationsV2, tenantBillingOperationsV2, tenantAuditOperationsV2, tenantTrustOperationsV2 } = refs;
+  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2, tenantSettingsOperationsV2, tenantBillingOperationsV2, tenantAuditOperationsV2, tenantGovernanceOperationsV2, tenantTrustOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
         createBinding: (context) =>
-          createTenantGovernanceRouteBindingForRuntime(configRef.current, context),
+          createTenantGovernanceRouteBindingForRuntime(configRef.current, context, tenantGovernanceOperationsV2),
       }),
       [TENANT_AUDIT_LOGS_ROUTE_ID]: createTenantAuditRouteModuleLoader({
         createBinding: (context) =>

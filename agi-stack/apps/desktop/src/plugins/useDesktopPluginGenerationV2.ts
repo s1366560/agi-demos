@@ -73,6 +73,7 @@ import { desktopTenantSettingsAuthorityDefinitionV2 } from './desktopTenantSetti
 import { desktopTenantWebhooksAuthorityDefinitionV2 } from './desktopTenantWebhooksAuthorityModuleV2';
 import { desktopTenantBillingAuthorityDefinitionV2 } from './desktopTenantBillingAuthorityModuleV2';
 import { desktopTenantAuditAuthorityDefinitionV2 } from './desktopTenantAuditAuthorityModuleV2';
+import { desktopTenantGovernanceAuthorityDefinitionV2 } from './desktopTenantGovernanceAuthorityModuleV2';
 import { desktopTenantTrustAuthorityDefinitionV2 } from './desktopTenantTrustAuthorityModuleV2';
 import { desktopTenantProjectsAuthorityDefinitionV2 } from './desktopTenantProjectsAuthorityModuleV2';
 import { desktopTenantTasksAuthorityDefinitionV2 } from './desktopTenantTasksAuthorityModuleV2';
@@ -151,6 +152,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopTenantWebhooksAuthorityDefinitionV2,
     desktopTenantBillingAuthorityDefinitionV2,
     desktopTenantAuditAuthorityDefinitionV2,
+    desktopTenantGovernanceAuthorityDefinitionV2,
     desktopTenantTrustAuthorityDefinitionV2,
     desktopTenantProjectsAuthorityDefinitionV2,
     desktopTenantTasksAuthorityDefinitionV2,

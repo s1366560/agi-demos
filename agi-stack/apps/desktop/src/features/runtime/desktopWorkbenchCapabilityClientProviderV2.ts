@@ -153,6 +153,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   tenantWebhooksOperationsV2: DesktopTenantWebhooksOperationsV2;
   tenantBillingOperationsV2: DesktopTenantBillingOperationsV2;
   tenantAuditOperationsV2: DesktopTenantAuditOperationsV2;
+  tenantGovernanceOperationsV2: import('../../plugins/desktopTenantGovernanceAuthorityModuleV2').DesktopTenantGovernanceOperationsV2;
   tenantTrustOperationsV2: DesktopTenantTrustOperationsV2;
   desktopWorkspaceCatalogOperationsV2: Pick<
     DesktopWorkspaceCatalogOperationsV2,
@@ -254,6 +255,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       tenantWebhooksOperationsV2: input.tenantWebhooksOperationsV2,
       tenantBillingOperationsV2: input.tenantBillingOperationsV2,
       tenantAuditOperationsV2: input.tenantAuditOperationsV2,
+      tenantGovernanceOperationsV2: input.tenantGovernanceOperationsV2,
       tenantTrustOperationsV2: input.tenantTrustOperationsV2,
       projectWorkspacesClient: createProjectWorkspacesV2Client(config, {
         catalogOperations: input.desktopWorkspaceCatalogOperationsV2,

@@ -73,8 +73,12 @@ const { desktopTenantWebhooksAuthorityDefinitionV2 } = require(
 const { desktopTenantBillingAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantBillingAuthorityModuleV2.js',
 );
+
 const { desktopTenantAuditAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantAuditAuthorityModuleV2.js',
+);
+const { desktopTenantGovernanceAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantGovernanceAuthorityModuleV2.js',
 );
 const { desktopTenantTrustAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantTrustAuthorityModuleV2.js',
@@ -243,6 +247,7 @@ function rendererDefinitions() {
     desktopTenantWebhooksAuthorityDefinitionV2,
     desktopTenantBillingAuthorityDefinitionV2,
     desktopTenantAuditAuthorityDefinitionV2,
+    desktopTenantGovernanceAuthorityDefinitionV2,
     desktopTenantTrustAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,

@@ -133,6 +133,7 @@ import { createDesktopTenantSettingsOperationsV2 } from './plugins/desktopTenant
 import { createDesktopTenantWebhooksOperationsV2 } from './plugins/desktopTenantWebhooksAuthorityModuleV2';
 import { createDesktopTenantBillingOperationsV2 } from './plugins/desktopTenantBillingAuthorityModuleV2';
 import { createDesktopTenantAuditOperationsV2 } from './plugins/desktopTenantAuditAuthorityModuleV2';
+import { createDesktopTenantGovernanceOperationsV2 } from './plugins/desktopTenantGovernanceAuthorityModuleV2';
 import { createDesktopTenantTrustOperationsV2 } from './plugins/desktopTenantTrustAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
@@ -1102,6 +1103,10 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantGovernanceOperationsV2 = useMemo(
+    () => createDesktopTenantGovernanceOperationsV2(() => desktopPluginMarketplaceGenerationActionsRefV2.current),
+    [],
+  );
   const desktopTenantTrustOperationsV2 = useMemo(
     () =>
       createDesktopTenantTrustOperationsV2(
@@ -1468,6 +1473,7 @@ export function App() {
       tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
       tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
       tenantAuditOperationsV2: desktopTenantAuditOperationsV2,
+      tenantGovernanceOperationsV2: desktopTenantGovernanceOperationsV2,
       tenantTrustOperationsV2: desktopTenantTrustOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
@@ -1588,6 +1594,7 @@ export function App() {
         tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
         tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
         tenantAuditOperationsV2: desktopTenantAuditOperationsV2,
+        tenantGovernanceOperationsV2: desktopTenantGovernanceOperationsV2,
         tenantTrustOperationsV2: desktopTenantTrustOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
         desktopWorkspaceLifecycleOperationsV2,

@@ -190,7 +190,7 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
       tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
       tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
       tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
-      tenantGovernanceClient: probe('available', null, ['view', 'list', 'invite']),
+      tenantGovernanceOperationsV2: tenantGovernanceOperationsV2Fixture(),
       tenantBillingOperationsV2: tenantBillingOperationsV2Fixture(),
       tenantAuditOperationsV2: tenantAuditOperationsV2Fixture(),
       tenantTrustOperationsV2: tenantTrustOperationsV2Fixture(),
@@ -324,7 +324,7 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
         tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
-        tenantGovernanceClient: neverProbe,
+        tenantGovernanceOperationsV2: { loadTenantGovernance: neverProbe.load },
         tenantBillingOperationsV2: { loadTenantBilling: neverProbe.load },
         tenantAuditClient: neverProbe,
         tenantTrustClient: neverProbe,
@@ -411,6 +411,29 @@ function tenantAuditOperationsV2Fixture() {
         query: { limit: 20, offset: 0 },
       };
       return { scope, authority: 'cloud', availability: 'available', reasonCode: null, contractVersion: '4.0.0', allowedActions: ['view', 'filter', 'inspect-runtime-hooks', 'export'], authorityRevision: 17, data, ...data };
+    },
+  };
+}
+
+function tenantGovernanceOperationsV2Fixture() {
+  return {
+    async loadTenantGovernance({ scope }) {
+      const data = {
+        membershipRole: 'owner',
+        members: [],
+        invitations: [],
+        pendingInvitationTotal: 0,
+      };
+      return {
+        scope,
+        authority: 'cloud',
+        availability: 'available',
+        reasonCode: null,
+        contractVersion: '4.0.0',
+        allowedActions: ['view', 'list', 'invite'],
+        data,
+        ...data,
+      };
     },
   };
 }

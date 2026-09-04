@@ -5,7 +5,9 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const featureRoot = '/tmp/agistack-desktop-test-dist/src/features/tenant-admin';
 const { DesktopApiError } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
-const { createTenantGovernanceClient } = require(`${featureRoot}/tenantGovernanceClient.js`);
+const {
+  createDesktopTenantGovernanceHttpProjectionV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantGovernanceHttpProjectionV2.js');
 const {
   createDesktopTenantBillingHttpProjectionV2: createTenantBillingClient,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantBillingHttpProjectionV2.js');
@@ -122,7 +124,7 @@ test('governance client observes owner permissions and uses trusted-session auth
       throw new Error(`unexpected request ${init.method ?? 'GET'} ${path}`);
     },
     async () => {
-      const client = createTenantGovernanceClient(cloudConfig);
+      const client = createDesktopTenantGovernanceHttpProjectionV2(cloudConfig);
       const observed = await client.load(scope);
       assert.equal(observed.availability, 'available');
       assert.equal(observed.membershipRole, 'owner');
@@ -359,7 +361,7 @@ test('governance accepts nullable backend member names without weakening the mem
       throw new Error(`unexpected request ${init.method ?? 'GET'} ${path}`);
     },
     async () => {
-      const observed = await createTenantGovernanceClient(cloudConfig).load(scope);
+      const observed = await createDesktopTenantGovernanceHttpProjectionV2(cloudConfig).load(scope);
       assert.equal(observed.members[0].name, null);
     }
   );
@@ -411,7 +413,7 @@ test('all four Local clients fail closed with catalog reason codes before networ
     async () => {
       const cases = [
         [
-          () => createTenantGovernanceClient(localConfig).load(localScope),
+          () => createDesktopTenantGovernanceHttpProjectionV2(localConfig).load(localScope),
           'cloud_tenant_membership_not_applicable',
         ],
         [
