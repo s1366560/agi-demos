@@ -8,7 +8,6 @@ import {
   type TenantAcpClient,
 } from './tenantAcpClient';
 import {
-  createTenantDecisionRecordsClient,
   TENANT_DECISION_RECORDS_LOCAL_REASON,
   TENANT_DECISION_RECORDS_ROUTE_ID,
   type TenantDecisionRecordsClient,
@@ -76,7 +75,7 @@ export type TenantRemainingCapabilityDependencies = Readonly<{
   webhooks?: Pick<TenantWebhooksClient, 'load'>;
   genes?: Pick<TenantGenesClient, 'load'>;
   events: Pick<TenantEventsClient, 'load'>;
-  decisionRecords?: Pick<TenantDecisionRecordsClient, 'load'>;
+  decisionRecords: Pick<TenantDecisionRecordsClient, 'load'>;
   organizationSettings?: Pick<TenantOrganizationSettingsClient, 'load'>;
   settings?: Pick<TenantSettingsClient, 'load'>;
 }>;
@@ -178,8 +177,7 @@ export function createTenantRemainingCapabilityClient(
     webhooks: dependencies.webhooks ?? createTenantWebhooksClient(runtimeConfig),
     genes: dependencies.genes ?? createTenantGenesClient(runtimeConfig),
     events: dependencies.events,
-    decisionRecords:
-      dependencies.decisionRecords ?? createTenantDecisionRecordsClient(runtimeConfig),
+    decisionRecords: dependencies.decisionRecords,
     organizationSettings:
       dependencies.organizationSettings ??
       createTenantOrganizationSettingsClient(runtimeConfig),

@@ -2,7 +2,7 @@ import type { DesktopRuntimeConfig } from '../../types';
 import { createTenantAcpClient } from './tenantAcpClient';
 import { createTenantAcpController } from './tenantAcpController';
 import type { TenantAcpRouteBinding } from './tenantAcpRouteModule';
-import { createTenantDecisionRecordsClient } from './tenantDecisionRecordsClient';
+import { createDesktopTenantDecisionRecordsClientV2, type DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import { createTenantDecisionRecordsController } from './tenantDecisionRecordsController';
 import type { TenantDecisionRecordsRouteBinding } from './tenantDecisionRecordsRouteModule';
 import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
@@ -102,6 +102,7 @@ export function createTenantEventsRouteBindingForRuntime(
 export function createTenantDecisionRecordsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantManagementRouteContext,
+  operations: DesktopTenantDecisionRecordsOperationsV2,
 ): TenantDecisionRecordsRouteBinding {
   const scope = Object.freeze({
     ...tenantScope(config, context),
@@ -110,7 +111,7 @@ export function createTenantDecisionRecordsRouteBindingForRuntime(
   return Object.freeze({
     scope,
     controller: createTenantDecisionRecordsController({
-      client: createTenantDecisionRecordsClient(config),
+      client: createDesktopTenantDecisionRecordsClientV2(operations, config),
       initialScope: scope,
     }),
   });

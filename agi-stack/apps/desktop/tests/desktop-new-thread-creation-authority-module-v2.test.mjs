@@ -61,6 +61,9 @@ const { desktopTenantEventsAuthorityDefinitionV2 } = require(
 const { desktopTenantPatternsAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantPatternsAuthorityModuleV2.js',
 );
+const { desktopTenantDecisionRecordsAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantDecisionRecordsAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -220,6 +223,7 @@ function rendererDefinitions() {
     desktopUnifiedRuntimesAuthorityDefinitionV2,
     desktopTenantEventsAuthorityDefinitionV2,
     desktopTenantPatternsAuthorityDefinitionV2,
+    desktopTenantDecisionRecordsAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,

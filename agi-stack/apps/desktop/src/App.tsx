@@ -128,6 +128,7 @@ import { createDesktopInstanceTemplatesOperationsV2 } from './plugins/desktopIns
 import { createDesktopUnifiedRuntimesOperationsV2 } from './plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import { createDesktopTenantEventsOperationsV2 } from './plugins/desktopTenantEventsAuthorityModuleV2';
 import { createDesktopTenantPatternsOperationsV2 } from './plugins/desktopTenantPatternsAuthorityModuleV2';
+import { createDesktopTenantDecisionRecordsOperationsV2 } from './plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
@@ -1061,6 +1062,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantDecisionRecordsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantDecisionRecordsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantCreationOperationsV2 = useMemo(
     () =>
       createDesktopTenantCreationOperationsV2(
@@ -1415,6 +1423,7 @@ export function App() {
       unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
       tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
+      tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1529,6 +1538,7 @@ export function App() {
         unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
         tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
+        tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
         desktopWorkspaceLifecycleOperationsV2,
         tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,

@@ -356,6 +356,7 @@ export type AppRouteRegistryRefs = {
   instanceTemplatesOperationsV2: DesktopInstanceTemplatesOperationsV2;
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
+  tenantDecisionRecordsOperationsV2: import('../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2').DesktopTenantDecisionRecordsOperationsV2;
   unifiedRuntimesOperationsV2: DesktopUnifiedRuntimesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
@@ -459,6 +460,7 @@ export type AppTenantGovernanceRouteRegistryRefs = Pick<
   | 'configRef'
   | 'deadLetterQueueOperationsV2'
   | 'tenantEventsOperationsV2'
+  | 'tenantDecisionRecordsOperationsV2'
   | 'desktopProductionRouteLocation'
 >;
 
@@ -1296,7 +1298,7 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
 export function createAppTenantGovernanceRouteRegistry(
   refs: AppTenantGovernanceRouteRegistryRefs,
 ) {
-  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2 } = refs;
+  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
@@ -1338,6 +1340,7 @@ export function createAppTenantGovernanceRouteRegistry(
               workspaceId: query.status === 'ready' ? query.workspaceId : '',
             },
             context,
+            tenantDecisionRecordsOperationsV2,
           );
         },
       }),
