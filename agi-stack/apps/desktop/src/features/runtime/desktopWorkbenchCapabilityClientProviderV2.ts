@@ -205,10 +205,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
   input: DesktopWorkbenchCapabilityClientProviderInputV2,
 ): DesktopWorkbenchCapabilityClientBindingV2 {
   const config = Object.freeze({ ...input.config });
-  const client = createDesktopWorkbenchCapabilityClient(
-    input.automationApi,
-    config,
-    {
+  const client = createDesktopWorkbenchCapabilityClient(input.automationApi, config, {
       pluginMarketplaceOperationsV2: input.pluginMarketplaceOperationsV2,
       projectBlackboardOperationsV2: input.projectBlackboardOperationsV2,
       projectAgentDashboardOperationsV2:
@@ -241,7 +238,6 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       tenantOverviewOperationsV2: input.tenantOverviewOperationsV2,
       tenantProjectsOperationsV2: input.tenantProjectsOperationsV2,
       tenantTasksOperationsV2: input.tenantTasksOperationsV2,
-    },
-  );
+  });
   return Object.freeze({ client });
 }

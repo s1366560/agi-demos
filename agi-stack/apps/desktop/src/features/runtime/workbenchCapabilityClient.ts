@@ -967,9 +967,9 @@ export function createDesktopWorkbenchCapabilityClient(
             withCapabilityScope(runtimePool, tenantScope),
           ),
           'tenant-tenant-instances': observed(runtimeInstances),
-          'tenant-tenant-clusters': (config.mode === 'local'
-            ? declared
-            : observed)(withCapabilityScope(runtimeClusters, tenantScope)),
+          'tenant-tenant-clusters': (config.mode === 'local' ? declared : observed)(
+            withCapabilityScope(runtimeClusters, tenantScope),
+          ),
           'tenant-tenant-deploy': observed(runtimeDeployments),
           'tenant-tenant-instance-templates': (config.mode === 'local'
             ? declared
