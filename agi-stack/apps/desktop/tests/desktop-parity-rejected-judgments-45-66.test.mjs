@@ -533,7 +533,7 @@ test("User Profile records the observed native route while Snapshot v4 fails clo
   assert.match(capability.judgment_rationale, /authority_revision/u);
 });
 
-test("declared Tenant Creation and Project Support loaders stay unavailable", () => {
+test("declared Tenant Creation and Project Support capability snapshots stay unavailable", () => {
   const cases = [
     {
       fragment:
@@ -576,7 +576,13 @@ test("declared Tenant Creation and Project Support loaders stay unavailable", ()
     ]) {
       assert.ok(capability.cloud_entries.includes(entry), `${id}: missing ${entry}`);
     }
-    assert.match(capability.judgment_rationale, /declared renderer provenance/u);
+    if (id === "tenant-creation") {
+      assert.match(capability.judgment_rationale, /generated-catalog V2 root Provider/u);
+      assert.match(capability.judgment_rationale, /root-scoped operation lease/u);
+      assert.match(capability.judgment_rationale, /static createTenantCreationClient transport was removed/u);
+    } else {
+      assert.match(capability.judgment_rationale, /declared renderer provenance/u);
+    }
   }
 });
 

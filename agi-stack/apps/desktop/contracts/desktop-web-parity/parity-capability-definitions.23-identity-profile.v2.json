@@ -134,6 +134,7 @@
       "cloud_reason_code": "renderer_capability_authority_unobserved",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/navigation/DesktopProductionRouter.tsx",
@@ -143,7 +144,11 @@
         "agi-stack/apps/desktop/src/features/tenant-creation/TenantCreationPage.tsx",
         "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationCapability.ts",
-        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationModel.ts"
+        "agi-stack/apps/desktop/src/features/tenant-creation/tenantCreationModel.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantCreationAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantCreationHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantCreationOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
@@ -220,7 +225,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop opens an authenticated global /tenants/new route without changing the active tenant, project, workspace, or conversation; validates and submits the native form through POST /api/v1/tenants/; displays the plan actually returned by authority; and refreshes the tenant catalog before returning to the workbench. Local Desktop returns local_tenant_creation_not_applicable before loading the module or making a Cloud request.",
-      "judgment_rationale": "NewTenant is a production-only Web page backed by POST /api/v1/tenants/. Cloud Desktop registers a native global route with an isolated strict 201 client, Web-compatible name, description, and plan inputs, deterministic dirty-cancel behavior, duplicate-submit prevention, request cancellation, structured HTTP reason codes, an immutable catalog upsert, and an authoritative catalog refresh. The backend create handler currently persists name and description but comments out requested plan and quota persistence, so Desktop reports a returned-plan mismatch instead of claiming the requested plan was saved. workbenchCapabilityClient still wraps tenantCreationCapability with declared renderer provenance, and Snapshot v4 therefore closes every action to renderer_capability_authority_unobserved despite the real loader and App binding. Local mode intentionally keeps a fixed application tenant and is stopped by the capability gate with local_tenant_creation_not_applicable."
+      "judgment_rationale": "At a42a20b98, Cloud tenant creation is routed through the generated-catalog V2 root Provider and one immutable root-scoped operation lease; the former static createTenantCreationClient transport was removed, and the HTTP projection retains authenticated vault-bound POST /api/v1/tenants/ with strict input, status, and response validation. However, production route/workbench capability metadata still uses declared tenantCreationCapability provenance with authority_revision=null, so parity must fail closed: Cloud remains unavailable with no actions rather than promoting create. Local remains intentionally not applicable and rejects before generation acquisition or Cloud transport; its production entry stays the generator-synthesized not_applicable marker, hence no local_entries delta. The existing source files remain relevant, so no cloud entry is removed. This source, contract, wiring, and focused-test evidence does not establish native Electron QA, a globally-ready publication, ACK/readiness, release readiness, or V1 retirement."
     },
     {
       "id": "user-profile",
