@@ -44,6 +44,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -77,69 +80,68 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
 );
 const { desktopConversationLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js',
 );
 const { desktopHitlResponseAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js',
 );
 const { desktopMyWorkAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopMyWorkAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopMyWorkAuthorityModuleV2.js',
 );
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js');
 const { desktopSessionProjectionAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js',
 );
 const { desktopSessionRunChangesAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js',
 );
 const { desktopSessionTimelineAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js',
 );
 const { desktopTenantAnalyticsAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantAnalyticsAuthorityModuleV2.js',
 );
 const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
 );
 const { desktopTenantOverviewAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantOverviewAuthorityModuleV2.js',
 );
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js',
 );
 const { desktopWorkspaceCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js',
 );
 const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
 const BOOTSTRAP_PATH = new URL(
   'shared/profiles/memstack-default-bootstrap.v2.json',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 const MANIFEST_PATH = new URL(
   'config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 const PROFILE_PATH = new URL(
   'config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 
 function loadBootstrap() {
@@ -193,6 +195,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
@@ -292,14 +295,14 @@ test('generated contract exposes one credential-free root execution snapshot Pro
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
     ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_MODULE_REF_V2
+      moduleRef === DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
     ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_MODULE_REF_V2
+      moduleRef === DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-execution-snapshot-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-execution-snapshot-authority',
   );
 
   assert.ok(module);
@@ -322,13 +325,13 @@ test('generated contract exposes one credential-free root execution snapshot Pro
   assert.equal(module.contract_digest, catalog.contract_digest);
   assert.equal(
     module.contract_digest,
-    desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2.contractDigest
+    desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2.contractDigest,
   );
   assert.equal(catalog.entrypoint, 'applyDesktopWorkspaceExecutionSnapshotAuthorityV2');
   assert.equal(
     catalog.artifact_source,
     'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
-      'desktopWorkspaceExecutionSnapshotAuthorityModuleV2.ts'
+      'desktopWorkspaceExecutionSnapshotAuthorityModuleV2.ts',
   );
   assert.equal(entry.module_ref, DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
@@ -340,7 +343,7 @@ test('generated contract exposes one credential-free root execution snapshot Pro
   for (const value of [module, catalog, entry]) {
     assert.doesNotMatch(
       JSON.stringify(value),
-      /apiKey|localApiToken|Authorization|execution-snapshot-session/iu
+      /apiKey|localApiToken|Authorization|execution-snapshot-session/iu,
     );
   }
 });
@@ -352,7 +355,7 @@ test('Loader activates the exact service and disable removes it without fallback
   const service = generation.resolve(
     DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_SERVICE_V2,
     { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
-    { version: DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_VERSION_V2 }
+    { version: DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
@@ -363,25 +366,25 @@ test('Loader activates the exact service and disable removes it without fallback
     () =>
       applyDesktopWorkspaceExecutionSnapshotAuthorityV2(
         { provide: () => assert.fail('invalid config must not provide') },
-        { strategy: 'legacy-client' }
+        { strategy: 'legacy-client' },
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_workspace_execution_snapshot_authority_config_invalid'
+      error.code === 'desktop_workspace_execution_snapshot_authority_config_invalid',
   );
 
   const invalid = structuredClone(bootstrap);
   invalid.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-execution-snapshot-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-execution-snapshot-authority',
   ).config.strategy = 'legacy-client';
   await assert.rejects(
     loader.stage(invalid),
-    (error) => error instanceof RuntimeV2Error && error.code === 'invalid_module_config'
+    (error) => error instanceof RuntimeV2Error && error.code === 'invalid_module_config',
   );
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-execution-snapshot-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-execution-snapshot-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
@@ -389,9 +392,9 @@ test('Loader activates the exact service and disable removes it without fallback
       disabledGeneration.resolve(
         DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_SERVICE_V2,
         { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
-        { version: DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_VERSION_V2 }
+        { version: DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_VERSION_V2 },
       ),
-    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service'
+    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
 
   const manager = new GenerationManagerV2();
@@ -400,13 +403,13 @@ test('Loader activates the exact service and disable removes it without fallback
     rendererDefinitions().map((definition) =>
       definition.moduleRef === DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_MODULE_REF_V2
         ? { ...definition, contractDigest: 'sha256:' + '0'.repeat(64) }
-        : definition
+        : definition,
     ),
-    'desktop-renderer'
+    'desktop-renderer',
   );
   await assert.rejects(
     wrongDefinitionLoader.stage(bootstrap),
-    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch'
+    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch',
   );
   assert.equal(manager.current, generation);
   await disabledGeneration.dispose();
@@ -454,12 +457,12 @@ test('local and vault-bound cloud transports derive exact paths from verified id
 
   try {
     const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
-      loadBootstrap()
+      loadBootstrap(),
     );
     const service = generation.resolve(
       DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_SERVICE_V2,
       { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
-      { version: DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_VERSION_V2 }
+      { version: DESKTOP_WORKSPACE_EXECUTION_SNAPSHOT_AUTHORITY_VERSION_V2 },
     );
     const controller = new AbortController();
     const localConfig = runtimeConfig();
@@ -472,7 +475,7 @@ test('local and vault-bound cloud transports derive exact paths from verified id
         apiKey: '',
         localApiToken: '',
         mode: 'cloud',
-      })
+      }),
     );
 
     assert.equal((await local.listTasks(identity(), controller.signal))[0].id, 'task-local');
@@ -573,11 +576,11 @@ test('task and plan operations freeze identity before independent exact project 
           project_id: 'project / one',
         },
       },
-    ]
+    ],
   );
   assert.deepEqual(
     lifecycle.filter((event) => typeof event === 'string'),
-    ['tasks', 'plan']
+    ['tasks', 'plan'],
   );
   assert.equal(lifecycle.filter((event) => event.type === 'release').length, 2);
 });
@@ -599,14 +602,14 @@ test('invalid scope, signal and response identity fail closed at their boundarie
       () => operations.listTasks({ config }),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === 'desktop_workspace_execution_snapshot_input_invalid'
+        error.code === 'desktop_workspace_execution_snapshot_input_invalid',
     );
   }
   assert.throws(
     () => operations.getPlanSnapshot({ config: runtimeConfig(), signal: {} }),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_workspace_execution_snapshot_input_invalid'
+      error.code === 'desktop_workspace_execution_snapshot_input_invalid',
   );
   assert.equal(acquisitions, 0);
 
@@ -633,19 +636,19 @@ test('invalid scope, signal and response identity fail closed at their boundarie
       authority.listTasks(identity()),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === 'desktop_workspace_execution_snapshot_response_scope_mismatch'
+        error.code === 'desktop_workspace_execution_snapshot_response_scope_mismatch',
     );
     await assert.rejects(
       authority.getPlanSnapshot(identity()),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === 'desktop_workspace_execution_snapshot_response_scope_mismatch'
+        error.code === 'desktop_workspace_execution_snapshot_response_scope_mismatch',
     );
     assert.throws(
       () => authority.listTasks(identity({ project_id: 'project-other' })),
       (error) =>
         error instanceof RuntimeV2Error &&
-        error.code === 'desktop_workspace_execution_snapshot_scope_mismatch'
+        error.code === 'desktop_workspace_execution_snapshot_scope_mismatch',
     );
     assert.equal(calls.length, 2);
   } finally {
@@ -660,7 +663,7 @@ test('missing or wrong service fails closed and release preserves the primary er
     () => operations.listTasks({ config: runtimeConfig() }),
     (error) =>
       error instanceof DesktopWorkspaceExecutionSnapshotAuthorityUnavailableErrorV2 &&
-      error.reasonCode === 'desktop_renderer_generation_actions_unavailable'
+      error.reasonCode === 'desktop_renderer_generation_actions_unavailable',
   );
 
   currentActions = {
@@ -675,7 +678,7 @@ test('missing or wrong service fails closed and release preserves the primary er
     (error) =>
       error instanceof DesktopWorkspaceExecutionSnapshotAuthorityUnavailableErrorV2 &&
       error.reasonCode === 'desktop_renderer_service_resolve_failed' &&
-      error.runtimeCode === 'missing_service'
+      error.runtimeCode === 'missing_service',
   );
 
   let wrongReleaseCount = 0;
@@ -695,7 +698,7 @@ test('missing or wrong service fails closed and release preserves the primary er
     operations.listTasks({ config: runtimeConfig() }),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_workspace_execution_snapshot_service_invalid'
+      error.code === 'desktop_workspace_execution_snapshot_service_invalid',
   );
   assert.equal(wrongReleaseCount, 1);
 
@@ -733,24 +736,24 @@ test('missing or wrong service fails closed and release preserves the primary er
       (authority) => {
         escapedAuthority = authority;
         throw primary;
-      }
+      },
     ),
-    (error) => error === primary
+    (error) => error === primary,
   );
   assert.throws(
     () => escapedAuthority.listTasks(identity()),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_workspace_execution_snapshot_operation_released'
+      error.code === 'desktop_workspace_execution_snapshot_operation_released',
   );
   assert.equal(releaseCount, 1);
   await assert.rejects(
     withDesktopWorkspaceExecutionSnapshotAuthorityOperationV2(
       releaseFailingActions,
       { config: runtimeConfig() },
-      () => []
+      () => [],
     ),
-    /execution_snapshot_release_failure/u
+    /execution_snapshot_release_failure/u,
   );
   assert.equal(releaseCount, 2);
 });
@@ -794,10 +797,10 @@ test('independent operations pin old and next generations through HMR', async ()
   assert.equal(nextRead.plan, 'next');
   assert.deepEqual(
     lifecycle.filter((event) => typeof event === 'string'),
-    ['tasks:old', 'plan:next']
+    ['tasks:old', 'plan:next'],
   );
   assert.deepEqual(
     lifecycle.filter((event) => event.type === 'release').map((event) => event.digest),
-    ['sha256:next', 'sha256:old']
+    ['sha256:next', 'sha256:old'],
   );
 });

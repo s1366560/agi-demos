@@ -698,7 +698,7 @@ test('App wires Runtime Deployments through one instance-scoped Cloud or Local b
 test('App wires Instance Templates through one tenant-scoped Cloud or Local binding', () => {
   assert.match(
     registrySource,
-    /TENANT_INSTANCE_TEMPLATES_ROUTE_ID[\s\S]*createInstanceTemplatesRouteModuleLoader\(\{[\s\S]*createInstanceTemplatesRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+    /TENANT_INSTANCE_TEMPLATES_ROUTE_ID[\s\S]*createInstanceTemplatesRouteModuleLoader\(\{[\s\S]*createInstanceTemplatesRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*instanceTemplatesOperationsV2,?\s*\)/u,
   );
 });
 

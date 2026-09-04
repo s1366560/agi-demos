@@ -42,12 +42,13 @@ const authorityModules = [
   'desktopProjectMemoriesAuthorityModuleV2',
   'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
- 'desktopRuntimePoolAuthorityModuleV2',
+  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
   'desktopDeadLetterQueueAuthorityModuleV2',
+  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
   'desktopSessionProjectionAuthorityModuleV2',
@@ -197,16 +198,13 @@ test('generated contract declares one credential-free root Project Search Provid
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_PROJECT_SEARCH_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_PROJECT_SEARCH_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_PROJECT_SEARCH_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_PROJECT_SEARCH_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-project-search-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-project-search-authority',
   );
 
   assert.ok(module);
@@ -225,15 +223,9 @@ test('generated contract declares one credential-free root Project Search Provid
   assert.deepEqual(module.contract.events, { emits: [], handles: [] });
   assert.equal(module.contract.config_schema.additionalProperties, false);
   assert.deepEqual(module.contract.config_schema.required, ['strategy']);
-  assert.equal(
-    module.contract.config_schema.properties.strategy.const,
-    'desktop-api-client',
-  );
+  assert.equal(module.contract.config_schema.properties.strategy.const, 'desktop-api-client');
   assert.equal(module.contract_digest, catalog.contract_digest);
-  assert.equal(
-    module.contract_digest,
-    desktopProjectSearchAuthorityDefinitionV2.contractDigest,
-  );
+  assert.equal(module.contract_digest, desktopProjectSearchAuthorityDefinitionV2.contractDigest);
   assert.equal(catalog.entrypoint, 'applyDesktopProjectSearchAuthorityV2');
   assert.equal(
     catalog.artifact_source,
@@ -248,10 +240,7 @@ test('generated contract declares one credential-free root Project Search Provid
   assert.equal(entry.enabled, true);
   assert.match(profile, /entry_id: builtin-desktop-project-search-authority/u);
   for (const value of [module, catalog, entry]) {
-    assert.doesNotMatch(
-      JSON.stringify(value),
-      /apiKey|localApiToken|Authorization/iu,
-    );
+    assert.doesNotMatch(JSON.stringify(value), /apiKey|localApiToken|Authorization/iu);
   }
 });
 
@@ -280,8 +269,7 @@ test('Loader activation and Profile disable remove search without fallback', asy
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-project-search-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-project-search-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
@@ -311,10 +299,9 @@ test('Local and Cloud service transports preserve search contract and vault secr
   };
 
   try {
-    const generation = await new LoaderV2(
-      rendererDefinitions(),
-      'desktop-renderer',
-    ).stage(loadBootstrap());
+    const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
+      loadBootstrap(),
+    );
     const service = generation.resolve(
       DESKTOP_PROJECT_SEARCH_AUTHORITY_SERVICE_V2,
       { kind: 'root' },
@@ -345,9 +332,7 @@ test('Local and Cloud service transports preserve search contract and vault secr
       },
     };
     await service
-      .bindOperation(
-        runtimeConfig({ mode: 'cloud', apiKey: '', localApiToken: '' }),
-      )
+      .bindOperation(runtimeConfig({ mode: 'cloud', apiKey: '', localApiToken: '' }))
       .searchProject(semanticRequest(), {
         tenantId: 'tenant-1',
         projectId: 'project-1',

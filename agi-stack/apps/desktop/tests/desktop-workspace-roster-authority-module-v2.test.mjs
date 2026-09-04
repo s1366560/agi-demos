@@ -20,7 +20,7 @@ const {
   desktopWorkspaceRosterAuthorityDefinitionV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.js');
 const marketplace = require(
-  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js',
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
@@ -48,12 +48,13 @@ const authorityModules = [
   'desktopProjectMemoriesAuthorityModuleV2',
   'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
- 'desktopRuntimePoolAuthorityModuleV2',
+  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
   'desktopDeadLetterQueueAuthorityModuleV2',
+  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
@@ -80,22 +81,22 @@ const authorityModules = [
   'desktopWorkspaceMessageCatalogAuthorityModuleV2',
 ].flatMap((moduleName) =>
   Object.values(require(`${COMPILED_ROOT}/src/plugins/${moduleName}.js`)).filter(
-    (value) => value?.moduleRef && typeof value?.apply === 'function'
-  )
+    (value) => value?.moduleRef && typeof value?.apply === 'function',
+  ),
 );
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
 const BOOTSTRAP_PATH = new URL(
   'shared/profiles/memstack-default-bootstrap.v2.json',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 const MANIFEST_PATH = new URL(
   'config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 const PROFILE_PATH = new URL(
   'config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 
 function loadBootstrap() {
@@ -168,13 +169,13 @@ test('generated contract declares one credential-free root workspace roster Prov
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_WORKSPACE_ROSTER_AUTHORITY_MODULE_REF_V2
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_WORKSPACE_ROSTER_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_WORKSPACE_ROSTER_AUTHORITY_MODULE_REF_V2
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_WORKSPACE_ROSTER_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-roster-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-roster-authority',
   );
 
   assert.ok(module);
@@ -200,7 +201,7 @@ test('generated contract declares one credential-free root workspace roster Prov
   assert.equal(
     catalog.artifact_source,
     'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
-      'desktopWorkspaceRosterAuthorityModuleV2.ts'
+      'desktopWorkspaceRosterAuthorityModuleV2.ts',
   );
   assert.equal(entry.module_ref, DESKTOP_WORKSPACE_ROSTER_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
@@ -212,7 +213,7 @@ test('generated contract declares one credential-free root workspace roster Prov
   for (const value of [module, catalog, entry]) {
     assert.doesNotMatch(
       JSON.stringify(value),
-      /apiKey|localApiToken|Authorization|workspace-roster-session/iu
+      /apiKey|localApiToken|Authorization|workspace-roster-session/iu,
     );
   }
 });
@@ -224,7 +225,7 @@ test('Loader activation and Profile disable remove workspace roster without fall
   const service = generation.resolve(
     DESKTOP_WORKSPACE_ROSTER_AUTHORITY_SERVICE_V2,
     { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
-    { version: DESKTOP_WORKSPACE_ROSTER_AUTHORITY_VERSION_V2 }
+    { version: DESKTOP_WORKSPACE_ROSTER_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
@@ -235,16 +236,16 @@ test('Loader activation and Profile disable remove workspace roster without fall
     () =>
       applyDesktopWorkspaceRosterAuthorityV2(
         { provide: () => assert.fail('invalid config must not provide') },
-        { strategy: 'legacy-client' }
+        { strategy: 'legacy-client' },
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_workspace_roster_authority_config_invalid'
+      error.code === 'desktop_workspace_roster_authority_config_invalid',
   );
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-roster-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-roster-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
@@ -252,9 +253,9 @@ test('Loader activation and Profile disable remove workspace roster without fall
       disabledGeneration.resolve(
         DESKTOP_WORKSPACE_ROSTER_AUTHORITY_SERVICE_V2,
         { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
-        { version: DESKTOP_WORKSPACE_ROSTER_AUTHORITY_VERSION_V2 }
+        { version: DESKTOP_WORKSPACE_ROSTER_AUTHORITY_VERSION_V2 },
       ),
-    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service'
+    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
 
   const manager = new GenerationManagerV2();
@@ -263,13 +264,13 @@ test('Loader activation and Profile disable remove workspace roster without fall
     rendererDefinitions().map((candidate) =>
       candidate.moduleRef === DESKTOP_WORKSPACE_ROSTER_AUTHORITY_MODULE_REF_V2
         ? { ...candidate, contractDigest: `sha256:${'0'.repeat(64)}` }
-        : candidate
+        : candidate,
     ),
-    'desktop-renderer'
+    'desktop-renderer',
   );
   await assert.rejects(
     wrongDefinitionLoader.stage(bootstrap),
-    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch'
+    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch',
   );
   assert.equal(manager.current, generation);
   await disabledGeneration.dispose();
@@ -301,7 +302,7 @@ test('Local and vault-bound Cloud transports preserve exact roster scope and sig
     let service;
     applyDesktopWorkspaceRosterAuthorityV2(
       { provide: (_key, provided) => (service = provided) },
-      { strategy: 'desktop-api-client' }
+      { strategy: 'desktop-api-client' },
     );
     const localConfig = runtimeConfig();
     const local = service.bindOperation(localConfig);
@@ -313,7 +314,7 @@ test('Local and vault-bound Cloud transports preserve exact roster scope and sig
         apiKey: '',
         localApiToken: '',
         mode: 'cloud',
-      })
+      }),
     );
     const agents = await cloud.listWorkspaceAgents(controller.signal);
 
@@ -326,7 +327,7 @@ test('Local and vault-bound Cloud transports preserve exact roster scope and sig
       fetchCalls[0].input,
       'http://127.0.0.1:46981/api/v1/tenants/tenant%20%2F%20one/' +
         'projects/project%20%2F%20one/workspaces/workspace%20%2F%20one/' +
-        'members?limit=500&offset=0'
+        'members?limit=500&offset=0',
     );
     assert.equal(fetchCalls[0].init.signal, controller.signal);
     assert.equal(cloudCommands.length, 1);
@@ -340,7 +341,7 @@ test('Local and vault-bound Cloud transports preserve exact roster scope and sig
     });
     assert.doesNotMatch(
       JSON.stringify(cloudCommands),
-      /Authorization|workspace-roster-session|workspace-roster-launch/u
+      /Authorization|workspace-roster-session|workspace-roster-launch/u,
     );
   } finally {
     globalThis.fetch = originalFetch;

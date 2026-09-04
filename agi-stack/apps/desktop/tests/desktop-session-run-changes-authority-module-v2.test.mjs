@@ -44,6 +44,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -100,12 +103,10 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
 );
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js',
@@ -195,6 +196,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,

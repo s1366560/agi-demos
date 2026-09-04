@@ -18,9 +18,7 @@ const {
   DESKTOP_WORKSPACE_AUTONOMY_ATTENTION_AUTHORITY_VERSION_V2,
   applyDesktopWorkspaceAutonomyAttentionAuthorityV2,
   desktopWorkspaceAutonomyAttentionAuthorityDefinitionV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceAutonomyAttentionAuthorityModuleV2.js'
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceAutonomyAttentionAuthorityModuleV2.js');
 const authorityModules = [
   'desktopArtifactContentAuthorityModuleV2',
   'desktopProjectSchemaAuthorityModuleV2',
@@ -45,12 +43,13 @@ const authorityModules = [
   'desktopProjectMemoriesAuthorityModuleV2',
   'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
- 'desktopRuntimePoolAuthorityModuleV2',
+  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
   'desktopDeadLetterQueueAuthorityModuleV2',
+  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
@@ -182,8 +181,7 @@ test('generated contract declares one credential-free root autonomy-attention Pr
       moduleRef === DESKTOP_WORKSPACE_AUTONOMY_ATTENTION_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-workspace-autonomy-attention-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-autonomy-attention-authority',
   );
 
   assert.ok(module);
@@ -256,8 +254,7 @@ test('Loader activation and Profile disable remove autonomy attention without fa
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-workspace-autonomy-attention-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-workspace-autonomy-attention-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
@@ -360,18 +357,21 @@ test('Local and vault-bound Cloud transports retain exact scope, signals and mut
 
     assert.equal(fetchCalls.length, 4);
     assert.equal(new URL(fetchCalls[0].input).origin, 'http://127.0.0.1:46951');
-    assert.equal(fetchCalls.every(({ init }) => init.signal === controller.signal), true);
+    assert.equal(
+      fetchCalls.every(({ init }) => init.signal === controller.signal),
+      true,
+    );
     assert.equal(cloudCommands.length, 4);
-    assert.equal(cloudCommands.every(({ command }) => command === 'cloud_request'), true);
+    assert.equal(
+      cloudCommands.every(({ command }) => command === 'cloud_request'),
+      true,
+    );
     assert.equal(JSON.stringify(cloudCommands).includes('Bearer'), false);
     assert.equal(JSON.stringify(cloudCommands).includes('workspace-attention-session'), false);
     const localResolveHeaders = new Headers(fetchCalls[3].init.headers);
     assert.equal(localResolveHeaders.get('If-Match'), '7');
     assert.equal(localResolveHeaders.get('X-Expected-Revision'), '7');
-    assert.equal(
-      localResolveHeaders.get('Idempotency-Key'),
-      'desktop-attention-idempotency-1',
-    );
+    assert.equal(localResolveHeaders.get('Idempotency-Key'), 'desktop-attention-idempotency-1');
     assert.deepEqual(cloudCommands[3].args.request.mutation, {
       expected_revision: 7,
       idempotency_key: 'desktop-attention-idempotency-1',

@@ -63,9 +63,7 @@ const cloudConfig = Object.freeze({
 test('Project Agent production routes own native loaders and App bindings', async () => {
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders(
-      Object.fromEntries(
-        routeIds.map((routeId) => [routeId, implementedLoader(routeId)]),
-      ),
+      Object.fromEntries(routeIds.map((routeId) => [routeId, implementedLoader(routeId)])),
     ),
   });
   for (const routeId of routeIds) {
@@ -96,10 +94,7 @@ test('Project Agent production routes own native loaders and App bindings', asyn
   assert.match(registrySource, /createDesktopProjectAgentLogsClientV2/u);
   assert.match(registrySource, /projectAgentLogsOperationsV2/u);
   assert.match(appSource, /createDesktopProjectAgentLogsOperationsV2/u);
-  assert.match(
-    appSource,
-    /projectAgentLogsOperationsV2:\s*desktopProjectAgentLogsOperationsV2/u,
-  );
+  assert.match(appSource, /projectAgentLogsOperationsV2:\s*desktopProjectAgentLogsOperationsV2/u);
   assert.match(registrySource, /createDesktopProjectAgentPatternsClientV2/u);
   assert.match(registrySource, /projectAgentPatternsOperationsV2/u);
   assert.match(appSource, /createDesktopProjectAgentPatternsOperationsV2/u);
@@ -163,12 +158,12 @@ async function loadSnapshot(config) {
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture({
           scopeRevision: 23,
         }),
-    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
-    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
-    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
-    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
-    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
-    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+        projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+        projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -176,19 +171,56 @@ async function loadSnapshot(config) {
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
         deadLetterQueueOperationsV2: {
           async probe({ config }) {
             return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
           },
         },
         backendStoresOperationsV2: {
           async probeBackendStores({ config }) {
             return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  authorityRevision: 23,
+                };
           },
         },
         projectWorkspacesClient: projectWorkspacesClientV2Fixture(),

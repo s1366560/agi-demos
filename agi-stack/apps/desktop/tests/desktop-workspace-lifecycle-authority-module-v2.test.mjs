@@ -18,9 +18,7 @@ const {
   DESKTOP_WORKSPACE_LIFECYCLE_AUTHORITY_VERSION_V2,
   applyDesktopWorkspaceLifecycleAuthorityV2,
   desktopWorkspaceLifecycleAuthorityDefinitionV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.js'
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceLifecycleAuthorityModuleV2.js');
 const authorityModules = [
   'desktopArtifactContentAuthorityModuleV2',
   'desktopProjectSchemaAuthorityModuleV2',
@@ -45,12 +43,13 @@ const authorityModules = [
   'desktopProjectMemoriesAuthorityModuleV2',
   'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
- 'desktopRuntimePoolAuthorityModuleV2',
+  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
   'desktopDeadLetterQueueAuthorityModuleV2',
+  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
@@ -81,7 +80,7 @@ const authorityModules = [
   ),
 );
 const marketplace = require(
-  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js',
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 

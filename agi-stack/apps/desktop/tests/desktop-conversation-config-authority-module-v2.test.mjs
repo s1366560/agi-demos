@@ -44,6 +44,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -66,18 +69,14 @@ const {
   createDesktopConversationConfigOperationsV2,
   desktopConversationConfigAuthorityDefinitionV2,
   withDesktopConversationConfigAuthorityOperationV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js');
 const { desktopConversationLifecycleAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js',
 );
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js',
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js');
 const { desktopSessionTimelineAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js',
 );
@@ -91,12 +90,10 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
 );
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js',
@@ -198,6 +195,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
@@ -332,7 +330,10 @@ test('generated contract exposes one credential-free root Provider', () => {
   assert.deepEqual(module.contract.config_schema.required, ['strategy']);
   assert.equal(module.contract.config_schema.properties.strategy.const, 'desktop-api-client');
   assert.equal(module.contract_digest, catalog.contract_digest);
-  assert.equal(module.contract_digest, desktopConversationConfigAuthorityDefinitionV2.contractDigest);
+  assert.equal(
+    module.contract_digest,
+    desktopConversationConfigAuthorityDefinitionV2.contractDigest,
+  );
   assert.equal(catalog.entrypoint, 'applyDesktopConversationConfigAuthorityV2');
   assert.equal(
     catalog.artifact_source,
@@ -439,10 +440,9 @@ test('local includes the route override while cloud explicitly omits it', async 
   };
 
   try {
-    const generation = await new LoaderV2(
-      rendererDefinitions(),
-      'desktop-renderer',
-    ).stage(loadBootstrap());
+    const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
+      loadBootstrap(),
+    );
     const service = generation.resolve(
       DESKTOP_CONVERSATION_CONFIG_AUTHORITY_SERVICE_V2,
       { kind: 'root' },
@@ -555,10 +555,7 @@ test('scope mismatch and every response identity drift fail closed', async () =>
     },
   }));
 
-  for (const configOverrides of [
-    { tenantId: 'tenant-other' },
-    { projectId: 'project-other' },
-  ]) {
+  for (const configOverrides of [{ tenantId: 'tenant-other' }, { projectId: 'project-other' }]) {
     assert.throws(
       () =>
         operations.updateModelOverride({
@@ -583,10 +580,9 @@ test('scope mismatch and every response identity drift fail closed', async () =>
   ];
   globalThis.fetch = async () => json(conversation(responseDrifts.shift()));
   try {
-    const generation = await new LoaderV2(
-      rendererDefinitions(),
-      'desktop-renderer',
-    ).stage(loadBootstrap());
+    const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
+      loadBootstrap(),
+    );
     const service = generation.resolve(
       DESKTOP_CONVERSATION_CONFIG_AUTHORITY_SERVICE_V2,
       { kind: 'root' },
@@ -722,11 +718,7 @@ test('HMR keeps an in-flight mutation on old generation and sends the next to ne
         });
       },
     });
-  let currentActions = acceptedActions(
-    serviceFor('old'),
-    'sha256:old',
-    lifecycle,
-  );
+  let currentActions = acceptedActions(serviceFor('old'), 'sha256:old', lifecycle);
   const operations = createDesktopConversationConfigOperationsV2(() => currentActions);
   const input = {
     config: runtimeConfig(),

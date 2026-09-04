@@ -44,6 +44,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -65,9 +68,7 @@ const {
   acquireDesktopTerminalLifecycleAuthorityV2,
   createDesktopTerminalLifecycleAuthorityServiceV2,
   desktopTerminalLifecycleAuthorityDefinitionV2,
-} = require(
-  `${COMPILED_ROOT}/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js`,
-);
+} = require(`${COMPILED_ROOT}/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js`);
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
@@ -103,12 +104,10 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
 );
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js`,
@@ -195,6 +194,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
@@ -449,11 +449,9 @@ test('Loader activates the exact service and preserves last-good on missing or b
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>
-      disabledGeneration.resolve(
-        DESKTOP_TERMINAL_LIFECYCLE_AUTHORITY_SERVICE_V2,
-        sessionScope,
-        { version: DESKTOP_TERMINAL_LIFECYCLE_AUTHORITY_VERSION_V2 },
-      ),
+      disabledGeneration.resolve(DESKTOP_TERMINAL_LIFECYCLE_AUTHORITY_SERVICE_V2, sessionScope, {
+        version: DESKTOP_TERMINAL_LIFECYCLE_AUTHORITY_VERSION_V2,
+      }),
     (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
 
@@ -488,7 +486,11 @@ test('local lifecycle holds one session lease across cookie, start, socket and r
     },
     openLocalSocket({ config, terminal, afterSequence }) {
       lifecycle.push(`socket:${config.localApiToken}:${terminal.session_id}:${afterSequence}`);
-      return { close() { lifecycle.push('socket-close'); } };
+      return {
+        close() {
+          lifecycle.push('socket-close');
+        },
+      };
     },
     async createCloudSession() {
       throw new Error('cloud create must not run');

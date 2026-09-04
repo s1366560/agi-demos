@@ -283,6 +283,7 @@ import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRu
 import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
+import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
@@ -349,6 +350,7 @@ export type AppRouteRegistryRefs = {
   runtimeInstancesOperationsV2: DesktopRuntimeInstancesOperationsV2;
   runtimeDeploymentsOperationsV2: DesktopRuntimeDeploymentsOperationsV2;
   deadLetterQueueOperationsV2: DesktopDeadLetterQueueOperationsV2;
+  instanceTemplatesOperationsV2: DesktopInstanceTemplatesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
@@ -399,6 +401,7 @@ export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
   | 'runtimeInstancesOperationsV2'
   | 'runtimeDeploymentsOperationsV2'
   | 'runtimePoolOperationsV2'
+  | 'instanceTemplatesOperationsV2'
 >;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -957,6 +960,7 @@ export function createAppRuntimeInfrastructureRouteRegistry(
     runtimeInstancesOperationsV2,
     runtimeDeploymentsOperationsV2,
     runtimePoolOperationsV2,
+    instanceTemplatesOperationsV2,
   } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
@@ -994,7 +998,11 @@ export function createAppRuntimeInfrastructureRouteRegistry(
       }),
       [TENANT_INSTANCE_TEMPLATES_ROUTE_ID]: createInstanceTemplatesRouteModuleLoader({
         createBinding: (context) =>
-          createInstanceTemplatesRouteBindingForRuntime(configRef.current, context),
+          createInstanceTemplatesRouteBindingForRuntime(
+            configRef.current,
+            context,
+            instanceTemplatesOperationsV2,
+          ),
       }),
       [TENANT_RUNTIMES_ROUTE_ID]: createUnifiedRuntimesRouteModuleLoader({
         createBinding: (context) =>

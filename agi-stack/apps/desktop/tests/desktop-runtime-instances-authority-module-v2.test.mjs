@@ -17,10 +17,11 @@ const {
   DESKTOP_RUNTIME_INSTANCES_AUTHORITY_VERSION_V2,
   applyDesktopRuntimeInstancesAuthorityV2,
   desktopRuntimeInstancesAuthorityDefinitionV2,
-    desktopRuntimeDeploymentsAuthorityDefinitionV2,
-    desktopProjectPlaybooksEventsAuthorityDefinitionV2,
-    desktopBackendStoresAuthorityDefinitionV2,
-    desktopDeadLetterQueueAuthorityDefinitionV2,
+  desktopRuntimeDeploymentsAuthorityDefinitionV2,
+  desktopProjectPlaybooksEventsAuthorityDefinitionV2,
+  desktopBackendStoresAuthorityDefinitionV2,
+  desktopDeadLetterQueueAuthorityDefinitionV2,
+  desktopInstanceTemplatesAuthorityDefinitionV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopRuntimeInstancesAuthorityModuleV2.js');
 
 const pluginRoot = `${COMPILED_ROOT}/src/plugins`;

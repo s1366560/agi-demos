@@ -23,9 +23,7 @@ import { desktopConversationConfigAuthorityDefinitionV2 } from './desktopConvers
 import { desktopHitlResponseAuthorityDefinitionV2 } from './desktopHitlResponseAuthorityModuleV2';
 import { desktopMyWorkAuthorityDefinitionV2 } from './desktopMyWorkAuthorityModuleV2';
 import { desktopNewTaskFlowAuthorityDefinitionV2 } from './desktopNewTaskFlowAuthorityModuleV2';
-import {
-  desktopNewThreadCreationAuthorityDefinitionV2,
-} from './desktopNewThreadCreationAuthorityModuleV2';
+import { desktopNewThreadCreationAuthorityDefinitionV2 } from './desktopNewThreadCreationAuthorityModuleV2';
 import { desktopProjectBlackboardAuthorityDefinitionV2 } from './desktopProjectBlackboardAuthorityModuleV2';
 import { desktopProjectAgentDashboardAuthorityDefinitionV2 } from './desktopProjectAgentDashboardAuthorityModuleV2';
 import { desktopProjectAgentLogsAuthorityDefinitionV2 } from './desktopProjectAgentLogsAuthorityModuleV2';
@@ -45,6 +43,7 @@ import { desktopProjectPlaybooksReadAuthorityDefinitionV2 } from './desktopProje
 import { desktopProjectPlaybooksEventsAuthorityDefinitionV2 } from './desktopProjectPlaybooksEventsAuthorityModuleV2';
 import { desktopBackendStoresAuthorityDefinitionV2 } from './desktopBackendStoresAuthorityModuleV2';
 import { desktopDeadLetterQueueAuthorityDefinitionV2 } from './desktopDeadLetterQueueAuthorityModuleV2';
+import { desktopInstanceTemplatesAuthorityDefinitionV2 } from './desktopInstanceTemplatesAuthorityModuleV2';
 import { desktopRuntimePoolAuthorityDefinitionV2 } from './desktopRuntimePoolAuthorityModuleV2';
 import { desktopRuntimeClustersAuthorityDefinitionV2 } from './desktopRuntimeClustersAuthorityModuleV2';
 import { desktopRuntimeInstancesAuthorityDefinitionV2 } from './desktopRuntimeInstancesAuthorityModuleV2';
@@ -76,17 +75,18 @@ import { desktopWorkspaceCatalogAuthorityDefinitionV2 } from './desktopWorkspace
 import { desktopWorkspaceLifecycleAuthorityDefinitionV2 } from './desktopWorkspaceLifecycleAuthorityModuleV2';
 import { desktopWorkspaceRosterAuthorityDefinitionV2 } from './desktopWorkspaceRosterAuthorityModuleV2';
 import { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } from './desktopWorkspaceExecutionSnapshotAuthorityModuleV2';
-import {
-  desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
-} from './desktopWorkspaceConversationCatalogAuthorityModuleV2';
+import { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } from './desktopWorkspaceConversationCatalogAuthorityModuleV2';
 import { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } from './desktopWorkspaceMessageCatalogAuthorityModuleV2';
 
-const RENDERER_DISTRIBUTION_COMMAND_V2 = 'platform_plugin_renderer_distribution_current_v2';
+const RENDERER_DISTRIBUTION_COMMAND_V2 =
+  'platform_plugin_renderer_distribution_current_v2';
 const POLL_INTERVAL_MS = 30_000;
 const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
   'desktop-renderer',
   Object.freeze([
-    ...createDesktopRendererDefinitionsV2(validateDesktopRendererContributionsV2),
+    ...createDesktopRendererDefinitionsV2(
+      validateDesktopRendererContributionsV2,
+    ),
     desktopArtifactContentAuthorityDefinitionV2,
     desktopAutomationAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
@@ -116,6 +116,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopRuntimePoolAuthorityDefinitionV2,
     desktopRuntimeClustersAuthorityDefinitionV2,
     desktopRuntimeInstancesAuthorityDefinitionV2,
@@ -145,13 +146,14 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopWorkspaceConversationCatalogAuthorityDefinitionV2,
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
-  ])
+  ]),
 );
-const desktopRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(desktopRendererRuntimeV2);
+const desktopRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(
+  desktopRendererRuntimeV2,
+);
 const desktopRendererStatusStoreV2 = new RendererGenerationStatusStoreV2();
-const desktopRendererDistributionReconcilerV2 = new DesktopRendererDistributionReconcilerV2(
-  desktopRendererRuntimeV2
-);
+const desktopRendererDistributionReconcilerV2 =
+  new DesktopRendererDistributionReconcilerV2(desktopRendererRuntimeV2);
 let pendingClose: ReturnType<typeof setTimeout> | null = null;
 
 export function activateDesktopPluginGenerationRootV2(): void {
@@ -162,24 +164,24 @@ export async function deactivateDesktopPluginGenerationRootV2(): Promise<void> {
 }
 
 export function acquireDesktopPluginGenerationLeaseV2(
-  generation: RuntimeGenerationV2
+  generation: RuntimeGenerationV2,
 ): GenerationLeaseV2 {
   return desktopRendererLeaseStoreV2.acquireGeneration(generation);
 }
 
 export function useDesktopPluginGenerationV2(
   _config: DesktopRuntimeConfig,
-  enabled: boolean
+  enabled: boolean,
 ): RendererPluginGenerationStateV2 {
   const snapshot = useSyncExternalStore(
     desktopRendererLeaseStoreV2.subscribe,
     desktopRendererLeaseStoreV2.getSnapshot,
-    desktopRendererLeaseStoreV2.getSnapshot
+    desktopRendererLeaseStoreV2.getSnapshot,
   );
   const status = useSyncExternalStore(
     desktopRendererStatusStoreV2.subscribe,
     desktopRendererStatusStoreV2.getSnapshot,
-    desktopRendererStatusStoreV2.getSnapshot
+    desktopRendererStatusStoreV2.getSnapshot,
   );
   useLayoutEffect(() => {
     void desktopRendererLeaseStoreV2.commit(snapshot);
@@ -197,7 +199,7 @@ export function useDesktopPluginGenerationV2(
 
     const stop = startDesktopPluginGenerationPollingV2(
       desktopRendererRuntimeV2,
-      desktopRendererStatusStoreV2
+      desktopRendererStatusStoreV2,
     );
     return () => {
       stop();
@@ -205,13 +207,17 @@ export function useDesktopPluginGenerationV2(
     };
   }, [enabled]);
 
-  const state = projectRendererPluginGenerationStateV2(enabled, snapshot.generation, status);
+  const state = projectRendererPluginGenerationStateV2(
+    enabled,
+    snapshot.generation,
+    status,
+  );
   return state;
 }
 
 function startDesktopPluginGenerationPollingV2(
   runtime: RendererPluginRuntimeV2,
-  statusStore: RendererGenerationStatusStoreV2
+  statusStore: RendererGenerationStatusStoreV2,
 ): () => void {
   return startRendererGenerationPollingV2({
     runtime,
@@ -222,7 +228,9 @@ function startDesktopPluginGenerationPollingV2(
   });
 }
 
-async function fetchDesktopPluginDistributionV2(signal: AbortSignal): Promise<unknown | null> {
+async function fetchDesktopPluginDistributionV2(
+  signal: AbortSignal,
+): Promise<unknown | null> {
   signal.throwIfAborted();
   const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
   if (invoke === undefined) {

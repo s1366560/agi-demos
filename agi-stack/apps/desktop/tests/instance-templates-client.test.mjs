@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const {
-  createInstanceTemplatesClient,
-  InstanceTemplatesUnavailableError,
-} = await import(
+const { createDesktopInstanceTemplatesHttpProjectionV2 } = await import(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopInstanceTemplatesHttpProjectionV2.js'
+);
+const { InstanceTemplatesUnavailableError } = await import(
   '/tmp/agistack-desktop-test-dist/src/features/instance-templates/instanceTemplatesClient.js'
 );
 
@@ -53,7 +53,7 @@ function template(overrides = {}) {
 
 test('Cloud Instance Templates uses the production list, detail, items, and lifecycle contracts', async () => {
   const calls = [];
-  const client = createInstanceTemplatesClient(runtimeConfig('cloud'), {
+  const client = createDesktopInstanceTemplatesHttpProjectionV2(runtimeConfig('cloud'), {
     fetch: async (input, init) => {
       const url = String(input);
       calls.push({ url, init });
@@ -79,10 +79,7 @@ test('Cloud Instance Templates uses the production list, detail, items, and life
         if (init?.method === 'DELETE') return response(null, 204);
         return response(template());
       }
-      if (
-        url.endsWith('/instance-templates/') ||
-        url.includes('/instance-templates/?')
-      ) {
+      if (url.endsWith('/instance-templates/') || url.includes('/instance-templates/?')) {
         if (init?.method === 'POST') return response(template(), 201);
         return response({
           templates: [template()],
@@ -103,10 +100,7 @@ test('Cloud Instance Templates uses the production list, detail, items, and life
   });
   assert.equal(page.templates[0].name, 'Starter');
   assert.equal(JSON.stringify(page).includes('must-not-cross-renderer'), false);
-  assert.match(
-    calls[0].url,
-    /instance-templates\/\?page=2&page_size=10&is_published=false$/u,
-  );
+  assert.match(calls[0].url, /instance-templates\/\?page=2&page_size=10&is_published=false$/u);
   assert.equal(calls[0].init.headers.get('Authorization'), 'Bearer cloud-token');
 
   const detail = await client.get(scope, 'template-1');
@@ -130,7 +124,7 @@ test('Cloud Instance Templates uses the production list, detail, items, and life
 
 test('Instance Templates fails closed on scope drift and never calls Local network', async () => {
   let fetchCalls = 0;
-  const local = createInstanceTemplatesClient(runtimeConfig('local'), {
+  const local = createDesktopInstanceTemplatesHttpProjectionV2(runtimeConfig('local'), {
     fetch: async () => {
       fetchCalls += 1;
       return response({});

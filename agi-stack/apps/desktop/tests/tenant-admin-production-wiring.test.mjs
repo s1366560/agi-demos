@@ -83,9 +83,7 @@ test('tenant governance routes have real production route registry bindings', ()
 
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders(
-      Object.fromEntries(
-        ROUTE_IDS.map((routeId) => [routeId, implementedLoader(routeId)]),
-      ),
+      Object.fromEntries(ROUTE_IDS.map((routeId) => [routeId, implementedLoader(routeId)])),
     ),
   });
   for (const routeId of ROUTE_IDS) {
@@ -116,63 +114,96 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
       headers: { 'content-type': 'application/json' },
     });
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
-      unavailableAutomation,
-      cloudConfig,
-      {
-        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
-        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
-        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
-    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
-    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
-    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
-    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
-    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
-    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
-        projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
-        projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
-        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
-        projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
-        runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
-        runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
-        runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
-        deadLetterQueueOperationsV2: {
-          async probe({ config }) {
-            return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
-          },
+    const client = createDesktopWorkbenchCapabilityClient(unavailableAutomation, cloudConfig, {
+      projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+      projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+      projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+      projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+      projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+      projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+      projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+      projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+      projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+      projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+      projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+      projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+      runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+      runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+      runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+      runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+      instanceTemplatesOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'local_instance_template_authority_unavailable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                authorityRevision: null,
+              };
         },
-        backendStoresOperationsV2: {
-          async probeBackendStores({ config }) {
-            return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
-          },
-        },
-        projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
-        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
-
-        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
-        tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
-        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
-        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
-        tenantGovernanceClient: probe('available', null, ['view', 'list', 'invite']),
-        tenantBillingClient: probe(
-          'degraded',
-          'tenant_billing_invoice_download_file_ipc_unavailable',
-          ['view', 'inspect-usage', 'list-invoices', 'upgrade-plan'],
-        ),
-        tenantAuditClient: probe(
-          'available',
-          null,
-          ['view', 'filter', 'inspect-runtime-hooks', 'export'],
-          17,
-        ),
-        tenantTrustClient: probe('available', null, ['view', 'list', 'create', 'revoke']),
       },
-    );
+      deadLetterQueueOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: null,
+                allowedActions: ['view', 'list'],
+                authorityRevision: null,
+              };
+        },
+      },
+      backendStoresOperationsV2: {
+        async probeBackendStores({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: null,
+                allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                authorityRevision: 23,
+              };
+        },
+      },
+      projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+      tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+      tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+      tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+      tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+      tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      tenantGovernanceClient: probe('available', null, ['view', 'list', 'invite']),
+      tenantBillingClient: probe(
+        'degraded',
+        'tenant_billing_invoice_download_file_ipc_unavailable',
+        ['view', 'inspect-usage', 'list-invoices', 'upgrade-plan'],
+      ),
+      tenantAuditClient: probe(
+        'available',
+        null,
+        ['view', 'filter', 'inspect-runtime-hooks', 'export'],
+        17,
+      ),
+      tenantTrustClient: probe('available', null, ['view', 'list', 'create', 'revoke']),
+    });
 
     const snapshot = await client.loadSnapshot();
     for (const routeId of ROUTE_IDS) {
@@ -197,18 +228,12 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
         routeId,
       );
     }
-    assert.deepEqual(
-      pickCapability(snapshot.capabilities['tenant-tenant-audit-logs']),
-      {
-        availability: 'available',
-        reason_code: null,
-        allowed_actions: ['view', 'filter', 'inspect-runtime-hooks', 'export'],
-      },
-    );
-    assert.equal(
-      snapshot.capabilities['tenant-tenant-audit-logs'].authority_revision,
-      17,
-    );
+    assert.deepEqual(pickCapability(snapshot.capabilities['tenant-tenant-audit-logs']), {
+      availability: 'available',
+      reason_code: null,
+      allowed_actions: ['view', 'filter', 'inspect-runtime-hooks', 'export'],
+    });
+    assert.equal(snapshot.capabilities['tenant-tenant-audit-logs'].authority_revision, 17);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -236,12 +261,12 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
-    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
-    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
-    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
-    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
-    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
-    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+        projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+        projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -249,19 +274,56 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
         deadLetterQueueOperationsV2: {
           async probe({ config }) {
             return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
           },
         },
         backendStoresOperationsV2: {
           async probeBackendStores({ config }) {
             return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  authorityRevision: 23,
+                };
           },
         },
         projectWorkspacesClient: projectWorkspacesClientV2Fixture(),

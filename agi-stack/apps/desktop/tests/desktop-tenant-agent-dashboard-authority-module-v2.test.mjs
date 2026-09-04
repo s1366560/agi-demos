@@ -17,9 +17,7 @@ const {
   DESKTOP_TENANT_AGENT_DASHBOARD_AUTHORITY_VERSION_V2,
   applyDesktopTenantAgentDashboardAuthorityV2,
   desktopTenantAgentDashboardAuthorityDefinitionV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.js'
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.js');
 
 const authorityModuleNames = [
   'desktopArtifactContentAuthorityModuleV2',
@@ -47,12 +45,13 @@ const authorityModuleNames = [
   'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
   'desktopProjectBlackboardAuthorityModuleV2',
- 'desktopRuntimePoolAuthorityModuleV2',
+  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
   'desktopDeadLetterQueueAuthorityModuleV2',
+  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',

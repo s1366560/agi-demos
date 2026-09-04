@@ -33,10 +33,7 @@ const {
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const providerSource = readFileSync(
-  new URL(
-    '../src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts',
-    import.meta.url,
-  ),
+  new URL('../src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts', import.meta.url),
   'utf8',
 );
 
@@ -46,18 +43,9 @@ test('desktop workbench capability client provider fails closed before publicati
   assert.throws(
     () => provider.resolve(),
     (error) => {
-      assert.equal(
-        error instanceof DesktopWorkbenchCapabilityClientProviderErrorV2,
-        true,
-      );
-      assert.equal(
-        error.reasonCode,
-        'desktop_workbench_capability_client_unpublished',
-      );
-      assert.equal(
-        error.message,
-        'desktop_workbench_capability_client_unpublished',
-      );
+      assert.equal(error instanceof DesktopWorkbenchCapabilityClientProviderErrorV2, true);
+      assert.equal(error.reasonCode, 'desktop_workbench_capability_client_unpublished');
+      assert.equal(error.message, 'desktop_workbench_capability_client_unpublished');
       return true;
     },
   );
@@ -69,11 +57,38 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'local', projectId: 'project-local' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: backendStoresOperationsV2(),
@@ -93,7 +108,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
@@ -106,11 +121,38 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-cloud' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: backendStoresOperationsV2(),
@@ -130,7 +172,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
@@ -155,11 +197,38 @@ test('failed capability client publication keeps the last-good binding', () => {
     automationApi: automationApi(),
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: backendStoresOperationsV2(),
@@ -179,7 +248,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
@@ -201,23 +270,50 @@ test('failed capability client publication keeps the last-good binding', () => {
         automationApi: automationApi(),
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
         deadLetterQueueOperationsV2: {
           async probe({ config }) {
             return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
           },
         },
         backendStoresOperationsV2: backendStoresOperationsV2(),
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
-    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
-    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
-    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
-    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
-    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
-    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+        projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+        projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+        projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+        projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+        projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
         projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -225,7 +321,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
         ...projectWorkspaceOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
@@ -248,10 +344,7 @@ test('App consumes the published V2 workbench capability client', () => {
     appSource,
     /projectAgentDashboardOperationsV2:\s*desktopProjectAgentDashboardOperationsV2/u,
   );
-  assert.match(
-    appSource,
-    /projectAgentLogsOperationsV2:\s*desktopProjectAgentLogsOperationsV2/u,
-  );
+  assert.match(appSource, /projectAgentLogsOperationsV2:\s*desktopProjectAgentLogsOperationsV2/u);
   assert.match(
     appSource,
     /projectAgentPatternsOperationsV2:\s*desktopProjectAgentPatternsOperationsV2/u,
@@ -260,30 +353,15 @@ test('App consumes the published V2 workbench capability client', () => {
     appSource,
     /projectCommunitiesOperationsV2:\s*desktopProjectCommunitiesOperationsV2/u,
   );
-  assert.match(
-    appSource,
-    /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/u,
-  );
-  assert.match(
-    appSource,
-    /projectTeamOperationsV2:\s*desktopProjectTeamOperationsV2/u,
-  );
-  assert.match(
-    appSource,
-    /projectSchemaOperationsV2:\s*desktopProjectSchemaOperationsV2/u,
-  );
+  assert.match(appSource, /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/u);
+  assert.match(appSource, /projectTeamOperationsV2:\s*desktopProjectTeamOperationsV2/u);
+  assert.match(appSource, /projectSchemaOperationsV2:\s*desktopProjectSchemaOperationsV2/u);
   assert.match(
     appSource,
     /projectMaintenanceOperationsV2:\s*desktopProjectMaintenanceOperationsV2/u,
   );
-  assert.match(
-    appSource,
-    /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/u,
-  );
-  assert.match(
-    appSource,
-    /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/u,
-  );
+  assert.match(appSource, /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/u);
+  assert.match(appSource, /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/u);
   assert.match(
     appSource,
     /useDesktopCapabilitySnapshot\(\s*desktopWorkbenchCapabilityClientV2\.client/u,
@@ -293,7 +371,10 @@ test('App consumes the published V2 workbench capability client', () => {
     providerSource,
     /createDesktopWorkbenchCapabilityClient\(input\.automationApi, config, \{/u,
   );
-  assert.match(providerSource, /pluginMarketplaceOperationsV2:\s*input\.pluginMarketplaceOperationsV2/u);
+  assert.match(
+    providerSource,
+    /pluginMarketplaceOperationsV2:\s*input\.pluginMarketplaceOperationsV2/u,
+  );
   assert.match(
     providerSource,
     /projectAgentDashboardOperationsV2:\s*input\.projectAgentDashboardOperationsV2/u,
@@ -314,14 +395,8 @@ test('App consumes the published V2 workbench capability client', () => {
     providerSource,
     /projectMemoriesOperationsV2:\s*input\.projectMemoriesOperationsV2/u,
   );
-  assert.match(
-    providerSource,
-    /projectTeamOperationsV2:\s*input\.projectTeamOperationsV2/u,
-  );
-  assert.match(
-    providerSource,
-    /projectSchemaOperationsV2:\s*input\.projectSchemaOperationsV2/u,
-  );
+  assert.match(providerSource, /projectTeamOperationsV2:\s*input\.projectTeamOperationsV2/u);
+  assert.match(providerSource, /projectSchemaOperationsV2:\s*input\.projectSchemaOperationsV2/u);
   assert.match(
     providerSource,
     /projectMaintenanceOperationsV2:\s*input\.projectMaintenanceOperationsV2/u,
@@ -330,11 +405,11 @@ test('App consumes the published V2 workbench capability client', () => {
     providerSource,
     /projectEntitiesOperationsV2:\s*input\.projectEntitiesOperationsV2/u,
   );
+  assert.match(providerSource, /projectGraphOperationsV2:\s*input\.projectGraphOperationsV2/u);
   assert.match(
     providerSource,
-    /projectGraphOperationsV2:\s*input\.projectGraphOperationsV2/u,
+    /projectOverviewOperationsV2:\s*input\.projectOverviewOperationsV2/u,
   );
-  assert.match(providerSource, /projectOverviewOperationsV2:\s*input\.projectOverviewOperationsV2/u);
   assert.match(
     providerSource,
     /projectBlackboardOperationsV2:\s*input\.projectBlackboardOperationsV2/u,
@@ -345,10 +420,7 @@ test('App consumes the published V2 workbench capability client', () => {
     /runtimeClustersOperationsV2:\s*input\.runtimeClustersOperationsV2/u,
   );
   assert.match(providerSource, /createProjectWorkspacesV2Client\(config,\s*\{/u);
-  assert.match(
-    providerSource,
-    /catalogOperations:\s*input\.desktopWorkspaceCatalogOperationsV2/u,
-  );
+  assert.match(providerSource, /catalogOperations:\s*input\.desktopWorkspaceCatalogOperationsV2/u);
   assert.match(
     providerSource,
     /lifecycleOperations:\s*input\.desktopWorkspaceLifecycleOperationsV2/u,
@@ -361,7 +433,10 @@ test('App consumes the published V2 workbench capability client', () => {
     providerSource,
     /tenantAgentDashboardOperationsV2:\s*input\.tenantAgentDashboardOperationsV2/u,
   );
-  assert.match(providerSource, /tenantAnalyticsOperationsV2:\s*input\.tenantAnalyticsOperationsV2/u);
+  assert.match(
+    providerSource,
+    /tenantAnalyticsOperationsV2:\s*input\.tenantAnalyticsOperationsV2/u,
+  );
   assert.match(providerSource, /tenantOverviewOperationsV2:\s*input\.tenantOverviewOperationsV2/u);
   assert.match(providerSource, /tenantProjectsOperationsV2:\s*input\.tenantProjectsOperationsV2/u);
   assert.match(providerSource, /tenantTasksOperationsV2:\s*input\.tenantTasksOperationsV2/u);

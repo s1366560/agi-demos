@@ -72,9 +72,7 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
   }
   const registry = createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders(
-      Object.fromEntries(
-        ROUTE_IDS.map((routeId) => [routeId, implementedLoader(routeId)]),
-      ),
+      Object.fromEntries(ROUTE_IDS.map((routeId) => [routeId, implementedLoader(routeId)])),
     ),
   });
   for (const routeId of ROUTE_IDS) {
@@ -115,22 +113,10 @@ test('Project Knowledge production routes own real loaders and App bindings', ()
     appSource,
     /projectCommunitiesOperationsV2:\s*desktopProjectCommunitiesOperationsV2/gu,
   );
-  assert.match(
-    appSource,
-    /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/gu,
-  );
-  assert.match(
-    appSource,
-    /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/gu,
-  );
-  assert.match(
-    appSource,
-    /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/gu,
-  );
-  assert.match(
-    appSource,
-    /projectTeamOperationsV2:\s*desktopProjectTeamOperationsV2/gu,
-  );
+  assert.match(appSource, /projectEntitiesOperationsV2:\s*desktopProjectEntitiesOperationsV2/gu);
+  assert.match(appSource, /projectGraphOperationsV2:\s*desktopProjectGraphOperationsV2/gu);
+  assert.match(appSource, /projectMemoriesOperationsV2:\s*desktopProjectMemoriesOperationsV2/gu);
+  assert.match(appSource, /projectTeamOperationsV2:\s*desktopProjectTeamOperationsV2/gu);
   assert.doesNotMatch(registrySource, /createProjectGraphClient/u);
   assert.doesNotMatch(registrySource, /createProjectCommunitiesClient/u);
   assert.doesNotMatch(registrySource, /createProjectEntitiesClient/u);
@@ -290,19 +276,56 @@ async function loadSnapshot(
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        instanceTemplatesOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_instance_template_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                  allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                  authorityRevision: null,
+                };
+          },
+        },
         deadLetterQueueOperationsV2: {
           async probe({ config }) {
             return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list'],
+                  authorityRevision: null,
+                };
           },
         },
         backendStoresOperationsV2: {
           async probeBackendStores({ config }) {
             return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+              ? {
+                  availability: 'not_applicable',
+                  reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                  allowedActions: [],
+                  authorityRevision: null,
+                }
+              : {
+                  availability: 'available',
+                  reasonCode: null,
+                  allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                  authorityRevision: 23,
+                };
           },
         },
         projectWorkspacesClient: projectWorkspacesClientV2Fixture(),

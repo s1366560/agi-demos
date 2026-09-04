@@ -28,10 +28,9 @@ import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardO
 
 const require = createRequire(import.meta.url);
 const root = '/tmp/agistack-desktop-test-dist/src/features/settings-routes';
-const {
-  P2_THIRD_BATCH_CAPABILITY_IDS,
-  createP2ThirdBatchCapabilityClient,
-} = require(`${root}/p2ThirdBatchCapabilityClient.js`);
+const { P2_THIRD_BATCH_CAPABILITY_IDS, createP2ThirdBatchCapabilityClient } = require(
+  `${root}/p2ThirdBatchCapabilityClient.js`,
+);
 const { NativeRouteClientError } = require(`${root}/nativeRouteHttpClient.js`);
 const {
   createDesktopWorkbenchCapabilityClient,
@@ -111,10 +110,7 @@ test('P2 third-batch Local policy distinguishes N/A, observed unavailable, and r
     channels: {
       async observe() {
         channelCalls += 1;
-        throw new NativeRouteClientError(
-          'local_channel_runtime_not_applicable',
-          501,
-        );
+        throw new NativeRouteClientError('local_channel_runtime_not_applicable', 501);
       },
     },
     templates: rejecting('local_subagent_registry_unavailable'),
@@ -198,55 +194,88 @@ test('workbench Snapshot v4 keeps unversioned P2 observations unavailable', asyn
       headers: { 'content-type': 'application/json' },
     });
   try {
-    const client = createDesktopWorkbenchCapabilityClient(
-      unavailableAutomation,
-      cloudConfig,
-      {
-        projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
-        projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
-        projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
-    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
-    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
-    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
-    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
-    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
-    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
-        projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
-        projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
-        projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
-        projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
-        runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
-        runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
-        runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
-        deadLetterQueueOperationsV2: {
-          async probe({ config }) {
-            return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
-          },
-        },
-        backendStoresOperationsV2: {
-          async probeBackendStores({ config }) {
-            return config.mode === 'local'
-              ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
-          },
-        },
-        projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
-        tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
-
-        tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
-        tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
-        tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
-        tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
-        p2ThirdBatchCapabilityClient: {
-          async load() {
-            return projectionSet();
-          },
+    const client = createDesktopWorkbenchCapabilityClient(unavailableAutomation, cloudConfig, {
+      projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+      projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+      projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+      projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+      projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+      projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+      projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
+      projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+      projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+      projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+      projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+      projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+      runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+      runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+      runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+      runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+      instanceTemplatesOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'local_instance_template_authority_unavailable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                authorityRevision: null,
+              };
         },
       },
-    );
+      deadLetterQueueOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: null,
+                allowedActions: ['view', 'list'],
+                authorityRevision: null,
+              };
+        },
+      },
+      backendStoresOperationsV2: {
+        async probeBackendStores({ config }) {
+          return config.mode === 'local'
+            ? {
+                availability: 'not_applicable',
+                reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                allowedActions: [],
+                authorityRevision: null,
+              }
+            : {
+                availability: 'available',
+                reasonCode: null,
+                allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                authorityRevision: 23,
+              };
+        },
+      },
+      projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+      tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+
+      tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+      tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+      tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+      tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+      p2ThirdBatchCapabilityClient: {
+        async load() {
+          return projectionSet();
+        },
+      },
+    });
     const snapshot = await client.loadSnapshot();
     for (const id of P2_THIRD_BATCH_CAPABILITY_IDS) {
       assert.equal(snapshot.capabilities[id].provenance, 'observed', id);
@@ -264,12 +293,7 @@ test('workbench Snapshot v4 keeps unversioned P2 observations unavailable', asyn
   }
 });
 
-function probe({
-  scope,
-  availability = 'available',
-  reasonCode = null,
-  allowedActions,
-}) {
+function probe({ scope, availability = 'available', reasonCode = null, allowedActions }) {
   return {
     async observe() {
       return {

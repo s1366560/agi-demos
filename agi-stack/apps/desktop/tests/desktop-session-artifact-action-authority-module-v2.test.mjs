@@ -42,12 +42,13 @@ const authorityModules = [
   'desktopProjectMemoriesAuthorityModuleV2',
   'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
- 'desktopRuntimePoolAuthorityModuleV2',
+  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
   'desktopDeadLetterQueueAuthorityModuleV2',
+  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionProjectionAuthorityModuleV2',
@@ -275,11 +276,7 @@ test('Loader activation and Profile disable remove Artifact Action without fallb
   assert.equal(Object.isFrozen(service), true);
   assert.deepEqual(Object.keys(service), ['bindOperation']);
   assert.throws(
-    () =>
-      service.bindOperation(
-        runtimeConfig(),
-        identity({ tenant_id: 'tenant-2' }),
-      ),
+    () => service.bindOperation(runtimeConfig(), identity({ tenant_id: 'tenant-2' })),
     (error) =>
       error instanceof RuntimeV2Error &&
       error.code === 'desktop_session_artifact_action_scope_mismatch',

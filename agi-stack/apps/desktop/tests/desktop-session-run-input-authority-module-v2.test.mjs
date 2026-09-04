@@ -22,9 +22,7 @@ const {
 const marketplace = require(
   COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js',
 );
-const roster = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.js',
-);
+const roster = require(COMPILED_ROOT + '/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.js');
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const authorityModules = [
@@ -51,12 +49,13 @@ const authorityModules = [
   'desktopProjectMemoriesAuthorityModuleV2',
   'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
- 'desktopRuntimePoolAuthorityModuleV2',
+  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
   'desktopDeadLetterQueueAuthorityModuleV2',
+  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
@@ -230,12 +229,10 @@ test('generated contract declares one credential-free root session run-input Pro
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_SESSION_RUN_INPUT_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_RUN_INPUT_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_SESSION_RUN_INPUT_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_RUN_INPUT_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
     ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-run-input-authority',
@@ -445,7 +442,10 @@ test('Local and vault-bound Cloud transports preserve identity, paths and signal
         '/api/v1/agent/run-inputs/input%20%2F%20one/promote-to-plan',
       ],
     );
-    assert.equal(fetchCalls.every(({ init }) => init.signal === controller.signal), true);
+    assert.equal(
+      fetchCalls.every(({ init }) => init.signal === controller.signal),
+      true,
+    );
     for (const call of fetchCalls) {
       const headers = new Headers(call.init.headers);
       assert.equal(headers.get('Authorization'), 'Bearer run-input-session');
@@ -459,7 +459,10 @@ test('Local and vault-bound Cloud transports preserve identity, paths and signal
         '/api/v1/agent/runs/run%20%2F%20one/inputs/input%20%2F%20one/promote',
       ],
     );
-    assert.equal(cloudCommands.every(({ command }) => command === 'cloud_request'), true);
+    assert.equal(
+      cloudCommands.every(({ command }) => command === 'cloud_request'),
+      true,
+    );
     assert.doesNotMatch(
       JSON.stringify(cloudCommands),
       /Authorization|run-input-session|run-input-launch/u,

@@ -246,11 +246,38 @@ test('workbench capability client requires an injected Project Workspaces V2 cli
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
           deadLetterQueueOperationsV2: {
             async probe({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
             },
           },
           backendStoresOperationsV2: {
@@ -281,18 +308,55 @@ test('workbench capability client requires the Project Blackboard V2 authority',
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
           deadLetterQueueOperationsV2: {
             async probe({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
             },
           },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
             },
           },
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
@@ -319,18 +383,55 @@ test('workbench capability client requires the Project Agent Dashboard V2 author
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
           deadLetterQueueOperationsV2: {
             async probe({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
             },
           },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
             },
           },
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
@@ -358,18 +459,55 @@ test('workbench capability client requires the Project Agent Logs V2 authority',
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
           deadLetterQueueOperationsV2: {
             async probe({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
             },
           },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
             },
           },
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
@@ -398,18 +536,55 @@ test('workbench capability client requires the Project Agent Patterns V2 authori
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          instanceTemplatesOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_instance_template_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+                    allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+                    authorityRevision: null,
+                  };
+            },
+          },
           deadLetterQueueOperationsV2: {
             async probe({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'cloud_message_bus_dlq_not_applicable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list'],
+                    authorityRevision: null,
+                  };
             },
           },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
-                ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+                ? {
+                    availability: 'not_applicable',
+                    reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+                    allowedActions: [],
+                    authorityRevision: null,
+                  }
+                : {
+                    availability: 'available',
+                    reasonCode: null,
+                    allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+                    authorityRevision: 23,
+                  };
             },
           },
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
@@ -434,25 +609,62 @@ test('workbench capability client requires the Project Communities V2 authority'
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -482,25 +694,62 @@ test('workbench capability client requires the Project Memories V2 authority', (
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -532,25 +781,62 @@ test('workbench capability client requires the Project Team V2 authority', () =>
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -583,25 +869,62 @@ test('workbench capability client requires the Project Schema V2 authority', () 
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -636,25 +959,62 @@ test('workbench capability client requires the Project Maintenance V2 authority'
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -689,25 +1049,62 @@ test('workbench capability client requires the Project Settings V2 authority', (
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -742,25 +1139,62 @@ test('workbench capability client requires the Project Graph V2 authority', () =
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -801,25 +1235,62 @@ test('workbench capability client requires both Project Entities V2 operations',
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -1108,112 +1579,130 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-tasks'],
-      withObservedAuthority({
-        availability: 'unavailable',
-        reason_code: 'capability_authority_revision_unavailable',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }, 'cloud_service'),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-pool'],
-      withObservedAuthority({
-        availability: 'unavailable',
-        reason_code: 'capability_authority_revision_unavailable',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }, 'cloud_service'),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-instances'],
-      withObservedAuthority({
-        availability: 'unavailable',
-        reason_code: 'capability_authority_revision_unavailable',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }, 'cloud_service'),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-clusters'],
-      withObservedAuthority({
-        availability: 'unavailable',
-        reason_code: 'capability_authority_revision_unavailable',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }, 'cloud_service'),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-deploy'],
-      withObservedAuthority(withoutAuthorityRevision({
-        availability: 'degraded',
-        reason_code: 'runtime_deployments_mutations_and_instance_discovery_partial',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'refresh',
-          'paginate',
-          'inspect-progress',
-          'reconnect-progress',
-        ],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
-        },
-        authority_revision: null,
-      }), 'cloud_service'),
+      withObservedAuthority(
+        withoutAuthorityRevision({
+          availability: 'degraded',
+          reason_code: 'runtime_deployments_mutations_and_instance_discovery_partial',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [
+            'view',
+            'list',
+            'refresh',
+            'paginate',
+            'inspect-progress',
+            'reconnect-progress',
+          ],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
+        }),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-dead-letter-queue'],
-      withObservedAuthority({
-        availability: 'unavailable',
-        reason_code: 'capability_authority_revision_unavailable',
-        service_version: '1.0.0',
-        contract_version: '4.0.0',
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'default',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '1.0.0',
+          contract_version: '4.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'default',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }, 'cloud_service'),
+        'cloud_service',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities['project-support'],
@@ -1565,20 +2054,23 @@ test('local workbench capability client consumes the scoped degraded Search cont
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-tasks'],
-      withObservedAuthority({
-        availability: 'unavailable',
-        reason_code: 'capability_authority_revision_unavailable',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'local',
-          project_id: 'local-project',
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }, 'sidecar'),
+        'sidecar',
+      ),
     );
     assert.deepEqual(
       snapshot.capabilities.sandbox_isolation,
@@ -2067,10 +2559,10 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
             7,
           ),
           {
-          tenant_id: 'local',
-          project_id: 'local-project',
-          workspace_id: 'local-workspace',
-          instance_id: null,
+            tenant_id: 'local',
+            project_id: 'local-project',
+            workspace_id: 'local-workspace',
+            instance_id: null,
           },
         ),
         'sidecar',
@@ -2095,20 +2587,23 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
     );
     assert.deepEqual(
       local.capabilities['tenant-tenant-instances'],
-      withObservedAuthority({
-        availability: 'unavailable',
-        reason_code: 'capability_authority_revision_unavailable',
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'local',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'unavailable',
+          reason_code: 'capability_authority_revision_unavailable',
+          service_version: '0.1.0',
+          contract_version: '3.0.0',
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'local',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }, 'sidecar'),
+        'sidecar',
+      ),
     );
     assert.deepEqual(
       local.capabilities['tenant-tenant-clusters'],
@@ -2129,20 +2624,23 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
     );
     assert.deepEqual(
       local.capabilities['tenant-tenant-deploy'],
-      withObservedAuthority({
-        availability: 'not_applicable',
-        reason_code: 'cloud_deployment_authority_not_applicable',
-        service_version: null,
-        contract_version: null,
-        allowed_actions: [],
-        scope: {
-          tenant_id: 'local',
-          project_id: null,
-          workspace_id: null,
-          instance_id: null,
+      withObservedAuthority(
+        {
+          availability: 'not_applicable',
+          reason_code: 'cloud_deployment_authority_not_applicable',
+          service_version: null,
+          contract_version: null,
+          allowed_actions: [],
+          scope: {
+            tenant_id: 'local',
+            project_id: null,
+            workspace_id: null,
+            instance_id: null,
+          },
+          authority_revision: null,
         },
-        authority_revision: null,
-      }, 'sidecar'),
+        'sidecar',
+      ),
     );
     assert.equal(capabilityFetchCalls, 2);
   } finally {
@@ -2222,19 +2720,56 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
-          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    instanceTemplatesOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_instance_template_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: 'instance_templates_nested_deep_link_and_deploy_partial',
+              allowedActions: ['view', 'list', 'create', 'delete', 'publish', 'clone'],
+              authorityRevision: null,
+            };
+      },
+    },
     deadLetterQueueOperationsV2: {
       async probe({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'cloud_message_bus_dlq_not_applicable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list'],
+              authorityRevision: null,
+            };
       },
     },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
-          ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
-          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          ? {
+              availability: 'not_applicable',
+              reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+              allowedActions: [],
+              authorityRevision: null,
+            }
+          : {
+              availability: 'available',
+              reasonCode: null,
+              allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'],
+              authorityRevision: 23,
+            };
       },
     },
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),

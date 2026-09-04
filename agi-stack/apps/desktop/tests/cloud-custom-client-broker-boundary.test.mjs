@@ -27,7 +27,7 @@ const BROKER_BOUND_CLIENTS = [
 
 const INJECTABLE_BROKER_CLIENTS = [
   'src/features/device-approval/deviceApprovalClient.ts',
-  'src/features/instance-templates/instanceTemplatesClient.ts',
+  'src/plugins/desktopInstanceTemplatesHttpProjectionV2.ts',
   'src/features/invitation-acceptance/invitationAcceptanceClient.ts',
   'src/features/unified-runtimes/unifiedRuntimesClient.ts',
   'src/features/settings-routes/nativeRouteHttpClient.ts',

@@ -52,6 +52,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -117,8 +120,7 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
@@ -199,6 +201,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
@@ -627,10 +630,7 @@ test('local service owns all eight authenticated transport contracts', async () 
         ['/api/v1/tenants/tenant-1/projects/project-1/workspaces', 'GET'],
         ['/api/v1/tenants/tenant-1/projects/project-1/task-sessions/capabilities', 'GET'],
         ['/api/v1/tenants/tenant-1/projects/project-1/task-sessions', 'POST'],
-        [
-          '/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/messages',
-          'POST',
-        ],
+        ['/api/v1/tenants/tenant-1/projects/project-1/workspaces/workspace-1/messages', 'POST'],
         ['/api/v1/agent/conversations/conversation-1/messages', 'GET'],
         ['/api/v1/agent/plan/tasks/conversation-1', 'GET'],
         ['/api/v1/agent/plan/mode', 'POST'],
@@ -759,14 +759,8 @@ test('every client call freezes inputs before one exact project or session lease
     received.find(({ kind }) => kind === 'createTaskSession').input.initial_message.content,
     'Prepare the plan',
   );
-  assert.equal(
-    received.find(({ kind }) => kind === 'sendMessage').contextItems[0].label,
-    'Brief',
-  );
-  assert.deepEqual(
-    received.find(({ kind }) => kind === 'sendMessage').mentions,
-    ['agent-1'],
-  );
+  assert.equal(received.find(({ kind }) => kind === 'sendMessage').contextItems[0].label, 'Brief');
+  assert.deepEqual(received.find(({ kind }) => kind === 'sendMessage').mentions, ['agent-1']);
   assert.equal(
     received.find(({ kind }) => kind === 'approvePlanAndStart').input.message,
     'Start the plan',
@@ -888,8 +882,7 @@ test('missing generation service is structured and an escaped authority is revok
   assert.throws(
     () => escaped.listWorkspaces(),
     (error) =>
-      error instanceof RuntimeV2Error &&
-      error.code === 'desktop_new_task_flow_operation_released',
+      error instanceof RuntimeV2Error && error.code === 'desktop_new_task_flow_operation_released',
   );
 });
 
@@ -917,9 +910,7 @@ test('operation failure outranks release failure and successful release failure 
       },
     }),
   };
-  const client = createDesktopNewTaskFlowOperationsV2(() => actions).bindOperation(
-    runtimeConfig(),
-  );
+  const client = createDesktopNewTaskFlowOperationsV2(() => actions).bindOperation(runtimeConfig());
 
   await assert.rejects(client.listWorkspaces(), /new_task_operation_failed/u);
   failOperation = false;
@@ -944,9 +935,7 @@ test('HMR pins an in-flight new-task operation and sends the next call to the ne
   newResponses.workspaces = [workspace({ id: 'workspace-new' })];
   const newService = serviceFixture([], newResponses);
   let actions = acceptedActions(oldService, 'sha256:old', lifecycle);
-  const client = createDesktopNewTaskFlowOperationsV2(() => actions).bindOperation(
-    runtimeConfig(),
-  );
+  const client = createDesktopNewTaskFlowOperationsV2(() => actions).bindOperation(runtimeConfig());
   const oldPending = client.listWorkspaces();
   actions = acceptedActions(newService, 'sha256:new', lifecycle);
   const next = await client.listWorkspaces();
@@ -957,11 +946,6 @@ test('HMR pins an in-flight new-task operation and sends the next call to the ne
   assert.equal(old[0].id, 'workspace-old');
   assert.deepEqual(
     lifecycle.map(({ type, digest }) => `${type}:${digest}`),
-    [
-      'acquire:sha256:old',
-      'acquire:sha256:new',
-      'release:sha256:new',
-      'release:sha256:old',
-    ],
+    ['acquire:sha256:old', 'acquire:sha256:new', 'release:sha256:new', 'release:sha256:old'],
   );
 });

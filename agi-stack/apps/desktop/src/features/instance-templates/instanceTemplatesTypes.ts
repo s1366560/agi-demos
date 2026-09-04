@@ -1,5 +1,19 @@
 export type InstanceTemplatesAuthority = 'cloud' | 'local';
 
+export const INSTANCE_TEMPLATES_CLOUD_ACTIONS = Object.freeze([
+  'view',
+  'list',
+  'list-items',
+  'create',
+  'delete',
+  'publish',
+  'clone',
+  'refresh',
+  'paginate',
+  'search-current-page',
+  'filter-status',
+]);
+
 export type InstanceTemplatesScope = Readonly<{
   authority: InstanceTemplatesAuthority;
   tenantId: string;

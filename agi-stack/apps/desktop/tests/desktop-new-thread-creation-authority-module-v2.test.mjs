@@ -21,9 +21,7 @@ const {
   createDesktopNewThreadCreationOperationsV2,
   desktopNewThreadCreationAuthorityDefinitionV2,
   withDesktopNewThreadCreationAuthorityOperationV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopNewThreadCreationAuthorityModuleV2.js',
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopNewThreadCreationAuthorityModuleV2.js');
 const { desktopProjectSearchAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopProjectSearchAuthorityModuleV2.js',
 );
@@ -51,6 +49,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -67,8 +68,7 @@ const { desktopConversationConfigAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
 );
 const { desktopConversationLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js',
 );
 const { desktopHitlResponseAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js',
@@ -80,15 +80,11 @@ const {
   DESKTOP_NEW_TASK_FLOW_AUTHORITY_MODULE_REF_V2,
   DESKTOP_NEW_TASK_FLOW_AUTHORITY_SERVICE_V2,
   desktopNewTaskFlowAuthorityDefinitionV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopNewTaskFlowAuthorityModuleV2.js',
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopNewTaskFlowAuthorityModuleV2.js');
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js',
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js');
 const { desktopSessionProjectionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js',
 );
@@ -126,16 +122,13 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
 );
 const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
@@ -214,6 +207,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
@@ -361,10 +355,7 @@ function serviceFixture(received = [], values = {}) {
             capabilityMode,
             agentConfig,
           });
-          return (
-            values.conversation ??
-            conversation({ title, user_id: expectedUserId })
-          );
+          return values.conversation ?? conversation({ title, user_id: expectedUserId });
         },
         async createTaskSession(input) {
           received.push({ kind: 'createTaskSession', input });
@@ -437,8 +428,7 @@ test('generated contract declares one root Provider with an exact task-flow alia
       moduleRef === DESKTOP_NEW_THREAD_CREATION_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-new-thread-creation-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-new-thread-creation-authority',
   );
 
   assert.ok(module);
@@ -463,10 +453,7 @@ test('generated contract declares one root Provider with an exact task-flow alia
   assert.deepEqual(module.contract.events, { emits: [], handles: [] });
   assert.equal(module.contract.config_schema.additionalProperties, false);
   assert.deepEqual(module.contract.config_schema.required, ['strategy']);
-  assert.equal(
-    module.contract.config_schema.properties.strategy.const,
-    'desktop-api-client',
-  );
+  assert.equal(module.contract.config_schema.properties.strategy.const, 'desktop-api-client');
   assert.equal(module.contract_digest, catalog.contract_digest);
   assert.equal(
     module.contract_digest,
@@ -478,10 +465,7 @@ test('generated contract declares one root Provider with an exact task-flow alia
     'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
       'desktopNewThreadCreationAuthorityModuleV2.ts',
   );
-  assert.equal(
-    entry.module_ref,
-    DESKTOP_NEW_THREAD_CREATION_AUTHORITY_MODULE_REF_V2,
-  );
+  assert.equal(entry.module_ref, DESKTOP_NEW_THREAD_CREATION_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
   assert.deepEqual(entry.scope, { kind: 'root' });
   assert.deepEqual(entry.config, { strategy: 'desktop-api-client' });
@@ -489,26 +473,18 @@ test('generated contract declares one root Provider with an exact task-flow alia
     task_flow: DESKTOP_NEW_TASK_FLOW_AUTHORITY_SERVICE_V2,
   });
   assert.equal(entry.enabled, true);
-  assert.match(
-    profile,
-    /entry_id: builtin-desktop-new-thread-creation-authority/u,
-  );
+  assert.match(profile, /entry_id: builtin-desktop-new-thread-creation-authority/u);
   assert.equal(
     graph.edges.some(
       (edge) =>
-        edge.consumer_module_ref ===
-          DESKTOP_NEW_THREAD_CREATION_AUTHORITY_MODULE_REF_V2 &&
-        edge.provider_module_ref ===
-          DESKTOP_NEW_TASK_FLOW_AUTHORITY_MODULE_REF_V2 &&
+        edge.consumer_module_ref === DESKTOP_NEW_THREAD_CREATION_AUTHORITY_MODULE_REF_V2 &&
+        edge.provider_module_ref === DESKTOP_NEW_TASK_FLOW_AUTHORITY_MODULE_REF_V2 &&
         edge.alias === 'task_flow',
     ),
     true,
   );
   for (const value of [module, catalog, entry]) {
-    assert.doesNotMatch(
-      JSON.stringify(value),
-      /apiKey|localApiToken|Authorization/iu,
-    );
+    assert.doesNotMatch(JSON.stringify(value), /apiKey|localApiToken|Authorization/iu);
   }
 });
 
@@ -528,8 +504,7 @@ test('Loader activates the service and rejects a disabled required Provider with
     () =>
       applyDesktopNewThreadCreationAuthorityV2(
         {
-          provide: () =>
-            assert.fail('invalid config must not provide a service'),
+          provide: () => assert.fail('invalid config must not provide a service'),
         },
         { strategy: 'legacy-client' },
       ),
@@ -540,8 +515,7 @@ test('Loader activates the service and rejects a disabled required Provider with
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-new-thread-creation-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-new-thread-creation-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
@@ -551,26 +525,20 @@ test('Loader activates the service and rejects a disabled required Provider with
         { kind: 'root' },
         { version: DESKTOP_NEW_THREAD_CREATION_AUTHORITY_VERSION_V2 },
       ),
-    (error) =>
-      error instanceof RuntimeV2Error && error.code === 'missing_service',
+    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
 
   const missingProvider = structuredClone(bootstrap);
   missingProvider.entries.find(
-    ({ entry_id: entryId }) =>
-      entryId === 'builtin-desktop-new-task-flow-authority',
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-new-task-flow-authority',
   ).enabled = false;
-  await assert.rejects(
-    loader.stage(missingProvider),
-    (error) => error instanceof RuntimeV2Error,
-  );
+  await assert.rejects(loader.stage(missingProvider), (error) => error instanceof RuntimeV2Error);
 
   const manager = new GenerationManagerV2();
   await manager.publish(generation);
   const wrongDefinitionLoader = new LoaderV2(
     rendererDefinitions().map((definition) =>
-      definition.moduleRef ===
-      DESKTOP_NEW_THREAD_CREATION_AUTHORITY_MODULE_REF_V2
+      definition.moduleRef === DESKTOP_NEW_THREAD_CREATION_AUTHORITY_MODULE_REF_V2
         ? { ...definition, contractDigest: 'sha256:' + '0'.repeat(64) }
         : definition,
     ),
@@ -578,9 +546,7 @@ test('Loader activates the service and rejects a disabled required Provider with
   );
   await assert.rejects(
     wrongDefinitionLoader.stage(bootstrap),
-    (error) =>
-      error instanceof RuntimeV2Error &&
-      error.code === 'contract_digest_mismatch',
+    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch',
   );
   assert.equal(manager.current, generation);
   await disabledGeneration.dispose();
@@ -594,8 +560,7 @@ test('local service routes conversation and message transport while task creatio
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     transportCalls.push({ url, init });
-    if (url.pathname === '/api/v1/agent/conversations')
-      return json(conversation());
+    if (url.pathname === '/api/v1/agent/conversations') return json(conversation());
     if (url.pathname.endsWith('/messages')) return json({ queued: true });
     return json({ detail: `unexpected route ${url.pathname}` }, 404);
   };
@@ -624,10 +589,7 @@ test('local service routes conversation and message transport while task creatio
   );
 
   try {
-    const generation = await new LoaderV2(
-      definitions,
-      'desktop-renderer',
-    ).stage(loadBootstrap());
+    const generation = await new LoaderV2(definitions, 'desktop-renderer').stage(loadBootstrap());
     const service = generation.resolve(
       DESKTOP_NEW_THREAD_CREATION_AUTHORITY_SERVICE_V2,
       { kind: 'root' },
@@ -636,27 +598,14 @@ test('local service routes conversation and message transport while task creatio
     const client = service.bindOperation(runtimeConfig());
 
     assert.deepEqual(
-      await client.createAgentConversation(
-        'Start a task',
-        'project-1',
-        'user-1',
-        'work',
-      ),
+      await client.createAgentConversation('Start a task', 'project-1', 'user-1', 'work'),
       conversation(),
     );
+    assert.deepEqual(await client.createTaskSession(taskSessionRequest()), taskSession());
     assert.deepEqual(
-      await client.createTaskSession(taskSessionRequest()),
-      taskSession(),
-    );
-    assert.deepEqual(
-      await client.runAgentMessage(
-        'conversation-1',
-        'Begin',
-        'message-1',
-        'project-1',
-        'coding',
-        { agentId: 'agent-1' },
-      ),
+      await client.runAgentMessage('conversation-1', 'Begin', 'message-1', 'project-1', 'coding', {
+        agentId: 'agent-1',
+      }),
       { queued: true },
     );
     assert.deepEqual(
@@ -665,10 +614,7 @@ test('local service routes conversation and message transport while task creatio
     );
     assert.deepEqual(
       transportCalls.map(({ url }) => url.pathname),
-      [
-        '/api/v1/agent/conversations',
-        '/api/v1/agent/conversations/conversation-1/messages',
-      ],
+      ['/api/v1/agent/conversations', '/api/v1/agent/conversations/conversation-1/messages'],
     );
     for (const call of transportCalls) {
       const headers = new Headers(call.init.headers);
@@ -704,10 +650,9 @@ test('Cloud service uses the vault broker for all three operations without crede
   };
 
   try {
-    const generation = await new LoaderV2(
-      rendererDefinitions(),
-      'desktop-renderer',
-    ).stage(loadBootstrap());
+    const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
+      loadBootstrap(),
+    );
     const service = generation.resolve(
       DESKTOP_NEW_THREAD_CREATION_AUTHORITY_SERVICE_V2,
       { kind: 'root' },
@@ -719,12 +664,7 @@ test('Cloud service uses the vault broker for all three operations without crede
 
     await client.createAgentConversation('Start a task', 'project-1', 'user-1');
     await client.createTaskSession(taskSessionRequest());
-    await client.runAgentMessage(
-      'conversation-1',
-      'Begin',
-      'message-1',
-      'project-1',
-    );
+    await client.runAgentMessage('conversation-1', 'Begin', 'message-1', 'project-1');
     assert.deepEqual(
       calls.map(({ command }) => command),
       ['cloud_request', 'cloud_request', 'cloud_request'],

@@ -58,15 +58,18 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
 const { desktopSessionRunControlAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionRunControlAuthorityModuleV2.js',
 );
-const {
-  DesktopArtifactRequestError,
-} = require(COMPILED_ROOT + '/src/features/chat/desktopArtifactClient.js');
+const { DesktopArtifactRequestError } = require(
+  COMPILED_ROOT + '/src/features/chat/desktopArtifactClient.js',
+);
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
 );
@@ -120,8 +123,7 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
@@ -198,6 +200,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
@@ -320,12 +323,10 @@ test('generated contract exposes one credential-free root artifact-content Provi
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_ARTIFACT_CONTENT_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_ARTIFACT_CONTENT_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) =>
-      moduleRef === DESKTOP_ARTIFACT_CONTENT_AUTHORITY_MODULE_REF_V2,
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_ARTIFACT_CONTENT_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
     ({ entry_id: entryId }) => entryId === 'builtin-desktop-artifact-content-authority',
@@ -456,11 +457,7 @@ test('local transport preserves load, save and binary download contracts', async
     const controller = new AbortController();
     const authority = service.bindOperation(runtimeConfig());
     const loaded = await authority.loadContent('artifact / one', controller.signal);
-    const saved = await authority.saveContent(
-      'artifact / one',
-      saveCommand(),
-      controller.signal,
-    );
+    const saved = await authority.saveContent('artifact / one', saveCommand(), controller.signal);
     const downloaded = await authority.download('artifact / one', controller.signal);
 
     assert.deepEqual(loaded, content());
@@ -600,7 +597,10 @@ test('compatible client freezes config, request and command before one exact pro
   const config = runtimeConfig();
   const command = saveCommand();
   const controller = new AbortController();
-  const client = createDesktopArtifactContentClientV2(() => actions, () => config);
+  const client = createDesktopArtifactContentClientV2(
+    () => actions,
+    () => config,
+  );
   const pending = client.saveContent('artifact / one', command, controller.signal);
   config.tenantId = 'mutated-tenant';
   config.projectId = 'mutated-project';
@@ -643,29 +643,37 @@ test('malformed config, artifact, command and signal fail before lease admission
     },
   };
   let config = runtimeConfig();
-  const client = createDesktopArtifactContentClientV2(() => actions, () => config);
+  const client = createDesktopArtifactContentClientV2(
+    () => actions,
+    () => config,
+  );
 
   await assert.rejects(
     client.loadContent('   '),
-    (error) => error instanceof DesktopArtifactRequestError && error.reasonCode === 'artifact_id_invalid',
+    (error) =>
+      error instanceof DesktopArtifactRequestError && error.reasonCode === 'artifact_id_invalid',
   );
   config = runtimeConfig({ tenantId: '' });
   await assert.rejects(
     client.loadContent('artifact-1'),
-    (error) => error instanceof RuntimeV2Error && error.code === 'desktop_artifact_content_input_invalid',
+    (error) =>
+      error instanceof RuntimeV2Error && error.code === 'desktop_artifact_content_input_invalid',
   );
   config = runtimeConfig();
   await assert.rejects(
     client.loadContent('artifact-1', {}),
-    (error) => error instanceof RuntimeV2Error && error.code === 'desktop_artifact_content_input_invalid',
+    (error) =>
+      error instanceof RuntimeV2Error && error.code === 'desktop_artifact_content_input_invalid',
   );
   await assert.rejects(
     client.saveContent('artifact-1', saveCommand({ contract_version: 1 })),
-    (error) => error instanceof RuntimeV2Error && error.code === 'desktop_artifact_content_input_invalid',
+    (error) =>
+      error instanceof RuntimeV2Error && error.code === 'desktop_artifact_content_input_invalid',
   );
   await assert.rejects(
     client.saveContent('artifact-1', saveCommand({ idempotency_key: '' })),
-    (error) => error instanceof RuntimeV2Error && error.code === 'desktop_artifact_content_input_invalid',
+    (error) =>
+      error instanceof RuntimeV2Error && error.code === 'desktop_artifact_content_input_invalid',
   );
   assert.equal(acquisitions, 0);
 });
@@ -716,7 +724,10 @@ test('every malformed service result fails closed at the operation boundary', as
 });
 
 test('missing generation service is structured and released authority is revoked', async () => {
-  const unavailable = createDesktopArtifactContentClientV2(() => null, () => runtimeConfig());
+  const unavailable = createDesktopArtifactContentClientV2(
+    () => null,
+    () => runtimeConfig(),
+  );
   await assert.rejects(
     unavailable.loadContent('artifact-1'),
     (error) =>
@@ -792,7 +803,10 @@ test('operation failure outranks release failure and successful release failure 
       },
     }),
   };
-  const client = createDesktopArtifactContentClientV2(() => actions, () => runtimeConfig());
+  const client = createDesktopArtifactContentClientV2(
+    () => actions,
+    () => runtimeConfig(),
+  );
 
   await assert.rejects(client.loadContent('artifact-1'), /artifact_operation_failed/u);
   service.bindOperation = () => ({
@@ -824,7 +838,10 @@ test('HMR pins an in-flight artifact operation and sends the next call to the ne
     }),
   };
   let actions = acceptedActions(oldService, 'sha256:old', lifecycle);
-  const client = createDesktopArtifactContentClientV2(() => actions, () => runtimeConfig());
+  const client = createDesktopArtifactContentClientV2(
+    () => actions,
+    () => runtimeConfig(),
+  );
   const oldPending = client.loadContent('old-artifact');
   actions = acceptedActions(newService, 'sha256:new', lifecycle);
   const next = await client.loadContent('new-artifact');
@@ -835,11 +852,6 @@ test('HMR pins an in-flight artifact operation and sends the next call to the ne
   assert.equal(old.content, 'old');
   assert.deepEqual(
     lifecycle.map(({ type, digest }) => `${type}:${digest}`),
-    [
-      'acquire:sha256:old',
-      'acquire:sha256:new',
-      'release:sha256:new',
-      'release:sha256:old',
-    ],
+    ['acquire:sha256:old', 'acquire:sha256:new', 'release:sha256:new', 'release:sha256:old'],
   );
 });

@@ -44,6 +44,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -68,44 +71,44 @@ const {
   withDesktopMyWorkAuthorityOperationV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopMyWorkAuthorityModuleV2.js');
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
 );
 const { desktopConversationLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js',
 );
 const { desktopHitlResponseAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js',
 );
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js');
 const { desktopSessionProjectionAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js',
 );
 const { desktopSessionRunChangesAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js',
 );
 const { desktopSessionTimelineAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js',
 );
 const { desktopTenantAnalyticsAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantAnalyticsAuthorityModuleV2.js',
 );
 const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
 );
 const { desktopTenantOverviewAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantOverviewAuthorityModuleV2.js',
 );
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js',
 );
 const { desktopWorkspaceCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js',
 );
 const { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceAgentBindingAuthorityModuleV2.js',
@@ -117,29 +120,28 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
 );
 const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
 const BOOTSTRAP_PATH = new URL(
   'shared/profiles/memstack-default-bootstrap.v2.json',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 const MANIFEST_PATH = new URL(
   'config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 const PROFILE_PATH = new URL(
   'config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 
 function loadBootstrap() {
@@ -193,6 +195,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
@@ -297,13 +300,13 @@ test('generated contract exposes one credential-free root My Work Provider', () 
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_MY_WORK_AUTHORITY_MODULE_REF_V2
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_MY_WORK_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_MY_WORK_AUTHORITY_MODULE_REF_V2
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_MY_WORK_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-my-work-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-my-work-authority',
   );
 
   assert.ok(module);
@@ -328,7 +331,7 @@ test('generated contract exposes one credential-free root My Work Provider', () 
   assert.equal(catalog.entrypoint, 'applyDesktopMyWorkAuthorityV2');
   assert.equal(
     catalog.artifact_source,
-    'repo+typescript://agi-stack/apps/desktop/src/plugins/desktopMyWorkAuthorityModuleV2.ts'
+    'repo+typescript://agi-stack/apps/desktop/src/plugins/desktopMyWorkAuthorityModuleV2.ts',
   );
   assert.equal(entry.module_ref, DESKTOP_MY_WORK_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
@@ -349,7 +352,7 @@ test('Loader activates the exact service and invalid candidates keep last-good',
   const service = generation.resolve(
     DESKTOP_MY_WORK_AUTHORITY_SERVICE_V2,
     { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
-    { version: DESKTOP_MY_WORK_AUTHORITY_VERSION_V2 }
+    { version: DESKTOP_MY_WORK_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
@@ -360,15 +363,15 @@ test('Loader activates the exact service and invalid candidates keep last-good',
     () =>
       applyDesktopMyWorkAuthorityV2(
         { provide: () => assert.fail('invalid config must not provide') },
-        { strategy: 'legacy-client' }
+        { strategy: 'legacy-client' },
       ),
     (error) =>
-      error instanceof RuntimeV2Error && error.code === 'desktop_my_work_authority_config_invalid'
+      error instanceof RuntimeV2Error && error.code === 'desktop_my_work_authority_config_invalid',
   );
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-my-work-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-my-work-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
@@ -376,9 +379,9 @@ test('Loader activates the exact service and invalid candidates keep last-good',
       disabledGeneration.resolve(
         DESKTOP_MY_WORK_AUTHORITY_SERVICE_V2,
         { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
-        { version: DESKTOP_MY_WORK_AUTHORITY_VERSION_V2 }
+        { version: DESKTOP_MY_WORK_AUTHORITY_VERSION_V2 },
       ),
-    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service'
+    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
 
   const manager = new GenerationManagerV2();
@@ -387,13 +390,13 @@ test('Loader activates the exact service and invalid candidates keep last-good',
     rendererDefinitions().map((definition) =>
       definition.moduleRef === DESKTOP_MY_WORK_AUTHORITY_MODULE_REF_V2
         ? { ...definition, contractDigest: 'sha256:' + '0'.repeat(64) }
-        : definition
+        : definition,
     ),
-    'desktop-renderer'
+    'desktop-renderer',
   );
   await assert.rejects(
     wrongDefinitionLoader.stage(bootstrap),
-    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch'
+    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch',
   );
   assert.equal(manager.current, generation);
   await disabledGeneration.dispose();
@@ -427,12 +430,12 @@ test('local and vault-bound cloud transports preserve exact authority semantics'
 
   try {
     const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
-      loadBootstrap()
+      loadBootstrap(),
     );
     const service = generation.resolve(
       DESKTOP_MY_WORK_AUTHORITY_SERVICE_V2,
       { kind: 'project', tenant_id: 'tenant / one', project_id: 'project / one' },
-      { version: DESKTOP_MY_WORK_AUTHORITY_VERSION_V2 }
+      { version: DESKTOP_MY_WORK_AUTHORITY_VERSION_V2 },
     );
     const controller = new AbortController();
     const localConfig = runtimeConfig();
@@ -474,7 +477,7 @@ test('local and vault-bound cloud transports preserve exact authority semantics'
     assert.equal(cloudCommands[0].command, 'cloud_request');
     assert.equal(
       cloudCommands[0].args.request.path,
-      '/api/v1/projects/project%20%2F%20one/my-work'
+      '/api/v1/projects/project%20%2F%20one/my-work',
     );
     assert.equal(JSON.stringify(cloudCommands).includes('Bearer'), false);
     await generation.dispose();
@@ -550,7 +553,7 @@ test('invalid input and cross-project responses fail closed', async () => {
   ]) {
     assert.throws(
       () => operations.listMyWork(input),
-      (error) => error instanceof RuntimeV2Error && error.code === 'desktop_my_work_input_invalid'
+      (error) => error instanceof RuntimeV2Error && error.code === 'desktop_my_work_input_invalid',
     );
   }
   assert.equal(acquisitions, 0);
@@ -572,7 +575,7 @@ test('invalid input and cross-project responses fail closed', async () => {
     await assert.rejects(
       authority.listMyWork(),
       (error) =>
-        error instanceof RuntimeV2Error && error.code === 'desktop_my_work_response_scope_mismatch'
+        error instanceof RuntimeV2Error && error.code === 'desktop_my_work_response_scope_mismatch',
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -586,7 +589,7 @@ test('missing or wrong service fails closed and release preserves the primary er
     () => operations.listMyWork({ config: runtimeConfig() }),
     (error) =>
       error instanceof DesktopMyWorkAuthorityUnavailableErrorV2 &&
-      error.reasonCode === 'desktop_renderer_generation_actions_unavailable'
+      error.reasonCode === 'desktop_renderer_generation_actions_unavailable',
   );
 
   currentActions = {
@@ -601,7 +604,7 @@ test('missing or wrong service fails closed and release preserves the primary er
     (error) =>
       error instanceof DesktopMyWorkAuthorityUnavailableErrorV2 &&
       error.reasonCode === 'desktop_renderer_service_resolve_failed' &&
-      error.runtimeCode === 'missing_service'
+      error.runtimeCode === 'missing_service',
   );
 
   let wrongReleaseCount = 0;
@@ -619,7 +622,7 @@ test('missing or wrong service fails closed and release preserves the primary er
   };
   await assert.rejects(
     operations.listMyWork({ config: runtimeConfig() }),
-    (error) => error instanceof RuntimeV2Error && error.code === 'desktop_my_work_service_invalid'
+    (error) => error instanceof RuntimeV2Error && error.code === 'desktop_my_work_service_invalid',
   );
   assert.equal(wrongReleaseCount, 1);
 
@@ -654,23 +657,23 @@ test('missing or wrong service fails closed and release preserves the primary er
       (authority) => {
         escapedAuthority = authority;
         throw primary;
-      }
+      },
     ),
-    (error) => error === primary
+    (error) => error === primary,
   );
   assert.throws(
     () => escapedAuthority.listMyWork(),
     (error) =>
-      error instanceof RuntimeV2Error && error.code === 'desktop_my_work_operation_released'
+      error instanceof RuntimeV2Error && error.code === 'desktop_my_work_operation_released',
   );
   assert.equal(releaseCount, 1);
   await assert.rejects(
     withDesktopMyWorkAuthorityOperationV2(
       releaseFailingActions,
       { config: runtimeConfig() },
-      (authority) => authority.listMyWork()
+      (authority) => authority.listMyWork(),
     ),
-    /my_work_release_failure/u
+    /my_work_release_failure/u,
   );
   assert.equal(releaseCount, 2);
 });
@@ -706,10 +709,10 @@ test('in-flight read stays on its old generation and the next read uses the new 
   assert.equal(nextRead.total, 'next');
   assert.deepEqual(
     lifecycle.filter((event) => typeof event === 'string'),
-    ['list:old', 'list:next']
+    ['list:old', 'list:next'],
   );
   assert.deepEqual(
     lifecycle.filter((event) => event.type === 'release').map((event) => event.digest),
-    ['sha256:next', 'sha256:old']
+    ['sha256:next', 'sha256:old'],
   );
 });

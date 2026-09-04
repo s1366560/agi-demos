@@ -566,6 +566,35 @@
       "contract_digest": "sha256:51634b0f3c4dfef941670937938d11b0040d014e50a58805bda9f1301efa5dbe"
     },
     {
+      "module_ref": "builtin://memstack/desktop/instance-templates-authority",
+      "entrypoint": "applyDesktopInstanceTemplatesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:111e67f440879d2242e98542078f71e00f5859b78620ae069a7d18ad1abcf472",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.instance-templates-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-vault-broker", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8301debe66665926ef19055c16f215b16424cf7d04126dd0c458aa38e2ffee1b"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/artifact-content-authority",
       "entrypoint": "applyDesktopArtifactContentAuthorityV2",
       "artifact": {

@@ -44,6 +44,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -66,9 +69,7 @@ const {
   createDesktopTenantCatalogOperationsV2,
   desktopTenantCatalogAuthorityDefinitionV2,
   withDesktopTenantCatalogOperationV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js');
 const { desktopTenantAnalyticsAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantAnalyticsAuthorityModuleV2.js',
 );
@@ -78,9 +79,7 @@ const { desktopTenantOverviewAuthorityDefinitionV2 } = require(
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
-} = require(
-  COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js',
-);
+} = require(COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js');
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
 );
@@ -112,12 +111,10 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
 );
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js',
@@ -198,6 +195,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
@@ -437,10 +435,9 @@ test('local and cloud operations freeze config and forward AbortSignal through e
   };
 
   try {
-    const generation = await new LoaderV2(
-      rendererDefinitions(),
-      'desktop-renderer',
-    ).stage(loadBootstrap());
+    const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
+      loadBootstrap(),
+    );
     const service = generation.resolve(
       DESKTOP_TENANT_CATALOG_AUTHORITY_SERVICE_V2,
       { kind: 'root' },
@@ -597,8 +594,7 @@ test('escaped authority is revoked and primary operation failure wins over relea
   assert.throws(
     () => escapedAuthority.listTenants(),
     (error) =>
-      error instanceof RuntimeV2Error &&
-      error.code === 'desktop_tenant_catalog_operation_released',
+      error instanceof RuntimeV2Error && error.code === 'desktop_tenant_catalog_operation_released',
   );
   assert.equal(releaseCount, 1);
 
@@ -627,11 +623,7 @@ test('HMR lets an in-flight refresh finish on old generation and sends the next 
         });
       },
     });
-  let currentActions = acceptedActions(
-    serviceFor('old'),
-    'sha256:old',
-    lifecycle,
-  );
+  let currentActions = acceptedActions(serviceFor('old'), 'sha256:old', lifecycle);
   const operations = createDesktopTenantCatalogOperationsV2(() => currentActions);
   const oldRefresh = operations.listTenants(runtimeConfig());
   await Promise.resolve();

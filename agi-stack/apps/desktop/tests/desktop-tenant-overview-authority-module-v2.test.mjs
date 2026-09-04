@@ -45,12 +45,13 @@ const authorityModules = [
   'desktopProjectTeamAuthorityModuleV2',
   'desktopProjectGraphAuthorityModuleV2',
   'desktopProjectBlackboardAuthorityModuleV2',
- 'desktopRuntimePoolAuthorityModuleV2',
+  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
   'desktopDeadLetterQueueAuthorityModuleV2',
+  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
@@ -153,10 +154,7 @@ test('generated contract declares one credential-free root tenant overview Provi
 });
 
 test('Loader activates the exact service and disabled Profile fails closed', async () => {
-  const definitions = [
-    ...createDesktopRendererDefinitionsV2(),
-    ...authorityModules,
-  ];
+  const definitions = [...createDesktopRendererDefinitionsV2(), ...authorityModules];
   const loader = new LoaderV2(definitions, 'desktop-renderer');
   const generation = await loader.stage(bootstrap());
   const service = generation.resolve(

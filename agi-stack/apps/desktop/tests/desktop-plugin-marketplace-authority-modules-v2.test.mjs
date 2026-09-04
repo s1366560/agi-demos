@@ -44,6 +44,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -69,9 +72,7 @@ const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
   withDesktopPluginMarketplaceCatalogOperationV2,
-} = require(
-  `${COMPILED_ROOT}/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js`,
-);
+} = require(`${COMPILED_ROOT}/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js`);
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopConversationConfigAuthorityModuleV2.js`,
 );
@@ -91,8 +92,7 @@ const { desktopSessionTimelineAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceAgentBindingAuthorityModuleV2.js',
@@ -104,8 +104,7 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
 );
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
   `${COMPILED_ROOT}/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js`,
@@ -198,6 +197,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
@@ -313,9 +313,7 @@ test('generated manifest, catalog and Profile expose two independent root servic
     const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
       ({ module_ref: moduleRef }) => moduleRef === contract.moduleRef,
     );
-    const entry = bootstrap.entries.find(
-      ({ entry_id: entryId }) => entryId === contract.entryId,
-    );
+    const entry = bootstrap.entries.find(({ entry_id: entryId }) => entryId === contract.entryId);
 
     assert.ok(module);
     assert.ok(catalog);
@@ -352,8 +350,7 @@ test('generated manifest, catalog and Profile expose two independent root servic
   assert.equal(
     desktopPluginMarketplaceCatalogDefinitionV2.contractDigest,
     PLUGIN_MODULE_CATALOG_V2.modules.find(
-      ({ module_ref: moduleRef }) =>
-        moduleRef === DESKTOP_PLUGIN_MARKETPLACE_CATALOG_MODULE_REF_V2,
+      ({ module_ref: moduleRef }) => moduleRef === DESKTOP_PLUGIN_MARKETPLACE_CATALOG_MODULE_REF_V2,
     ).contract_digest,
   );
   assert.equal(
@@ -451,10 +448,9 @@ test('Loader activates frozen services and each Profile entry disables independe
 });
 
 test('bound authorities freeze config and forward AbortSignal through exact V2 endpoints', async () => {
-  const generation = await new LoaderV2(
-    rendererDefinitions(),
-    'desktop-renderer',
-  ).stage(loadBootstrap());
+  const generation = await new LoaderV2(rendererDefinitions(), 'desktop-renderer').stage(
+    loadBootstrap(),
+  );
   const catalogService = generation.resolve(
     DESKTOP_PLUGIN_MARKETPLACE_CATALOG_SERVICE_V2,
     { kind: 'root' },
@@ -511,15 +507,9 @@ test('bound authorities freeze config and forward AbortSignal through exact V2 e
       assert.equal(headers.get('Authorization'), 'Bearer plugin-marketplace-session');
       assert.equal(headers.get('X-Agistack-Launch'), 'plugin-marketplace-launch');
     }
-    assert.equal(
-      calls[0].url.pathname,
-      '/api/v1/plugin-marketplace/packages',
-    );
+    assert.equal(calls[0].url.pathname, '/api/v1/plugin-marketplace/packages');
     assert.equal(calls[0].url.searchParams.get('include_revoked'), 'true');
-    assert.equal(
-      calls[1].url.pathname,
-      '/api/v1/plugin-marketplace/packages/github/uninstall',
-    );
+    assert.equal(calls[1].url.pathname, '/api/v1/plugin-marketplace/packages/github/uninstall');
     assert.deepEqual(JSON.parse(calls[1].init.body), {
       tenant_id: 'tenant-1',
       version: '2.4.1',
@@ -586,14 +576,9 @@ test('operation runner snapshots actions, leases exact services and releases exa
     },
   };
   let currentActions = actions;
-  const operations = createDesktopPluginMarketplaceOperationsV2(
-    () => currentActions,
-  );
+  const operations = createDesktopPluginMarketplaceOperationsV2(() => currentActions);
   const controller = new AbortController();
-  const listPending = operations.listMarketplacePlugins(
-    requestConfig,
-    controller.signal,
-  );
+  const listPending = operations.listMarketplacePlugins(requestConfig, controller.signal);
   requestConfig.apiBaseUrl = 'http://127.0.0.1:46999';
   requestConfig.apiKey = 'mutated-session';
   currentActions = null;
@@ -681,14 +666,10 @@ test('operation helper revokes escaped authority and preserves primary failure o
   };
 
   await assert.rejects(
-    withDesktopPluginMarketplaceCatalogOperationV2(
-      actions,
-      runtimeConfig(),
-      (authority) => {
-        escapedAuthority = authority;
-        throw primary;
-      },
-    ),
+    withDesktopPluginMarketplaceCatalogOperationV2(actions, runtimeConfig(), (authority) => {
+      escapedAuthority = authority;
+      throw primary;
+    }),
     (error) => error === primary,
   );
   assert.throws(
@@ -701,16 +682,11 @@ test('operation helper revokes escaped authority and preserves primary failure o
 });
 
 test('production and QA wiring remove every direct Marketplace transport fallback', () => {
-  const source = (relativePath) =>
-    readFileSync(new URL(relativePath, REPOSITORY_ROOT), 'utf8');
+  const source = (relativePath) => readFileSync(new URL(relativePath, REPOSITORY_ROOT), 'utf8');
   const hook = source('agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts');
   const app = source('agi-stack/apps/desktop/src/App.tsx');
-  const settings = source(
-    'agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx',
-  );
-  const management = source(
-    'agi-stack/apps/desktop/src/features/settings/usePluginManagement.ts',
-  );
+  const settings = source('agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx');
+  const management = source('agi-stack/apps/desktop/src/features/settings/usePluginManagement.ts');
   const routeClient = source(
     'agi-stack/apps/desktop/src/features/settings-routes/pluginsRouteClient.ts',
   );
@@ -729,12 +705,8 @@ test('production and QA wiring remove every direct Marketplace transport fallbac
   const composerProvider = source(
     'agi-stack/apps/desktop/src/features/task/desktopNewThreadComposerCatalogClientProviderV2.ts',
   );
-  const noProjectQa = source(
-    'agi-stack/apps/desktop/src/qa/NoProjectEntryQa.tsx',
-  );
-  const providerQa = source(
-    'agi-stack/apps/desktop/src/qa/ProviderSettingsQa.tsx',
-  );
+  const noProjectQa = source('agi-stack/apps/desktop/src/qa/NoProjectEntryQa.tsx');
+  const providerQa = source('agi-stack/apps/desktop/src/qa/ProviderSettingsQa.tsx');
 
   assert.match(hook, /desktopPluginMarketplaceCatalogDefinitionV2/u);
   assert.match(hook, /desktopPluginMarketplaceManagementDefinitionV2/u);

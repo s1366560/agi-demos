@@ -70,6 +70,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -117,8 +120,7 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
@@ -129,7 +131,10 @@ const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
-const BOOTSTRAP_PATH = new URL('shared/profiles/memstack-default-bootstrap.v2.json', REPOSITORY_ROOT);
+const BOOTSTRAP_PATH = new URL(
+  'shared/profiles/memstack-default-bootstrap.v2.json',
+  REPOSITORY_ROOT,
+);
 const MANIFEST_PATH = new URL(
   'config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json',
   REPOSITORY_ROOT,
@@ -196,6 +201,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,
@@ -650,12 +656,14 @@ test('Cloud service uses the vault broker for read, mutation and run without cre
       expected_revision: 7,
     });
 
-    assert.deepEqual(calls.map(({ command }) => command), [
-      'cloud_request',
-      'cloud_request',
-      'cloud_request',
-    ]);
-    assert.deepEqual(calls.map(({ args }) => args.request.method), ['GET', 'POST', 'POST']);
+    assert.deepEqual(
+      calls.map(({ command }) => command),
+      ['cloud_request', 'cloud_request', 'cloud_request'],
+    );
+    assert.deepEqual(
+      calls.map(({ args }) => args.request.method),
+      ['GET', 'POST', 'POST'],
+    );
     assert.equal(calls[1].args.request.body.workspace_id, undefined);
     assert.equal(calls[2].args.request.body.contract_version, 2);
     assert.equal(JSON.stringify(calls).includes('automation-session'), false);
@@ -672,7 +680,10 @@ test('every facade call freezes config and input before one exact project lease'
   const received = [];
   const config = runtimeConfig();
   const actions = acceptedActions(serviceFixture(received), 'sha256:generation-1', lifecycle);
-  const operations = createDesktopAutomationOperationsV2(() => actions, () => config);
+  const operations = createDesktopAutomationOperationsV2(
+    () => actions,
+    () => config,
+  );
   const controller = new AbortController();
   const create = createInput();
   const update = {
@@ -686,14 +697,18 @@ test('every facade call freezes config and input before one exact project lease'
     operations.createAutomation(create),
     operations.updateAutomation('automation-1', update),
     operations.toggleAutomation('automation-1', {
-      idempotency_key: 'toggle-automation-1', expected_revision: 7, enabled: false,
+      idempotency_key: 'toggle-automation-1',
+      expected_revision: 7,
+      enabled: false,
     }),
     operations.deleteAutomation('automation-1', {
-      idempotency_key: 'delete-automation-1', expected_revision: 7,
+      idempotency_key: 'delete-automation-1',
+      expected_revision: 7,
     }),
     operations.listAutomationRuns('automation-1', undefined, controller.signal),
     operations.runAutomation('automation-1', {
-      idempotency_key: 'run-automation-1', expected_revision: 7,
+      idempotency_key: 'run-automation-1',
+      expected_revision: 7,
     }),
   ];
   config.tenantId = 'mutated-tenant';
@@ -710,12 +725,20 @@ test('every facade call freezes config and input before one exact project lease'
     assert.equal(binding.config.tenantId, 'tenant-1');
     assert.equal(binding.config.projectId, 'project-1');
   }
-  assert.equal(received.find(({ kind }) => kind === 'createAutomation').input.name, 'Review automation');
-  assert.equal(received.find(({ kind }) => kind === 'updateAutomation').input.name, 'Updated automation');
+  assert.equal(
+    received.find(({ kind }) => kind === 'createAutomation').input.name,
+    'Review automation',
+  );
+  assert.equal(
+    received.find(({ kind }) => kind === 'updateAutomation').input.name,
+    'Updated automation',
+  );
   assert.deepEqual(
     lifecycle.filter(({ type }) => type === 'acquire').map(({ request }) => request.scope),
     Array.from({ length: 8 }, () => ({
-      kind: 'project', tenant_id: 'tenant-1', project_id: 'project-1',
+      kind: 'project',
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
     })),
   );
   assert.equal(lifecycle.filter(({ type }) => type === 'release').length, 8);
@@ -730,13 +753,19 @@ test('malformed scope, request and response fail closed at the V2 boundary', asy
     },
   };
   let config = runtimeConfig({ tenantId: '' });
-  let operations = createDesktopAutomationOperationsV2(() => neverActions, () => config);
+  let operations = createDesktopAutomationOperationsV2(
+    () => neverActions,
+    () => config,
+  );
   await assert.rejects(
     operations.listAutomations(),
     (error) => error instanceof RuntimeV2Error && error.code === 'desktop_automation_input_invalid',
   );
   config = runtimeConfig();
-  operations = createDesktopAutomationOperationsV2(() => neverActions, () => config);
+  operations = createDesktopAutomationOperationsV2(
+    () => neverActions,
+    () => config,
+  );
   await assert.rejects(
     operations.createAutomation(createInput({ idempotency_key: 'bad key' })),
     (error) => error instanceof RuntimeV2Error && error.code === 'desktop_automation_input_invalid',
@@ -747,7 +776,8 @@ test('malformed scope, request and response fail closed at the V2 boundary', asy
       { idempotency_key: 'run-automation-1', expected_revision: 7 },
       'other-project',
     ),
-    (error) => error instanceof RuntimeV2Error && error.code === 'desktop_automation_scope_mismatch',
+    (error) =>
+      error instanceof RuntimeV2Error && error.code === 'desktop_automation_scope_mismatch',
   );
   assert.equal(acquisitions, 0);
 
@@ -759,12 +789,16 @@ test('malformed scope, request and response fail closed at the V2 boundary', asy
   );
   await assert.rejects(
     malformedOperations.createAutomation(createInput()),
-    (error) => error instanceof RuntimeV2Error && error.code === 'desktop_automation_response_invalid',
+    (error) =>
+      error instanceof RuntimeV2Error && error.code === 'desktop_automation_response_invalid',
   );
 });
 
 test('missing service is structured and an escaped authority is revoked', async () => {
-  const unavailable = createDesktopAutomationOperationsV2(() => null, () => runtimeConfig());
+  const unavailable = createDesktopAutomationOperationsV2(
+    () => null,
+    () => runtimeConfig(),
+  );
   await assert.rejects(
     unavailable.listAutomations(),
     (error) =>
@@ -830,7 +864,10 @@ test('operation failure outranks release failure and successful release failure 
       },
     }),
   };
-  const operations = createDesktopAutomationOperationsV2(() => actions, () => runtimeConfig());
+  const operations = createDesktopAutomationOperationsV2(
+    () => actions,
+    () => runtimeConfig(),
+  );
 
   await assert.rejects(operations.listAutomations(), /automation_operation_failed/u);
   failOperation = false;
@@ -855,7 +892,10 @@ test('HMR pins an in-flight Automation call and routes the next call to the new 
   const nextResponses = responses();
   nextResponses.jobs = { items: [job({ id: 'automation-new' })], total: 1 };
   let actions = acceptedActions(oldService, 'sha256:old', lifecycle);
-  const operations = createDesktopAutomationOperationsV2(() => actions, () => runtimeConfig());
+  const operations = createDesktopAutomationOperationsV2(
+    () => actions,
+    () => runtimeConfig(),
+  );
   const oldPending = operations.listAutomations();
   actions = acceptedActions(serviceFixture([], nextResponses), 'sha256:new', lifecycle);
   const next = await operations.listAutomations();
@@ -866,11 +906,6 @@ test('HMR pins an in-flight Automation call and routes the next call to the new 
   assert.equal(old.items[0].id, 'automation-old');
   assert.deepEqual(
     lifecycle.map(({ type, digest }) => `${type}:${digest}`),
-    [
-      'acquire:sha256:old',
-      'acquire:sha256:new',
-      'release:sha256:new',
-      'release:sha256:old',
-    ],
+    ['acquire:sha256:old', 'acquire:sha256:new', 'release:sha256:new', 'release:sha256:old'],
   );
 });

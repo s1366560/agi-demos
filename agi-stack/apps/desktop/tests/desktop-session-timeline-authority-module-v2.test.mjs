@@ -44,6 +44,9 @@ const { desktopBackendStoresAuthorityDefinitionV2 } = require(
 const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
 );
+const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -69,26 +72,26 @@ const {
 } = require(COMPILED_ROOT + '/src/plugins/desktopSessionTimelineAuthorityModuleV2.js');
 const { DesktopApiError } = require(COMPILED_ROOT + '/src/api/client.js');
 const { desktopConversationConfigAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopConversationConfigAuthorityModuleV2.js',
 );
 const { desktopConversationLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopConversationLifecycleAuthorityModuleV2.js',
 );
 const { desktopHitlResponseAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopHitlResponseAuthorityModuleV2.js',
 );
 const { desktopMyWorkAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopMyWorkAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopMyWorkAuthorityModuleV2.js',
 );
 const {
   desktopPluginMarketplaceCatalogDefinitionV2,
   desktopPluginMarketplaceManagementDefinitionV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.js');
 const { desktopSessionProjectionAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopSessionProjectionAuthorityModuleV2.js',
 );
 const { desktopSessionRunChangesAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopSessionRunChangesAuthorityModuleV2.js',
 );
 const { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceAgentBindingAuthorityModuleV2.js',
@@ -100,48 +103,46 @@ const { desktopWorkspaceMemberMutationAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceMemberMutationAuthorityModuleV2.js',
 );
 const { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT +
-    '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceExecutionSnapshotAuthorityModuleV2.js',
 );
 const { desktopTerminalLifecycleAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopTerminalLifecycleAuthorityModuleV2.js',
 );
 const { desktopTenantAnalyticsAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantAnalyticsAuthorityModuleV2.js',
 );
 const { desktopTenantCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopTenantCatalogAuthorityModuleV2.js',
 );
 const { desktopTenantOverviewAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantOverviewAuthorityModuleV2.js',
 );
 const { desktopWorkspaceCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.js',
 );
 const { desktopWorkspaceContextAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceContextAuthorityModuleV2.js',
 );
 const { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } = require(
-  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js'
+  COMPILED_ROOT + '/src/plugins/desktopWorkspaceMessageCatalogAuthorityModuleV2.js',
 );
 const { DEFAULT_CONFIG } = require(COMPILED_ROOT + '/src/types.js');
 
 const REPOSITORY_ROOT = new URL('../../../../', import.meta.url);
 const BOOTSTRAP_PATH = new URL(
   'shared/profiles/memstack-default-bootstrap.v2.json',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 const MANIFEST_PATH = new URL(
   'config/plugin-manifests-v2/memstack-renderer-target-hosts.v2.json',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 const PROFILE_PATH = new URL(
   'config/plugin-profiles/memstack-production-target-hosts.v2.yaml',
-  REPOSITORY_ROOT
+  REPOSITORY_ROOT,
 );
 
 function loadBootstrap() {
@@ -195,6 +196,7 @@ function rendererDefinitions() {
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
+    desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
@@ -310,13 +312,13 @@ test('generated contract exposes one credential-free root session timeline Provi
   const profile = readFileSync(PROFILE_PATH, 'utf8');
   const bootstrap = loadBootstrap();
   const module = manifest.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2,
   );
   const catalog = PLUGIN_MODULE_CATALOG_V2.modules.find(
-    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2
+    ({ module_ref: moduleRef }) => moduleRef === DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2,
   );
   const entry = bootstrap.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-timeline-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-timeline-authority',
   );
 
   assert.ok(module);
@@ -342,7 +344,7 @@ test('generated contract exposes one credential-free root session timeline Provi
   assert.equal(
     catalog.artifact_source,
     'repo+typescript://agi-stack/apps/desktop/src/plugins/' +
-      'desktopSessionTimelineAuthorityModuleV2.ts'
+      'desktopSessionTimelineAuthorityModuleV2.ts',
   );
   assert.equal(entry.module_ref, DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2);
   assert.equal(entry.parent_entry_id, 'builtin-desktop-renderer-host');
@@ -363,7 +365,7 @@ test('Loader activates the exact service and disable removes it without fallback
   const service = generation.resolve(
     DESKTOP_SESSION_TIMELINE_AUTHORITY_SERVICE_V2,
     { kind: 'root' },
-    { version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2 }
+    { version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2 },
   );
 
   assert.equal(Object.isFrozen(service), true);
@@ -376,16 +378,16 @@ test('Loader activates the exact service and disable removes it without fallback
         {
           provide: () => assert.fail('invalid config must not provide a service'),
         },
-        { strategy: 'legacy-client' }
+        { strategy: 'legacy-client' },
       ),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_session_timeline_authority_config_invalid'
+      error.code === 'desktop_session_timeline_authority_config_invalid',
   );
 
   const disabled = structuredClone(bootstrap);
   disabled.entries.find(
-    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-timeline-authority'
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-session-timeline-authority',
   ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
@@ -398,9 +400,9 @@ test('Loader activates the exact service and disable removes it without fallback
           project_id: 'project-1',
           session_id: 'conversation-1',
         },
-        { version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2 }
+        { version: DESKTOP_SESSION_TIMELINE_AUTHORITY_VERSION_V2 },
       ),
-    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service'
+    (error) => error instanceof RuntimeV2Error && error.code === 'missing_service',
   );
 
   const manager = new GenerationManagerV2();
@@ -409,13 +411,13 @@ test('Loader activates the exact service and disable removes it without fallback
     rendererDefinitions().map((definition) =>
       definition.moduleRef === DESKTOP_SESSION_TIMELINE_AUTHORITY_MODULE_REF_V2
         ? { ...definition, contractDigest: 'sha256:' + '0'.repeat(64) }
-        : definition
+        : definition,
     ),
-    'desktop-renderer'
+    'desktop-renderer',
   );
   await assert.rejects(
     wrongDefinitionLoader.stage(bootstrap),
-    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch'
+    (error) => error instanceof RuntimeV2Error && error.code === 'contract_digest_mismatch',
   );
   assert.equal(manager.current, generation);
   await disabledGeneration.dispose();
@@ -438,19 +440,19 @@ test('local transport performs one exact request for each page and forwards ever
           service = provided;
         },
       },
-      { strategy: 'desktop-api-client' }
+      { strategy: 'desktop-api-client' },
     );
     const authority = service.bindOperation(runtimeConfig());
     const controller = new AbortController();
     const initial = await authority.getConversationMessages(
       conversation(),
       { limit: 75, fromTimeUs: 1_000, fromCounter: 4 },
-      controller.signal
+      controller.signal,
     );
     const earlier = await authority.getConversationMessages(
       conversation(),
       { limit: 50, beforeTimeUs: 2_000, beforeCounter: 7 },
-      controller.signal
+      controller.signal,
     );
 
     assert.equal(initial.page, 1);
@@ -505,7 +507,7 @@ test('vault-bound cloud transport remains behind DesktopApiClient', async () => 
           service = provided;
         },
       },
-      { strategy: 'desktop-api-client' }
+      { strategy: 'desktop-api-client' },
     );
     const payload = await service
       .bindOperation(runtimeConfig({ apiKey: '', localApiToken: '', mode: 'cloud' }))
@@ -540,7 +542,7 @@ test('operation freezes config, identity and page before the exact session lease
     },
   });
   const operations = createDesktopSessionTimelineOperationsV2(() =>
-    acceptedActions(service, 'sha256:generation-1', lifecycle)
+    acceptedActions(service, 'sha256:generation-1', lifecycle),
   );
   const config = runtimeConfig();
   const currentConversation = conversation();
@@ -588,7 +590,7 @@ test('operation freezes config, identity and page before the exact session lease
   });
   assert.deepEqual(
     lifecycle.filter((event) => event.type === 'release').map((event) => event.digest),
-    ['sha256:generation-1']
+    ['sha256:generation-1'],
   );
 });
 
@@ -621,7 +623,7 @@ test('invalid identity, scope, page and signal fail before acquiring a lease', a
     assert.throws(
       () => invoke(overrides),
       (error) =>
-        error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_scope_mismatch'
+        error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_scope_mismatch',
     );
   }
   for (const overrides of [
@@ -640,7 +642,7 @@ test('invalid identity, scope, page and signal fail before acquiring a lease', a
     assert.throws(
       () => invoke(overrides),
       (error) =>
-        error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_input_invalid'
+        error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_input_invalid',
     );
   }
   assert.equal(acquireCount, 0);
@@ -653,7 +655,7 @@ test('invalid identity, scope, page and signal fail before acquiring a lease', a
     }),
     (error) =>
       error instanceof DesktopSessionTimelineAuthorityUnavailableErrorV2 &&
-      error.reasonCode === 'desktop_renderer_service_resolve_failed'
+      error.reasonCode === 'desktop_renderer_service_resolve_failed',
   );
   assert.equal(acquireCount, 1);
 });
@@ -666,13 +668,13 @@ test('transport scope is revalidated and non-2xx preserves DesktopApiError', asy
         service = provided;
       },
     },
-    { strategy: 'desktop-api-client' }
+    { strategy: 'desktop-api-client' },
   );
   const authority = service.bindOperation(runtimeConfig());
   assert.throws(
     () => authority.getConversationMessages(conversation({ project_id: 'project-other' }), {}),
     (error) =>
-      error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_scope_mismatch'
+      error instanceof RuntimeV2Error && error.code === 'desktop_session_timeline_scope_mismatch',
   );
 
   const originalFetch = globalThis.fetch;
@@ -686,7 +688,7 @@ test('transport scope is revalidated and non-2xx preserves DesktopApiError', asy
         assert.equal(error.status, 503);
         assert.deepEqual(error.payload, response);
         return true;
-      }
+      },
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -705,7 +707,7 @@ test('missing service is structured and escaped authority is revoked before rele
     () => operations.getConversationMessages(input),
     (error) =>
       error instanceof DesktopSessionTimelineAuthorityUnavailableErrorV2 &&
-      error.reasonCode === 'desktop_renderer_generation_actions_unavailable'
+      error.reasonCode === 'desktop_renderer_generation_actions_unavailable',
   );
 
   currentActions = {
@@ -720,7 +722,7 @@ test('missing service is structured and escaped authority is revoked before rele
     (error) =>
       error instanceof DesktopSessionTimelineAuthorityUnavailableErrorV2 &&
       error.reasonCode === 'desktop_renderer_service_resolve_failed' &&
-      error.runtimeCode === 'missing_service'
+      error.runtimeCode === 'missing_service',
   );
 
   let releaseStartedResolve;
@@ -760,14 +762,14 @@ test('missing service is structured and escaped authority is revoked before rele
     (authority) => {
       escapedAuthority = authority;
       return timelinePayload();
-    }
+    },
   );
   await releaseStarted;
   assert.throws(
     () => escapedAuthority.getConversationMessages(conversation(), { limit: 50 }),
     (error) =>
       error instanceof RuntimeV2Error &&
-      error.code === 'desktop_session_timeline_operation_released'
+      error.code === 'desktop_session_timeline_operation_released',
   );
   assert.equal(transportCalls, 0);
   finishRelease();
@@ -843,13 +845,13 @@ test('Abort releases once and primary failures outrank release failures', async 
     withDesktopSessionTimelineAuthorityOperationV2(releaseFailureActions, input, () => {
       throw primary;
     }),
-    (error) => error === primary
+    (error) => error === primary,
   );
   await assert.rejects(
     withDesktopSessionTimelineAuthorityOperationV2(releaseFailureActions, input, () =>
-      timelinePayload()
+      timelinePayload(),
     ),
-    /timeline_release_failure/u
+    /timeline_release_failure/u,
   );
   assert.equal(failureReleaseCount, 2);
 });
@@ -894,17 +896,17 @@ test('concurrent pages pin independent generations and release independently', a
   assert.equal(nextRead.source, 'next');
   assert.deepEqual(
     lifecycle.filter((event) => typeof event === 'string'),
-    ['read:old:initial', 'read:next:2000']
+    ['read:old:initial', 'read:next:2000'],
   );
   assert.deepEqual(
     lifecycle.filter((event) => event.type === 'release').map((event) => event.digest),
-    ['sha256:next', 'sha256:old']
+    ['sha256:next', 'sha256:old'],
   );
 });
 
 function assertTimelineCall(
   call,
-  { limit, fromTimeUs, fromCounter, beforeTimeUs, beforeCounter, signal }
+  { limit, fromTimeUs, fromCounter, beforeTimeUs, beforeCounter, signal },
 ) {
   const url = new URL(call.input);
   const headers = new Headers(call.init.headers);

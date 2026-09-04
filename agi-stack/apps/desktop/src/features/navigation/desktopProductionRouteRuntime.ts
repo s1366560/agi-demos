@@ -46,7 +46,10 @@ import type { RuntimeDeploymentsRouteBinding } from '../runtime-deployments/runt
 import { createRuntimeDeploymentsController } from '../runtime-deployments/runtimeDeploymentsController';
 import type { InstanceTemplatesRouteBinding } from '../instance-templates/instanceTemplatesRouteModule';
 import { createInstanceTemplatesController } from '../instance-templates/instanceTemplatesController';
-import { createInstanceTemplatesClient } from '../instance-templates/instanceTemplatesClient';
+import {
+  createDesktopInstanceTemplatesClientV2,
+  type DesktopInstanceTemplatesOperationsV2,
+} from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
 import type { UnifiedRuntimesRouteBinding } from '../unified-runtimes/unifiedRuntimesRouteModule';
 import { createUnifiedRuntimesController } from '../unified-runtimes/unifiedRuntimesController';
 import { createUnifiedRuntimesClient } from '../unified-runtimes/unifiedRuntimesClient';
@@ -551,6 +554,7 @@ export function createRuntimeDeploymentsRouteBindingForRuntime(
 export function createInstanceTemplatesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  operations: DesktopInstanceTemplatesOperationsV2,
 ): InstanceTemplatesRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('instance_templates_runtime_scope_mismatch');
@@ -559,7 +563,7 @@ export function createInstanceTemplatesRouteBindingForRuntime(
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createInstanceTemplatesClient(config);
+  const client = createDesktopInstanceTemplatesClientV2(operations, config);
   return Object.freeze({
     controller: createInstanceTemplatesController({
       authority: config.mode,
