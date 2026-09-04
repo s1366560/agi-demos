@@ -19,7 +19,6 @@ import {
   type TenantGovernanceClient,
 } from './tenantGovernanceClient';
 import {
-  createTenantTrustClient,
   TENANT_TRUST_LOCAL_REASON,
   TENANT_TRUST_ROUTE_ID,
   type TenantTrustClient,
@@ -50,7 +49,7 @@ export type TenantAdminCapabilityDependencies = Readonly<{
   governance?: Pick<TenantGovernanceClient, 'load'>;
   billing: Pick<TenantBillingClient, 'load'>;
   audit?: Pick<TenantAuditClient, 'load'>;
-  trust?: Pick<TenantTrustClient, 'load'>;
+  trust: Pick<TenantTrustClient, 'load'>;
 }>;
 
 const REASON_PREFIX = Object.freeze({
@@ -106,7 +105,7 @@ export function createTenantAdminCapabilityClient(
       dependencies.governance ?? createTenantGovernanceClient(runtimeConfig),
     billing: dependencies.billing,
     audit: dependencies.audit ?? createTenantAuditClient(runtimeConfig),
-    trust: dependencies.trust ?? createTenantTrustClient(runtimeConfig),
+    trust: dependencies.trust,
   });
 
   return Object.freeze({

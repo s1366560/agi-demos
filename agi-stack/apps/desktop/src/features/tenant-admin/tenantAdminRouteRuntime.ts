@@ -9,7 +9,7 @@ import { createTenantGovernanceClient } from './tenantGovernanceClient';
 import { createTenantGovernanceController } from './tenantGovernanceController';
 import type { TenantGovernanceRouteBinding } from './tenantGovernanceRouteModule';
 import type { TenantAdminRouteContext } from './tenantAdminRouteModuleFactory';
-import { createTenantTrustClient } from './tenantTrustClient';
+import { createDesktopTenantTrustClientV2, type DesktopTenantTrustOperationsV2 } from '../../plugins/desktopTenantTrustAuthorityModuleV2';
 import { createTenantTrustController } from './tenantTrustController';
 import type { TenantTrustRouteBinding } from './tenantTrustRouteModule';
 
@@ -59,6 +59,7 @@ export function createTenantAuditRouteBindingForRuntime(
 export function createTenantTrustRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantAdminRouteContext,
+  operations: DesktopTenantTrustOperationsV2,
 ): TenantTrustRouteBinding {
   const baseScope = tenantScope(config, context);
   const scope = Object.freeze({
@@ -68,7 +69,7 @@ export function createTenantTrustRouteBindingForRuntime(
   return Object.freeze({
     scope,
     controller: createTenantTrustController({
-      client: createTenantTrustClient(config),
+      client: createDesktopTenantTrustClientV2(operations, config),
       initialScope: scope,
     }),
   });

@@ -198,7 +198,7 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
         ['view', 'filter', 'inspect-runtime-hooks', 'export'],
         17,
       ),
-      tenantTrustClient: probe('available', null, ['view', 'list', 'create', 'revoke']),
+      tenantTrustOperationsV2: tenantTrustOperationsV2Fixture(),
     });
 
     const snapshot = await client.loadSnapshot();
@@ -400,6 +400,24 @@ function tenantBillingOperationsV2Fixture() {
         reasonCode: 'tenant_billing_invoice_download_file_ipc_unavailable',
         contractVersion: '4.0.0',
         allowedActions: ['view', 'inspect-usage', 'list-invoices', 'upgrade-plan'],
+        data,
+        ...data,
+      };
+    },
+  };
+}
+
+function tenantTrustOperationsV2Fixture() {
+  return {
+    async loadTenantTrustPolicies({ scope }) {
+      const data = { membershipRole: 'owner', policies: [] };
+      return {
+        scope,
+        authority: 'cloud',
+        availability: 'available',
+        reasonCode: null,
+        contractVersion: '4.0.0',
+        allowedActions: ['view', 'list', 'create', 'revoke'],
         data,
         ...data,
       };

@@ -132,6 +132,7 @@ import { createDesktopTenantDecisionRecordsOperationsV2 } from './plugins/deskto
 import { createDesktopTenantSettingsOperationsV2 } from './plugins/desktopTenantSettingsAuthorityModuleV2';
 import { createDesktopTenantWebhooksOperationsV2 } from './plugins/desktopTenantWebhooksAuthorityModuleV2';
 import { createDesktopTenantBillingOperationsV2 } from './plugins/desktopTenantBillingAuthorityModuleV2';
+import { createDesktopTenantTrustOperationsV2 } from './plugins/desktopTenantTrustAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
@@ -1093,6 +1094,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantTrustOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantTrustOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantCreationOperationsV2 = useMemo(
     () =>
       createDesktopTenantCreationOperationsV2(
@@ -1451,6 +1459,7 @@ export function App() {
       tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
       tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
       tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
+      tenantTrustOperationsV2: desktopTenantTrustOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1569,6 +1578,7 @@ export function App() {
         tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
         tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
         tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
+        tenantTrustOperationsV2: desktopTenantTrustOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
         desktopWorkspaceLifecycleOperationsV2,
         tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
