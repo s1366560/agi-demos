@@ -337,8 +337,10 @@
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
@@ -348,13 +350,17 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAuditPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/TenantAuditPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantAuditAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantAuditHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantAuditOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
         "agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_audit_authority_not_applicable",
       "local_deviation": "Local security and lifecycle diagnostics remain native-only evidence and do not masquerade as the Cloud tenant audit ledger or export authority.",
-      "judgment_rationale": "AuditLogs owns the canonical tenant audit route and legacy global redirect. Desktop has a real Cloud loader, App binding and revision-bound authority that renders audit rows, common filters, runtime-hook summaries, pagination and retry. CSV and JSON export now reuse the active query, the bounded Cloud binary broker, the strict endpoint allowlist and the native Electron save dialog, including safe cancellation. Cloud remains partial because the Web runtime-hook list, hook-specific filters and record-detail surface are not wired into TenantAuditPage. Local tenant audit governance remains not applicable."
+      "judgment_rationale": "AuditLogs owns the canonical tenant audit route and legacy global redirect. Desktop Cloud load and bounded CSV or JSON export now resolve through the declared tenant-audit V2 service under a tenant operation lease. The authority preserves the active query, strict endpoint allowlist, 16 MiB binary limit, MIME checks, abort propagation and native Electron save dialog. Cloud remains partial because the Web runtime-hook list, hook-specific filters and record-detail surface are not wired into TenantAuditPage. Local tenant audit governance rejects before transport and remains not applicable."
     },
     {
       "id": "tenant-tenant-events",
