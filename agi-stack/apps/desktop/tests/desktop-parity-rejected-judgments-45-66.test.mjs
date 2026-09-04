@@ -651,6 +651,12 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
       "agi-stack/apps/desktop/src/features/backend-stores/backendStoresClient.ts",
       "agi-stack/apps/desktop/src/features/backend-stores/backendStoresController.ts",
       "agi-stack/apps/desktop/src/features/backend-stores/backendStoresRouteModule.tsx",
+      "agi-stack/apps/desktop/src/plugins/desktopBackendStoresAuthorityModuleV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopBackendStoresHttpProjectionV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopBackendStoresOperationContractV2.ts",
+      "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+      "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+      "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
     ],
     "project-playbooks": [
       "agi-stack/apps/desktop/src/features/project-playbooks/ProjectPlaybooksPage.tsx",
@@ -676,6 +682,12 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
     assert.equal(capability.cloud_status, "implemented", capabilityId);
     assert.equal(capability.local_status, "not_applicable", capabilityId);
     assert.equal(capability.local_policy, "cloud_only", capabilityId);
+    if (capabilityId === "backend-stores") {
+      assert.equal(
+        capability.local_reason_code,
+        "local_backend_stores_cloud_authority_unavailable",
+      );
+    }
     for (const entry of expectedEntries[capabilityId]) {
       assert.ok(capability.cloud_entries.includes(entry), `${capabilityId}: missing ${entry}`);
     }
@@ -700,7 +712,13 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
         `${capabilityId}: missing desktop_cloud permission for ${action}`,
       );
     }
-    if (capabilityId === "project-playbooks") {
+    if (capabilityId === "backend-stores") {
+      assert.match(capability.judgment_rationale, /static createBackendStoresClient/u);
+      assert.match(capability.judgment_rationale, /generated-catalog root Provider/u);
+      assert.match(capability.judgment_rationale, /tenant-scoped generation lease/u);
+      assert.match(capability.judgment_rationale, /zero-network not-applicable projection/u);
+      assert.match(capability.judgment_rationale, /not a product-capability expansion/u);
+    } else {
       assert.match(capability.judgment_rationale, /static createCloudProjectPlaybooksEventSource production factory/u);
       assert.match(capability.judgment_rationale, /generated-catalog root Provider/u);
       assert.match(capability.judgment_rationale, /project-scoped generation lease/u);

@@ -41,12 +41,18 @@
         "agi-stack/apps/desktop/src/features/backend-stores/BackendStoresPage.tsx",
         "agi-stack/apps/desktop/src/features/backend-stores/backendStoresClient.ts",
         "agi-stack/apps/desktop/src/features/backend-stores/backendStoresController.ts",
-        "agi-stack/apps/desktop/src/features/backend-stores/backendStoresRouteModule.tsx"
+        "agi-stack/apps/desktop/src/features/backend-stores/backendStoresRouteModule.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopBackendStoresAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopBackendStoresHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopBackendStoresOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
-      "local_reason_code": "local_backend_stores_cloud_only",
-      "local_deviation": "Local-online projects the Cloud store authority through the native broker. Local-offline keeps the route discoverable but cannot manage tenant Cloud stores and does not duplicate store credentials or governance in the sidecar.",
+      "local_reason_code": "local_backend_stores_cloud_authority_unavailable",
+      "local_deviation": "Local Desktop keeps the route discoverable but the V2 projection opens no Cloud transport and returns a structured not-applicable result; no sidecar store authority or fabricated credential governance is introduced.",
       "api_contracts": [
         {
           "surface": "web",
@@ -297,8 +303,8 @@
         "scope-switch",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop and Local-online natively manage graph and retrieval stores with the same tenant-scoped Cloud authority, secret-once behavior, test results, and structured errors as Web. Local-offline keeps the route discoverable and returns a stable not-applicable result without exposing credentials.",
-      "judgment_rationale": "BackendStores owns legacy and tenant-ID production routes but is absent from the canonical navigation inventory. Desktop now registers the tenant route and implements the graph and retrieval store list, create, edit, delete, and test lifecycle through the vault-bound Cloud request broker, typed client, controller, and native route module. Local-online projects that Cloud authority; Local-offline does not duplicate tenant store authority or secrets in the sidecar."
+      "expected_observable_result": "Cloud Desktop preserves tenant-scoped Backend Stores view, list, create, update, delete, and test behavior through V2 Cloud authority. Local Desktop keeps the route discoverable and returns a stable not-applicable result without opening Cloud transport.",
+      "judgment_rationale": "At e539d5bcc, Backend Stores removes the static createBackendStoresClient production transport factory. Route CRUD/test and the workbench capability probe now require generated-catalog root Provider service:desktop-renderer.backend-stores-authority@1.0.0. Every operation freezes its input and obtains one immutable tenant-scoped generation lease; Cloud continues through the application vault-bound request broker, while Local returns a structured zero-network not-applicable projection. This is an authority and lifecycle cutover inside the renderer, not a product-capability expansion: Cloud status, permissions, actions, and backend API contracts remain unchanged, and Local gains no Cloud or sidecar store authority."
     },
     {
       "id": "project-support",
