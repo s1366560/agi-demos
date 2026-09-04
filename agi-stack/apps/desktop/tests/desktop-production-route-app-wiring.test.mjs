@@ -142,7 +142,7 @@ test('V2 route factories retain the latest native route bindings', () => {
   );
   assert.match(
     registrySource,
-    /BACKEND_STORES_ROUTE_ID[\s\S]*createBackendStoresRouteModuleLoader\(\{[\s\S]*createBackendStoresController\(\{[\s\S]*createBackendStoresClient\([\s\S]*desktopVaultBoundCloudRequestBroker\(\)/u,
+    /BACKEND_STORES_ROUTE_ID[\s\S]*createBackendStoresRouteModuleLoader\(\{[\s\S]*createBackendStoresController\(\{[\s\S]*createDesktopBackendStoresClientV2\([\s\S]*refs\.backendStoresOperationsV2/u,
   );
   assert.match(
     registrySource,

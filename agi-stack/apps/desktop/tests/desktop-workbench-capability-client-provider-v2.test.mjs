@@ -69,6 +69,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'local', projectId: 'project-local' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    backendStoresOperationsV2: backendStoresOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -98,6 +99,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-cloud' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    backendStoresOperationsV2: backendStoresOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -139,6 +141,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     automationApi: automationApi(),
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    backendStoresOperationsV2: backendStoresOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -177,6 +180,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         automationApi: automationApi(),
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+        backendStoresOperationsV2: backendStoresOperationsV2(),
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -350,6 +354,26 @@ function pluginMarketplaceOperationsV2() {
   return {
     projectMarketplacePlugins: async (_config, _signal, project) => project([]),
   };
+}
+
+function backendStoresOperationsV2() {
+  return Object.freeze({
+    async probeBackendStores({ config }) {
+      return config.mode === 'local'
+        ? Object.freeze({
+            availability: 'not_applicable',
+            reasonCode: 'local_backend_stores_cloud_authority_unavailable',
+            allowedActions: Object.freeze([]),
+            authorityRevision: null,
+          })
+        : Object.freeze({
+            availability: 'available',
+            reasonCode: null,
+            allowedActions: Object.freeze(['view', 'list', 'create', 'update', 'delete', 'test']),
+            authorityRevision: 23,
+          });
+    },
+  });
 }
 
 function tenantAnalyticsOperationsV2() {

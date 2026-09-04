@@ -164,6 +164,7 @@ import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntim
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
 import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
+import type { DesktopBackendStoresOperationsV2 } from '../../plugins/desktopBackendStoresAuthorityModuleV2';
 import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_MINIMUM_CONTRACT_VERSION,
@@ -189,7 +190,6 @@ export {
 } from '../workspace/workspaceCollaborationCapabilityContract';
 
 type AuxiliaryCloudCapabilities = Readonly<{
-  backendStores: DesktopCapabilityAvailability;
   projectPlaybooks: DesktopCapabilityAvailability;
   cloudAuthorityObserved: boolean;
 }>;
@@ -275,6 +275,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     DesktopRuntimeDeploymentsOperationsV2,
     'probeRuntimeDeployments'
   >;
+  backendStoresOperationsV2: Pick<DesktopBackendStoresOperationsV2, 'probeBackendStores'>;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -397,6 +398,10 @@ export function createDesktopWorkbenchCapabilityClient(
   const runtimeDeploymentsOperationsV2 = options?.runtimeDeploymentsOperationsV2;
   if (typeof runtimeDeploymentsOperationsV2?.probeRuntimeDeployments !== 'function') {
     throw new Error('desktop_runtime_deployments_authority_required');
+  }
+  const backendStoresOperationsV2 = options?.backendStoresOperationsV2;
+  if (typeof backendStoresOperationsV2?.probeBackendStores !== 'function') {
+    throw new Error('desktop_backend_stores_authority_required');
   }
   const projectWorkspacesClient = options?.projectWorkspacesClient;
   if (typeof projectWorkspacesClient?.list !== 'function') {
@@ -546,6 +551,7 @@ export function createDesktopWorkbenchCapabilityClient(
         runtimeInstances,
         runtimeClusters,
         runtimeDeployments,
+        backendStores,
         tenantOverview,
         tenantAnalytics,
         tenantAgentDashboard,
@@ -572,6 +578,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadRuntimeInstancesCapability(config, runtimeInstancesOperationsV2, signal),
         loadRuntimeClustersCapability(config, runtimeClustersOperationsV2, signal),
         loadRuntimeDeploymentsCapability(config, runtimeDeploymentsOperationsV2, signal),
+        loadBackendStoresCapability(config, backendStoresOperationsV2, signal),
         loadTenantOverviewCapability(
           config,
           options.tenantOverviewOperationsV2,
@@ -673,7 +680,7 @@ export function createDesktopWorkbenchCapabilityClient(
           'tenant-creation': declared(tenantCreationCapability(config)),
           'invitation-acceptance': declared(invitationAcceptanceCapability(config)),
           'backend-stores': auxiliaryAuthority(
-            withCapabilityScope(auxiliaryCloudCapabilities.backendStores, tenantScope),
+            withCapabilityScope(backendStores, tenantScope),
           ),
           'project-playbooks': auxiliaryAuthority(
             withCapabilityScope(auxiliaryCloudCapabilities.projectPlaybooks, projectScope),
@@ -804,6 +811,46 @@ export function createDesktopWorkbenchCapabilityClient(
   };
 }
 
+async function loadBackendStoresCapability(
+  config: DesktopRuntimeConfig,
+  operations: Pick<DesktopBackendStoresOperationsV2, 'probeBackendStores'>,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const tenantId = scopeIdentifier(config.tenantId);
+  if (!tenantId) return unavailable('backend_stores_tenant_scope_unavailable');
+  try {
+    const capability = await operations.probeBackendStores({
+      config,
+      scope: { authority: config.mode, tenantId },
+      ...(signal === undefined ? {} : { options: { signal } }),
+    });
+    if (capability.availability === 'not_applicable') {
+      return notApplicable(
+        capability.reasonCode ?? 'local_backend_stores_cloud_authority_unavailable',
+      );
+    }
+    return {
+      availability: 'available',
+      reason_code: null,
+      service_version: '1.0.0',
+      contract_version: '4.0.0',
+      allowed_actions: [...capability.allowedActions],
+      scope: emptyCapabilityScope(),
+      authority_revision: capability.authorityRevision,
+      retryable: false,
+    };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (
+      error instanceof RuntimeV2Error &&
+      error.code === 'desktop_backend_stores_response_invalid'
+    ) {
+      return unavailable('backend_stores_contract_invalid');
+    }
+    return unavailable('backend_stores_authority_unavailable');
+  }
+}
+
 async function loadAuxiliaryCloudCapabilities(
   config: DesktopRuntimeConfig,
   broker: VaultBoundCloudRequestBroker | null,
@@ -812,9 +859,6 @@ async function loadAuxiliaryCloudCapabilities(
   if (!broker) {
     if (config.mode === 'local') {
       return Object.freeze({
-        backendStores: auxiliaryCloudUnavailable(
-          'local_backend_stores_cloud_authority_unavailable',
-        ),
         projectPlaybooks: auxiliaryCloudUnavailable(
           'local_project_playbooks_cloud_authority_unavailable',
         ),
@@ -822,7 +866,6 @@ async function loadAuxiliaryCloudCapabilities(
       });
     }
     return Object.freeze({
-      backendStores: unavailable('cloud_request_broker_missing'),
       projectPlaybooks: unavailable('cloud_request_broker_missing'),
       cloudAuthorityObserved: false,
     });
@@ -863,18 +906,7 @@ async function loadAuxiliaryCloudCapabilities(
     ) {
       throw new Error('workspace context is invalid');
     }
-    const backendActions =
-      membershipRole === 'owner' || membershipRole === 'admin'
-        ? ['view', 'list', 'create', 'update', 'delete', 'test']
-        : ['view', 'list'];
     const tenantScopeMatches = tenantId !== null && observedTenantId === tenantId;
-    const backendStores = tenantScopeMatches
-      ? auxiliaryCloudAvailable(backendActions, revision)
-      : auxiliaryCloudUnavailable(
-          config.mode === 'local'
-            ? 'local_backend_stores_cloud_scope_unavailable'
-            : 'backend_stores_scope_unavailable',
-        );
     const projectPlaybooks =
       tenantScopeMatches && projectId !== null && observedProjectId === projectId
         ? auxiliaryCloudAvailable(['view', 'list', 'refresh', 'review-verdicts'], revision)
@@ -884,7 +916,6 @@ async function loadAuxiliaryCloudCapabilities(
               : 'project_playbooks_scope_unavailable',
           );
     return Object.freeze({
-      backendStores,
       projectPlaybooks,
       cloudAuthorityObserved: true,
     });
@@ -892,9 +923,6 @@ async function loadAuxiliaryCloudCapabilities(
     if (signal?.aborted) throw error;
     if (config.mode === 'local') {
       return Object.freeze({
-        backendStores: auxiliaryCloudUnavailable(
-          'local_backend_stores_cloud_authority_unavailable',
-        ),
         projectPlaybooks: auxiliaryCloudUnavailable(
           'local_project_playbooks_cloud_authority_unavailable',
         ),
@@ -902,7 +930,6 @@ async function loadAuxiliaryCloudCapabilities(
       });
     }
     return Object.freeze({
-      backendStores: auxiliaryCloudUnavailable('backend_stores_authority_unavailable'),
       projectPlaybooks: auxiliaryCloudUnavailable('project_playbooks_authority_unavailable'),
       cloudAuthorityObserved: false,
     });

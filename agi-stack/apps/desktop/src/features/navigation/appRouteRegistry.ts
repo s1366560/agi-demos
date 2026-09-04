@@ -7,7 +7,6 @@ import {
   AGENT_WORKSPACE_ROUTE_ID,
   createAgentWorkspaceRouteModuleLoader,
 } from '../agent-workspace/agentWorkspaceRouteModule';
-import { createBackendStoresClient } from '../backend-stores/backendStoresClient';
 import { createBackendStoresController } from '../backend-stores/backendStoresController';
 import { createBackendStoresRouteModuleLoader } from '../backend-stores/backendStoresRouteModule';
 import { isIdentityAuthenticated } from '../auth/authContextModel';
@@ -272,6 +271,10 @@ import {
   type DesktopProjectPlaybooksEventsOperationsV2,
 } from '../../plugins/desktopProjectPlaybooksEventsAuthorityModuleV2';
 import {
+  createDesktopBackendStoresClientV2,
+  type DesktopBackendStoresOperationsV2,
+} from '../../plugins/desktopBackendStoresAuthorityModuleV2';
+import {
   createDesktopWorkspaceCollaborationClientV2,
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -339,6 +342,7 @@ export type AppRouteRegistryRefs = {
   projectSupportOperationsV2: DesktopProjectSupportOperationsV2;
   projectPlaybooksReadOperationsV2: DesktopProjectPlaybooksReadOperationsV2;
   projectPlaybooksEventsOperationsV2: DesktopProjectPlaybooksEventsOperationsV2;
+  backendStoresOperationsV2: DesktopBackendStoresOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   runtimeInstancesOperationsV2: DesktopRuntimeInstancesOperationsV2;
@@ -356,6 +360,7 @@ export type AppRouteRegistryRefs = {
 export type AppAuxiliaryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   | 'configRef'
+  | 'backendStoresOperationsV2'
   | 'projectPlaybooksReadOperationsV2'
   | 'projectPlaybooksEventsOperationsV2'
   | 'projectSupportOperationsV2'
@@ -576,9 +581,9 @@ export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryR
           });
           return Object.freeze({
             controller: createBackendStoresController({
-              client: createBackendStoresClient(
+              client: createDesktopBackendStoresClientV2(
+                refs.backendStoresOperationsV2,
                 currentConfig,
-                desktopVaultBoundCloudRequestBroker(),
               ),
               initialScope: scope,
             }),

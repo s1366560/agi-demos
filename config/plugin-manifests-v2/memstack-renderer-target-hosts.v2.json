@@ -508,6 +508,35 @@
       "contract_digest": "sha256:29e1d038b902b4448658d3739210572703af2c77198d9b49f83381a119de1dda"
     },
     {
+      "module_ref": "builtin://memstack/desktop/backend-stores-authority",
+      "entrypoint": "applyDesktopBackendStoresAuthorityV2",
+      "artifact": {
+        "digest": "sha256:ae64eeb37443c5ab012ef4586e86a3befba7107a0ba292882004c2724560717b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopBackendStoresAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.backend-stores-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-vault-broker", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:9719fcebc65a9e91084db30c9814545c4fba536fc97d9d8c49f3c7a66484c0cb"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/artifact-content-authority",
       "entrypoint": "applyDesktopArtifactContentAuthorityV2",
       "artifact": {

@@ -15,8 +15,11 @@ const { I18nProvider } = require(`${compiledRoot}/i18n.js`);
 const { BackendStoresPage } = require(
   `${compiledRoot}/features/backend-stores/BackendStoresPage.js`,
 );
-const { BACKEND_STORES_ROUTE_ID, createBackendStoresClient } = require(
+const { BACKEND_STORES_ROUTE_ID } = require(
   `${compiledRoot}/features/backend-stores/backendStoresClient.js`,
+);
+const { createDesktopBackendStoresHttpAuthorityV2 } = require(
+  `${compiledRoot}/plugins/desktopBackendStoresHttpProjectionV2.js`,
 );
 const { createBackendStoresController } = require(
   `${compiledRoot}/features/backend-stores/backendStoresController.js`,
@@ -354,8 +357,7 @@ test('Electron vault-bound broker scopes exact Project Knowledge reads and Advan
     },
     {
       path:
-        `/api/v1/graph/memory/graph?tenant_id=${tenantId}&project_id=${projectId}` +
-        '&limit=1000',
+        `/api/v1/graph/memory/graph?tenant_id=${tenantId}&project_id=${projectId}` + '&limit=1000',
       method: 'GET',
     },
     {
@@ -1757,62 +1759,7 @@ test('Electron broker admits exact remaining custom-client cohorts and rejects q
   );
 });
 
-test('Backend Stores loads both planes through a secret-free vault-bound broker contract', async () => {
-  const requests = [];
-  const broker = recordingBroker(requests, async (request) => {
-    const target = new URL(request.path, 'https://cloud.memstack.test');
-    if (target.pathname === '/api/v1/workspace-context') {
-      return {
-        context: {
-          tenant_id: 'tenant-1',
-          project_id: 'project-1',
-          revision: 8,
-        },
-        membership_role: 'admin',
-      };
-    }
-    if (target.pathname.endsWith('/types')) {
-      return {
-        success: true,
-        data: [
-          {
-            type: target.pathname.includes('graph') ? 'neo4j' : 'memstack_pgvector',
-            display_name: 'Default',
-            connection_fields: [],
-            index_fields: [],
-          },
-        ],
-      };
-    }
-    return {
-      success: true,
-      data: [storePayload(target.pathname.includes('graph') ? 'graph-1' : 'retrieval-1')],
-    };
-  });
-  const snapshot = await createBackendStoresClient(cloudConfig, broker).load(tenantScope);
-  assert.equal(snapshot.scopeRevision, 8);
-  assert.equal(snapshot.membershipRole, 'admin');
-  assert.deepEqual(
-    snapshot.graph.stores.map((store) => store.id),
-    ['graph-1'],
-  );
-  assert.deepEqual(
-    snapshot.retrieval.stores.map((store) => store.id),
-    ['retrieval-1'],
-  );
-  assert.equal(snapshot.allowedActions.includes('create'), true);
-
-  assert.equal(requests.length, 5);
-  for (const request of requests) {
-    const target = new URL(request.path, 'https://cloud.memstack.test');
-    assert.equal(Object.hasOwn(request, 'headers'), false);
-    if (!target.pathname.endsWith('/types') && target.pathname !== '/api/v1/workspace-context') {
-      assert.equal(target.searchParams.get('tenant_id'), 'tenant-1');
-    }
-  }
-});
-
-test('Backend Stores rejects masked secrets before mutations and fails closed in Local', async () => {
+test('Backend Stores V2 projection is structured cloud-only and zero-network in Local', async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalls = 0;
   globalThis.fetch = async () => {
@@ -1820,18 +1767,12 @@ test('Backend Stores rejects masked secrets before mutations and fails closed in
     throw new Error('network must not be reached');
   };
   try {
-    const cloud = createBackendStoresClient(cloudConfig);
+    const authority = createDesktopBackendStoresHttpAuthorityV2(localConfig, {
+      authority: 'local',
+      tenantId: 'tenant-1',
+    });
     await assert.rejects(
-      cloud.update(tenantScope, 'graph', 'graph-1', {
-        connectionConfig: { password: '***' },
-      }),
-      (error) => error.payload.reason_code === 'backend_stores_masked_secret_rejected',
-    );
-    await assert.rejects(
-      createBackendStoresClient(localConfig).load({
-        authority: 'local',
-        tenantId: 'tenant-1',
-      }),
+      authority.load(),
       (error) =>
         error.status === 503 &&
         error.payload.reason_code === 'local_backend_stores_cloud_authority_unavailable',
@@ -1840,32 +1781,6 @@ test('Backend Stores rejects masked secrets before mutations and fails closed in
     globalThis.fetch = originalFetch;
   }
   assert.equal(fetchCalls, 0);
-});
-
-test('Backend Stores uses Cloud authority from Local-online through the vault broker', async () => {
-  const requests = [];
-  const broker = recordingBroker(requests, async (request) => {
-    const target = new URL(request.path, 'https://cloud.memstack.test');
-    if (target.pathname === '/api/v1/workspace-context') {
-      return {
-        context: {
-          tenant_id: 'tenant-1',
-          project_id: 'project-1',
-          revision: 13,
-        },
-        membership_role: 'admin',
-      };
-    }
-    if (target.pathname.endsWith('/types')) return { success: true, data: [] };
-    return { success: true, data: [] };
-  });
-
-  const snapshot = await createBackendStoresClient(localConfig, broker).load(tenantScope);
-
-  assert.equal(snapshot.authority, 'cloud');
-  assert.equal(snapshot.scopeRevision, 13);
-  assert.equal(snapshot.allowedActions.includes('create'), true);
-  assert.equal(requests.length, 5);
 });
 
 test('Backend Stores renders mutation controls only for explicitly allowed actions', () => {
@@ -2003,10 +1918,9 @@ test('Project Playbooks validates project scope and parses playbooks plus verdic
       ],
     };
   });
-  const snapshot = await createDesktopProjectPlaybooksReadHttpAuthorityV2(
-    cloudConfig,
-    broker,
-  ).load(projectScope);
+  const snapshot = await createDesktopProjectPlaybooksReadHttpAuthorityV2(cloudConfig, broker).load(
+    projectScope,
+  );
   assert.equal(snapshot.scopeRevision, 12);
   assert.equal(snapshot.playbooks[0].name, 'Recover runtime');
   assert.equal(snapshot.verdicts[0].action, 'create');
@@ -2148,10 +2062,9 @@ test('Project Playbooks uses Cloud authority from Local-online through the vault
     return { items: [] };
   });
 
-  const snapshot = await createDesktopProjectPlaybooksReadHttpAuthorityV2(
-    localConfig,
-    broker,
-  ).load(projectScope);
+  const snapshot = await createDesktopProjectPlaybooksReadHttpAuthorityV2(localConfig, broker).load(
+    projectScope,
+  );
 
   assert.equal(snapshot.authority, 'cloud');
   assert.equal(snapshot.scopeRevision, 14);

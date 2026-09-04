@@ -367,6 +367,13 @@ test('workbench v4 marks transport authority observed and renderer declarations 
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        backendStoresOperationsV2: {
+          async probeBackendStores({ config }) {
+            return config.mode === 'local'
+              ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
+              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          },
+        },
         projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 

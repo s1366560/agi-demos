@@ -255,6 +255,13 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
           tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
           tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          backendStoresOperationsV2: {
+            async probeBackendStores({ config }) {
+              return config.mode === 'local'
+                ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
+                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+            },
+          },
           projectWorkspacesClient: {
             async list(scope) {
               assert.deepEqual(scope, workspaceScope);
@@ -343,6 +350,13 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
         tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+        backendStoresOperationsV2: {
+          async probeBackendStores({ config }) {
+            return config.mode === 'local'
+              ? { availability: 'not_applicable', reasonCode: 'local_backend_stores_cloud_authority_unavailable', allowedActions: [], authorityRevision: null }
+              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list', 'create', 'update', 'delete', 'test'], authorityRevision: 23 };
+          },
+        },
         projectWorkspacesClient: {
           async list() {
             throw new Error('workspace authority unavailable');
