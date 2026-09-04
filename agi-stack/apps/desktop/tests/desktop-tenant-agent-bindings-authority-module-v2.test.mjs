@@ -53,6 +53,7 @@ const authorityModuleNames = [
   'desktopDeadLetterQueueAuthorityModuleV2',
  'desktopInstanceTemplatesAuthorityModuleV2',
   'desktopUnifiedRuntimesAuthorityModuleV2',
+  'desktopTenantEventsAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',

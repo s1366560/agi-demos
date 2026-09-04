@@ -284,6 +284,7 @@ import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopR
 import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
+import type { DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
@@ -352,6 +353,7 @@ export type AppRouteRegistryRefs = {
   runtimeDeploymentsOperationsV2: DesktopRuntimeDeploymentsOperationsV2;
   deadLetterQueueOperationsV2: DesktopDeadLetterQueueOperationsV2;
   instanceTemplatesOperationsV2: DesktopInstanceTemplatesOperationsV2;
+  tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   unifiedRuntimesOperationsV2: DesktopUnifiedRuntimesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
@@ -451,7 +453,10 @@ export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
   AppSettingsRouteContentRefs;
 export type AppTenantGovernanceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'deadLetterQueueOperationsV2' | 'desktopProductionRouteLocation'
+  | 'configRef'
+  | 'deadLetterQueueOperationsV2'
+  | 'tenantEventsOperationsV2'
+  | 'desktopProductionRouteLocation'
 >;
 
 function createSettingsRouteContent(
@@ -1284,7 +1289,7 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
 export function createAppTenantGovernanceRouteRegistry(
   refs: AppTenantGovernanceRouteRegistryRefs,
 ) {
-  const { configRef, desktopProductionRouteLocation } = refs;
+  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
@@ -1297,7 +1302,11 @@ export function createAppTenantGovernanceRouteRegistry(
       }),
       [TENANT_EVENTS_ROUTE_ID]: createTenantEventsRouteModuleLoader({
         createBinding: (context) =>
-          createTenantEventsRouteBindingForRuntime(configRef.current, context),
+          createTenantEventsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantEventsOperationsV2,
+          ),
       }),
       [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: createDeadLetterQueueRouteModuleLoader({
         createBinding: (context) =>

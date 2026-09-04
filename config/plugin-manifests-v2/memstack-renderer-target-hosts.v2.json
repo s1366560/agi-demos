@@ -628,6 +628,35 @@
       "contract_digest": "sha256:2e08740f7954702ae9479d1a0632a3ea98f80b99c35aae71891f02ccae10c0c5"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-events-authority",
+      "entrypoint": "applyDesktopTenantEventsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:d06654a71c70426583641d5cb5b909979e652b0f9cfa158d491aacc2a81f52fd",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantEventsAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-events-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:b3823e0ddb9815cd787df6f368f047a9aee827467f69d6e245e2b011f5871f89"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/artifact-content-authority",
       "entrypoint": "applyDesktopArtifactContentAuthorityV2",
       "artifact": {

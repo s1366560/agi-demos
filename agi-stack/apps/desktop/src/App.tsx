@@ -126,6 +126,7 @@ import { createDesktopBackendStoresOperationsV2 } from './plugins/desktopBackend
 import { createDesktopDeadLetterQueueOperationsV2 } from './plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import { createDesktopInstanceTemplatesOperationsV2 } from './plugins/desktopInstanceTemplatesAuthorityModuleV2';
 import { createDesktopUnifiedRuntimesOperationsV2 } from './plugins/desktopUnifiedRuntimesAuthorityModuleV2';
+import { createDesktopTenantEventsOperationsV2 } from './plugins/desktopTenantEventsAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
@@ -1045,6 +1046,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantEventsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantEventsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantCreationOperationsV2 = useMemo(
     () =>
       createDesktopTenantCreationOperationsV2(
@@ -1397,6 +1405,7 @@ export function App() {
       deadLetterQueueOperationsV2: desktopDeadLetterQueueOperationsV2,
       instanceTemplatesOperationsV2: desktopInstanceTemplatesOperationsV2,
       unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
+      tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1509,6 +1518,7 @@ export function App() {
         deadLetterQueueOperationsV2: desktopDeadLetterQueueOperationsV2,
         instanceTemplatesOperationsV2: desktopInstanceTemplatesOperationsV2,
         unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
+        tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
         desktopWorkspaceLifecycleOperationsV2,
         tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,

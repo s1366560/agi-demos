@@ -55,6 +55,7 @@ import { createProviderRouteClient } from '../settings-routes/providerRouteClien
 import { createSkillsRouteClient } from '../settings-routes/skillsRouteClient';
 import type { TemplatesRouteClient } from '../settings-routes/templatesRouteClient';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
+import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import type {
   ProjectBlackboardScope,
   ProjectBlackboardSnapshot,
@@ -300,6 +301,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     'probe'
   >;
   unifiedRuntimesOperationsV2?: Pick<DesktopUnifiedRuntimesOperationsV2, 'probe'>;
+  tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -609,7 +611,9 @@ export function createDesktopWorkbenchCapabilityClient(
     });
   const tenantRemainingCapabilityClient =
     options.tenantRemainingCapabilityClient ??
-    createTenantRemainingCapabilityClient(config);
+    createTenantRemainingCapabilityClient(config, {
+      events: createDesktopTenantEventsClientV2(options.tenantEventsOperationsV2, config),
+    });
   const p2ThirdBatchCapabilityClient =
     options.p2ThirdBatchCapabilityClient ??
     createP2ThirdBatchCapabilityClient(config, {

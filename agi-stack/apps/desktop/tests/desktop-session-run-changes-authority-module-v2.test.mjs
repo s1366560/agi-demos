@@ -50,6 +50,9 @@ const { desktopInstanceTemplatesAuthorityDefinitionV2 } = require(
 const { desktopUnifiedRuntimesAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopUnifiedRuntimesAuthorityModuleV2.js',
 );
+const { desktopTenantEventsAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantEventsAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -201,6 +204,7 @@ function rendererDefinitions() {
     desktopDeadLetterQueueAuthorityDefinitionV2,
     desktopInstanceTemplatesAuthorityDefinitionV2,
     desktopUnifiedRuntimesAuthorityDefinitionV2,
+    desktopTenantEventsAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,

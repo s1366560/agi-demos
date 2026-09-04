@@ -9,34 +9,36 @@ const { createTenantPatternsClient } = require(`${featureRoot}/tenantPatternsCli
 const { createTenantAcpClient } = require(`${featureRoot}/tenantAcpClient.js`);
 const { createTenantWebhooksClient } = require(`${featureRoot}/tenantWebhooksClient.js`);
 const { createTenantGenesClient } = require(`${featureRoot}/tenantGenesClient.js`);
-const { createTenantEventsClient } = require(`${featureRoot}/tenantEventsClient.js`);
+const {
+  createDesktopTenantEventsHttpProjectionV2: createTenantEventsClient,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantEventsHttpProjectionV2.js');
 const { requestTenantManagementJson } = require(`${featureRoot}/tenantManagementHttp.js`);
 const { createTenantDecisionRecordsClient } = require(
-  `${featureRoot}/tenantDecisionRecordsClient.js`,
+  `${featureRoot}/tenantDecisionRecordsClient.js`
 );
 const { createTenantOrganizationSettingsClient } = require(
-  `${featureRoot}/tenantOrganizationSettingsClient.js`,
+  `${featureRoot}/tenantOrganizationSettingsClient.js`
 );
 const { createTenantSettingsClient } = require(`${featureRoot}/tenantSettingsClient.js`);
 const { createTenantPatternsRouteModuleLoader } = require(
-  `${featureRoot}/tenantPatternsRouteModule.js`,
+  `${featureRoot}/tenantPatternsRouteModule.js`
 );
 const { createTenantAcpRouteModuleLoader } = require(`${featureRoot}/tenantAcpRouteModule.js`);
 const { createTenantWebhooksRouteModuleLoader } = require(
-  `${featureRoot}/tenantWebhooksRouteModule.js`,
+  `${featureRoot}/tenantWebhooksRouteModule.js`
 );
 const { createTenantGenesRouteModuleLoader } = require(`${featureRoot}/tenantGenesRouteModule.js`);
 const { createTenantEventsRouteModuleLoader } = require(
-  `${featureRoot}/tenantEventsRouteModule.js`,
+  `${featureRoot}/tenantEventsRouteModule.js`
 );
 const { createTenantDecisionRecordsRouteModuleLoader } = require(
-  `${featureRoot}/tenantDecisionRecordsRouteModule.js`,
+  `${featureRoot}/tenantDecisionRecordsRouteModule.js`
 );
 const { createTenantOrganizationSettingsRouteModuleLoader } = require(
-  `${featureRoot}/tenantOrganizationSettingsRouteModule.js`,
+  `${featureRoot}/tenantOrganizationSettingsRouteModule.js`
 );
 const { createTenantSettingsRouteModuleLoader } = require(
-  `${featureRoot}/tenantSettingsRouteModule.js`,
+  `${featureRoot}/tenantSettingsRouteModule.js`
 );
 const {
   createTenantPatternsRouteBindingForRuntime,
@@ -48,14 +50,12 @@ const {
   createTenantOrganizationSettingsRouteBindingForRuntime,
   createTenantSettingsRouteBindingForRuntime,
 } = require(`${featureRoot}/tenantRemainingRouteRuntime.js`);
-const {
-  createTenantRemainingCapabilityClient,
-  TENANT_REMAINING_CAPABILITY_IDS,
-} = require(`${featureRoot}/tenantRemainingCapabilityClient.js`);
-const {
-  buildTenantDecisionRecordsRoutePath,
-  readTenantDecisionRecordsRouteQuery,
-} = require(`${featureRoot}/tenantDecisionRecordsRouteQuery.js`);
+const { createTenantRemainingCapabilityClient, TENANT_REMAINING_CAPABILITY_IDS } = require(
+  `${featureRoot}/tenantRemainingCapabilityClient.js`
+);
+const { buildTenantDecisionRecordsRoutePath, readTenantDecisionRecordsRouteQuery } = require(
+  `${featureRoot}/tenantDecisionRecordsRouteQuery.js`
+);
 
 const cloudConfig = Object.freeze({
   apiBaseUrl: 'https://cloud.memstack.test',
@@ -113,25 +113,13 @@ test('Decision Records workspace query is explicit, canonical and reloadable', (
 
 test('remaining tenant routes expose lazy native modules with Local policy', async () => {
   const cases = [
-    [
-      createTenantPatternsRouteModuleLoader,
-      'tenant-tenant-patterns',
-      'native_equivalent',
-    ],
+    [createTenantPatternsRouteModuleLoader, 'tenant-tenant-patterns', 'native_equivalent'],
     [createTenantAcpRouteModuleLoader, 'tenant-tenant-acp', 'cloud_only'],
     [createTenantWebhooksRouteModuleLoader, 'tenant-tenant-webhooks', 'cloud_only'],
     [createTenantGenesRouteModuleLoader, 'tenant-tenant-genes', 'native_equivalent'],
     [createTenantEventsRouteModuleLoader, 'tenant-tenant-events', 'native_equivalent'],
-    [
-      createTenantDecisionRecordsRouteModuleLoader,
-      'tenant-tenant-decision-records',
-      'cloud_only',
-    ],
-    [
-      createTenantOrganizationSettingsRouteModuleLoader,
-      'tenant-tenant-org-settings',
-      'cloud_only',
-    ],
+    [createTenantDecisionRecordsRouteModuleLoader, 'tenant-tenant-decision-records', 'cloud_only'],
+    [createTenantOrganizationSettingsRouteModuleLoader, 'tenant-tenant-org-settings', 'cloud_only'],
     [createTenantSettingsRouteModuleLoader, 'tenant-tenant-settings', 'cloud_only'],
   ];
 
@@ -163,7 +151,7 @@ test('remaining tenant routes expose lazy native modules with Local policy', asy
         availability: 'available',
         reasonCode: null,
         Surface: 'function',
-      },
+      }
     );
   }
 });
@@ -176,7 +164,11 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer trusted-session');
     if (parsed.pathname === '/api/v1/workspace-context') {
       return json({
-        context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 41 },
+        context: {
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          revision: 41,
+        },
         membership_role: 'owner',
       });
     }
@@ -204,7 +196,12 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     if (parsed.pathname === '/api/v1/events') {
       assert.equal(parsed.searchParams.get('tenant_id'), 'tenant-1');
       if (parsed.searchParams.get('event_type') === 'workspace.updated') {
-        return json({ items: [eventPayload()], total: 1, page: 1, page_size: 20 });
+        return json({
+          items: [eventPayload()],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        });
       }
       assert.equal(parsed.searchParams.get('page'), '1');
       assert.equal(parsed.searchParams.get('page_size'), '1');
@@ -220,7 +217,7 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     if (parsed.pathname === '/api/v1/tenants/tenant-1/smtp-config') return json(null);
     if (parsed.pathname === '/api/v1/tenants/tenant-1/gene-policies') return json([]);
     throw new Error(
-      `unexpected request ${init.method ?? 'GET'} ${parsed.pathname}${parsed.search}`,
+      `unexpected request ${init.method ?? 'GET'} ${parsed.pathname}${parsed.search}`
     );
   };
 
@@ -239,15 +236,15 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
 
   assert.deepEqual(
     snapshots.map((snapshot) => snapshot.authority),
-    ['cloud', 'cloud', 'cloud', 'cloud', 'cloud', 'cloud', 'cloud', 'cloud'],
+    ['cloud', 'cloud', 'cloud', 'cloud', 'cloud', 'cloud', 'cloud', 'cloud']
   );
   assert.equal(
     snapshots.every((snapshot) => snapshot.contractVersion === '4.0.0'),
-    true,
+    true
   );
   assert.equal(
     snapshots.every((snapshot) => snapshot.scopeRevision === 41),
-    true,
+    true
   );
   assert.deepEqual(snapshots[0].allowedActions, ['view', 'list', 'delete']);
   assert.deepEqual(snapshots[1].allowedActions, [
@@ -270,12 +267,7 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     'delete',
     'copy-secret',
   ]);
-  assert.deepEqual(snapshots[4].allowedActions, [
-    'view',
-    'list',
-    'filter',
-    'paginate',
-  ]);
+  assert.deepEqual(snapshots[4].allowedActions, ['view', 'list', 'filter', 'paginate']);
   assert.equal(snapshots[4].total, 1);
   assert.equal(snapshots[4].scopeRevision, 41);
   assert.deepEqual(snapshots[5].allowedActions, [
@@ -285,8 +277,14 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     'inspect',
     'resolve-approval',
   ]);
-  assert.equal(calls.some((call) => call.includes('tenant_id=tenant-1')), true);
-  assert.equal(calls.some((call) => call.includes('workspace_id=workspace-1')), true);
+  assert.equal(
+    calls.some((call) => call.includes('tenant_id=tenant-1')),
+    true
+  );
+  assert.equal(
+    calls.some((call) => call.includes('workspace_id=workspace-1')),
+    true
+  );
 });
 
 test('tenant management transport presents launch capability before Local sidecar route auth', async () => {
@@ -306,11 +304,11 @@ test('tenant management transport presents launch capability before Local sideca
 
   await assert.rejects(
     requestTenantManagementJson(localConfig, '/api/v1/events?tenant_id=local'),
-    (error) => error.status === 404,
+    (error) => error.status === 404
   );
   assert.deepEqual(
     await requestTenantManagementJson(cloudConfig, '/api/v1/events?tenant_id=tenant-1'),
-    { ok: true },
+    { ok: true }
   );
   assert.equal(calls[0].headers.get('Authorization'), 'Bearer local-session');
   assert.equal(calls[1].headers.get('Authorization'), 'Bearer trusted-session');
@@ -323,7 +321,11 @@ test('Events uses context revision independently from the page total', async () 
     assert.equal(new Headers(init.headers).get('X-Agistack-Launch'), null);
     if (parsed.pathname === '/api/v1/workspace-context') {
       return json({
-        context: { tenant_id: 'tenant-1', project_id: 'project-1', revision: 41 },
+        context: {
+          tenant_id: 'tenant-1',
+          project_id: 'project-1',
+          revision: 41,
+        },
         membership_role: 'member',
       });
     }
@@ -332,7 +334,12 @@ test('Events uses context revision independently from the page total', async () 
       eventCalls.push(parsed.search);
       assert.equal(parsed.searchParams.get('page'), '2');
       assert.equal(parsed.searchParams.get('page_size'), '5');
-      return json({ items: [eventPayload()], total: 13, page: 2, page_size: 5 });
+      return json({
+        items: [eventPayload()],
+        total: 13,
+        page: 2,
+        page_size: 5,
+      });
     }
     throw new Error(`unexpected request ${parsed.pathname}`);
   };
@@ -363,7 +370,12 @@ test('Events fails closed when scope authority changes during resource observati
     }
     if (parsed.pathname === '/api/v1/events/types') return json(['workspace.updated']);
     if (parsed.pathname === '/api/v1/events') {
-      return json({ items: [eventPayload()], total: 13, page: 1, page_size: 20 });
+      return json({
+        items: [eventPayload()],
+        total: 13,
+        page: 1,
+        page_size: 20,
+      });
     }
     throw new Error(`unexpected request ${parsed.pathname}`);
   };
@@ -446,7 +458,7 @@ test('Local native clients probe sidecar and return stable unavailable reasons',
   for (const [operation, reasonCode] of cases) {
     await assert.rejects(
       operation,
-      (error) => error.status === 501 && error.message === reasonCode,
+      (error) => error.status === 501 && error.message === reasonCode
     );
   }
   assert.deepEqual(calls.sort(), [
@@ -467,10 +479,7 @@ test('Cloud-only Local clients return catalog N/A without crossing to Cloud', as
     throw new Error('Cloud-only Local route must not fetch');
   };
   const cases = [
-    [
-      createTenantAcpClient(localConfig).load(localScope),
-      'local_external_acp_not_applicable',
-    ],
+    [createTenantAcpClient(localConfig).load(localScope), 'local_external_acp_not_applicable'],
     [
       createTenantWebhooksClient(localConfig).load(localScope),
       'cloud_tenant_webhook_authority_required',
@@ -494,7 +503,7 @@ test('Cloud-only Local clients return catalog N/A without crossing to Cloud', as
   for (const [operation, reasonCode] of cases) {
     await assert.rejects(
       operation,
-      (error) => error.status === 501 && error.message === reasonCode,
+      (error) => error.status === 501 && error.message === reasonCode
     );
   }
   assert.equal(calls, 0);
@@ -509,14 +518,14 @@ test('remaining Tenant clients fail closed on session and tenant mismatch', asyn
   await assert.rejects(
     createTenantSettingsClient({ ...cloudConfig, apiKey: '' }).load(cloudScope),
     (error) =>
-      error.status === 401 &&
-      error.message === 'tenant_management_trusted_session_required',
+      error.status === 401 && error.message === 'tenant_management_trusted_session_required'
   );
   await assert.rejects(
-    createTenantEventsClient(cloudConfig).load({ ...cloudScope, tenantId: 'tenant-2' }),
-    (error) =>
-      error.status === 409 &&
-      error.message === 'tenant_management_tenant_scope_mismatch',
+    createTenantEventsClient(cloudConfig).load({
+      ...cloudScope,
+      tenantId: 'tenant-2',
+    }),
+    (error) => error.status === 409 && error.message === 'tenant_management_tenant_scope_mismatch'
   );
   assert.equal(calls, 0);
 });
@@ -570,7 +579,7 @@ test('every published mutation action is reachable from its native page', () => 
   for (const [filename, needles] of cases) {
     const source = readFileSync(
       new URL(`../src/features/tenant-admin/${filename}`, import.meta.url),
-      'utf8',
+      'utf8'
     );
     for (const needle of needles) assert.match(source, new RegExp(escapeRegExp(needle)));
   }
@@ -596,7 +605,7 @@ test('remaining Tenant runtime bindings preserve mode and exact workspace scope'
   }
   assert.deepEqual(
     createTenantDecisionRecordsRouteBindingForRuntime(cloudConfig, context).scope,
-    cloudWorkspaceScope,
+    cloudWorkspaceScope
   );
 });
 
@@ -604,7 +613,7 @@ test('Cloud capability authority accepts only observed v4 exact-scope contracts'
   const calls = [];
   const capabilities = await createTenantRemainingCapabilityClient(
     cloudConfig,
-    capabilityDependencies('cloud', calls),
+    capabilityDependencies('cloud', calls)
   ).load();
 
   assert.deepEqual(TENANT_REMAINING_CAPABILITY_IDS, Object.keys(ACTIONS_BY_CAPABILITY));
@@ -618,28 +627,21 @@ test('Cloud capability authority accepts only observed v4 exact-scope contracts'
     assert.deepEqual(capabilities[id].allowed_actions, ACTIONS_BY_CAPABILITY[id]);
     assert.equal(capabilities[id].scope.tenant_id, 'tenant-1');
   }
-  assert.equal(
-    capabilities['tenant-tenant-decision-records'].scope.workspace_id,
-    'workspace-1',
-  );
+  assert.equal(capabilities['tenant-tenant-decision-records'].scope.workspace_id, 'workspace-1');
 });
 
 test('Local authority observes three sidecar routes and declares five N/A', async () => {
   const calls = [];
   const capabilities = await createTenantRemainingCapabilityClient(
     localConfig,
-    capabilityDependencies('sidecar', calls),
+    capabilityDependencies('sidecar', calls)
   ).load();
   assert.deepEqual(calls.sort(), [
     'tenant-tenant-events',
     'tenant-tenant-genes',
     'tenant-tenant-patterns',
   ]);
-  for (const id of [
-    'tenant-tenant-patterns',
-    'tenant-tenant-genes',
-    'tenant-tenant-events',
-  ]) {
+  for (const id of ['tenant-tenant-patterns', 'tenant-tenant-genes', 'tenant-tenant-events']) {
     assert.equal(capabilities[id].availability, 'available');
     assert.equal(capabilities[id].authority_source, 'sidecar');
     assert.equal(capabilities[id].provenance, 'observed');
@@ -665,21 +667,17 @@ test('remaining authority rejects mismatched authority and workspace scope', asy
   const dependencies = capabilityDependencies('cloud', calls);
   dependencies.patterns = {
     async load(scope) {
-      return observedSnapshot(
-        'sidecar',
-        scope,
-        ACTIONS_BY_CAPABILITY['tenant-tenant-patterns'],
-      );
+      return observedSnapshot('sidecar', scope, ACTIONS_BY_CAPABILITY['tenant-tenant-patterns']);
     },
   };
   const capabilities = await createTenantRemainingCapabilityClient(
     cloudConfig,
-    dependencies,
+    dependencies
   ).load();
   assert.equal(capabilities['tenant-tenant-patterns'].availability, 'unavailable');
   assert.equal(
     capabilities['tenant-tenant-patterns'].reason_code,
-    'tenant_patterns_authority_contract_invalid',
+    'tenant_patterns_authority_contract_invalid'
   );
   assert.equal(capabilities['tenant-tenant-patterns'].provenance, 'observed');
 
@@ -689,19 +687,19 @@ test('remaining authority rejects mismatched authority and workspace scope', asy
       const { scopeRevision: _scopeRevision, ...snapshot } = observedSnapshot(
         'cloud',
         scope,
-        ACTIONS_BY_CAPABILITY['tenant-tenant-patterns'],
+        ACTIONS_BY_CAPABILITY['tenant-tenant-patterns']
       );
       return snapshot;
     },
   };
   const missingRevision = await createTenantRemainingCapabilityClient(
     cloudConfig,
-    missingRevisionDependencies,
+    missingRevisionDependencies
   ).load();
   assert.equal(missingRevision['tenant-tenant-patterns'].availability, 'unavailable');
   assert.equal(
     missingRevision['tenant-tenant-patterns'].reason_code,
-    'tenant_patterns_authority_contract_invalid',
+    'tenant_patterns_authority_contract_invalid'
   );
 
   let decisionCalls = 0;
@@ -714,7 +712,7 @@ test('remaining authority rejects mismatched authority and workspace scope', asy
   };
   const missingWorkspace = await createTenantRemainingCapabilityClient(
     { ...cloudConfig, workspaceId: '' },
-    missingWorkspaceDependencies,
+    missingWorkspaceDependencies
   ).load();
   assert.equal(decisionCalls, 0);
   assert.deepEqual(
@@ -729,7 +727,7 @@ test('remaining authority rejects mismatched authority and workspace scope', asy
       reason: 'tenant_decisions_workspace_scope_unavailable',
       source: 'renderer',
       provenance: 'declared',
-    },
+    }
   );
 });
 

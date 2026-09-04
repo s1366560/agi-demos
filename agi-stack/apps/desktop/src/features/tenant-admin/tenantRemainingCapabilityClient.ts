@@ -14,7 +14,6 @@ import {
   type TenantDecisionRecordsClient,
 } from './tenantDecisionRecordsClient';
 import {
-  createTenantEventsClient,
   TENANT_EVENTS_LOCAL_REASON,
   TENANT_EVENTS_ROUTE_ID,
   type TenantEventsClient,
@@ -77,7 +76,7 @@ export type TenantRemainingCapabilityDependencies = Readonly<{
   acp?: Pick<TenantAcpClient, 'load'>;
   webhooks?: Pick<TenantWebhooksClient, 'load'>;
   genes?: Pick<TenantGenesClient, 'load'>;
-  events?: Pick<TenantEventsClient, 'load'>;
+  events: Pick<TenantEventsClient, 'load'>;
   decisionRecords?: Pick<TenantDecisionRecordsClient, 'load'>;
   organizationSettings?: Pick<TenantOrganizationSettingsClient, 'load'>;
   settings?: Pick<TenantSettingsClient, 'load'>;
@@ -171,7 +170,7 @@ const ACTION_CATALOG = Object.freeze({
 
 export function createTenantRemainingCapabilityClient(
   config: DesktopRuntimeConfig,
-  dependencies: TenantRemainingCapabilityDependencies = {},
+  dependencies: TenantRemainingCapabilityDependencies,
 ): TenantRemainingCapabilityClient {
   const runtimeConfig = Object.freeze({ ...config });
   const clients = Object.freeze({
@@ -179,7 +178,7 @@ export function createTenantRemainingCapabilityClient(
     acp: dependencies.acp ?? createTenantAcpClient(runtimeConfig),
     webhooks: dependencies.webhooks ?? createTenantWebhooksClient(runtimeConfig),
     genes: dependencies.genes ?? createTenantGenesClient(runtimeConfig),
-    events: dependencies.events ?? createTenantEventsClient(runtimeConfig),
+    events: dependencies.events,
     decisionRecords:
       dependencies.decisionRecords ?? createTenantDecisionRecordsClient(runtimeConfig),
     organizationSettings:
