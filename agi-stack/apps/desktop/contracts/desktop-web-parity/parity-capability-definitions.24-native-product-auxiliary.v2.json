@@ -514,12 +514,15 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsSocketProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_project_playbooks_cloud_only",
-      "local_deviation": "Local-online projects the Cloud project playbook authority. Local-offline keeps the project route discoverable but cannot fabricate playbooks or reflection verdicts without Cloud authority.",
+      "local_deviation": "Local Desktop keeps the project route discoverable but does not project the Cloud playbooks event stream or fabricate playbooks and reflection verdicts without Cloud authority.",
       "api_contracts": [
         {
           "surface": "web",
@@ -609,8 +612,8 @@
         "scope-switch",
         "retry"
       ],
-      "expected_observable_result": "Cloud Desktop and Local-online natively present project playbooks and reflection verdicts from Cloud authority with the same project scope, refresh behavior, and structured states as Web. Local-offline keeps the route discoverable and returns a stable not-applicable result.",
-      "judgment_rationale": "PlaybookLibrary is a read-only project production route absent from the canonical navigation inventory. The static createProjectPlaybooksClient transport was removed; the production read path now requires the generated-catalog V2 root Provider service:desktop-renderer.project-playbooks-read-authority@1.0.0. One immutable project-scoped operation lease spans workspace-context observation plus the playbooks and reflection-verdict reads. Generation pinning guarantees renderer implementation consistency only and does not make those three backend reads transactionally snapshot-isolated. The retained static WebSocket event source remains a separate Cloud freshness authority whose reflection-complete events trigger controller refresh; it is not part of the new V2 read authority. Local-online projects Cloud authority through the application vault broker, while Local-offline does not fabricate playbook or verdict data in the sidecar."
+      "expected_observable_result": "Cloud Desktop natively presents project playbooks and reflection verdicts from Cloud authority with the same project scope, refresh behavior, and structured states as Web. Local Desktop keeps the route discoverable and returns a stable not-applicable result without opening Cloud transport.",
+      "judgment_rationale": "At 8f8393582, Project Playbooks removes the static createCloudProjectPlaybooksEventSource production factory. Route construction now requires createDesktopProjectPlaybooksEventSourceV2 backed by generated-catalog root Provider service:desktop-renderer.project-playbooks-events-authority@1.0.0. Every Cloud subscription acquires one immutable project-scoped generation lease and retains it until unsubscribe; the socket projection continues to use the projected Cloud session and authenticated Electron socket broker, while the retained pure parser filters reflection_complete events and triggers refresh. This is an authority and lifecycle cutover inside the renderer, not a product-capability expansion: the read APIs, permissions, actions, and existing Cloud availability remain unchanged. Local remains cloud-only not applicable with no transport and no fabricated authority."
     },
     {
       "id": "not-found",

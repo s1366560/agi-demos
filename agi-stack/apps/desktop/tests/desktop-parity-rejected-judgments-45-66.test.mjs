@@ -582,7 +582,7 @@ test("declared Tenant Creation and Project Support capability snapshots stay una
       assert.ok(capability.cloud_entries.includes(entry), `${id}: missing ${entry}`);
     }
     if (id === "tenant-creation") {
-      assert.match(capability.judgment_rationale, /generated-catalog V2 root Provider/u);
+      assert.match(capability.judgment_rationale, /generated-catalog root Provider/u);
       assert.match(capability.judgment_rationale, /root-scoped operation lease/u);
       assert.match(capability.judgment_rationale, /static createTenantCreationClient transport was removed/u);
     } else {
@@ -661,6 +661,9 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
       "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadAuthorityModuleV2.ts",
       "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadHttpProjectionV2.ts",
       "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadOperationContractV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsAuthorityModuleV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsOperationContractV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsSocketProjectionV2.ts",
       "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
     ],
   };
@@ -698,12 +701,12 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
       );
     }
     if (capabilityId === "project-playbooks") {
-      assert.match(capability.judgment_rationale, /static createProjectPlaybooksClient transport was removed/u);
+      assert.match(capability.judgment_rationale, /static createCloudProjectPlaybooksEventSource production factory/u);
       assert.match(capability.judgment_rationale, /generated-catalog V2 root Provider/u);
       assert.match(capability.judgment_rationale, /project-scoped operation lease/u);
-      assert.match(capability.judgment_rationale, /renderer implementation consistency only/u);
-      assert.match(capability.judgment_rationale, /does not make those three backend reads transactionally snapshot-isolated/u);
-      assert.match(capability.judgment_rationale, /retained static WebSocket event source/u);
+      assert.match(capability.judgment_rationale, /authenticated Electron socket broker/u);
+      assert.match(capability.judgment_rationale, /not a product-capability expansion/u);
+      assert.match(capability.judgment_rationale, /Local remains cloud-only not applicable/u);
     }
   }
 });
