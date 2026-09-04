@@ -10,7 +10,7 @@ const {
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantPatternsHttpProjectionV2.js');
 const { createTenantAcpClient } = require(`${featureRoot}/tenantAcpClient.js`);
 const { createDesktopTenantWebhooksHttpProjectionV2: createTenantWebhooksClient } = require(
-  `${desktopRoot}/plugins/desktopTenantWebhooksHttpProjectionV2.js`,
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantWebhooksHttpProjectionV2.js',
 );
 const { createTenantGenesClient } = require(`${featureRoot}/tenantGenesClient.js`);
 const {
