@@ -17,7 +17,10 @@ import type {
 import { createProfileRouteClient } from './profileRouteClient';
 import { createProfileRouteController } from './profileRouteController';
 import type { ProfileRouteBinding } from './profileRouteModule';
-import { createTemplatesRouteClient } from './templatesRouteClient';
+import {
+  createDesktopTenantTemplatesClientV2,
+  type DesktopTenantTemplatesOperationsV2,
+} from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import { createTemplatesRouteController } from './templatesRouteController';
 import type {
   TemplatesRouteBinding,
@@ -63,6 +66,7 @@ export function createChannelsRouteBindingForRuntime(
 export function createTemplatesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TemplatesRouteContext,
+  operations: DesktopTenantTemplatesOperationsV2,
 ): TemplatesRouteBinding {
   const scope = Object.freeze({
     authority: config.mode,
@@ -70,7 +74,7 @@ export function createTemplatesRouteBindingForRuntime(
   });
   return Object.freeze({
     controller: createTemplatesRouteController({
-      client: createTemplatesRouteClient(config),
+      client: createDesktopTenantTemplatesClientV2(operations, config),
       initialScope: scope,
     }),
     scope,

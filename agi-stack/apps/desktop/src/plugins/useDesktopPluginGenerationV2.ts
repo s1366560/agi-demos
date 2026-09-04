@@ -70,6 +70,7 @@ import { desktopTenantOverviewAuthorityDefinitionV2 } from './desktopTenantOverv
 import { desktopTenantEventsAuthorityDefinitionV2 } from './desktopTenantEventsAuthorityModuleV2';
 import { desktopTenantPatternsAuthorityDefinitionV2 } from './desktopTenantPatternsAuthorityModuleV2';
 import { desktopTenantEvolutionAuthorityDefinitionV2 } from './desktopTenantEvolutionAuthorityModuleV2';
+import { desktopTenantTemplatesAuthorityDefinitionV2 } from './desktopTenantTemplatesAuthorityModuleV2';
 import { desktopTenantGenesAuthorityDefinitionV2 } from './desktopTenantGenesAuthorityModuleV2';
 import { desktopTenantOrganizationSettingsAuthorityDefinitionV2 } from './desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { desktopTenantDecisionRecordsAuthorityDefinitionV2 } from './desktopTenantDecisionRecordsAuthorityModuleV2';
@@ -153,6 +154,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopTenantEventsAuthorityDefinitionV2,
     desktopTenantPatternsAuthorityDefinitionV2,
     desktopTenantEvolutionAuthorityDefinitionV2,
+    desktopTenantTemplatesAuthorityDefinitionV2,
     desktopTenantGenesAuthorityDefinitionV2,
     desktopTenantOrganizationSettingsAuthorityDefinitionV2,
     desktopTenantDecisionRecordsAuthorityDefinitionV2,

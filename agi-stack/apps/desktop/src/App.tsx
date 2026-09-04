@@ -129,6 +129,7 @@ import { createDesktopUnifiedRuntimesOperationsV2 } from './plugins/desktopUnifi
 import { createDesktopTenantEventsOperationsV2 } from './plugins/desktopTenantEventsAuthorityModuleV2';
 import { createDesktopTenantPatternsOperationsV2 } from './plugins/desktopTenantPatternsAuthorityModuleV2';
 import { createDesktopTenantEvolutionOperationsV2 } from './plugins/desktopTenantEvolutionAuthorityModuleV2';
+import { createDesktopTenantTemplatesOperationsV2 } from './plugins/desktopTenantTemplatesAuthorityModuleV2';
 import { createDesktopTenantGenesOperationsV2 } from './plugins/desktopTenantGenesAuthorityModuleV2';
 import { createDesktopTenantOrganizationSettingsOperationsV2 } from './plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAuthorityModuleV2';
@@ -1079,6 +1080,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantTemplatesOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantTemplatesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantGenesOperationsV2 = useMemo(
     () =>
       createDesktopTenantGenesOperationsV2(
@@ -1498,6 +1506,7 @@ export function App() {
       tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
       tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
+      tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
       tenantGenesOperationsV2: desktopTenantGenesOperationsV2,
       tenantOrganizationSettingsOperationsV2:
         desktopTenantOrganizationSettingsOperationsV2,
@@ -1565,6 +1574,7 @@ export function App() {
       desktopTenantCatalogOperationsV2,
       desktopTenantCreationOperationsV2,
       desktopTenantGenesOperationsV2,
+      desktopTenantTemplatesOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
       desktopTenantOverviewOperationsV2,
       desktopTenantProjectsOperationsV2,
@@ -1626,6 +1636,7 @@ export function App() {
         tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
         tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
+        tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         tenantGenesOperationsV2: desktopTenantGenesOperationsV2,
         tenantOrganizationSettingsOperationsV2:
           desktopTenantOrganizationSettingsOperationsV2,
@@ -1670,6 +1681,7 @@ export function App() {
       desktopDeadLetterQueueOperationsV2,
       desktopInstanceTemplatesOperationsV2,
       desktopTenantEvolutionOperationsV2,
+      desktopTenantTemplatesOperationsV2,
       desktopTenantGenesOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
@@ -7567,6 +7579,7 @@ export function App() {
         agentDefinitionEvent,
         rendererRouteRegistry: desktopProductionRouteRegistry,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+        tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         onClose: () => {
           const closeRoute = settingsRouteCloseNavigationRef.current;
           settingsRouteCloseNavigationRef.current = null;

@@ -23,6 +23,7 @@ import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktop
 import type { DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import type { DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
+import type { DesktopTenantTemplatesOperationsV2 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import type { DesktopTenantGenesOperationsV2 } from '../../plugins/desktopTenantGenesAuthorityModuleV2';
 import type { DesktopTenantOrganizationSettingsOperationsV2 } from '../../plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import type { DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
@@ -152,6 +153,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   tenantGenesOperationsV2: DesktopTenantGenesOperationsV2;
   tenantOrganizationSettingsOperationsV2: DesktopTenantOrganizationSettingsOperationsV2;
   tenantAcpOperationsV2: import('../../plugins/desktopTenantAcpAuthorityModuleV2').DesktopTenantAcpOperationsV2;
@@ -258,6 +260,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       tenantEventsOperationsV2: input.tenantEventsOperationsV2,
       tenantPatternsOperationsV2: input.tenantPatternsOperationsV2,
       tenantEvolutionOperationsV2: input.tenantEvolutionOperationsV2,
+      tenantTemplatesOperationsV2: input.tenantTemplatesOperationsV2,
       tenantGenesOperationsV2: input.tenantGenesOperationsV2,
       tenantOrganizationSettingsOperationsV2:
         input.tenantOrganizationSettingsOperationsV2,

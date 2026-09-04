@@ -77,7 +77,6 @@ import type {
   ManagedSkillZipImportInput,
   ManagedSubAgent,
   ManagedSubAgentMutation,
-  ManagedSubAgentTemplateList,
   PaginatedConversationsResponse,
   PlanSnapshot,
   PromptTemplateCreateInput,
@@ -2513,14 +2512,6 @@ export class DesktopApiClient {
       enabled,
       expectedRevision,
     );
-  }
-
-  async listManagedSubAgentTemplates(signal?: AbortSignal): Promise<ManagedSubAgentTemplateList> {
-    return this.managedResourcesClient.listManagedSubAgentTemplates(signal);
-  }
-
-  async installManagedSubAgentTemplate(templateId: string): Promise<ManagedSubAgent> {
-    return this.managedResourcesClient.installManagedSubAgentTemplate(templateId);
   }
 
   async importManagedFilesystemSubAgent(

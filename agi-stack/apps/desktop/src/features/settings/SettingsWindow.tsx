@@ -22,6 +22,7 @@ import type {
 import type { DesktopRouteModule } from '../navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../navigation/desktopRouteRegistry';
 import type { DesktopPluginMarketplaceOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import type { DesktopTenantTemplatesOperationsV2 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
 import { PROFILE_ROUTE_ID } from '../settings-routes/profileRoutePresentationModel';
@@ -89,6 +90,7 @@ type SettingsWindowProps = {
   agentDefinitionEvent: AgentWsEvent | null;
   rendererRouteRegistry?: DesktopRouteRegistry<DesktopRouteModule>;
   pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
+  tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -109,6 +111,7 @@ export function SettingsWindow({
   agentDefinitionEvent,
   rendererRouteRegistry,
   pluginMarketplaceOperationsV2,
+  tenantTemplatesOperationsV2,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -312,6 +315,7 @@ export function SettingsWindow({
     config,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
+    tenantTemplatesOperationsV2,
     onReload: reloadSubAgentResources,
   });
   const subAgentDefinitions = useSubAgentDefinitionManagement({

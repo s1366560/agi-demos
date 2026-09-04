@@ -27,6 +27,7 @@ import type {
   MarketplacePluginCatalogEntry,
 } from '../types';
 import { DEFAULT_CONFIG } from '../types';
+import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
 import '../styles/global.css';
 
 declare global {
@@ -38,6 +39,7 @@ const QA_TENANT_ID = 'tenant-northstar';
 const QA_PROJECT_ID = 'project-desktop-client';
 const QA_WORKSPACE_ID = 'workspace-desktop-client';
 const NOW = '2026-07-14T09:40:00.000Z';
+const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2();
 const QA_ENVIRONMENT_SECRETS = new Set(['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
 
 const qaProviderTypes = [
@@ -1824,6 +1826,7 @@ function ProviderSettingsQa() {
       runtimeDisabledReason={null}
       agentDefinitionEvent={agentDefinitionEvent}
       pluginMarketplaceOperationsV2={qaPluginMarketplaceOperationsV2}
+      tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
       onClose={() => undefined}
       onConfigChange={setConfig}
       onRuntimeStatusRefresh={async () => undefined}

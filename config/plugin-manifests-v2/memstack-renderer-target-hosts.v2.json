@@ -715,6 +715,35 @@
       "contract_digest": "sha256:5aaca52685d58b1fd01f98c0575b5a226ae82b434a4292e3dda6181d4f68e1e3"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-templates-authority",
+      "entrypoint": "applyDesktopTenantTemplatesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:1ec1ce75b011fc00f577966090efaba529be65015d74f8d5aa1dacfd60299b66",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantTemplatesAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-templates-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:c224c862118ebfe62c08a4f652b5499075dcf7c30518cb0035c5e471842a2655"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-organization-settings-authority",
       "entrypoint": "applyDesktopTenantOrganizationSettingsAuthorityV2",
       "artifact": {

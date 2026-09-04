@@ -52,7 +52,10 @@ import {
 import type { ProfileRouteClient } from '../settings-routes/profileRouteClient';
 import { createProviderRouteClient } from '../settings-routes/providerRouteClient';
 import { createSkillsRouteClient } from '../settings-routes/skillsRouteClient';
-import type { TemplatesRouteClient } from '../settings-routes/templatesRouteClient';
+import {
+  createDesktopTenantTemplatesClientV2,
+  type DesktopTenantTemplatesOperationsV2,
+} from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import { createDesktopTenantPatternsClientV2, type DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
@@ -322,6 +325,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   tenantGenesOperationsV2: DesktopTenantGenesOperationsV2;
   tenantOrganizationSettingsOperationsV2: DesktopTenantOrganizationSettingsOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
@@ -351,7 +355,6 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     'load'
   >;
   channelsRouteClient?: Pick<ChannelsRouteClient, 'observe'>;
-  templatesRouteClient?: Pick<TemplatesRouteClient, 'observe'>;
   profileRouteClient?: Pick<ProfileRouteClient, 'observe'>;
   p2ThirdBatchCapabilityClient?: Pick<P2ThirdBatchCapabilityClient, 'load'>;
   cloudRequestBroker?: VaultBoundCloudRequestBroker | null;
@@ -657,7 +660,10 @@ export function createDesktopWorkbenchCapabilityClient(
         config,
       ),
       channels: options.channelsRouteClient,
-      templates: options.templatesRouteClient,
+      templates: createDesktopTenantTemplatesClientV2(
+        options.tenantTemplatesOperationsV2,
+        config,
+      ),
       profile: options.profileRouteClient,
     });
   const cloudRequestBroker =

@@ -21,7 +21,6 @@ import type {
   ManagedSkillZipImportInput,
   ManagedSubAgent,
   ManagedSubAgentMutation,
-  ManagedSubAgentTemplateList,
   PromptTemplateCreateInput,
   PromptTemplateRecord,
   PromptTemplateVariable,
@@ -473,26 +472,6 @@ export class ManagedResourcesClient {
             ? this.mutationBody({ enabled }, expectedRevision)
             : undefined,
       },
-    );
-  }
-
-  async listManagedSubAgentTemplates(
-    signal?: AbortSignal,
-  ): Promise<ManagedSubAgentTemplateList> {
-    const params = new URLSearchParams({ limit: '100' });
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgentTemplateList>(
-      `/api/v1/subagents/templates/list?${params.toString()}`,
-      { signal },
-    );
-  }
-
-  async installManagedSubAgentTemplate(templateId: string): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(
-      `/api/v1/subagents/templates/${encodeURIComponent(templateId)}/install?${params.toString()}`,
-      { method: 'POST' },
     );
   }
 

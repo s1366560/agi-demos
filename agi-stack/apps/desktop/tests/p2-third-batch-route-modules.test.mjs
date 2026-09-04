@@ -16,7 +16,9 @@ const { createEvolutionRouteModuleLoader } = require(`${root}/evolutionRouteModu
 const { createChannelsRouteClient } = require(`${root}/channelsRouteClient.js`);
 const { createChannelsRouteController } = require(`${root}/channelsRouteController.js`);
 const { createChannelsRouteModuleLoader } = require(`${root}/channelsRouteModule.js`);
-const { createTemplatesRouteClient } = require(`${root}/templatesRouteClient.js`);
+const { createDesktopTenantTemplatesHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTemplatesHttpProjectionV2.js',
+);
 const { createTemplatesRouteController } = require(`${root}/templatesRouteController.js`);
 const { createTemplatesRouteModuleLoader } = require(`${root}/templatesRouteModule.js`);
 const { createProfileRouteClient } = require(`${root}/profileRouteClient.js`);
@@ -218,18 +220,26 @@ test('Channels client exposes project CRUD/test authority and fails closed in Lo
 test('Templates client owns list, categories, detail, install, and seed contracts', async () => {
   const requests = [];
   const restore = mockFetch(requests, [
-    { templates: [templateSummary()], total: 1 },
+    { templates: [templateDetail()], total: 1 },
     { categories: ['coding'] },
     templateDetail(),
-    { id: 'agent-1', name: 'installed', display_name: 'Installed' },
+    {
+      id: 'agent-1',
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      name: 'installed',
+      enabled: true,
+      source: 'database',
+    },
     { created: 2, message: 'Seeded 2 builtin templates' },
   ]);
   try {
     const scope = { authority: 'cloud', tenantId: 'tenant-1' };
-    const client = createTemplatesRouteClient(cloudConfig);
-    const observed = await client.observe(scope, {
+    const client = createDesktopTenantTemplatesHttpProjectionV2(cloudConfig);
+    const observed = await client.load(scope, {
       page: 1,
       pageSize: 12,
+      category: '',
       search: 'code',
     });
     assert.equal(observed.itemCount, 1);
@@ -258,10 +268,10 @@ test('Templates client owns list, categories, detail, install, and seed contract
   ]);
   try {
     await assert.rejects(
-      createTemplatesRouteClient(localConfig).observe({
-        authority: 'local',
-        tenantId: 'tenant-1',
-      }),
+      createDesktopTenantTemplatesHttpProjectionV2(localConfig).load(
+        { authority: 'local', tenantId: 'tenant-1' },
+        { page: 1, pageSize: 12, category: '', search: '' },
+      ),
       (error) => error.status === 501 && error.reasonCode === 'local_subagent_registry_unavailable',
     );
   } finally {

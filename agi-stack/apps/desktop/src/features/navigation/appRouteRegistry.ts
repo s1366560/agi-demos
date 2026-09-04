@@ -287,6 +287,7 @@ import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktop
 import type { DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import type { DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
+import type { DesktopTenantTemplatesOperationsV2 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
@@ -358,6 +359,7 @@ export type AppRouteRegistryRefs = {
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   tenantGenesOperationsV2: import('../../plugins/desktopTenantGenesAuthorityModuleV2').DesktopTenantGenesOperationsV2;
   tenantDecisionRecordsOperationsV2: import('../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2').DesktopTenantDecisionRecordsOperationsV2;
   tenantOrganizationSettingsOperationsV2: import('../../plugins/desktopTenantOrganizationSettingsAuthorityModuleV2').DesktopTenantOrganizationSettingsOperationsV2;
@@ -465,7 +467,11 @@ export type AppTenantAgentBuildingRouteRegistryRefs = Pick<
   AppSettingsRouteContentRefs;
 export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'pluginMarketplaceOperationsV2' | 'tenantWebhooksOperationsV2' | 'tenantAcpOperationsV2'
+  | 'configRef'
+  | 'pluginMarketplaceOperationsV2'
+  | 'tenantAcpOperationsV2'
+  | 'tenantTemplatesOperationsV2'
+  | 'tenantWebhooksOperationsV2'
 > &
   AppSettingsRouteContentRefs;
 export type AppTenantGovernanceRouteRegistryRefs = Pick<
@@ -1278,7 +1284,13 @@ export function createAppTenantAgentBuildingRouteRegistry(
 export function createAppTenantExtensionsIntegrationsRouteRegistry(
   refs: AppTenantExtensionsIntegrationsRouteRegistryRefs,
 ) {
-  const { configRef, pluginMarketplaceOperationsV2, tenantWebhooksOperationsV2, tenantAcpOperationsV2 } = refs;
+  const {
+    configRef,
+    pluginMarketplaceOperationsV2,
+    tenantWebhooksOperationsV2,
+    tenantAcpOperationsV2,
+    tenantTemplatesOperationsV2,
+  } = refs;
   const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
@@ -1321,7 +1333,11 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
       }),
       [TENANT_TEMPLATES_ROUTE_ID]: createTemplatesRouteModuleLoader({
         createBinding: (context) =>
-          createTemplatesRouteBindingForRuntime(configRef.current, context),
+          createTemplatesRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantTemplatesOperationsV2,
+          ),
       }),
     }),
   });

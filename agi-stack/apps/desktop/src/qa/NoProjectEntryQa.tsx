@@ -21,6 +21,7 @@ import type {
   WorkspaceSummary,
 } from '../types';
 import { createDesktopNewTaskFlowQaOperationsV2 } from './desktopNewTaskFlowAuthorityQaV2';
+import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
 import '../styles/global.css';
 
 declare global {
@@ -29,6 +30,7 @@ declare global {
 
 const QA_API_ORIGIN = 'https://no-project.qa.memstack.invalid';
 const NOW = '2026-07-18T08:00:00.000Z';
+const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2();
 const qaSearchParams = new URLSearchParams(window.location.search);
 const qaScenario = qaSearchParams.get('scenario');
 const qaWindowState = qaSearchParams.get('state');
@@ -320,6 +322,7 @@ function NoProjectEntryQa() {
           runtimeDisabledReason={newTaskDisabledReason}
           agentDefinitionEvent={null}
           pluginMarketplaceOperationsV2={noProjectPluginMarketplaceOperationsV2}
+          tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
           onClose={() => setSettingsOpen(false)}
           onConfigChange={setConfig}
           onRuntimeStatusRefresh={async () => undefined}

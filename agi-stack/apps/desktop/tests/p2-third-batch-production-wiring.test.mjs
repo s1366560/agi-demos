@@ -222,7 +222,7 @@ test('Capability catalog contains four P2 third-batch IDs exactly once', () => {
 });
 
 async function loadSnapshot(config, clients) {
-  const { evolutionRouteClient, ...remainingClients } = clients;
+  const { evolutionRouteClient, templatesRouteClient, ...remainingClients } = clients;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ reason_code: 'unrelated_authority_unavailable' }), {
@@ -242,6 +242,10 @@ async function loadSnapshot(config, clients) {
         tenantEvolutionOperationsV2: {
           observeTenantEvolution: ({ scope, signal }) =>
             evolutionRouteClient.observe(scope, signal),
+        },
+        tenantTemplatesOperationsV2: {
+          loadTenantTemplates: ({ scope, signal }) =>
+            templatesRouteClient.observe(scope, {}, signal),
         },
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
