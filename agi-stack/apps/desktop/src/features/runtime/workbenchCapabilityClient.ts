@@ -59,6 +59,7 @@ import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2
 import { createDesktopTenantPatternsClientV2, type DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import { createDesktopTenantDecisionRecordsClientV2, type DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import { createDesktopTenantSettingsClientV2, type DesktopTenantSettingsOperationsV2 } from '../../plugins/desktopTenantSettingsAuthorityModuleV2';
+import { createDesktopTenantWebhooksClientV2, type DesktopTenantWebhooksOperationsV2 } from '../../plugins/desktopTenantWebhooksAuthorityModuleV2';
 import type {
   ProjectBlackboardScope,
   ProjectBlackboardSnapshot,
@@ -308,6 +309,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
   tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
+  tenantWebhooksOperationsV2: DesktopTenantWebhooksOperationsV2;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -622,6 +624,7 @@ export function createDesktopWorkbenchCapabilityClient(
       patterns: createDesktopTenantPatternsClientV2(options.tenantPatternsOperationsV2, config),
       decisionRecords: createDesktopTenantDecisionRecordsClientV2(options.tenantDecisionRecordsOperationsV2, config),
       settings: createDesktopTenantSettingsClientV2(options.tenantSettingsOperationsV2, config),
+      webhooks: createDesktopTenantWebhooksClientV2(options.tenantWebhooksOperationsV2, config),
     });
   const p2ThirdBatchCapabilityClient =
     options.p2ThirdBatchCapabilityClient ??

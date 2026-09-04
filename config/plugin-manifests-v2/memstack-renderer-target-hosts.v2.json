@@ -715,6 +715,35 @@
       "contract_digest": "sha256:f1d2448cca87e41a8ecb9132a9040cece45066a7c365b7c85f0a96640303a577"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-webhooks-authority",
+      "entrypoint": "applyDesktopTenantWebhooksAuthorityV2",
+      "artifact": {
+        "digest": "sha256:e19d2a68bd4f8b48c915e0b5814594d89ab60c3115902056c85db75ce50eed10",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantWebhooksAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-webhooks-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:d27658cfd99e28553266369de4c494a006c1a0744cfa5e3d0986450b9f2df7d7"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-events-authority",
       "entrypoint": "applyDesktopTenantEventsAuthorityV2",
       "artifact": {

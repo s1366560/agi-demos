@@ -23,7 +23,7 @@ import type { TenantPatternsRouteBinding } from './tenantPatternsRouteModule';
 import { createDesktopTenantSettingsClientV2, type DesktopTenantSettingsOperationsV2 } from '../../plugins/desktopTenantSettingsAuthorityModuleV2';
 import { createTenantSettingsController } from './tenantSettingsController';
 import type { TenantSettingsRouteBinding } from './tenantSettingsRouteModule';
-import { createTenantWebhooksClient } from './tenantWebhooksClient';
+import { createDesktopTenantWebhooksClientV2, type DesktopTenantWebhooksOperationsV2 } from '../../plugins/desktopTenantWebhooksAuthorityModuleV2';
 import { createTenantWebhooksController } from './tenantWebhooksController';
 import type { TenantWebhooksRouteBinding } from './tenantWebhooksRouteModule';
 
@@ -59,12 +59,13 @@ export function createTenantAcpRouteBindingForRuntime(
 export function createTenantWebhooksRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantManagementRouteContext,
+  operations: DesktopTenantWebhooksOperationsV2,
 ): TenantWebhooksRouteBinding {
   const scope = tenantScope(config, context);
   return Object.freeze({
     scope,
     controller: createTenantWebhooksController({
-      client: createTenantWebhooksClient(config),
+      client: createDesktopTenantWebhooksClientV2(operations, config),
       initialScope: scope,
     }),
   });

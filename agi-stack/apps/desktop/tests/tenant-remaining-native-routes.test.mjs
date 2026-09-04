@@ -9,7 +9,9 @@ const {
   createDesktopTenantPatternsHttpProjectionV2: createTenantPatternsClient,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantPatternsHttpProjectionV2.js');
 const { createTenantAcpClient } = require(`${featureRoot}/tenantAcpClient.js`);
-const { createTenantWebhooksClient } = require(`${featureRoot}/tenantWebhooksClient.js`);
+const { createDesktopTenantWebhooksHttpProjectionV2: createTenantWebhooksClient } = require(
+  `${desktopRoot}/plugins/desktopTenantWebhooksHttpProjectionV2.js`,
+);
 const { createTenantGenesClient } = require(`${featureRoot}/tenantGenesClient.js`);
 const {
   createDesktopTenantEventsHttpProjectionV2: createTenantEventsClient,

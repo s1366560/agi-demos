@@ -24,6 +24,7 @@ import type { DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenan
 import type { DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import type { DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import type { DesktopTenantSettingsOperationsV2 } from '../../plugins/desktopTenantSettingsAuthorityModuleV2';
+import type { DesktopTenantWebhooksOperationsV2 } from '../../plugins/desktopTenantWebhooksAuthorityModuleV2';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
@@ -146,6 +147,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
   tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
+  tenantWebhooksOperationsV2: DesktopTenantWebhooksOperationsV2;
   desktopWorkspaceCatalogOperationsV2: Pick<
     DesktopWorkspaceCatalogOperationsV2,
     'listWorkspacesForProject'
@@ -243,6 +245,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       tenantPatternsOperationsV2: input.tenantPatternsOperationsV2,
       tenantDecisionRecordsOperationsV2: input.tenantDecisionRecordsOperationsV2,
       tenantSettingsOperationsV2: input.tenantSettingsOperationsV2,
+      tenantWebhooksOperationsV2: input.tenantWebhooksOperationsV2,
       projectWorkspacesClient: createProjectWorkspacesV2Client(config, {
         catalogOperations: input.desktopWorkspaceCatalogOperationsV2,
         lifecycleOperations: input.desktopWorkspaceLifecycleOperationsV2,

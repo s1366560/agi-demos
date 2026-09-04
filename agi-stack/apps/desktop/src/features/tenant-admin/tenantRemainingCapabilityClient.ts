@@ -40,7 +40,6 @@ import {
   type TenantSettingsClient,
 } from './tenantSettingsClient';
 import {
-  createTenantWebhooksClient,
   TENANT_WEBHOOKS_LOCAL_REASON,
   TENANT_WEBHOOKS_ROUTE_ID,
   type TenantWebhooksClient,
@@ -71,7 +70,7 @@ export type TenantRemainingCapabilityClient = Readonly<{
 export type TenantRemainingCapabilityDependencies = Readonly<{
   patterns: Pick<TenantPatternsClient, 'load'>;
   acp?: Pick<TenantAcpClient, 'load'>;
-  webhooks?: Pick<TenantWebhooksClient, 'load'>;
+  webhooks: Pick<TenantWebhooksClient, 'load'>;
   genes?: Pick<TenantGenesClient, 'load'>;
   events: Pick<TenantEventsClient, 'load'>;
   decisionRecords: Pick<TenantDecisionRecordsClient, 'load'>;
@@ -173,7 +172,7 @@ export function createTenantRemainingCapabilityClient(
   const clients = Object.freeze({
     patterns: dependencies.patterns,
     acp: dependencies.acp ?? createTenantAcpClient(runtimeConfig),
-    webhooks: dependencies.webhooks ?? createTenantWebhooksClient(runtimeConfig),
+    webhooks: dependencies.webhooks,
     genes: dependencies.genes ?? createTenantGenesClient(runtimeConfig),
     events: dependencies.events,
     decisionRecords: dependencies.decisionRecords,
