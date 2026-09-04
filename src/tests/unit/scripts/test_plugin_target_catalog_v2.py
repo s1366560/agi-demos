@@ -97,6 +97,7 @@ _EXPECTED_TARGET_MODULES = {
             "builtin://memstack/desktop/tenant-decision-records-authority",
             "builtin://memstack/desktop/tenant-settings-authority",
             "builtin://memstack/desktop/tenant-webhooks-authority",
+            "builtin://memstack/desktop/tenant-billing-authority",
             "builtin://memstack/desktop/tenant-projects-authority",
             "builtin://memstack/desktop/tenant-tasks-authority",
             "builtin://memstack/desktop/terminal-lifecycle-authority",
@@ -250,7 +251,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 403
+    assert len(entries) == 404
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",

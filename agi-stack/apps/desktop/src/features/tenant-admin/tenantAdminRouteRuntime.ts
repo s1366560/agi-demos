@@ -2,7 +2,7 @@ import type { DesktopRuntimeConfig } from '../../types';
 import { createTenantAuditClient } from './tenantAuditClient';
 import { createTenantAuditController } from './tenantAuditController';
 import type { TenantAuditRouteBinding } from './tenantAuditRouteModule';
-import { createTenantBillingClient } from './tenantBillingClient';
+import { createDesktopTenantBillingClientV2, type DesktopTenantBillingOperationsV2 } from '../../plugins/desktopTenantBillingAuthorityModuleV2';
 import { createTenantBillingController } from './tenantBillingController';
 import type { TenantBillingRouteBinding } from './tenantBillingRouteModule';
 import { createTenantGovernanceClient } from './tenantGovernanceClient';
@@ -30,12 +30,13 @@ export function createTenantGovernanceRouteBindingForRuntime(
 export function createTenantBillingRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantAdminRouteContext,
+  operations: DesktopTenantBillingOperationsV2,
 ): TenantBillingRouteBinding {
   const scope = tenantScope(config, context);
   return Object.freeze({
     scope,
     controller: createTenantBillingController({
-      client: createTenantBillingClient(config),
+      client: createDesktopTenantBillingClientV2(operations, config),
       initialScope: scope,
     }),
   });

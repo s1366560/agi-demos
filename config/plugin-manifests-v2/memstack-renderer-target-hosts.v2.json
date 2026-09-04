@@ -744,6 +744,35 @@
       "contract_digest": "sha256:d27658cfd99e28553266369de4c494a006c1a0744cfa5e3d0986450b9f2df7d7"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-billing-authority",
+      "entrypoint": "applyDesktopTenantBillingAuthorityV2",
+      "artifact": {
+        "digest": "sha256:bc5cbdaa1cfc885ade5e2efe756a5eda0fc6b3e177e90d768b9f179cd57830e8",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantBillingAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-billing-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:8e8e2d0f2dca4f710f377309f5a819387d3af121563c09045e9be24bc9e0da85"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-events-authority",
       "entrypoint": "applyDesktopTenantEventsAuthorityV2",
       "artifact": {

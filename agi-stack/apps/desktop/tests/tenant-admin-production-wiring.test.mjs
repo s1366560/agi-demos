@@ -191,11 +191,7 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
       tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
       tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       tenantGovernanceClient: probe('available', null, ['view', 'list', 'invite']),
-      tenantBillingClient: probe(
-        'degraded',
-        'tenant_billing_invoice_download_file_ipc_unavailable',
-        ['view', 'inspect-usage', 'list-invoices', 'upgrade-plan'],
-      ),
+      tenantBillingOperationsV2: tenantBillingOperationsV2Fixture(),
       tenantAuditClient: probe(
         'available',
         null,
@@ -334,7 +330,7 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
         tenantGovernanceClient: neverProbe,
-        tenantBillingClient: neverProbe,
+        tenantBillingOperationsV2: { loadTenantBilling: neverProbe.load },
         tenantAuditClient: neverProbe,
         tenantTrustClient: neverProbe,
       },
@@ -383,6 +379,29 @@ function probe(availability, reasonCode, allowedActions, authorityRevision = und
         contractVersion: '4.0.0',
         allowedActions,
         ...(authorityRevision === undefined ? {} : { authorityRevision }),
+      };
+    },
+  };
+}
+
+function tenantBillingOperationsV2Fixture() {
+  return {
+    async loadTenantBilling({ scope }) {
+      const data = {
+        membershipRole: 'owner',
+        tenant: { id: scope.tenantId, name: 'Tenant', plan: 'pro', storageLimit: 10 },
+        usage: { projects: 1, memories: 2, users: 3, storage: 4 },
+        invoices: [],
+      };
+      return {
+        scope,
+        authority: 'cloud',
+        availability: 'degraded',
+        reasonCode: 'tenant_billing_invoice_download_file_ipc_unavailable',
+        contractVersion: '4.0.0',
+        allowedActions: ['view', 'inspect-usage', 'list-invoices', 'upgrade-plan'],
+        data,
+        ...data,
       };
     },
   };
