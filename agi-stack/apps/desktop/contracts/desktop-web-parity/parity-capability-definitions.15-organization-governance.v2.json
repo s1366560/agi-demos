@@ -526,7 +526,7 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_settings_not_applicable",
       "local_deviation": "Desktop application, runtime, and vault preferences remain separate native settings. Local mode does not present them as Cloud tenant metadata, quota, or deletion authority.",
-      "judgment_rationale": "TenantSettings owns tenant metadata, usage and deletion. Desktop now resolves the canonical route and workbench read plus explicit owner mutations through one Tenant Settings V2 Provider, with every operation pinned to a tenant generation. Reads and usage remain tenant-member operations; update and deletion retain owner observation and are never retried or invoked by lifecycle code. The Cloud projection preserves stable scope observation around the two-resource read. Application, runtime and vault settings stay separate, while all Local operations fail before network access with cloud_tenant_settings_not_applicable."
+      "judgment_rationale": "TenantSettings owns tenant metadata, usage and deletion. Desktop now resolves the canonical route and workbench read plus explicit owner mutations through one Tenant Settings V2 Provider, with every operation pinned to a tenant generation. Reads and usage remain tenant-member operations; update and deletion retain owner observation and are never retried or invoked by lifecycle code. The Cloud projection preserves stable scope revision observation around the two-resource read. Application, runtime and vault settings stay separate, while all Local operations fail before network access with cloud_tenant_settings_not_applicable."
     }
   ],
   "source_ownership": {
