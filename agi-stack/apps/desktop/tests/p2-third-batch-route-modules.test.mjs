@@ -8,7 +8,9 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require('/tmp/agistack-desktop-test-dist/src/i18n.js');
 
-const { createEvolutionRouteClient } = require(`${root}/evolutionRouteClient.js`);
+const { createDesktopTenantEvolutionHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantEvolutionHttpProjectionV2.js',
+);
 const { createEvolutionRouteController } = require(`${root}/evolutionRouteController.js`);
 const { createEvolutionRouteModuleLoader } = require(`${root}/evolutionRouteModule.js`);
 const { createChannelsRouteClient } = require(`${root}/channelsRouteClient.js`);
@@ -98,7 +100,7 @@ test('Evolution client uses Cloud trusted-session actions and Local sidecar reas
   ]);
   try {
     const scope = { authority: 'cloud', tenantId: 'tenant-1' };
-    const client = createEvolutionRouteClient(cloudConfig);
+    const client = createDesktopTenantEvolutionHttpProjectionV2(cloudConfig);
     const observed = await client.observe(scope);
     assert.equal(observed.itemCount, 1);
     assert.deepEqual(observed.allowedActions, [
@@ -134,7 +136,7 @@ test('Evolution client uses Cloud trusted-session actions and Local sidecar reas
   ]);
   try {
     await assert.rejects(
-      createEvolutionRouteClient(localConfig).observe({
+      createDesktopTenantEvolutionHttpProjectionV2(localConfig).observe({
         authority: 'local',
         tenantId: 'tenant-1',
       }),

@@ -128,6 +128,7 @@ import { createDesktopInstanceTemplatesOperationsV2 } from './plugins/desktopIns
 import { createDesktopUnifiedRuntimesOperationsV2 } from './plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import { createDesktopTenantEventsOperationsV2 } from './plugins/desktopTenantEventsAuthorityModuleV2';
 import { createDesktopTenantPatternsOperationsV2 } from './plugins/desktopTenantPatternsAuthorityModuleV2';
+import { createDesktopTenantEvolutionOperationsV2 } from './plugins/desktopTenantEvolutionAuthorityModuleV2';
 import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAuthorityModuleV2';
 import { createDesktopTenantDecisionRecordsOperationsV2 } from './plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import { createDesktopTenantSettingsOperationsV2 } from './plugins/desktopTenantSettingsAuthorityModuleV2';
@@ -1069,6 +1070,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantEvolutionOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantEvolutionOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantAcpOperationsV2 = useMemo(
     () => createDesktopTenantAcpOperationsV2(() => desktopPluginMarketplaceGenerationActionsRefV2.current),
     [],
@@ -1473,6 +1481,7 @@ export function App() {
       unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
       tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
+      tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
       tenantAcpOperationsV2: desktopTenantAcpOperationsV2,
       tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
       tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
@@ -1594,7 +1603,8 @@ export function App() {
         instanceTemplatesOperationsV2: desktopInstanceTemplatesOperationsV2,
         unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
         tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
-      tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
+        tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
+        tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         tenantAcpOperationsV2: desktopTenantAcpOperationsV2,
         tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
         tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
@@ -1635,6 +1645,7 @@ export function App() {
       desktopBackendStoresOperationsV2,
       desktopDeadLetterQueueOperationsV2,
       desktopInstanceTemplatesOperationsV2,
+      desktopTenantEvolutionOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceLifecycleOperationsV2,
       desktopTenantAgentBindingsOperationsV2,

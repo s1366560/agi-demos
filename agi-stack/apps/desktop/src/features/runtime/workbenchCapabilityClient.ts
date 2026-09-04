@@ -33,7 +33,6 @@ import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapab
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
 import { createAgentDefinitionsRouteClient } from '../settings-routes/agentDefinitionsRouteClient';
 import type { ChannelsRouteClient } from '../settings-routes/channelsRouteClient';
-import type { EvolutionRouteClient } from '../settings-routes/evolutionRouteClient';
 import {
   managementRouteObservation,
   managementRouteReasonPrefix,
@@ -57,6 +56,10 @@ import type { TemplatesRouteClient } from '../settings-routes/templatesRouteClie
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import { createDesktopTenantPatternsClientV2, type DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
+import {
+  createDesktopTenantEvolutionClientV2,
+  type DesktopTenantEvolutionOperationsV2,
+} from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import { createDesktopTenantDecisionRecordsClientV2, type DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import { createDesktopTenantSettingsClientV2, type DesktopTenantSettingsOperationsV2 } from '../../plugins/desktopTenantSettingsAuthorityModuleV2';
 import { createDesktopTenantWebhooksClientV2, type DesktopTenantWebhooksOperationsV2 } from '../../plugins/desktopTenantWebhooksAuthorityModuleV2';
@@ -310,6 +313,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   unifiedRuntimesOperationsV2?: Pick<DesktopUnifiedRuntimesOperationsV2, 'probe'>;
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
+  tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
   tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
   tenantWebhooksOperationsV2: DesktopTenantWebhooksOperationsV2;
@@ -336,7 +340,6 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     TenantRemainingCapabilityClient,
     'load'
   >;
-  evolutionRouteClient?: Pick<EvolutionRouteClient, 'observe'>;
   channelsRouteClient?: Pick<ChannelsRouteClient, 'observe'>;
   templatesRouteClient?: Pick<TemplatesRouteClient, 'observe'>;
   profileRouteClient?: Pick<ProfileRouteClient, 'observe'>;
@@ -634,7 +637,10 @@ export function createDesktopWorkbenchCapabilityClient(
   const p2ThirdBatchCapabilityClient =
     options.p2ThirdBatchCapabilityClient ??
     createP2ThirdBatchCapabilityClient(config, {
-      evolution: options.evolutionRouteClient,
+      evolution: createDesktopTenantEvolutionClientV2(
+        options.tenantEvolutionOperationsV2,
+        config,
+      ),
       channels: options.channelsRouteClient,
       templates: options.templatesRouteClient,
       profile: options.profileRouteClient,

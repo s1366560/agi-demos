@@ -286,6 +286,7 @@ import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDe
 import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
 import type { DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import type { DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
+import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
@@ -356,6 +357,7 @@ export type AppRouteRegistryRefs = {
   instanceTemplatesOperationsV2: DesktopInstanceTemplatesOperationsV2;
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
+  tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
   tenantDecisionRecordsOperationsV2: import('../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2').DesktopTenantDecisionRecordsOperationsV2;
   tenantSettingsOperationsV2: import('../../plugins/desktopTenantSettingsAuthorityModuleV2').DesktopTenantSettingsOperationsV2;
   tenantWebhooksOperationsV2: import('../../plugins/desktopTenantWebhooksAuthorityModuleV2').DesktopTenantWebhooksOperationsV2;
@@ -455,6 +457,7 @@ export type AppTenantAgentBuildingRouteRegistryRefs = Pick<
   | 'tenantAgentBindingsOperationsV2'
   | 'tenantAgentDashboardOperationsV2'
   | 'tenantPatternsOperationsV2'
+  | 'tenantEvolutionOperationsV2'
 > &
   AppSettingsRouteContentRefs;
 export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
@@ -1245,7 +1248,11 @@ export function createAppTenantAgentBuildingRouteRegistry(
       }),
       [TENANT_EVOLUTION_ROUTE_ID]: createEvolutionRouteModuleLoader({
         createBinding: (context) =>
-          createEvolutionRouteBindingForRuntime(configRef.current, context),
+          createEvolutionRouteBindingForRuntime(
+            configRef.current,
+            context,
+            refs.tenantEvolutionOperationsV2,
+          ),
       }),
       [TENANT_PATTERNS_ROUTE_ID]: createTenantPatternsRouteModuleLoader({
         createBinding: (context) =>

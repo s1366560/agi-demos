@@ -657,6 +657,35 @@
       "contract_digest": "sha256:be996e7facba9664ffbe7f5f5bbf794f8bf92df076b140aa951c698f9bce061a"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-evolution-authority",
+      "entrypoint": "applyDesktopTenantEvolutionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:5f84ec2e18af05c56aed69647178caa193c5680a7f6c2ead38a5b9363c96d226",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantEvolutionAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-evolution-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:f7bc82b8144c7fb61597758af895f34b301d42ba2b0a1e27eeb90ecdd38baa75"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-decision-records-authority",
       "entrypoint": "applyDesktopTenantDecisionRecordsAuthorityV2",
       "artifact": {

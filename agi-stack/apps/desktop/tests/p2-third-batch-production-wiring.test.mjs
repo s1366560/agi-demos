@@ -57,6 +57,18 @@ const profileAuxiliarySource = readFileSync(
   new URL('../src/features/settings-routes/profileAuxiliaryRoute.ts', import.meta.url),
   'utf8',
 );
+const evolutionClientSource = readFileSync(
+  new URL('../src/features/settings-routes/evolutionRouteClient.ts', import.meta.url),
+  'utf8',
+);
+const p2RuntimeSource = readFileSync(
+  new URL('../src/features/settings-routes/p2ThirdBatchRouteRuntime.ts', import.meta.url),
+  'utf8',
+);
+const workbenchSource = readFileSync(
+  new URL('../src/features/runtime/workbenchCapabilityClient.ts', import.meta.url),
+  'utf8',
+);
 
 const ROUTE_IDS = Object.freeze([
   'tenant-tenant-evolution',
@@ -111,6 +123,12 @@ test('P2 third-batch and Profile loaders are owned by the V2 route registry', ()
   assert.match(settingsSource, /byId\.get\(PROFILE_ROUTE_ID\)\?\.loader/u);
   assert.match(profileAuxiliarySource, /createProfileGenerationHashLocationPort/u);
   assert.doesNotMatch(appSource, /matchProfileAuxiliaryRoute|profileAuxiliaryRouteActiveRef/u);
+  assert.doesNotMatch(evolutionClientSource, /createEvolutionRouteClient|requestNativeRouteJson/u);
+  assert.match(p2RuntimeSource, /createDesktopTenantEvolutionClientV2/u);
+  assert.match(registrySource, /tenantEvolutionOperationsV2/u);
+  assert.match(workbenchSource, /tenantEvolutionOperationsV2/u);
+  assert.doesNotMatch(workbenchSource, /evolutionRouteClient\?/u);
+  assert.match(appSource, /createDesktopTenantEvolutionOperationsV2/u);
   assert.doesNotMatch(
     appSource,
     /(?:evolution|channels|templates|profile)[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
@@ -204,6 +222,7 @@ test('Capability catalog contains four P2 third-batch IDs exactly once', () => {
 });
 
 async function loadSnapshot(config, clients) {
+  const { evolutionRouteClient, ...remainingClients } = clients;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ reason_code: 'unrelated_authority_unavailable' }), {
@@ -219,7 +238,11 @@ async function loadSnapshot(config, clients) {
       },
       config,
       {
-        ...clients,
+        ...remainingClients,
+        tenantEvolutionOperationsV2: {
+          observeTenantEvolution: ({ scope, signal }) =>
+            evolutionRouteClient.observe(scope, signal),
+        },
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),

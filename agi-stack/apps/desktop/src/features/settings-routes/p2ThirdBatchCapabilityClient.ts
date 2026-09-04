@@ -9,11 +9,7 @@ import {
   type ChannelsRouteClient,
   type ChannelsRouteScope,
 } from './channelsRouteClient';
-import {
-  createEvolutionRouteClient,
-  type EvolutionRouteClient,
-  type EvolutionRouteScope,
-} from './evolutionRouteClient';
+import type { EvolutionRouteClient, EvolutionRouteScope } from './evolutionRouteClient';
 import { NativeRouteClientError } from './nativeRouteHttpClient';
 import {
   createProfileRouteClient,
@@ -53,7 +49,7 @@ export type P2ThirdBatchCapabilityClient = Readonly<{
 }>;
 
 export type P2ThirdBatchCapabilityDependencies = Readonly<{
-  evolution?: Pick<EvolutionRouteClient, 'observe'>;
+  evolution: Pick<EvolutionRouteClient, 'observe'>;
   channels?: Pick<ChannelsRouteClient, 'observe'>;
   templates?: Pick<TemplatesRouteClient, 'observe'>;
   profile?: Pick<ProfileRouteClient, 'observe'>;
@@ -113,11 +109,11 @@ const REASON_PREFIX = Object.freeze({
 
 export function createP2ThirdBatchCapabilityClient(
   config: DesktopRuntimeConfig,
-  dependencies: P2ThirdBatchCapabilityDependencies = {},
+  dependencies: P2ThirdBatchCapabilityDependencies,
 ): P2ThirdBatchCapabilityClient {
   const runtime = Object.freeze({ ...config });
   const clients = Object.freeze({
-    evolution: dependencies.evolution ?? createEvolutionRouteClient(runtime),
+    evolution: dependencies.evolution,
     channels: dependencies.channels ?? createChannelsRouteClient(runtime),
     templates: dependencies.templates ?? createTemplatesRouteClient(runtime),
     profile: dependencies.profile ?? createProfileRouteClient(runtime),

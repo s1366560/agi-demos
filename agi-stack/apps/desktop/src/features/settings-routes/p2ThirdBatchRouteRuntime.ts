@@ -5,7 +5,10 @@ import type {
   ChannelsRouteBinding,
   ChannelsRouteContext,
 } from './channelsRouteModule';
-import { createEvolutionRouteClient } from './evolutionRouteClient';
+import {
+  createDesktopTenantEvolutionClientV2,
+  type DesktopTenantEvolutionOperationsV2,
+} from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import { createEvolutionRouteController } from './evolutionRouteController';
 import type {
   EvolutionRouteBinding,
@@ -24,6 +27,7 @@ import type {
 export function createEvolutionRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: EvolutionRouteContext,
+  operations: DesktopTenantEvolutionOperationsV2,
 ): EvolutionRouteBinding {
   const scope = Object.freeze({
     authority: config.mode,
@@ -31,7 +35,7 @@ export function createEvolutionRouteBindingForRuntime(
   });
   return Object.freeze({
     controller: createEvolutionRouteController({
-      client: createEvolutionRouteClient(config),
+      client: createDesktopTenantEvolutionClientV2(operations, config),
       initialScope: scope,
     }),
     scope,
