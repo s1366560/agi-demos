@@ -524,9 +524,11 @@
       "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/settings-routes/providerRouteClient.ts",
         "agi-stack/apps/desktop/src/features/settings-routes/providersRouteModule.ts",
@@ -754,13 +756,17 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantWebhooksClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantWebhooksController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantWebhooksPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantWebhooksPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantWebhooksPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantWebhooksAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantWebhooksHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantWebhooksOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_webhook_authority_required",
       "local_deviation": "Tenant webhook registration and secret rotation require an addressable Cloud service authority. Local Desktop keeps the native route contract but does not create an unaudited host callback service.",
-      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Creation requires an event selected from the event type catalog, and that catalog is served by /events/types behind the events feature gate; a disabled or failed catalog is therefore a structured unavailable or error state for creation rather than an ungated tenant-admin action. Webhook CRUD and secret copy remain tenant-admin operations without that feature gate. Desktop has a real production loader, App binding, typed client, controller and native Cloud management page with the reviewed CRUD and event-catalog contracts. The route now binds its stable tenant scope revision around resource reads and preserves the administrator and feature-gate checks for every mutation. Local remains explicitly cloud-only rather than an external-browser fallback."
+      "judgment_rationale": "Webhooks is a registered canonical tenant route backed by the tenant webhook service. Desktop now resolves the route and workbench read plus all CRUD mutations through one Tenant Webhooks V2 Provider, with each operation pinned to an immutable tenant generation and no static fallback. The Cloud projection preserves stable tenant scope revision observation, administrator authorization, exact request contracts and secret response handling; mutations are never retried or invoked by lifecycle code. Creation still depends on the events feature gate for the event type catalog. Local operations fail before network access with cloud_tenant_webhook_authority_required rather than creating an unaudited callback service."
     }
   ],
   "source_ownership": {
