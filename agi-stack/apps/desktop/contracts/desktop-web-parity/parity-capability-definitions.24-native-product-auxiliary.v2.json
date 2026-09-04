@@ -337,16 +337,19 @@
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportCapability.ts",
-        "agi-stack/apps/desktop/src/features/project-support/projectSupportClient.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportController.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportTypes.ts",
         "agi-stack/apps/desktop/src/features/project-support/ProjectSupportPage.tsx",
-        "agi-stack/apps/desktop/src/features/project-support/projectSupportRuntime.ts"
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
@@ -467,7 +470,7 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop natively lists, creates, and closes the caller's tenant-scoped support tickets from the project route with scoped errors and retry behavior. Local Desktop keeps the native route and returns a stable not-applicable result.",
-      "judgment_rationale": "Support is a project production route without a canonical navigation target. Cloud Desktop owns a native list/create/close page backed by the hosted tenant-scoped caller-owned ticket authority, but workbenchCapabilityClient still wraps projectSupportCapability with declared renderer provenance. Snapshot v4 therefore closes every Cloud action to renderer_capability_authority_unobserved despite the real loader, typed client/controller, App binding, and hosted API contracts. The hosted support-ticket service remains intentionally not duplicated for Local mode."
+      "judgment_rationale": "Support is a project production route without a canonical navigation target. Cloud Desktop now routes list/create/close through the generated-catalog V2 root Provider service:desktop-renderer.project-support-authority@1.0.0 under an immutable project-scoped operation lease, and the static projectSupportClient/projectSupportRuntime transport path was removed. The lease is only a renderer execution boundary: the hosted ticket authority remains tenant-scoped, workbenchCapabilityClient still wraps projectSupportCapability with declared renderer provenance, and hosted responses expose authorityRevision=null. Snapshot v4 therefore keeps every Cloud action closed to renderer_capability_authority_unobserved. The hosted support-ticket service remains intentionally not duplicated for Local mode."
     },
     {
       "id": "project-playbooks",

@@ -550,10 +550,15 @@ test("declared Tenant Creation and Project Support capability snapshots stay una
         "parity-capability-definitions.24-native-product-auxiliary.v2.json",
       id: "project-support",
       entries: [
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportCapability.ts",
-        "agi-stack/apps/desktop/src/features/project-support/projectSupportClient.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportController.ts",
         "agi-stack/apps/desktop/src/features/project-support/projectSupportRouteModule.tsx",
+        "agi-stack/apps/desktop/src/features/project-support/projectSupportTypes.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSupportOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
       ],
     },
   ];
@@ -582,6 +587,21 @@ test("declared Tenant Creation and Project Support capability snapshots stay una
       assert.match(capability.judgment_rationale, /static createTenantCreationClient transport was removed/u);
     } else {
       assert.match(capability.judgment_rationale, /declared renderer provenance/u);
+      assert.match(capability.judgment_rationale, /generated-catalog V2 root Provider/u);
+      assert.match(capability.judgment_rationale, /project-scoped operation lease/u);
+      assert.match(capability.judgment_rationale, /hosted ticket authority remains tenant-scoped/u);
+      assert.match(capability.judgment_rationale, /authorityRevision=null/u);
+      assert.match(capability.judgment_rationale, /static projectSupportClient\/projectSupportRuntime transport path was removed/u);
+      assert.ok(
+        !capability.cloud_entries.includes(
+          "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+        ),
+      );
+      assert.ok(
+        !capability.cloud_entries.includes(
+          "agi-stack/apps/desktop/src/features/project-support/projectSupportRuntime.ts",
+        ),
+      );
     }
   }
 });
