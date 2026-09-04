@@ -19,6 +19,7 @@ const BROKER_BOUND_CLIENTS = [
   'src/features/runtime-pool/runtimePoolClient.ts',
   'src/plugins/desktopRuntimeClustersHttpProjectionV2.ts',
   'src/plugins/desktopRuntimeInstancesHttpProjectionV2.ts',
+  'src/plugins/desktopRuntimeDeploymentsHttpProjectionV2.ts',
   'src/features/governance/deadLetterQueueHttpClient.ts',
   'src/features/sandbox/sandboxRuntimeSurfaceClient.ts',
   'src/features/sandbox/terminalSessionV2Client.ts',
@@ -28,7 +29,6 @@ const INJECTABLE_BROKER_CLIENTS = [
   'src/features/device-approval/deviceApprovalClient.ts',
   'src/features/instance-templates/instanceTemplatesClient.ts',
   'src/features/invitation-acceptance/invitationAcceptanceClient.ts',
-  'src/features/runtime-deployments/runtimeDeploymentsClient.ts',
   'src/features/unified-runtimes/unifiedRuntimesClient.ts',
   'src/features/settings-routes/nativeRouteHttpClient.ts',
 ];

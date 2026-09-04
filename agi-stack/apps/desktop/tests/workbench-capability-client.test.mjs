@@ -19,6 +19,7 @@ import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fix
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
 import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -244,6 +245,7 @@ test('workbench capability client requires an injected Project Workspaces V2 cli
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
           tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
@@ -266,6 +268,7 @@ test('workbench capability client requires the Project Blackboard V2 authority',
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
           tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -289,6 +292,7 @@ test('workbench capability client requires the Project Agent Dashboard V2 author
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
@@ -313,6 +317,7 @@ test('workbench capability client requires the Project Agent Logs V2 authority',
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
@@ -338,6 +343,7 @@ test('workbench capability client requires the Project Agent Patterns V2 authori
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
@@ -364,6 +370,7 @@ test('workbench capability client requires the Project Communities V2 authority'
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -397,6 +404,7 @@ test('workbench capability client requires the Project Memories V2 authority', (
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -432,6 +440,7 @@ test('workbench capability client requires the Project Team V2 authority', () =>
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -468,6 +477,7 @@ test('workbench capability client requires the Project Schema V2 authority', () 
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -506,6 +516,7 @@ test('workbench capability client requires the Project Maintenance V2 authority'
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -544,6 +555,7 @@ test('workbench capability client requires the Project Settings V2 authority', (
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -582,6 +594,7 @@ test('workbench capability client requires the Project Graph V2 authority', () =
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -626,6 +639,7 @@ test('workbench capability client requires both Project Entities V2 operations',
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
@@ -982,7 +996,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-deploy'],
-      withDeclaredAuthority({
+      withObservedAuthority(withoutAuthorityRevision({
         availability: 'degraded',
         reason_code: 'runtime_deployments_mutations_and_instance_discovery_partial',
         service_version: '0.1.0',
@@ -1002,7 +1016,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
           instance_id: null,
         },
         authority_revision: null,
-      }),
+      }), 'cloud_service'),
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-dead-letter-queue'],
@@ -1941,7 +1955,7 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
     );
     assert.deepEqual(
       local.capabilities['tenant-tenant-deploy'],
-      withDeclaredAuthority({
+      withObservedAuthority({
         availability: 'not_applicable',
         reason_code: 'cloud_deployment_authority_not_applicable',
         service_version: null,
@@ -1954,7 +1968,7 @@ test('Workspace Collaboration 404 remains unavailable while local mode observes 
           instance_id: null,
         },
         authority_revision: null,
-      }),
+      }, 'sidecar'),
     );
     assert.equal(capabilityFetchCalls, 2);
   } finally {
@@ -2034,6 +2048,7 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 

@@ -16,6 +16,7 @@ import type { DesktopProjectSettingsOperationsV2 } from '../../plugins/desktopPr
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
 import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
+import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
@@ -109,6 +110,10 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     DesktopRuntimeInstancesOperationsV2,
     'probeRuntimeInstances'
   >;
+  runtimeDeploymentsOperationsV2: Pick<
+    DesktopRuntimeDeploymentsOperationsV2,
+    'probeRuntimeDeployments'
+  >;
   desktopWorkspaceCatalogOperationsV2: Pick<
     DesktopWorkspaceCatalogOperationsV2,
     'listWorkspacesForProject'
@@ -194,6 +199,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
     runtimePoolOperationsV2: input.runtimePoolOperationsV2,
     runtimeClustersOperationsV2: input.runtimeClustersOperationsV2,
     runtimeInstancesOperationsV2: input.runtimeInstancesOperationsV2,
+    runtimeDeploymentsOperationsV2: input.runtimeDeploymentsOperationsV2,
     projectWorkspacesClient: createProjectWorkspacesV2Client(config, {
       catalogOperations: input.desktopWorkspaceCatalogOperationsV2,
       lifecycleOperations: input.desktopWorkspaceLifecycleOperationsV2,

@@ -20,6 +20,7 @@ import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fix
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
 import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -446,6 +447,7 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
         projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 

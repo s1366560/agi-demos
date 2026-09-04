@@ -20,6 +20,7 @@ import { projectWorkspaceOperationsV2Fixture } from './projectWorkspaceOperation
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
 import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -84,6 +85,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
@@ -112,6 +114,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
@@ -152,6 +155,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
@@ -189,6 +193,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
+          runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
         ...projectWorkspaceOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),

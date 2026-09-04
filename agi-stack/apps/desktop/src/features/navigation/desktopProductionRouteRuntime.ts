@@ -22,6 +22,10 @@ import {
   createDesktopRuntimeInstancesClientV2,
   type DesktopRuntimeInstancesOperationsV2,
 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
+import {
+  createDesktopRuntimeDeploymentsClientV2,
+  type DesktopRuntimeDeploymentsOperationsV2,
+} from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type {
   ProjectOverviewRouteBinding,
   ProjectOverviewRouteContext,
@@ -37,7 +41,6 @@ import type { RuntimeClustersRouteBinding } from '../runtime-clusters/runtimeClu
 import { createRuntimeClustersController } from '../runtime-clusters/runtimeClustersController';
 import type { RuntimeDeploymentsRouteBinding } from '../runtime-deployments/runtimeDeploymentsRouteModule';
 import { createRuntimeDeploymentsController } from '../runtime-deployments/runtimeDeploymentsController';
-import { createRuntimeDeploymentsClient } from '../runtime-deployments/runtimeDeploymentsClient';
 import type { InstanceTemplatesRouteBinding } from '../instance-templates/instanceTemplatesRouteModule';
 import { createInstanceTemplatesController } from '../instance-templates/instanceTemplatesController';
 import { createInstanceTemplatesClient } from '../instance-templates/instanceTemplatesClient';
@@ -520,6 +523,7 @@ export function createRuntimeClustersRouteBindingForRuntime(
 export function createRuntimeDeploymentsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string; instanceId?: string }>,
+  runtimeDeploymentsOperationsV2: DesktopRuntimeDeploymentsOperationsV2,
 ): RuntimeDeploymentsRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('runtime_deployments_runtime_scope_mismatch');
@@ -529,7 +533,7 @@ export function createRuntimeDeploymentsRouteBindingForRuntime(
     tenantId: context.tenantId,
     instanceId: context.instanceId ?? null,
   });
-  const client = createRuntimeDeploymentsClient(config);
+  const client = createDesktopRuntimeDeploymentsClientV2(runtimeDeploymentsOperationsV2, config);
   return Object.freeze({
     controller: createRuntimeDeploymentsController({
       authority: config.mode,

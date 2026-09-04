@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
 import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
 import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
+import { runtimeDeploymentsOperationsV2Fixture } from './runtimeDeploymentsOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -463,6 +464,7 @@ test('Runtime Deployments binding preserves instance scope and keeps Local cloud
   const cloud = createRuntimeDeploymentsRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId, instanceId: 'instance-1' },
+    runtimeDeploymentsOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, {
     authority: 'cloud',
@@ -474,6 +476,7 @@ test('Runtime Deployments binding preserves instance scope and keeps Local cloud
   const local = createRuntimeDeploymentsRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId, instanceId: 'instance-1' },
+    runtimeDeploymentsOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, {
     authority: 'local',
@@ -494,12 +497,14 @@ test('Runtime Deployments binding rejects tenant drift and preserves missing ins
       createRuntimeDeploymentsRouteBindingForRuntime(
         runtimeConfig('cloud'),
         { tenantId: 'tenant-other', instanceId: 'instance-1' },
+        runtimeDeploymentsOperationsV2Fixture(),
       ),
     /runtime_deployments_runtime_scope_mismatch/u,
   );
   const missing = createRuntimeDeploymentsRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimeDeploymentsOperationsV2Fixture(),
   );
   assert.equal(missing.scope.instanceId, null);
   assert.equal(missing.controller.getSnapshot().state, 'loading');

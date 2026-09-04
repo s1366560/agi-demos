@@ -44,6 +44,7 @@ const authorityModules = [
   'desktopProjectGraphAuthorityModuleV2',
  'desktopRuntimePoolAuthorityModuleV2',
   'desktopRuntimeInstancesAuthorityModuleV2',
+  'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
   'desktopSessionProjectionAuthorityModuleV2',

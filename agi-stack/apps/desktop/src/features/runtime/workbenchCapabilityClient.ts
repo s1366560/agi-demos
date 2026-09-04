@@ -33,7 +33,6 @@ import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapab
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
 import { deadLetterQueueCapability } from '../governance/deadLetterQueueCapability';
 import { instanceTemplatesCapability } from '../instance-templates/instanceTemplatesCapability';
-import { runtimeDeploymentsCapability } from '../runtime-deployments/runtimeDeploymentsCapability';
 import { createAgentDefinitionsRouteClient } from '../settings-routes/agentDefinitionsRouteClient';
 import type { ChannelsRouteClient } from '../settings-routes/channelsRouteClient';
 import type { EvolutionRouteClient } from '../settings-routes/evolutionRouteClient';
@@ -164,6 +163,7 @@ import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktop
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
 import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
+import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_MINIMUM_CONTRACT_VERSION,
@@ -270,6 +270,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   runtimeInstancesOperationsV2: Pick<
     DesktopRuntimeInstancesOperationsV2,
     'probeRuntimeInstances'
+  >;
+  runtimeDeploymentsOperationsV2: Pick<
+    DesktopRuntimeDeploymentsOperationsV2,
+    'probeRuntimeDeployments'
   >;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
@@ -389,6 +393,10 @@ export function createDesktopWorkbenchCapabilityClient(
   const runtimeInstancesOperationsV2 = options?.runtimeInstancesOperationsV2;
   if (typeof runtimeInstancesOperationsV2?.probeRuntimeInstances !== 'function') {
     throw new Error('desktop_runtime_instances_authority_required');
+  }
+  const runtimeDeploymentsOperationsV2 = options?.runtimeDeploymentsOperationsV2;
+  if (typeof runtimeDeploymentsOperationsV2?.probeRuntimeDeployments !== 'function') {
+    throw new Error('desktop_runtime_deployments_authority_required');
   }
   const projectWorkspacesClient = options?.projectWorkspacesClient;
   if (typeof projectWorkspacesClient?.list !== 'function') {
@@ -537,6 +545,7 @@ export function createDesktopWorkbenchCapabilityClient(
         runtimePool,
         runtimeInstances,
         runtimeClusters,
+        runtimeDeployments,
         tenantOverview,
         tenantAnalytics,
         tenantAgentDashboard,
@@ -562,6 +571,7 @@ export function createDesktopWorkbenchCapabilityClient(
         loadRuntimePoolCapability(config, runtimePoolOperationsV2, signal),
         loadRuntimeInstancesCapability(config, runtimeInstancesOperationsV2, signal),
         loadRuntimeClustersCapability(config, runtimeClustersOperationsV2, signal),
+        loadRuntimeDeploymentsCapability(config, runtimeDeploymentsOperationsV2, signal),
         loadTenantOverviewCapability(
           config,
           options.tenantOverviewOperationsV2,
@@ -778,7 +788,7 @@ export function createDesktopWorkbenchCapabilityClient(
           'tenant-tenant-clusters': (config.mode === 'local' ? declared : observed)(
             withCapabilityScope(runtimeClusters, tenantScope),
           ),
-          'tenant-tenant-deploy': declared(runtimeDeploymentsCapability(config)),
+          'tenant-tenant-deploy': observed(runtimeDeployments),
           'tenant-tenant-instance-templates': declared(instanceTemplatesCapability(config)),
           'tenant-tenant-dead-letter-queue': declared(deadLetterQueueCapability(config)),
           'project-project-channels': snapshotP2ThirdBatchCapability(
@@ -1745,6 +1755,35 @@ async function loadRuntimeInstancesCapability(
       return unavailable('runtime_instances_contract_invalid');
     }
     return unavailable('runtime_instances_authority_unavailable');
+  }
+}
+
+async function loadRuntimeDeploymentsCapability(
+  config: DesktopRuntimeConfig,
+  operations: Pick<DesktopRuntimeDeploymentsOperationsV2, 'probeRuntimeDeployments'>,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const tenantId = scopeIdentifier(config.tenantId);
+  if (!tenantId) return unavailable('runtime_deployments_tenant_scope_unavailable');
+
+  try {
+    return await operations.probeRuntimeDeployments({
+      config,
+      scope: { authority: config.mode, tenantId, instanceId: null },
+      ...(signal === undefined ? {} : { signal }),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (error instanceof DesktopApiError && error.status === 403) {
+      return unavailable('runtime_deployments_forbidden');
+    }
+    if (
+      error instanceof RuntimeV2Error &&
+      error.code === 'desktop_runtime_deployments_service_contract_invalid'
+    ) {
+      return unavailable('runtime_deployments_contract_invalid');
+    }
+    return unavailable('runtime_deployments_authority_unavailable');
   }
 }
 
