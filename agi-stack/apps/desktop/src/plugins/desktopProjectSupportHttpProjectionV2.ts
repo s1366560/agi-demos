@@ -1,10 +1,6 @@
-import {
-  DesktopApiError,
-  desktopApiCredential,
-  desktopLaunchCapability,
-} from '../../api/client';
-import { desktopApiFetch } from '../../api/cloudRequestBroker';
-import type { DesktopRuntimeConfig } from '../../types';
+import { DesktopApiError, desktopApiCredential, desktopLaunchCapability } from '../api/client';
+import { desktopApiFetch } from '../api/cloudRequestBroker';
+import type { DesktopRuntimeConfig } from '../types';
 import type {
   ProjectSupportClient,
   ProjectSupportCloseResult,
@@ -16,31 +12,15 @@ import type {
   ProjectSupportScope,
   ProjectSupportStatus,
   ProjectSupportTicket,
-} from './projectSupportTypes';
+} from '../features/project-support/projectSupportTypes';
 
 const PAGE_SIZE = 25;
-const CLOUD_ACTIONS = Object.freeze([
-  'view',
-  'list',
-  'create',
-  'close',
-  'retry',
-]);
+const CLOUD_ACTIONS = Object.freeze(['view', 'list', 'create', 'close', 'retry']);
 const LOCAL_REASON_CODE = 'local_support_service_not_applicable';
-const PRIORITIES = new Set<ProjectSupportPriority>([
-  'low',
-  'medium',
-  'high',
-  'urgent',
-]);
-const STATUSES = new Set<ProjectSupportStatus>([
-  'open',
-  'in_progress',
-  'resolved',
-  'closed',
-]);
+const PRIORITIES = new Set<ProjectSupportPriority>(['low', 'medium', 'high', 'urgent']);
+const STATUSES = new Set<ProjectSupportStatus>(['open', 'in_progress', 'resolved', 'closed']);
 
-export function createProjectSupportClient(
+export function createDesktopProjectSupportHttpAuthorityV2(
   config: DesktopRuntimeConfig,
 ): ProjectSupportClient {
   const runtimeConfig = Object.freeze({ ...config });
@@ -55,29 +35,24 @@ export function createProjectSupportClient(
         limit: String(limit),
         offset: String(offset),
       });
-      const payload = await requestJson(
-        runtimeConfig,
-        `/api/v1/support/tickets?${search}`,
-        { method: 'GET', signal: options?.signal },
-      );
+      const payload = await requestJson(runtimeConfig, `/api/v1/support/tickets?${search}`, {
+        method: 'GET',
+        signal: options?.signal,
+      });
       return readListSnapshot(payload, scope, limit, offset);
     },
     async create(scope, input, options) {
       requireScope(runtimeConfig, scope);
       requireCloud(scope);
       const normalized = normalizeCreateInput(input);
-      const payload = await requestJson(
-        runtimeConfig,
-        '/api/v1/support/tickets',
-        {
-          method: 'POST',
-          signal: options?.signal,
-          body: {
-            tenant_id: scope.tenantId,
-            ...normalized,
-          },
+      const payload = await requestJson(runtimeConfig, '/api/v1/support/tickets', {
+        method: 'POST',
+        signal: options?.signal,
+        body: {
+          tenant_id: scope.tenantId,
+          ...normalized,
         },
-      );
+      });
       return readCreatedTicket(payload, scope, normalized);
     },
     async close(scope, ticketId, options) {
@@ -123,11 +98,7 @@ async function requestJson(
     ? await response.json().catch(() => null)
     : await response.text().catch(() => '');
   if (!response.ok) {
-    throw new DesktopApiError(
-      errorMessage(response.status, payload),
-      response.status,
-      payload,
-    );
+    throw new DesktopApiError(errorMessage(response.status, payload), response.status, payload);
   }
   if (!isJson || payload === null) {
     throw contractError('cloud_project_support_contract_invalid');
@@ -152,9 +123,7 @@ function readListSnapshot(
   ) {
     throw contractError(reason);
   }
-  const tickets = Object.freeze(
-    payload.tickets.map((ticket) => readTicket(ticket, scope, reason)),
-  );
+  const tickets = Object.freeze(payload.tickets.map((ticket) => readTicket(ticket, scope, reason)));
   if (
     tickets.length > expectedLimit ||
     tickets.length > payload.total ||
@@ -204,9 +173,7 @@ function readTicket(
     updatedAt: requireTimestamp(payload.updated_at, reason),
     resolvedAt: nullableTimestamp(payload.resolved_at, reason),
     allowedActions: Object.freeze(
-      status === 'open' || status === 'in_progress'
-        ? ['view', 'close']
-        : ['view'],
+      status === 'open' || status === 'in_progress' ? ['view', 'close'] : ['view'],
     ),
   });
 }
@@ -240,16 +207,9 @@ function readCreatedTicket(
   });
 }
 
-function readCloseResult(
-  payload: unknown,
-  expectedId: string,
-): ProjectSupportCloseResult {
+function readCloseResult(payload: unknown, expectedId: string): ProjectSupportCloseResult {
   const reason = 'cloud_project_support_close_contract_invalid';
-  if (
-    !isRecord(payload) ||
-    payload.id !== expectedId ||
-    payload.status !== 'closed'
-  ) {
+  if (!isRecord(payload) || payload.id !== expectedId || payload.status !== 'closed') {
     throw contractError(reason);
   }
   return Object.freeze({
@@ -287,10 +247,7 @@ function requireCloud(scope: ProjectSupportScope): void {
   });
 }
 
-function requireScope(
-  config: DesktopRuntimeConfig,
-  scope: ProjectSupportScope,
-): void {
+function requireScope(config: DesktopRuntimeConfig, scope: ProjectSupportScope): void {
   if (
     scope.authority !== config.mode ||
     scope.tenantId !== config.tenantId ||
@@ -300,9 +257,7 @@ function requireScope(
   }
 }
 
-function normalizeCreateInput(
-  input: ProjectSupportCreateInput,
-): ProjectSupportCreateInput {
+function normalizeCreateInput(input: ProjectSupportCreateInput): ProjectSupportCreateInput {
   const subject = input.subject.trim();
   const message = input.message.trim();
   if (
@@ -354,11 +309,7 @@ function requireText(input: unknown, reason: string): string {
 }
 
 function requireTimestamp(input: unknown, reason: string): string {
-  if (
-    typeof input !== 'string' ||
-    !input.trim() ||
-    Number.isNaN(Date.parse(input))
-  ) {
+  if (typeof input !== 'string' || !input.trim() || Number.isNaN(Date.parse(input))) {
     throw contractError(reason);
   }
   return input;

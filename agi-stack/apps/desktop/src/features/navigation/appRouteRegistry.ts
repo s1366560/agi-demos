@@ -140,7 +140,7 @@ import { createProjectWorkspacesController } from '../project-workspaces/project
 import { createProjectWorkspacesV2Client } from '../project-workspaces/projectWorkspacesV2Client';
 import { createProjectWorkspacesRouteModuleLoader } from '../project-workspaces/projectWorkspacesRouteModule';
 import { createProjectSupportRouteModuleLoader } from '../project-support/projectSupportRouteModule';
-import { createProjectSupportRouteBindingForRuntime } from '../project-support/projectSupportRuntime';
+import { createProjectSupportController } from '../project-support/projectSupportController';
 import { createDeadLetterQueueRouteModuleLoader } from '../governance/deadLetterQueueRouteModule';
 import { createInstanceTemplatesRouteModuleLoader } from '../instance-templates/instanceTemplatesRouteModule';
 import { createRuntimeClustersRouteModuleLoader } from '../runtime-clusters/runtimeClustersRouteModule';
@@ -262,6 +262,10 @@ import {
   type DesktopProjectSettingsOperationsV2,
 } from '../../plugins/desktopProjectSettingsAuthorityModuleV2';
 import {
+  createDesktopProjectSupportClientV2,
+  type DesktopProjectSupportOperationsV2,
+} from '../../plugins/desktopProjectSupportAuthorityModuleV2';
+import {
   createDesktopWorkspaceCollaborationClientV2,
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -324,6 +328,7 @@ export type AppRouteRegistryRefs = {
   projectSchemaOperationsV2: DesktopProjectSchemaOperationsV2;
   projectMaintenanceOperationsV2: DesktopProjectMaintenanceOperationsV2;
   projectSettingsOperationsV2: DesktopProjectSettingsOperationsV2;
+  projectSupportOperationsV2: DesktopProjectSupportOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
@@ -338,7 +343,7 @@ export type AppRouteRegistryRefs = {
 
 export type AppAuxiliaryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'setAuth'
+  'configRef' | 'projectSupportOperationsV2' | 'setAuth'
 >;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -584,8 +589,31 @@ export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryR
         },
       }),
       [PROJECT_SUPPORT_ROUTE_ID]: createProjectSupportRouteModuleLoader({
-        createBinding: (context) =>
-          createProjectSupportRouteBindingForRuntime(configRef.current, context),
+        createBinding: (context) => {
+          const currentConfig = configRef.current;
+          if (
+            currentConfig.tenantId !== context.tenantId ||
+            currentConfig.projectId !== context.projectId
+          ) {
+            throw new Error('project_support_runtime_scope_mismatch');
+          }
+          const scope = Object.freeze({
+            authority: currentConfig.mode,
+            tenantId: context.tenantId,
+            projectId: context.projectId,
+          });
+          return Object.freeze({
+            controller: createProjectSupportController({
+              authority: currentConfig.mode,
+              client: createDesktopProjectSupportClientV2(
+                refs.projectSupportOperationsV2,
+                currentConfig,
+              ),
+              initialScope: scope,
+            }),
+            scope,
+          });
+        },
       }),
     }),
   });

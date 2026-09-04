@@ -5,9 +5,9 @@ const { DesktopApiError } = await import(
   '/tmp/agistack-desktop-test-dist/src/api/client.js'
 );
 const {
-  createProjectSupportClient,
+  createDesktopProjectSupportHttpAuthorityV2,
 } = await import(
-  '/tmp/agistack-desktop-test-dist/src/features/project-support/projectSupportClient.js'
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectSupportHttpProjectionV2.js'
 );
 
 const originalFetch = globalThis.fetch;
@@ -49,7 +49,7 @@ test('Cloud Project Support binds list, create, and close to the tenant scope', 
     });
   };
 
-  const client = createProjectSupportClient(runtimeConfig());
+  const client = createDesktopProjectSupportHttpAuthorityV2(runtimeConfig());
   const scope = cloudScope();
   const snapshot = await client.list(scope, { limit: 25, offset: 0 });
   const created = await client.create(scope, {
@@ -94,7 +94,7 @@ test('Local Project Support is a stable not-applicable authority and never fetch
     fetchCalls += 1;
     throw new Error('Local Project Support must not call a hosted service');
   };
-  const client = createProjectSupportClient(
+  const client = createDesktopProjectSupportHttpAuthorityV2(
     runtimeConfig({ mode: 'local', apiBaseUrl: 'http://127.0.0.1:4777' }),
   );
   const scope = { ...cloudScope(), authority: 'local' };
@@ -122,7 +122,7 @@ test('Local Project Support is a stable not-applicable authority and never fetch
 });
 
 test('Project Support client rejects cross-scope requests and malformed Cloud payloads', async () => {
-  const client = createProjectSupportClient(runtimeConfig());
+  const client = createDesktopProjectSupportHttpAuthorityV2(runtimeConfig());
   await assert.rejects(
     client.list({ ...cloudScope(), projectId: 'project-other' }),
     /project_support_scope_mismatch/u,

@@ -40,6 +40,7 @@ import { desktopProjectTeamAuthorityDefinitionV2 } from './desktopProjectTeamAut
 import { desktopProjectSchemaAuthorityDefinitionV2 } from './desktopProjectSchemaAuthorityModuleV2';
 import { desktopProjectMaintenanceAuthorityDefinitionV2 } from './desktopProjectMaintenanceAuthorityModuleV2';
 import { desktopProjectSettingsAuthorityDefinitionV2 } from './desktopProjectSettingsAuthorityModuleV2';
+import { desktopProjectSupportAuthorityDefinitionV2 } from './desktopProjectSupportAuthorityModuleV2';
 import { desktopRuntimePoolAuthorityDefinitionV2 } from './desktopRuntimePoolAuthorityModuleV2';
 import { desktopRuntimeClustersAuthorityDefinitionV2 } from './desktopRuntimeClustersAuthorityModuleV2';
 import { desktopSessionArtifactActionAuthorityDefinitionV2 } from './desktopSessionArtifactActionAuthorityModuleV2';
@@ -104,6 +105,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopProjectSchemaAuthorityDefinitionV2,
     desktopProjectMaintenanceAuthorityDefinitionV2,
     desktopProjectSettingsAuthorityDefinitionV2,
+    desktopProjectSupportAuthorityDefinitionV2,
     desktopRuntimePoolAuthorityDefinitionV2,
     desktopRuntimeClustersAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
@@ -143,7 +145,6 @@ let pendingClose: ReturnType<typeof setTimeout> | null = null;
 export function activateDesktopPluginGenerationRootV2(): void {
   desktopRendererLeaseStoreV2.activateRoot();
 }
-
 export async function deactivateDesktopPluginGenerationRootV2(): Promise<void> {
   await desktopRendererLeaseStoreV2.deactivateRoot();
 }

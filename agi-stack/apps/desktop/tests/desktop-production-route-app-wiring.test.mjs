@@ -658,7 +658,7 @@ test('tenant creation V2 route composition preserves catalog refresh and navigat
 test('auxiliary V2 route factory wires Project Support through scoped Cloud authority', () => {
   assert.match(
     registrySource,
-    /PROJECT_SUPPORT_ROUTE_ID[\s\S]*createProjectSupportRouteModuleLoader\(\{[\s\S]*createProjectSupportRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+    /PROJECT_SUPPORT_ROUTE_ID[\s\S]*createProjectSupportRouteModuleLoader\(\{[\s\S]*createDesktopProjectSupportClientV2\([\s\S]*projectSupportOperationsV2/u,
   );
   assert.doesNotMatch(
     registrySource,
