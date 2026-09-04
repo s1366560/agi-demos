@@ -6,10 +6,13 @@ import { createDesktopTenantDecisionRecordsClientV2, type DesktopTenantDecisionR
 import { createTenantDecisionRecordsController } from './tenantDecisionRecordsController';
 import type { TenantDecisionRecordsRouteBinding } from './tenantDecisionRecordsRouteModule';
 import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
+import {
+  createDesktopTenantGenesClientV2,
+  type DesktopTenantGenesOperationsV2,
+} from '../../plugins/desktopTenantGenesAuthorityModuleV2';
 import { createDesktopTenantPatternsClientV2, type DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import { createTenantEventsController } from './tenantEventsController';
 import type { TenantEventsRouteBinding } from './tenantEventsRouteModule';
-import { createTenantGenesClient } from './tenantGenesClient';
 import { createTenantGenesController } from './tenantGenesController';
 import type { TenantGenesRouteBinding } from './tenantGenesRouteModule';
 import type { TenantManagementRouteContext } from './tenantManagementRouteModuleFactory';
@@ -78,12 +81,13 @@ export function createTenantWebhooksRouteBindingForRuntime(
 export function createTenantGenesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantManagementRouteContext,
+  operations: DesktopTenantGenesOperationsV2,
 ): TenantGenesRouteBinding {
   const scope = tenantScope(config, context);
   return Object.freeze({
     scope,
     controller: createTenantGenesController({
-      client: createTenantGenesClient(config),
+      client: createDesktopTenantGenesClientV2(operations, config),
       initialScope: scope,
     }),
   });

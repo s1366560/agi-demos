@@ -60,6 +60,7 @@ const authorityModules = [
       'desktopTenantGovernanceAuthorityModuleV2',
       'desktopTenantAcpAuthorityModuleV2',
   'desktopTenantEvolutionAuthorityModuleV2',
+  'desktopTenantGenesAuthorityModuleV2',
   'desktopTenantOrganizationSettingsAuthorityModuleV2',
   'desktopTenantTrustAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',

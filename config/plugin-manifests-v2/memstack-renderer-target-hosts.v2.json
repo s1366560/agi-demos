@@ -686,6 +686,35 @@
       "contract_digest": "sha256:f7bc82b8144c7fb61597758af895f34b301d42ba2b0a1e27eeb90ecdd38baa75"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-genes-authority",
+      "entrypoint": "applyDesktopTenantGenesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:2f970cd9bbe100c0f6845d73b9ac9fd0edad048489d63deffea5196045096147",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantGenesAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-genes-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:5aaca52685d58b1fd01f98c0575b5a226ae82b434a4292e3dda6181d4f68e1e3"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-organization-settings-authority",
       "entrypoint": "applyDesktopTenantOrganizationSettingsAuthorityV2",
       "artifact": {

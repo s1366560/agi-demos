@@ -17,7 +17,6 @@ import {
   type TenantEventsClient,
 } from './tenantEventsClient';
 import {
-  createTenantGenesClient,
   TENANT_GENES_LOCAL_REASON,
   TENANT_GENES_ROUTE_ID,
   type TenantGenesClient,
@@ -69,7 +68,7 @@ export type TenantRemainingCapabilityDependencies = Readonly<{
   patterns: Pick<TenantPatternsClient, 'load'>;
   acp: Pick<TenantAcpClient, 'load'>;
   webhooks: Pick<TenantWebhooksClient, 'load'>;
-  genes?: Pick<TenantGenesClient, 'load'>;
+  genes: Pick<TenantGenesClient, 'load'>;
   events: Pick<TenantEventsClient, 'load'>;
   decisionRecords: Pick<TenantDecisionRecordsClient, 'load'>;
   organizationSettings: Pick<TenantOrganizationSettingsClient, 'load'>;
@@ -171,7 +170,7 @@ export function createTenantRemainingCapabilityClient(
     patterns: dependencies.patterns,
     acp: dependencies.acp,
     webhooks: dependencies.webhooks,
-    genes: dependencies.genes ?? createTenantGenesClient(runtimeConfig),
+    genes: dependencies.genes,
     events: dependencies.events,
     decisionRecords: dependencies.decisionRecords,
     organizationSettings: dependencies.organizationSettings,

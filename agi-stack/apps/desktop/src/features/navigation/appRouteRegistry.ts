@@ -358,6 +358,7 @@ export type AppRouteRegistryRefs = {
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  tenantGenesOperationsV2: import('../../plugins/desktopTenantGenesAuthorityModuleV2').DesktopTenantGenesOperationsV2;
   tenantDecisionRecordsOperationsV2: import('../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2').DesktopTenantDecisionRecordsOperationsV2;
   tenantOrganizationSettingsOperationsV2: import('../../plugins/desktopTenantOrganizationSettingsAuthorityModuleV2').DesktopTenantOrganizationSettingsOperationsV2;
   tenantSettingsOperationsV2: import('../../plugins/desktopTenantSettingsAuthorityModuleV2').DesktopTenantSettingsOperationsV2;
@@ -419,6 +420,7 @@ export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
   | 'runtimeDeploymentsOperationsV2'
   | 'runtimePoolOperationsV2'
   | 'instanceTemplatesOperationsV2'
+  | 'tenantGenesOperationsV2'
   | 'unifiedRuntimesOperationsV2'
 >;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
@@ -991,6 +993,7 @@ export function createAppRuntimeInfrastructureRouteRegistry(
     runtimeDeploymentsOperationsV2,
     runtimePoolOperationsV2,
     instanceTemplatesOperationsV2,
+    tenantGenesOperationsV2,
     unifiedRuntimesOperationsV2,
   } = refs;
   return createDesktopProductionRouteRegistry({
@@ -1045,7 +1048,11 @@ export function createAppRuntimeInfrastructureRouteRegistry(
       }),
       [TENANT_GENES_ROUTE_ID]: createTenantGenesRouteModuleLoader({
         createBinding: (context) =>
-          createTenantGenesRouteBindingForRuntime(configRef.current, context),
+          createTenantGenesRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantGenesOperationsV2,
+          ),
       }),
     }),
   });

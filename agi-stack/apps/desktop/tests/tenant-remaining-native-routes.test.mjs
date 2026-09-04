@@ -14,7 +14,9 @@ const {
 const { createDesktopTenantWebhooksHttpProjectionV2: createTenantWebhooksClient } = require(
   '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantWebhooksHttpProjectionV2.js',
 );
-const { createTenantGenesClient } = require(`${featureRoot}/tenantGenesClient.js`);
+const { createDesktopTenantGenesHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantGenesHttpProjectionV2.js',
+);
 const {
   createDesktopTenantEventsHttpProjectionV2: createTenantEventsClient,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantEventsHttpProjectionV2.js');
@@ -236,7 +238,7 @@ test('Cloud clients use trusted session and exact tenant/workspace scope', async
     createTenantPatternsClient(cloudConfig).load(cloudScope),
     createTenantAcpClient(cloudConfig).load(cloudScope),
     createTenantWebhooksClient(cloudConfig).load(cloudScope),
-    createTenantGenesClient(cloudConfig).load(cloudScope),
+    createDesktopTenantGenesHttpProjectionV2(cloudConfig).load(cloudScope),
     createTenantEventsClient(cloudConfig).load(cloudScope, {
       filters: { eventType: 'workspace.updated' },
     }),
@@ -458,7 +460,7 @@ test('Local native clients probe sidecar and return stable unavailable reasons',
       'local_workflow_patterns_authority_unavailable',
     ],
     [
-      createTenantGenesClient(localConfig).load(localScope),
+      createDesktopTenantGenesHttpProjectionV2(localConfig).load(localScope),
       'local_gene_market_authority_unavailable',
     ],
     [

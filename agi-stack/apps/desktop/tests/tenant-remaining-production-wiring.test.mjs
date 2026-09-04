@@ -50,6 +50,10 @@ const organizationSettingsTypesSource = readFileSync(
   new URL('../src/features/tenant-admin/tenantOrganizationSettingsClient.ts', import.meta.url),
   'utf8',
 );
+const genesTypesSource = readFileSync(
+  new URL('../src/features/tenant-admin/tenantGenesClient.ts', import.meta.url),
+  'utf8',
+);
 const workbenchSource = readFileSync(
   new URL('../src/features/runtime/workbenchCapabilityClient.ts', import.meta.url),
   'utf8',
@@ -110,6 +114,18 @@ test('Tenant Organization Settings production consumers require the V2 operation
     capabilitySource,
     /organizationSettings:\s*dependencies\.organizationSettings\s*\?\?/u,
   );
+});
+
+test('Tenant Genes production consumers require the complete V2 operation authority', () => {
+  assert.match(appSource, /createDesktopTenantGenesOperationsV2/u);
+  assert.match(registrySource, /tenantGenesOperationsV2/u);
+  assert.match(routeRuntimeSource, /createDesktopTenantGenesClientV2/u);
+  assert.match(workbenchSource, /tenantGenesOperationsV2/u);
+
+  for (const source of [routeRuntimeSource, capabilitySource, genesTypesSource]) {
+    assert.doesNotMatch(source, /createTenantGenesClient/u);
+  }
+  assert.doesNotMatch(capabilitySource, /genes:\s*dependencies\.genes\s*\?\?/u);
 });
 
 test('Workbench preserves observed Cloud and mixed Local provenance for remaining Tenant routes', async () => {
