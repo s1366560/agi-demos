@@ -6,6 +6,7 @@ import { createTenantDecisionRecordsClient } from './tenantDecisionRecordsClient
 import { createTenantDecisionRecordsController } from './tenantDecisionRecordsController';
 import type { TenantDecisionRecordsRouteBinding } from './tenantDecisionRecordsRouteModule';
 import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
+import { createDesktopTenantPatternsClientV2, type DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import { createTenantEventsController } from './tenantEventsController';
 import type { TenantEventsRouteBinding } from './tenantEventsRouteModule';
 import { createTenantGenesClient } from './tenantGenesClient';
@@ -17,7 +18,6 @@ import { createTenantOrganizationSettingsController } from './tenantOrganization
 import type {
   TenantOrganizationSettingsRouteBinding,
 } from './tenantOrganizationSettingsRouteModule';
-import { createTenantPatternsClient } from './tenantPatternsClient';
 import { createTenantPatternsController } from './tenantPatternsController';
 import type { TenantPatternsRouteBinding } from './tenantPatternsRouteModule';
 import { createTenantSettingsClient } from './tenantSettingsClient';
@@ -30,12 +30,13 @@ import type { TenantWebhooksRouteBinding } from './tenantWebhooksRouteModule';
 export function createTenantPatternsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantManagementRouteContext,
+  operations: DesktopTenantPatternsOperationsV2,
 ): TenantPatternsRouteBinding {
   const scope = tenantScope(config, context);
   return Object.freeze({
     scope,
     controller: createTenantPatternsController({
-      client: createTenantPatternsClient(config),
+      client: createDesktopTenantPatternsClientV2(operations, config),
       initialScope: scope,
     }),
   });

@@ -285,6 +285,7 @@ import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/deskto
 import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
 import type { DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
+import type { DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
@@ -354,6 +355,7 @@ export type AppRouteRegistryRefs = {
   deadLetterQueueOperationsV2: DesktopDeadLetterQueueOperationsV2;
   instanceTemplatesOperationsV2: DesktopInstanceTemplatesOperationsV2;
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
+  tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   unifiedRuntimesOperationsV2: DesktopUnifiedRuntimesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
@@ -444,6 +446,7 @@ export type AppTenantAgentBuildingRouteRegistryRefs = Pick<
   | 'configRef'
   | 'tenantAgentBindingsOperationsV2'
   | 'tenantAgentDashboardOperationsV2'
+  | 'tenantPatternsOperationsV2'
 > &
   AppSettingsRouteContentRefs;
 export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
@@ -1232,7 +1235,11 @@ export function createAppTenantAgentBuildingRouteRegistry(
       }),
       [TENANT_PATTERNS_ROUTE_ID]: createTenantPatternsRouteModuleLoader({
         createBinding: (context) =>
-          createTenantPatternsRouteBindingForRuntime(configRef.current, context),
+          createTenantPatternsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            refs.tenantPatternsOperationsV2,
+          ),
       }),
     }),
   });

@@ -5,7 +5,9 @@ import { afterEach, test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const featureRoot = '/tmp/agistack-desktop-test-dist/src/features/tenant-admin';
-const { createTenantPatternsClient } = require(`${featureRoot}/tenantPatternsClient.js`);
+const {
+  createDesktopTenantPatternsHttpProjectionV2: createTenantPatternsClient,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantPatternsHttpProjectionV2.js');
 const { createTenantAcpClient } = require(`${featureRoot}/tenantAcpClient.js`);
 const { createTenantWebhooksClient } = require(`${featureRoot}/tenantWebhooksClient.js`);
 const { createTenantGenesClient } = require(`${featureRoot}/tenantGenesClient.js`);

@@ -67,6 +67,7 @@ import { desktopTenantCatalogAuthorityDefinitionV2 } from './desktopTenantCatalo
 import { desktopTenantCreationAuthorityDefinitionV2 } from './desktopTenantCreationAuthorityModuleV2';
 import { desktopTenantOverviewAuthorityDefinitionV2 } from './desktopTenantOverviewAuthorityModuleV2';
 import { desktopTenantEventsAuthorityDefinitionV2 } from './desktopTenantEventsAuthorityModuleV2';
+import { desktopTenantPatternsAuthorityDefinitionV2 } from './desktopTenantPatternsAuthorityModuleV2';
 import { desktopTenantProjectsAuthorityDefinitionV2 } from './desktopTenantProjectsAuthorityModuleV2';
 import { desktopTenantTasksAuthorityDefinitionV2 } from './desktopTenantTasksAuthorityModuleV2';
 import { desktopWorkspaceAgentBindingAuthorityDefinitionV2 } from './desktopWorkspaceAgentBindingAuthorityModuleV2';
@@ -138,6 +139,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopTenantCreationAuthorityDefinitionV2,
     desktopTenantOverviewAuthorityDefinitionV2,
     desktopTenantEventsAuthorityDefinitionV2,
+    desktopTenantPatternsAuthorityDefinitionV2,
     desktopTenantProjectsAuthorityDefinitionV2,
     desktopTenantTasksAuthorityDefinitionV2,
     desktopWorkspaceAgentBindingAuthorityDefinitionV2,
