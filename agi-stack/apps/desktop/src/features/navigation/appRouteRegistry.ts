@@ -14,7 +14,6 @@ import { isIdentityAuthenticated } from '../auth/authContextModel';
 import { createDeviceApprovalClient } from '../device-approval/deviceApprovalClient';
 import { readDeviceApprovalCodeFromHash } from '../device-approval/deviceApprovalModel';
 import { createDeviceApprovalRouteModuleLoader } from '../device-approval/deviceApprovalRouteModule';
-import { createTenantCreationClient } from '../tenant-creation/tenantCreationClient';
 import { upsertCreatedTenant } from '../tenant-creation/tenantCreationModel';
 import { createTenantCreationRouteModuleLoader } from '../tenant-creation/tenantCreationRouteModule';
 import {
@@ -275,6 +274,10 @@ import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTe
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
+import {
+  createDesktopTenantCreationClientV2,
+  type DesktopTenantCreationOperationsV2,
+} from '../../plugins/desktopTenantCreationAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type { DesktopTenantTasksOperationsV2 } from '../../plugins/desktopTenantTasksAuthorityModuleV2';
@@ -296,6 +299,7 @@ export type AppRouteRegistryRefs = {
   tenantAgentBindingsOperationsV2: DesktopTenantAgentBindingsOperationsV2;
   tenantAgentDashboardOperationsV2: DesktopTenantAgentDashboardOperationsV2;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
+  tenantCreationOperationsV2: DesktopTenantCreationOperationsV2;
   tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
   tenantProjectsOperationsV2: DesktopTenantProjectsOperationsV2;
   tenantTasksOperationsV2: DesktopTenantTasksOperationsV2;
@@ -1254,6 +1258,7 @@ export function createAppTenantCreationRouteRegistry(refs: AppRouteRegistryRefs)
     configRef,
     desktopProductionRouteNavigation,
     tenantCatalogOperationsV2,
+    tenantCreationOperationsV2,
     setAuth,
   } = refs;
   return createDesktopProductionRouteRegistry({
@@ -1262,7 +1267,10 @@ export function createAppTenantCreationRouteRegistry(refs: AppRouteRegistryRefs)
         createBinding: () => {
           const currentConfig = configRef.current;
           return Object.freeze({
-            client: createTenantCreationClient(currentConfig),
+            client: createDesktopTenantCreationClientV2(
+              tenantCreationOperationsV2,
+              currentConfig,
+            ),
             onCreated: async (created, signal) => {
               setAuth((current) => ({
                 ...current,

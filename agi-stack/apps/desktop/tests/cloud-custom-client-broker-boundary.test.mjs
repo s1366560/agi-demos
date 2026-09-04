@@ -13,6 +13,7 @@ const BROKER_BOUND_CLIENTS = [
   'src/plugins/desktopTenantAnalyticsAuthorityModuleV2.ts',
   'src/plugins/desktopTenantAgentDashboardAuthorityModuleV2.ts',
   'src/plugins/desktopTenantAgentBindingsAuthorityModuleV2.ts',
+  'src/plugins/desktopTenantCreationHttpProjectionV2.ts',
   'src/features/tenant-admin/tenantAdminHttp.ts',
   'src/features/tenant-admin/tenantManagementHttp.ts',
   'src/features/runtime-pool/runtimePoolClient.ts',
@@ -28,7 +29,6 @@ const INJECTABLE_BROKER_CLIENTS = [
   'src/features/invitation-acceptance/invitationAcceptanceClient.ts',
   'src/features/runtime-deployments/runtimeDeploymentsClient.ts',
   'src/features/runtime-instances/runtimeInstancesClient.ts',
-  'src/features/tenant-creation/tenantCreationClient.ts',
   'src/features/unified-runtimes/unifiedRuntimesClient.ts',
   'src/features/settings-routes/nativeRouteHttpClient.ts',
 ];
@@ -66,7 +66,7 @@ test('Cloud-only creation, approval, invitation, and settings gates accept vault
   for (const path of [
     'src/features/device-approval/deviceApprovalClient.ts',
     'src/features/invitation-acceptance/invitationAcceptanceClient.ts',
-    'src/features/tenant-creation/tenantCreationClient.ts',
+    'src/plugins/desktopTenantCreationHttpProjectionV2.ts',
     'src/features/settings-routes/nativeRouteHttpClient.ts',
   ]) {
     const source = readFileSync(new URL(path, desktopRoot), 'utf8');

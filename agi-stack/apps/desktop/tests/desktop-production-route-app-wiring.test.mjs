@@ -634,7 +634,7 @@ test('tenant creation V2 route composition preserves catalog refresh and navigat
   );
   assert.match(
     tenantCreationFactorySource,
-    /client:\s*createTenantCreationClient\(currentConfig\)/u,
+    /client:\s*createDesktopTenantCreationClientV2\([\s\S]*tenantCreationOperationsV2,[\s\S]*currentConfig/u,
   );
   assert.match(
     tenantCreationFactorySource,

@@ -140,6 +140,7 @@ import { createDesktopTenantAgentBindingsOperationsV2 } from './plugins/desktopT
 import { createDesktopTenantAgentDashboardOperationsV2 } from './plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import { createDesktopTenantAnalyticsOperationsV2 } from './plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import { createDesktopTenantCatalogOperationsV2 } from './plugins/desktopTenantCatalogAuthorityModuleV2';
+import { createDesktopTenantCreationOperationsV2 } from './plugins/desktopTenantCreationAuthorityModuleV2';
 import { createDesktopTenantOverviewOperationsV2 } from './plugins/desktopTenantOverviewAuthorityModuleV2';
 import { createDesktopTenantProjectsOperationsV2 } from './plugins/desktopTenantProjectsAuthorityModuleV2';
 import { createDesktopTenantTasksOperationsV2 } from './plugins/desktopTenantTasksAuthorityModuleV2';
@@ -986,6 +987,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantCreationOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantCreationOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopProjectEntitiesOperationsV2 = useMemo(
     () =>
       createDesktopProjectEntitiesOperationsV2(
@@ -1317,6 +1325,7 @@ export function App() {
       tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
       tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
       tenantCatalogOperationsV2: desktopTenantCatalogOperationsV2,
+      tenantCreationOperationsV2: desktopTenantCreationOperationsV2,
       tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
       tenantProjectsOperationsV2: desktopTenantProjectsOperationsV2,
       tenantTasksOperationsV2: desktopTenantTasksOperationsV2,
@@ -1354,6 +1363,7 @@ export function App() {
       desktopTenantAgentDashboardOperationsV2,
       desktopTenantAnalyticsOperationsV2,
       desktopTenantCatalogOperationsV2,
+      desktopTenantCreationOperationsV2,
       desktopTenantOverviewOperationsV2,
       desktopTenantProjectsOperationsV2,
       desktopTenantTasksOperationsV2,

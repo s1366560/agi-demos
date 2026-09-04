@@ -948,6 +948,37 @@
       "contract_digest": "sha256:0a1cdc178d1744c6e161cb27f251d02a4974d3966c348b143a0fc96ca356e63d"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-creation-authority",
+      "entrypoint": "applyDesktopTenantCreationAuthorityV2",
+      "artifact": {
+        "digest": "sha256:b0a513e1544611ec91d29ed14a7b985368ff0022769564475a8cb6b65524b3b7",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantCreationAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-creation-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:6832ad35001b7a62ccb03a93cd9416cce7332f92e4ef729d06e9bfc39a432c1f"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-entities-authority",
       "entrypoint": "applyDesktopProjectEntitiesAuthorityV2",
       "artifact": {
