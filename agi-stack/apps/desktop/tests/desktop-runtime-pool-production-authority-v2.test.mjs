@@ -24,19 +24,20 @@ const projectionSource = readFileSync(
   'utf8',
 );
 
-test('Runtime Pool and Unified Runtimes require the same V2 operations facade', () => {
+test('Runtime Pool and Unified Runtimes use generation-owned V2 operations facades', () => {
   assert.match(
     appSource,
     /const desktopRuntimePoolOperationsV2 = useMemo\([\s\S]*createDesktopRuntimePoolOperationsV2\([\s\S]*desktopPluginMarketplaceGenerationActionsRefV2\.current[\s\S]*\[\],?\s*\);/u,
   );
   assert.match(appSource, /runtimePoolOperationsV2:\s*desktopRuntimePoolOperationsV2/u);
+  assert.match(appSource, /unifiedRuntimesOperationsV2:\s*desktopUnifiedRuntimesOperationsV2/u);
   assert.match(
     routeRegistrySource,
     /TENANT_POOL_ROUTE_ID[\s\S]*createRuntimePoolRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*runtimePoolOperationsV2/u,
   );
   assert.match(
     routeRegistrySource,
-    /TENANT_RUNTIMES_ROUTE_ID[\s\S]*createUnifiedRuntimesRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*runtimePoolOperationsV2/u,
+    /TENANT_RUNTIMES_ROUTE_ID[\s\S]*createUnifiedRuntimesRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*unifiedRuntimesOperationsV2/u,
   );
   assert.doesNotMatch(routeRuntimeSource, /createRuntimePoolHttpClient/u);
   assert.doesNotMatch(unifiedClientSource, /createRuntimePoolHttpClient|poolClient\s*\?/u);

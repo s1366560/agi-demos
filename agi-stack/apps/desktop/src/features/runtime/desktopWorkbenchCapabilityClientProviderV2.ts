@@ -20,6 +20,7 @@ import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/deskto
 import type { DesktopBackendStoresOperationsV2 } from '../../plugins/desktopBackendStoresAuthorityModuleV2';
 import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
+import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
@@ -136,6 +137,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     DesktopInstanceTemplatesOperationsV2,
     'probe'
   >;
+  unifiedRuntimesOperationsV2?: Pick<DesktopUnifiedRuntimesOperationsV2, 'probe'>;
   desktopWorkspaceCatalogOperationsV2: Pick<
     DesktopWorkspaceCatalogOperationsV2,
     'listWorkspacesForProject'
@@ -228,6 +230,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       backendStoresOperationsV2: input.backendStoresOperationsV2,
       deadLetterQueueOperationsV2: input.deadLetterQueueOperationsV2,
       instanceTemplatesOperationsV2: input.instanceTemplatesOperationsV2,
+      unifiedRuntimesOperationsV2: input.unifiedRuntimesOperationsV2,
       projectWorkspacesClient: createProjectWorkspacesV2Client(config, {
         catalogOperations: input.desktopWorkspaceCatalogOperationsV2,
         lifecycleOperations: input.desktopWorkspaceLifecycleOperationsV2,

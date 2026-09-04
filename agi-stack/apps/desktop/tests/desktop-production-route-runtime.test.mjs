@@ -545,7 +545,7 @@ test('Unified Runtimes binding preserves exact Cloud and Local scope authority',
   const cloud = createUnifiedRuntimesRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
-    runtimePoolOperationsV2Fixture(),
+    unifiedRuntimesOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, {
     authority: 'cloud',
@@ -557,7 +557,7 @@ test('Unified Runtimes binding preserves exact Cloud and Local scope authority',
   const local = createUnifiedRuntimesRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
-    runtimePoolOperationsV2Fixture(),
+    unifiedRuntimesOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, {
     authority: 'local',
@@ -578,7 +578,7 @@ test('Unified Runtimes binding rejects tenant and project scope drift', () => {
       createUnifiedRuntimesRouteBindingForRuntime(
         runtimeConfig('cloud', { tenantId: 'tenant-other' }),
         { tenantId },
-        runtimePoolOperationsV2Fixture(),
+        unifiedRuntimesOperationsV2Fixture(),
       ),
     /unified_runtimes_runtime_scope_mismatch/u,
   );
@@ -587,7 +587,7 @@ test('Unified Runtimes binding rejects tenant and project scope drift', () => {
       createUnifiedRuntimesRouteBindingForRuntime(
         runtimeConfig('local', { projectId: ' ' }),
         { tenantId },
-        runtimePoolOperationsV2Fixture(),
+        unifiedRuntimesOperationsV2Fixture(),
       ),
     /unified_runtimes_runtime_scope_mismatch/u,
   );
@@ -721,5 +721,20 @@ function runtimePoolOperationsV2Fixture() {
       },
       authority_revision: null,
     }),
+  };
+}
+
+function unifiedRuntimesOperationsV2Fixture() {
+  return {
+    async getPoolStatus() { return {}; },
+    async listPoolInstances() { return { instances: [], total: 0, page: 1, pageSize: 100 }; },
+    async listSandboxes() { return []; },
+    async getSandboxStats() { return null; },
+    async getLocalSidecar() { return { running: true, toolCount: 0, providerCount: 0 }; },
+    async getSandboxCapabilities() {
+      const unavailable = { availability: 'unavailable', reasonCode: 'sandbox_capability_unavailable' };
+      return { serviceVersion: '1.0.0', contractVersion: '1.0.0', terminalInteractive: unavailable, terminalResume: unavailable, files: unavailable, kasmVnc: unavailable };
+    },
+    async probe() { throw new Error('not used'); },
   };
 }

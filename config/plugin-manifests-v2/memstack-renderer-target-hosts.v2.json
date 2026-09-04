@@ -595,6 +595,39 @@
       "contract_digest": "sha256:8301debe66665926ef19055c16f215b16424cf7d04126dd0c458aa38e2ffee1b"
     },
     {
+      "module_ref": "builtin://memstack/desktop/unified-runtimes-authority",
+      "entrypoint": "applyDesktopUnifiedRuntimesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:eb179fae81653afc05c4aa51b0e72a9f8ce8be8f1762f44a3a987962a87fdb67",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopUnifiedRuntimesAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.unified-runtimes-authority",
+            "version": "1.0.0"
+          }],
+          "requires": [{
+            "alias": "runtime_pool",
+            "service": "service:desktop-renderer.runtime-pool-authority",
+            "version": "1.0.0"
+          }]
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:2e08740f7954702ae9479d1a0632a3ea98f80b99c35aae71891f02ccae10c0c5"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/artifact-content-authority",
       "entrypoint": "applyDesktopArtifactContentAuthorityV2",
       "artifact": {

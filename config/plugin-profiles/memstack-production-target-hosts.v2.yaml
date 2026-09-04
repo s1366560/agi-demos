@@ -790,6 +790,21 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-unified-runtimes-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/unified-runtimes-authority
+      enabled: true
+      config:
+        strategy: desktop-api-fetch
+      inject:
+        runtime_pool: service:desktop-renderer.runtime-pool-authority
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-session-artifact-action-authority
       parent_entry_id: builtin-desktop-renderer-host
       plugin_ref: memstack-renderer-target-hosts

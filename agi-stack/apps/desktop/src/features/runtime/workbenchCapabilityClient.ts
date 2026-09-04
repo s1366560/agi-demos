@@ -54,7 +54,7 @@ import type { ProfileRouteClient } from '../settings-routes/profileRouteClient';
 import { createProviderRouteClient } from '../settings-routes/providerRouteClient';
 import { createSkillsRouteClient } from '../settings-routes/skillsRouteClient';
 import type { TemplatesRouteClient } from '../settings-routes/templatesRouteClient';
-import { unifiedRuntimesCapability } from '../unified-runtimes/unifiedRuntimesCapability';
+import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type {
   ProjectBlackboardScope,
   ProjectBlackboardSnapshot,
@@ -299,6 +299,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     DesktopInstanceTemplatesOperationsV2,
     'probe'
   >;
+  unifiedRuntimesOperationsV2?: Pick<DesktopUnifiedRuntimesOperationsV2, 'probe'>;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -457,6 +458,7 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof instanceTemplatesOperationsV2?.probe !== 'function') {
     throw new Error('desktop_instance_templates_authority_required');
   }
+  const unifiedRuntimesOperationsV2 = options?.unifiedRuntimesOperationsV2;
   const projectWorkspacesClient = options?.projectWorkspacesClient;
   if (typeof projectWorkspacesClient?.list !== 'function') {
     throw new Error('desktop_project_workspaces_authority_required');
@@ -636,6 +638,7 @@ export function createDesktopWorkbenchCapabilityClient(
         backendStores,
         deadLetterQueue,
         instanceTemplates,
+        unifiedRuntimes,
         tenantOverview,
         tenantAnalytics,
         tenantAgentDashboard,
@@ -693,6 +696,7 @@ export function createDesktopWorkbenchCapabilityClient(
           instanceTemplatesOperationsV2,
           signal,
         ),
+        loadUnifiedRuntimesCapability(config, unifiedRuntimesOperationsV2, signal),
         loadTenantOverviewCapability(
           config,
           options.tenantOverviewOperationsV2,
@@ -962,7 +966,7 @@ export function createDesktopWorkbenchCapabilityClient(
             tenantWorkspacesCapability(config),
           ),
           'tenant-tenant-tasks': observed(tenantTasks),
-          'tenant-tenant-runtimes': declared(unifiedRuntimesCapability(config)),
+          'tenant-tenant-runtimes': observed(unifiedRuntimes),
           'tenant-tenant-pool': (config.mode === 'local' ? declared : observed)(
             withCapabilityScope(runtimePool, tenantScope),
           ),
@@ -1102,6 +1106,27 @@ async function loadInstanceTemplatesCapability(
   } catch (error) {
     if (signal?.aborted) throw error;
     return unavailable('instance_templates_authority_unavailable');
+  }
+}
+
+async function loadUnifiedRuntimesCapability(
+  config: DesktopRuntimeConfig,
+  operations: Pick<DesktopUnifiedRuntimesOperationsV2, 'probe'> | undefined,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const tenantId = scopeIdentifier(config.tenantId);
+  const projectId = scopeIdentifier(config.projectId) ?? '';
+  if (!tenantId) return unavailable('unified_runtimes_tenant_scope_unavailable');
+  if (!operations) return unavailable('unified_runtimes_authority_unavailable');
+  try {
+    return await operations.probe({
+      config,
+      scope: { authority: config.mode, tenantId, projectId },
+      ...(signal === undefined ? {} : { signal }),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return unavailable('unified_runtimes_authority_unavailable');
   }
 }
 

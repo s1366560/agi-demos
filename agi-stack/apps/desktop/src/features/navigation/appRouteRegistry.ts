@@ -284,6 +284,7 @@ import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopR
 import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
+import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
@@ -351,6 +352,7 @@ export type AppRouteRegistryRefs = {
   runtimeDeploymentsOperationsV2: DesktopRuntimeDeploymentsOperationsV2;
   deadLetterQueueOperationsV2: DesktopDeadLetterQueueOperationsV2;
   instanceTemplatesOperationsV2: DesktopInstanceTemplatesOperationsV2;
+  unifiedRuntimesOperationsV2: DesktopUnifiedRuntimesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
@@ -402,6 +404,7 @@ export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
   | 'runtimeDeploymentsOperationsV2'
   | 'runtimePoolOperationsV2'
   | 'instanceTemplatesOperationsV2'
+  | 'unifiedRuntimesOperationsV2'
 >;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -961,6 +964,7 @@ export function createAppRuntimeInfrastructureRouteRegistry(
     runtimeDeploymentsOperationsV2,
     runtimePoolOperationsV2,
     instanceTemplatesOperationsV2,
+    unifiedRuntimesOperationsV2,
   } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
@@ -1009,7 +1013,7 @@ export function createAppRuntimeInfrastructureRouteRegistry(
           createUnifiedRuntimesRouteBindingForRuntime(
             configRef.current,
             context,
-            runtimePoolOperationsV2,
+            unifiedRuntimesOperationsV2,
           ),
       }),
       [TENANT_GENES_ROUTE_ID]: createTenantGenesRouteModuleLoader({

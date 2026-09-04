@@ -52,7 +52,10 @@ import {
 } from '../../plugins/desktopInstanceTemplatesAuthorityModuleV2';
 import type { UnifiedRuntimesRouteBinding } from '../unified-runtimes/unifiedRuntimesRouteModule';
 import { createUnifiedRuntimesController } from '../unified-runtimes/unifiedRuntimesController';
-import { createUnifiedRuntimesClient } from '../unified-runtimes/unifiedRuntimesClient';
+import {
+  createDesktopUnifiedRuntimesClientV2,
+  type DesktopUnifiedRuntimesOperationsV2,
+} from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type {
   DesktopCapabilityAvailability,
   DesktopCapabilitySnapshot,
@@ -577,7 +580,7 @@ export function createInstanceTemplatesRouteBindingForRuntime(
 export function createUnifiedRuntimesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
-  runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2,
+  operations: DesktopUnifiedRuntimesOperationsV2,
 ): UnifiedRuntimesRouteBinding {
   if (
     config.tenantId !== context.tenantId ||
@@ -586,15 +589,12 @@ export function createUnifiedRuntimesRouteBindingForRuntime(
   ) {
     throw new Error('unified_runtimes_runtime_scope_mismatch');
   }
-  requireRuntimePoolOperationsV2(runtimePoolOperationsV2);
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
     projectId: config.projectId,
   });
-  const client = createUnifiedRuntimesClient(config, {
-    poolClient: createDesktopRuntimePoolClientV2(runtimePoolOperationsV2, config),
-  });
+  const client = createDesktopUnifiedRuntimesClientV2(operations, config);
   return Object.freeze({
     controller: createUnifiedRuntimesController({
       authority: config.mode,

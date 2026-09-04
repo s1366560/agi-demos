@@ -44,6 +44,7 @@ import { desktopProjectPlaybooksEventsAuthorityDefinitionV2 } from './desktopPro
 import { desktopBackendStoresAuthorityDefinitionV2 } from './desktopBackendStoresAuthorityModuleV2';
 import { desktopDeadLetterQueueAuthorityDefinitionV2 } from './desktopDeadLetterQueueAuthorityModuleV2';
 import { desktopInstanceTemplatesAuthorityDefinitionV2 } from './desktopInstanceTemplatesAuthorityModuleV2';
+import { desktopUnifiedRuntimesAuthorityDefinitionV2 } from './desktopUnifiedRuntimesAuthorityModuleV2';
 import { desktopRuntimePoolAuthorityDefinitionV2 } from './desktopRuntimePoolAuthorityModuleV2';
 import { desktopRuntimeClustersAuthorityDefinitionV2 } from './desktopRuntimeClustersAuthorityModuleV2';
 import { desktopRuntimeInstancesAuthorityDefinitionV2 } from './desktopRuntimeInstancesAuthorityModuleV2';
@@ -117,6 +118,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopBackendStoresAuthorityDefinitionV2,
     desktopDeadLetterQueueAuthorityDefinitionV2,
     desktopInstanceTemplatesAuthorityDefinitionV2,
+    desktopUnifiedRuntimesAuthorityDefinitionV2,
     desktopRuntimePoolAuthorityDefinitionV2,
     desktopRuntimeClustersAuthorityDefinitionV2,
     desktopRuntimeInstancesAuthorityDefinitionV2,

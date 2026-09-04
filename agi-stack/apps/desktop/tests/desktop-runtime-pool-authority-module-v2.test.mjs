@@ -110,6 +110,9 @@ test('Loader activates the exact Runtime Pool service and disabled Profile fails
   disabled.entries.find(
     ({ entry_id: entryId }) => entryId === 'builtin-desktop-runtime-pool-authority',
   ).enabled = false;
+  disabled.entries.find(
+    ({ entry_id: entryId }) => entryId === 'builtin-desktop-unified-runtimes-authority',
+  ).enabled = false;
   const disabledGeneration = await loader.stage(disabled);
   assert.throws(
     () =>

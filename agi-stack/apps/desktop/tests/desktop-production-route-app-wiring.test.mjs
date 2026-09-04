@@ -705,7 +705,7 @@ test('App wires Instance Templates through one tenant-scoped Cloud or Local bind
 test('App wires Unified Runtimes through one scoped Cloud or Local binding', () => {
   assert.match(
     registrySource,
-    /TENANT_RUNTIMES_ROUTE_ID[\s\S]*createUnifiedRuntimesRouteModuleLoader\(\{[\s\S]*createUnifiedRuntimesRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*runtimePoolOperationsV2,?\s*\)/u,
+    /TENANT_RUNTIMES_ROUTE_ID[\s\S]*createUnifiedRuntimesRouteModuleLoader\(\{[\s\S]*createUnifiedRuntimesRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*unifiedRuntimesOperationsV2,?\s*\)/u,
   );
 });
 
