@@ -33,7 +33,7 @@ const { createDesktopProjectPlaybooksReadHttpAuthorityV2 } = require(
 const { createProjectPlaybooksController } = require(
   `${compiledRoot}/features/project-playbooks/projectPlaybooksController.js`,
 );
-const { createCloudProjectPlaybooksEventSource, createProjectPlaybooksEventSource } = require(
+const { createProjectPlaybooksEventSource } = require(
   `${compiledRoot}/features/project-playbooks/projectPlaybooksEventSource.js`,
 );
 const { createProjectPlaybooksRouteModuleLoader } = require(
@@ -2122,139 +2122,14 @@ test('Project Playbooks refresh events are project-scoped and unsubscribe cleanl
   assert.equal(observed, 1);
 });
 
-test('Project Playbooks Local-online event source uses the trusted Cloud origin and cleans up', async () => {
-  const opened = [];
-  const sent = [];
-  const closed = [];
-  let transportListener = null;
-  let refreshes = 0;
-  let projectionLoads = 0;
-  const transport = {
-    subscribe(listener) {
-      transportListener = listener;
-      return () => {
-        transportListener = null;
-      };
-    },
-    async open(input) {
-      opened.push(input);
-      await authorizeVaultBoundCloudSocket(input.request, cloudSocketDependencies());
-      queueMicrotask(() => {
-        transportListener?.({
-          socketId: input.socketId,
-          type: 'open',
-          protocol: 'memstack.auth',
-        });
-      });
-    },
-    async send(input) {
-      sent.push({ ...input, frame: { ...input.frame } });
-    },
-    async close(input) {
-      closed.push(input);
-      queueMicrotask(() => {
-        transportListener?.({
-          socketId: input.socketId,
-          type: 'close',
-          code: input.code,
-          reason: input.reason,
-          wasClean: true,
-        });
-      });
-    },
-  };
-  const source = createCloudProjectPlaybooksEventSource(
-    { ...localConfig, workspaceId: 'local-workspace-must-not-cross-authority' },
-    {
-      projectionClient: {
-        async load(signal) {
-          projectionLoads += 1;
-          assert.equal(signal.aborted, false);
-          return { apiBaseUrl: 'https://cloud.memstack.test' };
-        },
-      },
-      transport: () => transport,
-      sessionId: () => 'playbooks_cloud_session_1',
-    },
-  );
-  const unsubscribe = source.subscribe(projectScope, () => {
-    refreshes += 1;
-  });
-
-  await waitFor(() => sent.length === 1);
-  assert.equal(projectionLoads, 1);
-  assert.equal(opened.length, 1);
-  assert.equal(new URL(opened[0].request.url).origin, 'wss://cloud.memstack.test');
-  assert.notEqual(new URL(opened[0].request.url).origin, 'ws://127.0.0.1:43117');
-  assert.deepEqual(opened[0].request.scope, {
-    tenant_id: 'tenant-1',
-    project_id: 'project-1',
-    workspace_id: null,
-    conversation_id: null,
-  });
-  assert.deepEqual(JSON.parse(sent[0].frame.text), {
-    type: 'subscribe_project_events',
-    project_id: 'project-1',
-  });
-
-  transportListener({
-    socketId: opened[0].socketId,
-    type: 'message',
-    frame: {
-      binary: false,
-      text: JSON.stringify({
-        type: 'reflection_complete',
-        project_id: 'project-1',
-      }),
-    },
-  });
-  assert.equal(refreshes, 1);
-
-  unsubscribe();
-  await waitFor(() => closed.length === 1);
-  assert.deepEqual(JSON.parse(sent.at(-1).frame.text), {
-    type: 'unsubscribe_project_events',
-    project_id: 'project-1',
-  });
-  assert.equal(closed[0].reason, 'project_playbooks_unsubscribe');
-});
-
-test('Project Playbooks event cleanup aborts a pending trusted-session projection', async () => {
-  let projectionSignal = null;
-  let socketOpens = 0;
-  const source = createCloudProjectPlaybooksEventSource(localConfig, {
-    projectionClient: {
-      load(signal) {
-        projectionSignal = signal;
-        return new Promise(() => {});
-      },
-    },
-    transport: () => ({
-      subscribe() {
-        return () => {};
-      },
-      async open() {
-        socketOpens += 1;
-      },
-      async send() {},
-      async close() {},
-    }),
-    sessionId: () => 'playbooks_cloud_session_2',
-  });
-
-  const unsubscribe = source.subscribe(projectScope, () => {});
-  await waitFor(() => projectionSignal !== null);
-  unsubscribe();
-
-  assert.equal(projectionSignal.aborted, true);
-  assert.equal(socketOpens, 0);
-});
-
 test('Project Playbooks route binds reflection refresh and native Cloud socket cleanup', () => {
   assert.match(playbooksRouteSource, /binding\.events\.subscribe\(binding\.scope/u);
   assert.match(playbooksRouteSource, /binding\.controller\.retry\(\)/u);
   assert.match(playbooksRouteSource, /unsubscribe\(\)[\s\S]*binding\.controller\.stop\(\)/u);
-  assert.match(appRouteRegistrySource, /createCloudProjectPlaybooksEventSource\(currentConfig\)/u);
+  assert.match(
+    appRouteRegistrySource,
+    /createDesktopProjectPlaybooksEventSourceV2\([\s\S]*projectPlaybooksEventsOperationsV2/u,
+  );
 });
 
 test('Project Playbooks uses Cloud authority from Local-online through the vault broker', async () => {

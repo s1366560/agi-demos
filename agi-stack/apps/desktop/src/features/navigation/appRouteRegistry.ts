@@ -87,7 +87,6 @@ import {
   TENANT_WORKSPACES_ROUTE_ID,
 } from './desktopProductionRouteRegistry';
 import { createProjectPlaybooksController } from '../project-playbooks/projectPlaybooksController';
-import { createCloudProjectPlaybooksEventSource } from '../project-playbooks/projectPlaybooksEventSource';
 import { createProjectPlaybooksRouteModuleLoader } from '../project-playbooks/projectPlaybooksRouteModule';
 import {
   createDeadLetterQueueRouteBindingForRuntime,
@@ -269,6 +268,10 @@ import {
   type DesktopProjectPlaybooksReadOperationsV2,
 } from '../../plugins/desktopProjectPlaybooksReadAuthorityModuleV2';
 import {
+  createDesktopProjectPlaybooksEventSourceV2,
+  type DesktopProjectPlaybooksEventsOperationsV2,
+} from '../../plugins/desktopProjectPlaybooksEventsAuthorityModuleV2';
+import {
   createDesktopWorkspaceCollaborationClientV2,
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -335,6 +338,7 @@ export type AppRouteRegistryRefs = {
   projectSettingsOperationsV2: DesktopProjectSettingsOperationsV2;
   projectSupportOperationsV2: DesktopProjectSupportOperationsV2;
   projectPlaybooksReadOperationsV2: DesktopProjectPlaybooksReadOperationsV2;
+  projectPlaybooksEventsOperationsV2: DesktopProjectPlaybooksEventsOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   runtimeInstancesOperationsV2: DesktopRuntimeInstancesOperationsV2;
@@ -353,6 +357,7 @@ export type AppAuxiliaryRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
   | 'configRef'
   | 'projectPlaybooksReadOperationsV2'
+  | 'projectPlaybooksEventsOperationsV2'
   | 'projectSupportOperationsV2'
   | 'setAuth'
 >;
@@ -598,7 +603,10 @@ export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryR
               ),
               initialScope: scope,
             }),
-            events: createCloudProjectPlaybooksEventSource(currentConfig),
+            events: createDesktopProjectPlaybooksEventSourceV2(
+              refs.projectPlaybooksEventsOperationsV2,
+              currentConfig,
+            ),
             scope,
           });
         },
