@@ -1,5 +1,5 @@
 import type { DesktopRuntimeConfig } from '../../types';
-import { createTenantAcpClient } from './tenantAcpClient';
+import { createDesktopTenantAcpClientV2, type DesktopTenantAcpOperationsV2 } from '../../plugins/desktopTenantAcpAuthorityModuleV2';
 import { createTenantAcpController } from './tenantAcpController';
 import type { TenantAcpRouteBinding } from './tenantAcpRouteModule';
 import { createDesktopTenantDecisionRecordsClientV2, type DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
@@ -45,12 +45,13 @@ export function createTenantPatternsRouteBindingForRuntime(
 export function createTenantAcpRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantManagementRouteContext,
+  operations: DesktopTenantAcpOperationsV2,
 ): TenantAcpRouteBinding {
   const scope = tenantScope(config, context);
   return Object.freeze({
     scope,
     controller: createTenantAcpController({
-      client: createTenantAcpClient(config),
+      client: createDesktopTenantAcpClientV2(operations, config),
       initialScope: scope,
     }),
   });

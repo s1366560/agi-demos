@@ -148,6 +148,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   unifiedRuntimesOperationsV2?: Pick<DesktopUnifiedRuntimesOperationsV2, 'probe'>;
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
+  tenantAcpOperationsV2: import('../../plugins/desktopTenantAcpAuthorityModuleV2').DesktopTenantAcpOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
   tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
   tenantWebhooksOperationsV2: DesktopTenantWebhooksOperationsV2;
@@ -250,6 +251,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       unifiedRuntimesOperationsV2: input.unifiedRuntimesOperationsV2,
       tenantEventsOperationsV2: input.tenantEventsOperationsV2,
       tenantPatternsOperationsV2: input.tenantPatternsOperationsV2,
+      tenantAcpOperationsV2: input.tenantAcpOperationsV2,
       tenantDecisionRecordsOperationsV2: input.tenantDecisionRecordsOperationsV2,
       tenantSettingsOperationsV2: input.tenantSettingsOperationsV2,
       tenantWebhooksOperationsV2: input.tenantWebhooksOperationsV2,

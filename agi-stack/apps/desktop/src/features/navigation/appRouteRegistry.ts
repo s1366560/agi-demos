@@ -363,6 +363,7 @@ export type AppRouteRegistryRefs = {
   tenantAuditOperationsV2: import('../../plugins/desktopTenantAuditAuthorityModuleV2').DesktopTenantAuditOperationsV2;
   tenantGovernanceOperationsV2: import('../../plugins/desktopTenantGovernanceAuthorityModuleV2').DesktopTenantGovernanceOperationsV2;
   tenantTrustOperationsV2: import('../../plugins/desktopTenantTrustAuthorityModuleV2').DesktopTenantTrustOperationsV2;
+  tenantAcpOperationsV2: import('../../plugins/desktopTenantAcpAuthorityModuleV2').DesktopTenantAcpOperationsV2;
   unifiedRuntimesOperationsV2: DesktopUnifiedRuntimesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
@@ -458,7 +459,7 @@ export type AppTenantAgentBuildingRouteRegistryRefs = Pick<
   AppSettingsRouteContentRefs;
 export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'pluginMarketplaceOperationsV2' | 'tenantWebhooksOperationsV2'
+  'configRef' | 'pluginMarketplaceOperationsV2' | 'tenantWebhooksOperationsV2' | 'tenantAcpOperationsV2'
 > &
   AppSettingsRouteContentRefs;
 export type AppTenantGovernanceRouteRegistryRefs = Pick<
@@ -1261,13 +1262,13 @@ export function createAppTenantAgentBuildingRouteRegistry(
 export function createAppTenantExtensionsIntegrationsRouteRegistry(
   refs: AppTenantExtensionsIntegrationsRouteRegistryRefs,
 ) {
-  const { configRef, pluginMarketplaceOperationsV2, tenantWebhooksOperationsV2 } = refs;
+  const { configRef, pluginMarketplaceOperationsV2, tenantWebhooksOperationsV2, tenantAcpOperationsV2 } = refs;
   const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_ACP_ROUTE_ID]: createTenantAcpRouteModuleLoader({
         createBinding: (context) =>
-          createTenantAcpRouteBindingForRuntime(configRef.current, context),
+          createTenantAcpRouteBindingForRuntime(configRef.current, context, tenantAcpOperationsV2),
       }),
       [TENANT_WEBHOOKS_ROUTE_ID]: createTenantWebhooksRouteModuleLoader({
         createBinding: (context) =>

@@ -2,7 +2,6 @@ import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig, RuntimeMode } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import {
-  createTenantAcpClient,
   TENANT_ACP_LOCAL_REASON,
   TENANT_ACP_ROUTE_ID,
   type TenantAcpClient,
@@ -69,7 +68,7 @@ export type TenantRemainingCapabilityClient = Readonly<{
 }>;
 export type TenantRemainingCapabilityDependencies = Readonly<{
   patterns: Pick<TenantPatternsClient, 'load'>;
-  acp?: Pick<TenantAcpClient, 'load'>;
+  acp: Pick<TenantAcpClient, 'load'>;
   webhooks: Pick<TenantWebhooksClient, 'load'>;
   genes?: Pick<TenantGenesClient, 'load'>;
   events: Pick<TenantEventsClient, 'load'>;
@@ -171,7 +170,7 @@ export function createTenantRemainingCapabilityClient(
   const runtimeConfig = Object.freeze({ ...config });
   const clients = Object.freeze({
     patterns: dependencies.patterns,
-    acp: dependencies.acp ?? createTenantAcpClient(runtimeConfig),
+    acp: dependencies.acp,
     webhooks: dependencies.webhooks,
     genes: dependencies.genes ?? createTenantGenesClient(runtimeConfig),
     events: dependencies.events,

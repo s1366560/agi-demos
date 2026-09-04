@@ -128,6 +128,7 @@ import { createDesktopInstanceTemplatesOperationsV2 } from './plugins/desktopIns
 import { createDesktopUnifiedRuntimesOperationsV2 } from './plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import { createDesktopTenantEventsOperationsV2 } from './plugins/desktopTenantEventsAuthorityModuleV2';
 import { createDesktopTenantPatternsOperationsV2 } from './plugins/desktopTenantPatternsAuthorityModuleV2';
+import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAuthorityModuleV2';
 import { createDesktopTenantDecisionRecordsOperationsV2 } from './plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import { createDesktopTenantSettingsOperationsV2 } from './plugins/desktopTenantSettingsAuthorityModuleV2';
 import { createDesktopTenantWebhooksOperationsV2 } from './plugins/desktopTenantWebhooksAuthorityModuleV2';
@@ -1068,6 +1069,10 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantAcpOperationsV2 = useMemo(
+    () => createDesktopTenantAcpOperationsV2(() => desktopPluginMarketplaceGenerationActionsRefV2.current),
+    [],
+  );
   const desktopTenantDecisionRecordsOperationsV2 = useMemo(
     () =>
       createDesktopTenantDecisionRecordsOperationsV2(
@@ -1468,6 +1473,7 @@ export function App() {
       unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
       tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
+      tenantAcpOperationsV2: desktopTenantAcpOperationsV2,
       tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
       tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
       tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
@@ -1589,6 +1595,7 @@ export function App() {
         unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
         tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
+        tenantAcpOperationsV2: desktopTenantAcpOperationsV2,
         tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
         tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
         tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,

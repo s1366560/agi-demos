@@ -105,6 +105,7 @@ import {
 } from '../tenant-admin/tenantAdminCapabilityClient';
 import { createDesktopTenantBillingClientV2, type DesktopTenantBillingOperationsV2 } from '../../plugins/desktopTenantBillingAuthorityModuleV2';
 import { createDesktopTenantGovernanceClientV2, type DesktopTenantGovernanceOperationsV2 } from '../../plugins/desktopTenantGovernanceAuthorityModuleV2';
+import { createDesktopTenantAcpClientV2, type DesktopTenantAcpOperationsV2 } from '../../plugins/desktopTenantAcpAuthorityModuleV2';
 import { type TenantTrustClient } from '../tenant-admin/tenantTrustClient';
 import { createDesktopTenantTrustClientV2, type DesktopTenantTrustOperationsV2 } from '../../plugins/desktopTenantTrustAuthorityModuleV2';
 import {
@@ -326,6 +327,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   >;
   projectAdministrationClients?: ProjectAdministrationCapabilityClients;
   tenantGovernanceOperationsV2: DesktopTenantGovernanceOperationsV2;
+  tenantAcpOperationsV2: DesktopTenantAcpOperationsV2;
   tenantBillingOperationsV2: DesktopTenantBillingOperationsV2;
   tenantAuditOperationsV2: DesktopTenantAuditOperationsV2;
   tenantTrustOperationsV2: DesktopTenantTrustOperationsV2;
@@ -624,6 +626,7 @@ export function createDesktopWorkbenchCapabilityClient(
     createTenantRemainingCapabilityClient(config, {
       events: createDesktopTenantEventsClientV2(options.tenantEventsOperationsV2, config),
       patterns: createDesktopTenantPatternsClientV2(options.tenantPatternsOperationsV2, config),
+      acp: createDesktopTenantAcpClientV2(options.tenantAcpOperationsV2, config),
       decisionRecords: createDesktopTenantDecisionRecordsClientV2(options.tenantDecisionRecordsOperationsV2, config),
       settings: createDesktopTenantSettingsClientV2(options.tenantSettingsOperationsV2, config),
       webhooks: createDesktopTenantWebhooksClientV2(options.tenantWebhooksOperationsV2, config),

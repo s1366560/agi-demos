@@ -8,7 +8,9 @@ const featureRoot = '/tmp/agistack-desktop-test-dist/src/features/tenant-admin';
 const {
   createDesktopTenantPatternsHttpProjectionV2: createTenantPatternsClient,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantPatternsHttpProjectionV2.js');
-const { createTenantAcpClient } = require(`${featureRoot}/tenantAcpClient.js`);
+const {
+  createDesktopTenantAcpHttpProjectionV2: createTenantAcpClient,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAcpHttpProjectionV2.js');
 const { createDesktopTenantWebhooksHttpProjectionV2: createTenantWebhooksClient } = require(
   '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantWebhooksHttpProjectionV2.js',
 );
