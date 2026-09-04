@@ -13,7 +13,10 @@ import { createTenantGenesClient } from './tenantGenesClient';
 import { createTenantGenesController } from './tenantGenesController';
 import type { TenantGenesRouteBinding } from './tenantGenesRouteModule';
 import type { TenantManagementRouteContext } from './tenantManagementRouteModuleFactory';
-import { createTenantOrganizationSettingsClient } from './tenantOrganizationSettingsClient';
+import {
+  createDesktopTenantOrganizationSettingsClientV2,
+  type DesktopTenantOrganizationSettingsOperationsV2,
+} from '../../plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { createTenantOrganizationSettingsController } from './tenantOrganizationSettingsController';
 import type {
   TenantOrganizationSettingsRouteBinding,
@@ -122,12 +125,13 @@ export function createTenantDecisionRecordsRouteBindingForRuntime(
 export function createTenantOrganizationSettingsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantManagementRouteContext,
+  operations: DesktopTenantOrganizationSettingsOperationsV2,
 ): TenantOrganizationSettingsRouteBinding {
   const scope = tenantScope(config, context);
   return Object.freeze({
     scope,
     controller: createTenantOrganizationSettingsController({
-      client: createTenantOrganizationSettingsClient(config),
+      client: createDesktopTenantOrganizationSettingsClientV2(operations, config),
       initialScope: scope,
     }),
   });

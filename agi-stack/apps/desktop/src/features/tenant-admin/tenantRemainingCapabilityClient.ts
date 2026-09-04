@@ -23,7 +23,6 @@ import {
   type TenantGenesClient,
 } from './tenantGenesClient';
 import {
-  createTenantOrganizationSettingsClient,
   TENANT_ORGANIZATION_SETTINGS_LOCAL_REASON,
   TENANT_ORGANIZATION_SETTINGS_ROUTE_ID,
   type TenantOrganizationSettingsClient,
@@ -73,7 +72,7 @@ export type TenantRemainingCapabilityDependencies = Readonly<{
   genes?: Pick<TenantGenesClient, 'load'>;
   events: Pick<TenantEventsClient, 'load'>;
   decisionRecords: Pick<TenantDecisionRecordsClient, 'load'>;
-  organizationSettings?: Pick<TenantOrganizationSettingsClient, 'load'>;
+  organizationSettings: Pick<TenantOrganizationSettingsClient, 'load'>;
   settings: Pick<TenantSettingsClient, 'load'>;
 }>;
 
@@ -175,9 +174,7 @@ export function createTenantRemainingCapabilityClient(
     genes: dependencies.genes ?? createTenantGenesClient(runtimeConfig),
     events: dependencies.events,
     decisionRecords: dependencies.decisionRecords,
-    organizationSettings:
-      dependencies.organizationSettings ??
-      createTenantOrganizationSettingsClient(runtimeConfig),
+    organizationSettings: dependencies.organizationSettings,
     settings: dependencies.settings,
   });
 

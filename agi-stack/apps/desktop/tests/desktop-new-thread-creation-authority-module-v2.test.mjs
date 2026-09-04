@@ -86,6 +86,9 @@ const { desktopTenantAcpAuthorityDefinitionV2 } = require(
 const { desktopTenantEvolutionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantEvolutionAuthorityModuleV2.js',
 );
+const { desktopTenantOrganizationSettingsAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantOrganizationSettingsAuthorityModuleV2.js',
+);
 const { desktopTenantTrustAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantTrustAuthorityModuleV2.js',
 );
@@ -256,6 +259,7 @@ function rendererDefinitions() {
     desktopTenantGovernanceAuthorityDefinitionV2,
     desktopTenantAcpAuthorityDefinitionV2,
     desktopTenantEvolutionAuthorityDefinitionV2,
+    desktopTenantOrganizationSettingsAuthorityDefinitionV2,
     desktopTenantTrustAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,

@@ -22,8 +22,11 @@ const { requestTenantManagementJson } = require(`${featureRoot}/tenantManagement
 const {
   createDesktopTenantDecisionRecordsHttpProjectionV2: createTenantDecisionRecordsClient,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantDecisionRecordsHttpProjectionV2.js');
-const { createTenantOrganizationSettingsClient } = require(
-  `${featureRoot}/tenantOrganizationSettingsClient.js`
+const {
+  createDesktopTenantOrganizationSettingsHttpProjectionV2:
+    createTenantOrganizationSettingsClient,
+} = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantOrganizationSettingsHttpProjectionV2.js',
 );
 const {
   createDesktopTenantSettingsHttpProjectionV2: createTenantSettingsClient,

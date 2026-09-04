@@ -23,6 +23,7 @@ import type { DesktopInstanceTemplatesOperationsV2 } from '../../plugins/desktop
 import type { DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import type { DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
+import type { DesktopTenantOrganizationSettingsOperationsV2 } from '../../plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import type { DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import type { DesktopTenantSettingsOperationsV2 } from '../../plugins/desktopTenantSettingsAuthorityModuleV2';
 import type { DesktopTenantWebhooksOperationsV2 } from '../../plugins/desktopTenantWebhooksAuthorityModuleV2';
@@ -150,6 +151,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  tenantOrganizationSettingsOperationsV2: DesktopTenantOrganizationSettingsOperationsV2;
   tenantAcpOperationsV2: import('../../plugins/desktopTenantAcpAuthorityModuleV2').DesktopTenantAcpOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
   tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
@@ -254,6 +256,8 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       tenantEventsOperationsV2: input.tenantEventsOperationsV2,
       tenantPatternsOperationsV2: input.tenantPatternsOperationsV2,
       tenantEvolutionOperationsV2: input.tenantEvolutionOperationsV2,
+      tenantOrganizationSettingsOperationsV2:
+        input.tenantOrganizationSettingsOperationsV2,
       tenantAcpOperationsV2: input.tenantAcpOperationsV2,
       tenantDecisionRecordsOperationsV2: input.tenantDecisionRecordsOperationsV2,
       tenantSettingsOperationsV2: input.tenantSettingsOperationsV2,

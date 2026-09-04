@@ -359,6 +359,7 @@ export type AppRouteRegistryRefs = {
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
   tenantDecisionRecordsOperationsV2: import('../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2').DesktopTenantDecisionRecordsOperationsV2;
+  tenantOrganizationSettingsOperationsV2: import('../../plugins/desktopTenantOrganizationSettingsAuthorityModuleV2').DesktopTenantOrganizationSettingsOperationsV2;
   tenantSettingsOperationsV2: import('../../plugins/desktopTenantSettingsAuthorityModuleV2').DesktopTenantSettingsOperationsV2;
   tenantWebhooksOperationsV2: import('../../plugins/desktopTenantWebhooksAuthorityModuleV2').DesktopTenantWebhooksOperationsV2;
   tenantBillingOperationsV2: import('../../plugins/desktopTenantBillingAuthorityModuleV2').DesktopTenantBillingOperationsV2;
@@ -471,6 +472,7 @@ export type AppTenantGovernanceRouteRegistryRefs = Pick<
   | 'deadLetterQueueOperationsV2'
   | 'tenantEventsOperationsV2'
   | 'tenantDecisionRecordsOperationsV2'
+  | 'tenantOrganizationSettingsOperationsV2'
   | 'tenantSettingsOperationsV2'
   | 'tenantBillingOperationsV2'
   | 'tenantAuditOperationsV2'
@@ -1321,7 +1323,7 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
 export function createAppTenantGovernanceRouteRegistry(
   refs: AppTenantGovernanceRouteRegistryRefs,
 ) {
-  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2, tenantSettingsOperationsV2, tenantBillingOperationsV2, tenantAuditOperationsV2, tenantGovernanceOperationsV2, tenantTrustOperationsV2 } = refs;
+  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2, tenantOrganizationSettingsOperationsV2, tenantSettingsOperationsV2, tenantBillingOperationsV2, tenantAuditOperationsV2, tenantGovernanceOperationsV2, tenantTrustOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
@@ -1377,7 +1379,11 @@ export function createAppTenantGovernanceRouteRegistry(
       }),
       [TENANT_ORGANIZATION_SETTINGS_ROUTE_ID]: createTenantOrganizationSettingsRouteModuleLoader({
         createBinding: (context) =>
-          createTenantOrganizationSettingsRouteBindingForRuntime(configRef.current, context),
+          createTenantOrganizationSettingsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantOrganizationSettingsOperationsV2,
+          ),
       }),
       [TENANT_SETTINGS_ROUTE_ID]: createTenantSettingsRouteModuleLoader({
         createBinding: (context) =>

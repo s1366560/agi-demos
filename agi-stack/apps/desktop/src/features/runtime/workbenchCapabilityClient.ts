@@ -60,6 +60,10 @@ import {
   createDesktopTenantEvolutionClientV2,
   type DesktopTenantEvolutionOperationsV2,
 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
+import {
+  createDesktopTenantOrganizationSettingsClientV2,
+  type DesktopTenantOrganizationSettingsOperationsV2,
+} from '../../plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { createDesktopTenantDecisionRecordsClientV2, type DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
 import { createDesktopTenantSettingsClientV2, type DesktopTenantSettingsOperationsV2 } from '../../plugins/desktopTenantSettingsAuthorityModuleV2';
 import { createDesktopTenantWebhooksClientV2, type DesktopTenantWebhooksOperationsV2 } from '../../plugins/desktopTenantWebhooksAuthorityModuleV2';
@@ -314,6 +318,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  tenantOrganizationSettingsOperationsV2: DesktopTenantOrganizationSettingsOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
   tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
   tenantWebhooksOperationsV2: DesktopTenantWebhooksOperationsV2;
@@ -631,6 +636,10 @@ export function createDesktopWorkbenchCapabilityClient(
       patterns: createDesktopTenantPatternsClientV2(options.tenantPatternsOperationsV2, config),
       acp: createDesktopTenantAcpClientV2(options.tenantAcpOperationsV2, config),
       decisionRecords: createDesktopTenantDecisionRecordsClientV2(options.tenantDecisionRecordsOperationsV2, config),
+      organizationSettings: createDesktopTenantOrganizationSettingsClientV2(
+        options.tenantOrganizationSettingsOperationsV2,
+        config,
+      ),
       settings: createDesktopTenantSettingsClientV2(options.tenantSettingsOperationsV2, config),
       webhooks: createDesktopTenantWebhooksClientV2(options.tenantWebhooksOperationsV2, config),
     });

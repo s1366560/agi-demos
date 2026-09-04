@@ -37,6 +37,23 @@ const registrySource = readFileSync(
   new URL('../src/features/navigation/appRouteRegistry.ts', import.meta.url),
   'utf8',
 );
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+const routeRuntimeSource = readFileSync(
+  new URL('../src/features/tenant-admin/tenantRemainingRouteRuntime.ts', import.meta.url),
+  'utf8',
+);
+const capabilitySource = readFileSync(
+  new URL('../src/features/tenant-admin/tenantRemainingCapabilityClient.ts', import.meta.url),
+  'utf8',
+);
+const organizationSettingsTypesSource = readFileSync(
+  new URL('../src/features/tenant-admin/tenantOrganizationSettingsClient.ts', import.meta.url),
+  'utf8',
+);
+const workbenchSource = readFileSync(
+  new URL('../src/features/runtime/workbenchCapabilityClient.ts', import.meta.url),
+  'utf8',
+);
 const routeIds = Object.freeze([
   'tenant-tenant-patterns',
   'tenant-tenant-acp',
@@ -78,6 +95,21 @@ test('remaining Tenant routes bind their typed runtime authorities in the produc
   ]) {
     assert.match(registrySource, new RegExp(symbol, 'u'), symbol);
   }
+});
+
+test('Tenant Organization Settings production consumers require the V2 operation authority', () => {
+  assert.match(appSource, /createDesktopTenantOrganizationSettingsOperationsV2/u);
+  assert.match(registrySource, /tenantOrganizationSettingsOperationsV2/u);
+  assert.match(routeRuntimeSource, /createDesktopTenantOrganizationSettingsClientV2/u);
+  assert.match(workbenchSource, /tenantOrganizationSettingsOperationsV2/u);
+
+  for (const source of [routeRuntimeSource, capabilitySource, organizationSettingsTypesSource]) {
+    assert.doesNotMatch(source, /createTenantOrganizationSettingsClient/u);
+  }
+  assert.doesNotMatch(
+    capabilitySource,
+    /organizationSettings:\s*dependencies\.organizationSettings\s*\?\?/u,
+  );
 });
 
 test('Workbench preserves observed Cloud and mixed Local provenance for remaining Tenant routes', async () => {
