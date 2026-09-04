@@ -300,9 +300,11 @@
       "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/settings-routes/mcpServersRouteClient.ts",
         "agi-stack/apps/desktop/src/features/settings-routes/mcpServersRouteModule.ts",
@@ -558,13 +560,17 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAcpClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAcpController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAcpPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantAcpPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantAcpPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantAcpAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantAcpHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantAcpOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "local_external_acp_not_applicable",
       "local_deviation": "External ACP runner pools, agents, and sessions require Cloud connection and governance authority; Local Desktop returns the stable cloud-only reason instead of fabricating an offline service.",
-      "judgment_rationale": "AcpDashboard reads status and runner pools, renders the Agent and session summaries embedded in status, and exposes external-Agent create, update, delete and test controls. Separate runner-instance, Agent-list, session-list and session lifecycle service methods are not called by the production page and are excluded from its API authority. Desktop has a revision-bound Cloud loader plus role-gated create, update, delete and test controls for the Agent list. The typed snapshot also loads status, runner pools and sessions, but TenantAcpPage does not render those three surfaces, so Cloud remains partial with only the page-reachable Agent actions. External ACP authority remains intentionally cloud-only for Local Desktop."
+      "judgment_rationale": "AcpDashboard reads status and runner pools, renders the Agent and session summaries embedded in status, and exposes external-Agent create, update, delete and test controls. Desktop Cloud load and all four mutations now resolve through the declared tenant-acp V2 service under a tenant operation lease. Nested command, args, environment, header, label and cwd-policy inputs are defensively copied and frozen before lease acquisition; the projection re-observes tenant administration authority for every mutation and uses only the vault-bound Cloud transport. TenantAcpPage still does not render the status, runner-pool and session surfaces, so Cloud remains partial with only the existing page-reachable actions. Local rejects before transport and remains intentionally not applicable."
     },
     {
       "id": "tenant-tenant-templates",
