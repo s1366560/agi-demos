@@ -307,21 +307,26 @@
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_deployment_authority_not_applicable",
       "local_deviation": "Local Desktop may run supervised local work but does not expose the Cloud deployment authority. It must render a stable cloud-only state instead of launching an external control plane.",
-      "judgment_rationale": "DeployProgress is shared by tenant deployment routes and nested instance deployment routes, so one audited Deployments capability owns the source. The routed Web page calls list, create, detail, progress, success, failed, and cancel, but not getLatestForInstance. Web stays degraded because the backend list field deploys is read as deployments, finished_at and message are rendered as completed_at and error_message, success sends no required body, failed supplies no required non-empty message, and the running status is tested as in_progress for cancellation. Desktop has a real native loader, App binding, typed Cloud client, controller and read-oriented deployment page, but workbenchCapabilityClient still wraps runtimeDeploymentsCapability with declared renderer provenance. Snapshot v4 closes every declared active capability to renderer_capability_authority_unobserved, so no Cloud deployment action is currently route-reachable. Local remains a declared cloud-only not-applicable surface and never calls a simulated deployment authority.",
+      "judgment_rationale": "At e24e4d158, Desktop Runtime Deployments replaces the deleted static capability and client with service:desktop-renderer.runtime-deployments-authority@1.0.0, a root V2 Provider and tenant-scoped immutable generation leases for list, get, progress streaming and probe. Cloud transport remains vault-bound through desktopApiFetch and now reports observed cloud_service provenance, but the backend supplies no authority revision, so Snapshot v4 must fail closed with no promoted actions. Local performs no deployment transport and remains cloud-only not applicable; its observed sidecar snapshot source records the local execution context, not a Local deployment authority. Web remains partial for its broader contract and existing field, mutation-body and status mismatches.",
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsCapability.ts",
-        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsClient.ts",
+        "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsContract.ts",
         "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsController.ts",
         "agi-stack/apps/desktop/src/features/runtime-deployments/runtimeDeploymentsRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/runtime-deployments/RuntimeDeploymentsPage.tsx"
+        "agi-stack/apps/desktop/src/features/runtime-deployments/RuntimeDeploymentsPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "cloud_reason_code": "renderer_capability_authority_unobserved"
+      "cloud_reason_code": "capability_authority_revision_unavailable"
     },
     {
       "id": "tenant-tenant-instance-templates",
