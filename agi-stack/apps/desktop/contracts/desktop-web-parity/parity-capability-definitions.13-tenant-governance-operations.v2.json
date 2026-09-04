@@ -196,13 +196,17 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantGovernanceClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantGovernanceController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantGovernancePresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantGovernancePage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantGovernancePage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantGovernanceAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantGovernanceHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantGovernanceOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_membership_not_applicable",
       "local_deviation": "A Local Desktop runtime has one application user and does not create a parallel offline tenant membership or invitation authority.",
-      "judgment_rationale": "UserList owns tenant members and pending invitations; invitation acceptance remains a separate route-only capability. Desktop now has a real Cloud route loader, App binding, typed membership and invitation client, controller, page and role-aware permission checks. Its authority observation does not publish an authorityRevision, so workbenchCapabilityClient closes the otherwise active snapshot to capability_authority_revision_unavailable and no Cloud action is currently route-reachable. Local remains deliberately not applicable because it must not invent multi-user governance."
+      "judgment_rationale": "UserList owns tenant members and pending invitations; invitation acceptance remains a separate route-only capability. Desktop Cloud membership reads and invitation, role-change and removal mutations now resolve through the declared tenant-governance V2 service under a tenant operation lease. The projection re-observes membership for every mutation, preserves role-aware permission checks and uses the vault-bound Cloud transport. Its authority observation still does not publish an authorityRevision, so workbenchCapabilityClient closes the snapshot to capability_authority_revision_unavailable and advertises no Cloud action. Local rejects before transport and remains deliberately not applicable because it must not invent multi-user governance."
     },
     {
       "id": "tenant-tenant-audit-logs",
