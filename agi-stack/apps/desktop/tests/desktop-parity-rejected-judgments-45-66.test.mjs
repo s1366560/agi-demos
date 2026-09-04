@@ -413,7 +413,7 @@ test("Project Settings records only the routed page sandbox operations and autho
   assert.equal(capability.cloud_status, "partial");
   assert.equal(
     capability.cloud_reason_code,
-    "desktop_project_settings_actions_and_update_contract_mismatch",
+    "desktop_project_settings_actions_unwired",
   );
   assert.deepEqual(capability.cloud_actions, ["view"]);
   assert.equal(capability.local_status, "unavailable");
@@ -423,8 +423,10 @@ test("Project Settings records only the routed page sandbox operations and autho
     "local_project_settings_authority_unavailable",
   );
   assert.doesNotMatch(capability.judgment_rationale, /userPayload\.id/u);
-  assert.match(capability.judgment_rationale, /PATCH/u);
-  assert.match(capability.judgment_rationale, /PUT/u);
+  assert.match(capability.judgment_rationale, /Project Settings V2 authority/u);
+  assert.match(capability.judgment_rationale, /project-scoped generation lease/u);
+  assert.match(capability.judgment_rationale, /static factory and its latent mutation methods were removed/u);
+  assert.match(capability.judgment_rationale, /PATCH-versus-PUT mismatch rationale is no longer/u);
 
   for (const action of [
     "view",
