@@ -709,26 +709,30 @@
         }
       ],
       "cloud_status": "unavailable",
-      "cloud_reason_code": "renderer_capability_authority_unobserved",
+  "cloud_reason_code": "capability_authority_revision_unavailable",
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/governance/DeadLetterQueuePage.tsx",
-        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueCapability.ts",
-        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueClient.ts",
-        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueController.ts",
-        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueHttpClient.ts",
-        "agi-stack/apps/desktop/src/features/governance/deadLetterQueueRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/governance/useDeadLetterQueueController.ts",
-        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts"
+    "agi-stack/apps/desktop/src/features/governance/deadLetterQueueClient.ts",
+    "agi-stack/apps/desktop/src/features/governance/deadLetterQueueController.ts",
+    "agi-stack/apps/desktop/src/features/governance/deadLetterQueueRouteModule.tsx",
+    "agi-stack/apps/desktop/src/features/governance/useDeadLetterQueueController.ts",
+    "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
+    "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
+    "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+    "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueHttpProjectionV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueOperationContractV2.ts",
+    "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_message_bus_dlq_not_applicable",
       "local_deviation": "The Cloud message-bus DLQ has no Local equivalent. Local retry and recovery remain owned by their specific sidecar outbox contracts rather than a fabricated global queue.",
-      "judgment_rationale": "Desktop has a real global-admin Dead Letter Queue loader, App binding, strict DTO client, controller and complete native page. However workbenchCapabilityClient still wraps deadLetterQueueCapability with declared renderer provenance. Snapshot v4 closes that active declaration to renderer_capability_authority_unobserved, so the route cannot currently advertise or execute any Cloud DLQ action despite the implemented module. Local does not call Cloud APIs and retains the stable cloud_message_bus_dlq_not_applicable disposition."
-    }
+  "judgment_rationale": "At d8b89a0c4, Dead Letter Queue removes the static deadLetterQueueCapability and HTTP transport factory. Route reads and mutations plus the workbench capability probe now require generated-catalog root Provider service:desktop-renderer.dead-letter-queue-authority@1.0.0. Every operation freezes its input and obtains one immutable tenant-scoped generation lease; Cloud continues through the application vault-bound request broker, while Local returns a structured zero-network not-applicable projection. The Cloud capability remains fail-closed because the backend response does not yet supply an authority revision, so no action is advertised; this renderer authority cutover does not claim native QA, backend parity expansion, or Local queue authority."
+}
   ],
   "source_ownership": {
     "tenant-tenant-users": [

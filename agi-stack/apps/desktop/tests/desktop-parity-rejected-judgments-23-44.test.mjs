@@ -229,6 +229,22 @@ test("Dead Letter Queue does not claim its unused single-message API", () => {
   assert.ok(
     cloudContracts.every((contract) => contract.authority === "cloud_service"),
   );
+  assert.equal(dlq.cloud_status, "unavailable");
+  assert.equal(
+    dlq.cloud_reason_code,
+    "capability_authority_revision_unavailable",
+  );
+  assert.deepEqual(dlq.cloud_actions, []);
+  for (const entry of [
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueHttpProjectionV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueOperationContractV2.ts",
+    "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+  ]) {
+    assert.ok(dlq.cloud_entries.includes(entry), `missing ${entry}`);
+  }
+  assert.match(dlq.judgment_rationale, /generation lease/iu);
+  assert.match(dlq.judgment_rationale, /zero-network/iu);
 });
 
 test("Decision Records inspects the selected list row without a detail GET", () => {
