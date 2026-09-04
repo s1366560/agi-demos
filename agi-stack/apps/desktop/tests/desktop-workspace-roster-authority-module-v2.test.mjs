@@ -62,6 +62,7 @@ const authorityModules = [
   'desktopTenantSettingsAuthorityModuleV2',
   'desktopTenantWebhooksAuthorityModuleV2',
   'desktopTenantBillingAuthorityModuleV2',
+  'desktopTenantAuditAuthorityModuleV2',
   'desktopTenantTrustAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',

@@ -192,12 +192,7 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
       tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       tenantGovernanceClient: probe('available', null, ['view', 'list', 'invite']),
       tenantBillingOperationsV2: tenantBillingOperationsV2Fixture(),
-      tenantAuditClient: probe(
-        'available',
-        null,
-        ['view', 'filter', 'inspect-runtime-hooks', 'export'],
-        17,
-      ),
+      tenantAuditOperationsV2: tenantAuditOperationsV2Fixture(),
       tenantTrustOperationsV2: tenantTrustOperationsV2Fixture(),
     });
 
@@ -403,6 +398,19 @@ function tenantBillingOperationsV2Fixture() {
         data,
         ...data,
       };
+    },
+  };
+}
+
+function tenantAuditOperationsV2Fixture() {
+  return {
+    async loadTenantAudit({ scope }) {
+      const data = {
+        membershipRole: 'owner', entries: [], total: 17, limit: 20, offset: 0,
+        runtimeSummary: { total: 0, actionCounts: {}, executorCounts: {}, familyCounts: {}, isolationModeCounts: {}, latestTimestamp: null },
+        query: { limit: 20, offset: 0 },
+      };
+      return { scope, authority: 'cloud', availability: 'available', reasonCode: null, contractVersion: '4.0.0', allowedActions: ['view', 'filter', 'inspect-runtime-hooks', 'export'], authorityRevision: 17, data, ...data };
     },
   };
 }

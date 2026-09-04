@@ -98,6 +98,7 @@ import { loadTenantProjectsCapability } from '../tenant/tenantProjectsCapability
 import { loadTenantTasksCapability } from '../tenant/tenantTasksCapability';
 import { tenantWorkspacesCapability } from '../tenant/tenantWorkspacesCapability';
 import type { TenantAuditClient } from '../tenant-admin/tenantAuditClient';
+import { createDesktopTenantAuditClientV2, type DesktopTenantAuditOperationsV2 } from '../../plugins/desktopTenantAuditAuthorityModuleV2';
 import {
   createTenantAdminCapabilityClient,
   type TenantAdminCapabilityClient,
@@ -326,7 +327,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   projectAdministrationClients?: ProjectAdministrationCapabilityClients;
   tenantGovernanceClient?: Pick<TenantGovernanceClient, 'load'>;
   tenantBillingOperationsV2: DesktopTenantBillingOperationsV2;
-  tenantAuditClient?: Pick<TenantAuditClient, 'load'>;
+  tenantAuditOperationsV2: DesktopTenantAuditOperationsV2;
   tenantTrustOperationsV2: DesktopTenantTrustOperationsV2;
   tenantAdminCapabilityClient?: Pick<TenantAdminCapabilityClient, 'load'>;
   tenantRemainingCapabilityClient?: Pick<
@@ -615,7 +616,7 @@ export function createDesktopWorkbenchCapabilityClient(
     createTenantAdminCapabilityClient(config, {
       governance: options.tenantGovernanceClient,
       billing: createDesktopTenantBillingClientV2(options.tenantBillingOperationsV2, config),
-      audit: options.tenantAuditClient,
+      audit: createDesktopTenantAuditClientV2(options.tenantAuditOperationsV2, config),
       trust: createDesktopTenantTrustClientV2(options.tenantTrustOperationsV2, config),
     });
   const tenantRemainingCapabilityClient =

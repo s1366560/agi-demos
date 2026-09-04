@@ -132,6 +132,7 @@ import { createDesktopTenantDecisionRecordsOperationsV2 } from './plugins/deskto
 import { createDesktopTenantSettingsOperationsV2 } from './plugins/desktopTenantSettingsAuthorityModuleV2';
 import { createDesktopTenantWebhooksOperationsV2 } from './plugins/desktopTenantWebhooksAuthorityModuleV2';
 import { createDesktopTenantBillingOperationsV2 } from './plugins/desktopTenantBillingAuthorityModuleV2';
+import { createDesktopTenantAuditOperationsV2 } from './plugins/desktopTenantAuditAuthorityModuleV2';
 import { createDesktopTenantTrustOperationsV2 } from './plugins/desktopTenantTrustAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
@@ -1094,6 +1095,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantAuditOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAuditOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantTrustOperationsV2 = useMemo(
     () =>
       createDesktopTenantTrustOperationsV2(
@@ -1459,6 +1467,7 @@ export function App() {
       tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
       tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
       tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
+      tenantAuditOperationsV2: desktopTenantAuditOperationsV2,
       tenantTrustOperationsV2: desktopTenantTrustOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
@@ -1578,6 +1587,7 @@ export function App() {
         tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
         tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
         tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
+        tenantAuditOperationsV2: desktopTenantAuditOperationsV2,
         tenantTrustOperationsV2: desktopTenantTrustOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
         desktopWorkspaceLifecycleOperationsV2,

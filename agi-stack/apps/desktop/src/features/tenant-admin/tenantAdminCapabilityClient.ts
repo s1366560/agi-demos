@@ -2,7 +2,6 @@ import { DesktopApiError } from '../../api/client';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopCapabilityAvailability } from '../runtime/capabilitySnapshot';
 import {
-  createTenantAuditClient,
   TENANT_AUDIT_LOCAL_REASON,
   TENANT_AUDIT_ROUTE_ID,
   type TenantAuditClient,
@@ -48,7 +47,7 @@ export type TenantAdminCapabilityClient = Readonly<{
 export type TenantAdminCapabilityDependencies = Readonly<{
   governance?: Pick<TenantGovernanceClient, 'load'>;
   billing: Pick<TenantBillingClient, 'load'>;
-  audit?: Pick<TenantAuditClient, 'load'>;
+  audit: Pick<TenantAuditClient, 'load'>;
   trust: Pick<TenantTrustClient, 'load'>;
 }>;
 
@@ -104,7 +103,7 @@ export function createTenantAdminCapabilityClient(
     governance:
       dependencies.governance ?? createTenantGovernanceClient(runtimeConfig),
     billing: dependencies.billing,
-    audit: dependencies.audit ?? createTenantAuditClient(runtimeConfig),
+    audit: dependencies.audit,
     trust: dependencies.trust,
   });
 

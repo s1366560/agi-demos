@@ -9,7 +9,9 @@ const { createTenantGovernanceClient } = require(`${featureRoot}/tenantGovernanc
 const {
   createDesktopTenantBillingHttpProjectionV2: createTenantBillingClient,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantBillingHttpProjectionV2.js');
-const { createTenantAuditClient } = require(`${featureRoot}/tenantAuditClient.js`);
+const {
+  createDesktopTenantAuditHttpProjectionV2: createTenantAuditClient,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAuditHttpProjectionV2.js');
 const {
   createDesktopTenantTrustHttpProjectionV2: createTenantTrustClient,
 } = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTrustHttpProjectionV2.js');

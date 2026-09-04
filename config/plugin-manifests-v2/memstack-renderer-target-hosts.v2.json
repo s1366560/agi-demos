@@ -773,6 +773,35 @@
       "contract_digest": "sha256:8e8e2d0f2dca4f710f377309f5a819387d3af121563c09045e9be24bc9e0da85"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-audit-authority",
+      "entrypoint": "applyDesktopTenantAuditAuthorityV2",
+      "artifact": {
+        "digest": "sha256:2d41767df0e7ceaa1341ffee49183060d7ced00321f06ead0b8f15fd182f321a",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantAuditAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-audit-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:edcf0fee85610c7ca68dd97c2bca314ef59c9543ce35b3236ba26a2d612b3aa7"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-trust-authority",
       "entrypoint": "applyDesktopTenantTrustAuthorityV2",
       "artifact": {
