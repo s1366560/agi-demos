@@ -69,6 +69,13 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'local', projectId: 'project-local' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: backendStoresOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
@@ -99,6 +106,13 @@ test('each publication returns one frozen generation-pinned capability client bi
     automationApi: automationApi(),
     config: { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-cloud' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: backendStoresOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
@@ -141,6 +155,13 @@ test('failed capability client publication keeps the last-good binding', () => {
     automationApi: automationApi(),
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: backendStoresOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
@@ -180,6 +201,13 @@ test('failed capability client publication keeps the last-good binding', () => {
         automationApi: automationApi(),
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+        deadLetterQueueOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          },
+        },
         backendStoresOperationsV2: backendStoresOperationsV2(),
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),

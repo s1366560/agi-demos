@@ -18,18 +18,15 @@ import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRu
 import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type { DesktopBackendStoresOperationsV2 } from '../../plugins/desktopBackendStoresAuthorityModuleV2';
+import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type { DesktopTenantTasksOperationsV2 } from '../../plugins/desktopTenantTasksAuthorityModuleV2';
-import type {
-  DesktopWorkspaceCatalogOperationsV2,
-} from '../../plugins/desktopWorkspaceCatalogAuthorityModuleV2';
-import type {
-  DesktopWorkspaceLifecycleOperationsV2,
-} from '../../plugins/desktopWorkspaceLifecycleAuthorityModuleV2';
+import type { DesktopWorkspaceCatalogOperationsV2 } from '../../plugins/desktopWorkspaceCatalogAuthorityModuleV2';
+import type { DesktopWorkspaceLifecycleOperationsV2 } from '../../plugins/desktopWorkspaceLifecycleAuthorityModuleV2';
 import { createProjectWorkspacesV2Client } from '../project-workspaces/projectWorkspacesV2Client';
 import {
   createDesktopWorkbenchCapabilityClient,
@@ -56,18 +53,12 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     DesktopPluginMarketplaceCatalogOperationsV2,
     'projectMarketplacePlugins'
   >;
-  projectOverviewOperationsV2: Pick<
-    DesktopProjectOverviewOperationsV2,
-    'probeProjectOverview'
-  >;
+  projectOverviewOperationsV2: Pick<DesktopProjectOverviewOperationsV2, 'probeProjectOverview'>;
   projectAgentDashboardOperationsV2: Pick<
     DesktopProjectAgentDashboardOperationsV2,
     'loadProjectAgentDashboard'
   >;
-  projectAgentLogsOperationsV2: Pick<
-    DesktopProjectAgentLogsOperationsV2,
-    'loadProjectAgentLogs'
-  >;
+  projectAgentLogsOperationsV2: Pick<DesktopProjectAgentLogsOperationsV2, 'loadProjectAgentLogs'>;
   projectAgentPatternsOperationsV2: Pick<
     DesktopProjectAgentPatternsOperationsV2,
     'loadProjectAgentPatterns'
@@ -76,23 +67,14 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     DesktopProjectCommunitiesOperationsV2,
     'loadProjectCommunities'
   >;
-  projectMemoriesOperationsV2: Pick<
-    DesktopProjectMemoriesOperationsV2,
-    'loadProjectMemories'
-  >;
+  projectMemoriesOperationsV2: Pick<DesktopProjectMemoriesOperationsV2, 'loadProjectMemories'>;
   projectTeamOperationsV2: Pick<DesktopProjectTeamOperationsV2, 'loadProjectTeam'>;
-  projectSchemaOperationsV2: Pick<
-    DesktopProjectSchemaOperationsV2,
-    'loadProjectSchema'
-  >;
+  projectSchemaOperationsV2: Pick<DesktopProjectSchemaOperationsV2, 'loadProjectSchema'>;
   projectMaintenanceOperationsV2: Pick<
     DesktopProjectMaintenanceOperationsV2,
     'loadProjectMaintenance'
   >;
-  projectSettingsOperationsV2: Pick<
-    DesktopProjectSettingsOperationsV2,
-    'loadProjectSettings'
-  >;
+  projectSettingsOperationsV2: Pick<DesktopProjectSettingsOperationsV2, 'loadProjectSettings'>;
   projectEntitiesOperationsV2: Pick<
     DesktopProjectEntitiesOperationsV2,
     'loadProjectEntities' | 'loadProjectEntityRelationships'
@@ -103,19 +85,14 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     'probeProjectBlackboard' | 'probeWorkspaceCollaborationCapability'
   >;
   runtimePoolOperationsV2: Pick<DesktopRuntimePoolOperationsV2, 'probeRuntimePool'>;
-  runtimeClustersOperationsV2: Pick<
-    DesktopRuntimeClustersOperationsV2,
-    'probeRuntimeClusters'
-  >;
-  runtimeInstancesOperationsV2: Pick<
-    DesktopRuntimeInstancesOperationsV2,
-    'probeRuntimeInstances'
-  >;
+  runtimeClustersOperationsV2: Pick<DesktopRuntimeClustersOperationsV2, 'probeRuntimeClusters'>;
+  runtimeInstancesOperationsV2: Pick<DesktopRuntimeInstancesOperationsV2, 'probeRuntimeInstances'>;
   runtimeDeploymentsOperationsV2: Pick<
     DesktopRuntimeDeploymentsOperationsV2,
     'probeRuntimeDeployments'
   >;
   backendStoresOperationsV2: Pick<DesktopBackendStoresOperationsV2, 'probeBackendStores'>;
+  deadLetterQueueOperationsV2: Pick<DesktopDeadLetterQueueOperationsV2, 'probe'>;
   desktopWorkspaceCatalogOperationsV2: Pick<
     DesktopWorkspaceCatalogOperationsV2,
     'listWorkspacesForProject'
@@ -124,10 +101,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     DesktopWorkspaceLifecycleOperationsV2,
     'createWorkspace'
   >;
-  tenantAnalyticsOperationsV2: Pick<
-    DesktopTenantAnalyticsOperationsV2,
-    'loadTenantAnalytics'
-  >;
+  tenantAnalyticsOperationsV2: Pick<DesktopTenantAnalyticsOperationsV2, 'loadTenantAnalytics'>;
   tenantAgentBindingsOperationsV2: Pick<
     DesktopTenantAgentBindingsOperationsV2,
     'listTenantAgentBindings'
@@ -136,14 +110,8 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     DesktopTenantAgentDashboardOperationsV2,
     'loadTenantAgentDashboard'
   >;
-  tenantOverviewOperationsV2: Pick<
-    DesktopTenantOverviewOperationsV2,
-    'loadTenantOverview'
-  >;
-  tenantProjectsOperationsV2: Pick<
-    DesktopTenantProjectsOperationsV2,
-    'listTenantProjects'
-  >;
+  tenantOverviewOperationsV2: Pick<DesktopTenantOverviewOperationsV2, 'loadTenantOverview'>;
+  tenantProjectsOperationsV2: Pick<DesktopTenantProjectsOperationsV2, 'listTenantProjects'>;
   tenantTasksOperationsV2: Pick<DesktopTenantTasksOperationsV2, 'loadTenantTasks'>;
 }>;
 
@@ -158,8 +126,7 @@ export type DesktopWorkbenchCapabilityClientProviderV2 = Readonly<{
   resolve: () => DesktopWorkbenchCapabilityClientBindingV2;
 }>;
 
-export function createDesktopWorkbenchCapabilityClientProviderV2():
-  DesktopWorkbenchCapabilityClientProviderV2 {
+export function createDesktopWorkbenchCapabilityClientProviderV2(): DesktopWorkbenchCapabilityClientProviderV2 {
   let publication: DesktopWorkbenchCapabilityClientBindingV2 | null = null;
 
   return Object.freeze({
@@ -203,6 +170,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
     runtimeInstancesOperationsV2: input.runtimeInstancesOperationsV2,
     runtimeDeploymentsOperationsV2: input.runtimeDeploymentsOperationsV2,
     backendStoresOperationsV2: input.backendStoresOperationsV2,
+    deadLetterQueueOperationsV2: input.deadLetterQueueOperationsV2,
     projectWorkspacesClient: createProjectWorkspacesV2Client(config, {
       catalogOperations: input.desktopWorkspaceCatalogOperationsV2,
       lifecycleOperations: input.desktopWorkspaceLifecycleOperationsV2,

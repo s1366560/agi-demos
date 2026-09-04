@@ -282,6 +282,7 @@ import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntim
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
 import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
+import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
@@ -347,6 +348,7 @@ export type AppRouteRegistryRefs = {
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   runtimeInstancesOperationsV2: DesktopRuntimeInstancesOperationsV2;
   runtimeDeploymentsOperationsV2: DesktopRuntimeDeploymentsOperationsV2;
+  deadLetterQueueOperationsV2: DesktopDeadLetterQueueOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
@@ -443,7 +445,7 @@ export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
   AppSettingsRouteContentRefs;
 export type AppTenantGovernanceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'desktopProductionRouteLocation'
+  'configRef' | 'deadLetterQueueOperationsV2' | 'desktopProductionRouteLocation'
 >;
 
 function createSettingsRouteContent(
@@ -1287,7 +1289,11 @@ export function createAppTenantGovernanceRouteRegistry(
       }),
       [TENANT_DEAD_LETTER_QUEUE_ROUTE_ID]: createDeadLetterQueueRouteModuleLoader({
         createBinding: (context) =>
-          createDeadLetterQueueRouteBindingForRuntime(configRef.current, context),
+          createDeadLetterQueueRouteBindingForRuntime(
+            configRef.current,
+            context,
+            refs.deadLetterQueueOperationsV2,
+          ),
       }),
       [TENANT_TRUST_POLICIES_ROUTE_ID]: createTenantTrustRouteModuleLoader({
         createBinding: (context) =>

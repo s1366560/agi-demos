@@ -1,10 +1,6 @@
-import {
-  DesktopApiError,
-  desktopApiCredential,
-  desktopLaunchCapability,
-} from '../../api/client';
-import { desktopApiFetch } from '../../api/cloudRequestBroker';
-import type { DesktopRuntimeConfig } from '../../types';
+import { DesktopApiError, desktopApiCredential, desktopLaunchCapability } from '../api/client';
+import { desktopApiFetch } from '../api/cloudRequestBroker';
+import type { DesktopRuntimeConfig } from '../types';
 import {
   DeadLetterQueueUnavailableError,
   type DeadLetterQueueBatchResult,
@@ -16,7 +12,7 @@ import {
   type DeadLetterQueueQuery,
   type DeadLetterQueueScope,
   type DeadLetterQueueStats,
-} from './deadLetterQueueClient';
+} from '../features/governance/deadLetterQueueClient';
 
 const BASE_PATH = '/api/v1/admin/dlq';
 const CONTRACT_VERSION = '3.0.0';
@@ -47,7 +43,7 @@ type RequestOptions = Readonly<{
   body?: Readonly<Record<string, unknown>>;
 }>;
 
-export function createDeadLetterQueueHttpClient(
+export function createDesktopDeadLetterQueueHttpProjectionV2(
   config: DesktopRuntimeConfig,
 ): DeadLetterQueueClient {
   const runtimeConfig = Object.freeze({ ...config });

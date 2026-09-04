@@ -537,6 +537,35 @@
       "contract_digest": "sha256:9719fcebc65a9e91084db30c9814545c4fba536fc97d9d8c49f3c7a66484c0cb"
     },
     {
+      "module_ref": "builtin://memstack/desktop/dead-letter-queue-authority",
+      "entrypoint": "applyDesktopDeadLetterQueueAuthorityV2",
+      "artifact": {
+        "digest": "sha256:001cce6dbe218e76f015d394a6937c00b5d35d108397db85338d8b047e68d82b",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.dead-letter-queue-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-vault-broker", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:51634b0f3c4dfef941670937938d11b0040d014e50a58805bda9f1301efa5dbe"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/artifact-content-authority",
       "entrypoint": "applyDesktopArtifactContentAuthorityV2",
       "artifact": {

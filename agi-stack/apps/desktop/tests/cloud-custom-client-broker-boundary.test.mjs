@@ -20,7 +20,7 @@ const BROKER_BOUND_CLIENTS = [
   'src/plugins/desktopRuntimeClustersHttpProjectionV2.ts',
   'src/plugins/desktopRuntimeInstancesHttpProjectionV2.ts',
   'src/plugins/desktopRuntimeDeploymentsHttpProjectionV2.ts',
-  'src/features/governance/deadLetterQueueHttpClient.ts',
+  'src/plugins/desktopDeadLetterQueueHttpProjectionV2.ts',
   'src/features/sandbox/sandboxRuntimeSurfaceClient.ts',
   'src/features/sandbox/terminalSessionV2Client.ts',
 ];

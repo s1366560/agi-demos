@@ -1,10 +1,6 @@
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
-import {
-  DesktopApiError,
-  desktopApiCredential,
-  desktopLaunchCapability,
-} from '../../api/client';
+import { DesktopApiError, desktopApiCredential, desktopLaunchCapability } from '../../api/client';
 import {
   desktopApiFetch,
   desktopVaultBoundCloudRequestBroker,
@@ -31,7 +27,6 @@ import {
 import { deviceApprovalCapability } from '../device-approval/deviceApprovalCapability';
 import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapability';
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
-import { deadLetterQueueCapability } from '../governance/deadLetterQueueCapability';
 import { instanceTemplatesCapability } from '../instance-templates/instanceTemplatesCapability';
 import { createAgentDefinitionsRouteClient } from '../settings-routes/agentDefinitionsRouteClient';
 import type { ChannelsRouteClient } from '../settings-routes/channelsRouteClient';
@@ -165,6 +160,7 @@ import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRu
 import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import type { DesktopRuntimeDeploymentsOperationsV2 } from '../../plugins/desktopRuntimeDeploymentsAuthorityModuleV2';
 import type { DesktopBackendStoresOperationsV2 } from '../../plugins/desktopBackendStoresAuthorityModuleV2';
+import type { DesktopDeadLetterQueueOperationsV2 } from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import {
   DESKTOP_CAPABILITY_SNAPSHOT_VERSION,
   DESKTOP_MINIMUM_CONTRACT_VERSION,
@@ -207,31 +203,16 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     DesktopTenantAgentDashboardOperationsV2,
     'loadTenantAgentDashboard'
   >;
-  tenantAnalyticsOperationsV2: Pick<
-    DesktopTenantAnalyticsOperationsV2,
-    'loadTenantAnalytics'
-  >;
-  tenantOverviewOperationsV2: Pick<
-    DesktopTenantOverviewOperationsV2,
-    'loadTenantOverview'
-  >;
-  tenantProjectsOperationsV2: Pick<
-    DesktopTenantProjectsOperationsV2,
-    'listTenantProjects'
-  >;
+  tenantAnalyticsOperationsV2: Pick<DesktopTenantAnalyticsOperationsV2, 'loadTenantAnalytics'>;
+  tenantOverviewOperationsV2: Pick<DesktopTenantOverviewOperationsV2, 'loadTenantOverview'>;
+  tenantProjectsOperationsV2: Pick<DesktopTenantProjectsOperationsV2, 'listTenantProjects'>;
   tenantTasksOperationsV2: Pick<DesktopTenantTasksOperationsV2, 'loadTenantTasks'>;
-  projectOverviewOperationsV2: Pick<
-    DesktopProjectOverviewOperationsV2,
-    'probeProjectOverview'
-  >;
+  projectOverviewOperationsV2: Pick<DesktopProjectOverviewOperationsV2, 'probeProjectOverview'>;
   projectAgentDashboardOperationsV2: Pick<
     DesktopProjectAgentDashboardOperationsV2,
     'loadProjectAgentDashboard'
   >;
-  projectAgentLogsOperationsV2: Pick<
-    DesktopProjectAgentLogsOperationsV2,
-    'loadProjectAgentLogs'
-  >;
+  projectAgentLogsOperationsV2: Pick<DesktopProjectAgentLogsOperationsV2, 'loadProjectAgentLogs'>;
   projectAgentPatternsOperationsV2: Pick<
     DesktopProjectAgentPatternsOperationsV2,
     'loadProjectAgentPatterns'
@@ -240,42 +221,28 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     DesktopProjectCommunitiesOperationsV2,
     'loadProjectCommunities'
   >;
-  projectMemoriesOperationsV2: Pick<
-    DesktopProjectMemoriesOperationsV2,
-    'loadProjectMemories'
-  >;
+  projectMemoriesOperationsV2: Pick<DesktopProjectMemoriesOperationsV2, 'loadProjectMemories'>;
   projectTeamOperationsV2: Pick<DesktopProjectTeamOperationsV2, 'loadProjectTeam'>;
-  projectSchemaOperationsV2: Pick<
-    DesktopProjectSchemaOperationsV2,
-    'loadProjectSchema'
-  >;
+  projectSchemaOperationsV2: Pick<DesktopProjectSchemaOperationsV2, 'loadProjectSchema'>;
   projectMaintenanceOperationsV2: Pick<
     DesktopProjectMaintenanceOperationsV2,
     'loadProjectMaintenance'
   >;
-  projectSettingsOperationsV2: Pick<
-    DesktopProjectSettingsOperationsV2,
-    'loadProjectSettings'
-  >;
+  projectSettingsOperationsV2: Pick<DesktopProjectSettingsOperationsV2, 'loadProjectSettings'>;
   projectEntitiesOperationsV2: Pick<
     DesktopProjectEntitiesOperationsV2,
     'loadProjectEntities' | 'loadProjectEntityRelationships'
   >;
   projectGraphOperationsV2: Pick<DesktopProjectGraphOperationsV2, 'loadProjectGraph'>;
   runtimePoolOperationsV2: Pick<DesktopRuntimePoolOperationsV2, 'probeRuntimePool'>;
-  runtimeClustersOperationsV2: Pick<
-    DesktopRuntimeClustersOperationsV2,
-    'probeRuntimeClusters'
-  >;
-  runtimeInstancesOperationsV2: Pick<
-    DesktopRuntimeInstancesOperationsV2,
-    'probeRuntimeInstances'
-  >;
+  runtimeClustersOperationsV2: Pick<DesktopRuntimeClustersOperationsV2, 'probeRuntimeClusters'>;
+  runtimeInstancesOperationsV2: Pick<DesktopRuntimeInstancesOperationsV2, 'probeRuntimeInstances'>;
   runtimeDeploymentsOperationsV2: Pick<
     DesktopRuntimeDeploymentsOperationsV2,
     'probeRuntimeDeployments'
   >;
   backendStoresOperationsV2: Pick<DesktopBackendStoresOperationsV2, 'probeBackendStores'>;
+  deadLetterQueueOperationsV2: Pick<DesktopDeadLetterQueueOperationsV2, 'probe'>;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -322,8 +289,9 @@ const MANAGEMENT_ROUTE_CAPABILITY_NAMES = Object.freeze([
 ] as const satisfies readonly ManagementRouteCapability[]);
 const MANAGEMENT_ROUTE_SERVICE_VERSION = '0.1.0';
 const MANAGEMENT_ROUTE_CONTRACT_VERSION = '4.0.0';
-const UNAVAILABLE_PLUGIN_MARKETPLACE_OPERATIONS_V2 =
-  createDesktopPluginMarketplaceOperationsV2(() => null);
+const UNAVAILABLE_PLUGIN_MARKETPLACE_OPERATIONS_V2 = createDesktopPluginMarketplaceOperationsV2(
+  () => null,
+);
 const PROJECT_WORKSPACES_SERVICE_VERSION = '0.1.0';
 const PROJECT_WORKSPACES_CONTRACT_VERSION = '4.0.0';
 const PROJECT_BLACKBOARD_SERVICE_VERSION = '0.1.0';
@@ -356,9 +324,7 @@ export function createDesktopWorkbenchCapabilityClient(
   options: DesktopWorkbenchCapabilityClientOptions,
 ): DesktopWorkbenchCapabilityClient {
   const tenantAgentBindingsOperationsV2 = options?.tenantAgentBindingsOperationsV2;
-  if (
-    typeof tenantAgentBindingsOperationsV2?.listTenantAgentBindings !== 'function'
-  ) {
+  if (typeof tenantAgentBindingsOperationsV2?.listTenantAgentBindings !== 'function') {
     throw new Error('desktop_tenant_agent_bindings_authority_required');
   }
   const tenantAnalyticsOperationsV2 = options?.tenantAnalyticsOperationsV2;
@@ -366,9 +332,7 @@ export function createDesktopWorkbenchCapabilityClient(
     throw new Error('desktop_tenant_analytics_authority_required');
   }
   const tenantAgentDashboardOperationsV2 = options?.tenantAgentDashboardOperationsV2;
-  if (
-    typeof tenantAgentDashboardOperationsV2?.loadTenantAgentDashboard !== 'function'
-  ) {
+  if (typeof tenantAgentDashboardOperationsV2?.loadTenantAgentDashboard !== 'function') {
     throw new Error('desktop_tenant_agent_dashboard_authority_required');
   }
   const tenantProjectsOperationsV2 = options?.tenantProjectsOperationsV2;
@@ -403,6 +367,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof backendStoresOperationsV2?.probeBackendStores !== 'function') {
     throw new Error('desktop_backend_stores_authority_required');
   }
+  const deadLetterQueueOperationsV2 = options?.deadLetterQueueOperationsV2;
+  if (typeof deadLetterQueueOperationsV2?.probe !== 'function') {
+    throw new Error('desktop_dead_letter_queue_authority_required');
+  }
   const projectWorkspacesClient = options?.projectWorkspacesClient;
   if (typeof projectWorkspacesClient?.list !== 'function') {
     throw new Error('desktop_project_workspaces_authority_required');
@@ -415,9 +383,7 @@ export function createDesktopWorkbenchCapabilityClient(
     throw new Error('desktop_project_blackboard_authority_required');
   }
   const projectAgentDashboardOperationsV2 = options?.projectAgentDashboardOperationsV2;
-  if (
-    typeof projectAgentDashboardOperationsV2?.loadProjectAgentDashboard !== 'function'
-  ) {
+  if (typeof projectAgentDashboardOperationsV2?.loadProjectAgentDashboard !== 'function') {
     throw new Error('desktop_project_agent_dashboard_authority_required');
   }
   const projectAgentLogsOperationsV2 = options?.projectAgentLogsOperationsV2;
@@ -425,15 +391,11 @@ export function createDesktopWorkbenchCapabilityClient(
     throw new Error('desktop_project_agent_logs_authority_required');
   }
   const projectAgentPatternsOperationsV2 = options?.projectAgentPatternsOperationsV2;
-  if (
-    typeof projectAgentPatternsOperationsV2?.loadProjectAgentPatterns !== 'function'
-  ) {
+  if (typeof projectAgentPatternsOperationsV2?.loadProjectAgentPatterns !== 'function') {
     throw new Error('desktop_project_agent_patterns_authority_required');
   }
   const projectCommunitiesOperationsV2 = options?.projectCommunitiesOperationsV2;
-  if (
-    typeof projectCommunitiesOperationsV2?.loadProjectCommunities !== 'function'
-  ) {
+  if (typeof projectCommunitiesOperationsV2?.loadProjectCommunities !== 'function') {
     throw new Error('desktop_project_communities_authority_required');
   }
   const projectMemoriesOperationsV2 = options?.projectMemoriesOperationsV2;
@@ -552,6 +514,7 @@ export function createDesktopWorkbenchCapabilityClient(
         runtimeClusters,
         runtimeDeployments,
         backendStores,
+        deadLetterQueue,
         tenantOverview,
         tenantAnalytics,
         tenantAgentDashboard,
@@ -579,26 +542,11 @@ export function createDesktopWorkbenchCapabilityClient(
         loadRuntimeClustersCapability(config, runtimeClustersOperationsV2, signal),
         loadRuntimeDeploymentsCapability(config, runtimeDeploymentsOperationsV2, signal),
         loadBackendStoresCapability(config, backendStoresOperationsV2, signal),
-        loadTenantOverviewCapability(
-          config,
-          options.tenantOverviewOperationsV2,
-          signal,
-        ),
-        loadTenantAnalyticsCapability(
-          config,
-          tenantAnalyticsOperationsV2,
-          signal,
-        ),
-        loadTenantAgentDashboardCapability(
-          config,
-          tenantAgentDashboardOperationsV2,
-          signal,
-        ),
-        loadTenantAgentBindingsCapability(
-          config,
-          tenantAgentBindingsOperationsV2,
-          signal,
-        ),
+        loadDeadLetterQueueCapability(config, deadLetterQueueOperationsV2, signal),
+        loadTenantOverviewCapability(config, options.tenantOverviewOperationsV2, signal),
+        loadTenantAnalyticsCapability(config, tenantAnalyticsOperationsV2, signal),
+        loadTenantAgentDashboardCapability(config, tenantAgentDashboardOperationsV2, signal),
+        loadTenantAgentBindingsCapability(config, tenantAgentBindingsOperationsV2, signal),
         loadTenantProjectsCapability(config, tenantProjectsOperationsV2, signal),
         loadTenantTasksCapability(config, tenantTasksOperationsV2, signal),
         loadManagementRouteCapabilities(managementRouteClients, config, signal),
@@ -679,9 +627,7 @@ export function createDesktopWorkbenchCapabilityClient(
           'device-approval': declared(deviceApprovalCapability(config)),
           'tenant-creation': declared(tenantCreationCapability(config)),
           'invitation-acceptance': declared(invitationAcceptanceCapability(config)),
-          'backend-stores': auxiliaryAuthority(
-            withCapabilityScope(backendStores, tenantScope),
-          ),
+          'backend-stores': auxiliaryAuthority(withCapabilityScope(backendStores, tenantScope)),
           'project-playbooks': auxiliaryAuthority(
             withCapabilityScope(auxiliaryCloudCapabilities.projectPlaybooks, projectScope),
           ),
@@ -797,7 +743,9 @@ export function createDesktopWorkbenchCapabilityClient(
           ),
           'tenant-tenant-deploy': observed(runtimeDeployments),
           'tenant-tenant-instance-templates': declared(instanceTemplatesCapability(config)),
-          'tenant-tenant-dead-letter-queue': declared(deadLetterQueueCapability(config)),
+          'tenant-tenant-dead-letter-queue': (config.mode === 'local' ? declared : observed)(
+            withCapabilityScope(deadLetterQueue, tenantScope),
+          ),
           'project-project-channels': snapshotP2ThirdBatchCapability(
             p2ThirdBatchCapabilities['project-project-channels'],
           ),
@@ -822,7 +770,7 @@ async function loadBackendStoresCapability(
     const capability = await operations.probeBackendStores({
       config,
       scope: { authority: config.mode, tenantId },
-      ...(signal === undefined ? {} : { options: { signal } }),
+      ...(signal === undefined ? {} : { signal }),
     });
     if (capability.availability === 'not_applicable') {
       return notApplicable(
@@ -848,6 +796,40 @@ async function loadBackendStoresCapability(
       return unavailable('backend_stores_contract_invalid');
     }
     return unavailable('backend_stores_authority_unavailable');
+  }
+}
+
+async function loadDeadLetterQueueCapability(
+  config: DesktopRuntimeConfig,
+  operations: Pick<DesktopDeadLetterQueueOperationsV2, 'probe'>,
+  signal?: AbortSignal,
+): Promise<DesktopCapabilityAvailability> {
+  const tenantId = scopeIdentifier(config.tenantId);
+  if (!tenantId) return unavailable('dead_letter_queue_tenant_scope_unavailable');
+  try {
+    const capability = await operations.probe({
+      config,
+      scope: { authority: config.mode, tenantId },
+      ...(signal === undefined ? {} : { options: { signal } }),
+    });
+    if (capability.availability === 'not_applicable') {
+      return notApplicable(
+        capability.reasonCode ?? 'local_dead_letter_queue_cloud_authority_unavailable',
+      );
+    }
+    return {
+      availability: 'available',
+      reason_code: null,
+      service_version: '1.0.0',
+      contract_version: '4.0.0',
+      allowed_actions: [...capability.allowedActions],
+      scope: emptyCapabilityScope(),
+      authority_revision: capability.authorityRevision,
+      retryable: false,
+    };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return unavailable('dead_letter_queue_authority_unavailable');
   }
 }
 
@@ -1301,10 +1283,7 @@ function createManagementRouteClients(
     'tenant-tenant-providers': createProviderRouteClient(config),
     'tenant-tenant-agent-definitions': createAgentDefinitionsRouteClient(config),
     'tenant-tenant-skills': createSkillsRouteClient(config),
-    'tenant-tenant-plugins': createPluginsRouteClient(
-      config,
-      pluginMarketplaceOperationsV2,
-    ),
+    'tenant-tenant-plugins': createPluginsRouteClient(config, pluginMarketplaceOperationsV2),
     'tenant-tenant-mcp-servers': createMcpServersRouteClient(config),
   });
 }
@@ -1592,11 +1571,10 @@ async function loadSearchCapability(
     if (credential) headers.set('Authorization', `Bearer ${credential}`);
     const launchCapability = desktopLaunchCapability(config);
     if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-    const response = await desktopApiFetch(
-      config,
-      '/api/v1/search-enhanced/capabilities',
-      { headers, signal },
-    );
+    const response = await desktopApiFetch(config, '/api/v1/search-enhanced/capabilities', {
+      headers,
+      signal,
+    });
     if (!response.ok) return unavailable('search_capability_contract_unavailable');
     const contentType = response.headers.get('content-type') ?? '';
     if (!contentType.includes('application/json')) {
@@ -1645,10 +1623,7 @@ async function loadAutomationCapabilities(
 
 async function loadWorkspaceCollaborationCapability(
   config: DesktopRuntimeConfig,
-  operations: Pick<
-    DesktopProjectBlackboardOperationsV2,
-    'probeWorkspaceCollaborationCapability'
-  >,
+  operations: Pick<DesktopProjectBlackboardOperationsV2, 'probeWorkspaceCollaborationCapability'>,
   signal?: AbortSignal,
 ): Promise<DesktopCapabilityAvailability> {
   if (readWorkspaceCollaborationCapabilityScope(config) === null) {

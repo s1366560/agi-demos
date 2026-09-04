@@ -47,6 +47,7 @@ const authorityModules = [
   'desktopRuntimeDeploymentsAuthorityModuleV2',
   'desktopProjectPlaybooksEventsAuthorityModuleV2',
   'desktopBackendStoresAuthorityModuleV2',
+  'desktopDeadLetterQueueAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopProjectSearchAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',

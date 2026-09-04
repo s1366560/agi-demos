@@ -32,7 +32,10 @@ import type {
 } from '../project/projectOverviewRouteModule';
 import type { DeadLetterQueueRouteBinding } from '../governance/deadLetterQueueRouteModule';
 import { createDeadLetterQueueController } from '../governance/deadLetterQueueController';
-import { createDeadLetterQueueHttpClient } from '../governance/deadLetterQueueHttpClient';
+import {
+  createDesktopDeadLetterQueueClientV2,
+  type DesktopDeadLetterQueueOperationsV2,
+} from '../../plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import type { RuntimePoolRouteBinding } from '../runtime-pool/runtimePoolRouteModule';
 import { createRuntimePoolController } from '../runtime-pool/runtimePoolController';
 import type { RuntimeInstancesRouteBinding } from '../runtime-instances/runtimeInstancesRouteModule';
@@ -432,12 +435,13 @@ export function createTenantTasksRouteBindingForRuntime(
 export function createDeadLetterQueueRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  operations: DesktopDeadLetterQueueOperationsV2,
 ): DeadLetterQueueRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('dead_letter_queue_runtime_scope_mismatch');
   }
   const scope = Object.freeze({ authority: config.mode, tenantId: context.tenantId });
-  const client = createDeadLetterQueueHttpClient(config);
+  const client = createDesktopDeadLetterQueueClientV2(operations, config);
   return Object.freeze({
     controller: createDeadLetterQueueController({
       authority: config.mode,

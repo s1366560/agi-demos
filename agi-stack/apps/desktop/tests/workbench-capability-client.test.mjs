@@ -246,6 +246,13 @@ test('workbench capability client requires an injected Project Workspaces V2 cli
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+            },
+          },
           backendStoresOperationsV2: {
             async probeBackendStores() {
               throw new Error('backend_stores_not_exercised');
@@ -274,6 +281,13 @@ test('workbench capability client requires the Project Blackboard V2 authority',
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+            },
+          },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
@@ -305,6 +319,13 @@ test('workbench capability client requires the Project Agent Dashboard V2 author
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+            },
+          },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
@@ -337,6 +358,13 @@ test('workbench capability client requires the Project Agent Logs V2 authority',
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+            },
+          },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
@@ -370,6 +398,13 @@ test('workbench capability client requires the Project Agent Patterns V2 authori
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+            },
+          },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
@@ -399,6 +434,13 @@ test('workbench capability client requires the Project Communities V2 authority'
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
@@ -440,6 +482,13 @@ test('workbench capability client requires the Project Memories V2 authority', (
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
@@ -483,6 +532,13 @@ test('workbench capability client requires the Project Team V2 authority', () =>
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
@@ -527,6 +583,13 @@ test('workbench capability client requires the Project Schema V2 authority', () 
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
@@ -573,6 +636,13 @@ test('workbench capability client requires the Project Maintenance V2 authority'
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
@@ -619,6 +689,13 @@ test('workbench capability client requires the Project Settings V2 authority', (
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
@@ -665,6 +742,13 @@ test('workbench capability client requires the Project Graph V2 authority', () =
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
@@ -717,6 +801,13 @@ test('workbench capability client requires both Project Entities V2 operations',
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'
@@ -1109,24 +1200,12 @@ test('cloud client validates structured Search and Automation authorities', asyn
     );
     assert.deepEqual(
       snapshot.capabilities['tenant-tenant-dead-letter-queue'],
-      withDeclaredAuthority({
-        availability: 'available',
-        reason_code: null,
-        service_version: '0.1.0',
-        contract_version: '3.0.0',
-        allowed_actions: [
-          'view',
-          'list',
-          'inspect-stats',
-          'inspect-message',
-          'filter',
-          'paginate',
-          'refresh',
-          'retry-message',
-          'retry-batch',
-          'discard',
-          'cleanup',
-        ],
+      withObservedAuthority({
+        availability: 'unavailable',
+        reason_code: 'capability_authority_revision_unavailable',
+        service_version: '1.0.0',
+        contract_version: '4.0.0',
+        allowed_actions: [],
         scope: {
           tenant_id: 'default',
           project_id: null,
@@ -1134,7 +1213,7 @@ test('cloud client validates structured Search and Automation authorities', asyn
           instance_id: null,
         },
         authority_revision: null,
-      }),
+      }, 'cloud_service'),
     );
     assert.deepEqual(
       snapshot.capabilities['project-support'],
@@ -2144,6 +2223,13 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
     runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+    deadLetterQueueOperationsV2: {
+      async probe({ config }) {
+        return config.mode === 'local'
+          ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+          : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+      },
+    },
     backendStoresOperationsV2: {
       async probeBackendStores({ config }) {
         return config.mode === 'local'

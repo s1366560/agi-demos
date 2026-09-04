@@ -20,6 +20,7 @@ const {
     desktopRuntimeDeploymentsAuthorityDefinitionV2,
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
+    desktopDeadLetterQueueAuthorityDefinitionV2,
 } = require(COMPILED_ROOT + '/src/plugins/desktopRuntimeInstancesAuthorityModuleV2.js');
 
 const pluginRoot = `${COMPILED_ROOT}/src/plugins`;

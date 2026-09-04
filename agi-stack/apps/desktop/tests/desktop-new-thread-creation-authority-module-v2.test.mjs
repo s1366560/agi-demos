@@ -48,6 +48,9 @@ const { desktopProjectPlaybooksEventsAuthorityDefinitionV2 } = require(
 const { desktopBackendStoresAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopBackendStoresAuthorityModuleV2.js',
 );
+const { desktopDeadLetterQueueAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -210,6 +213,7 @@ function rendererDefinitions() {
     desktopRuntimeDeploymentsAuthorityDefinitionV2,
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,
     desktopBackendStoresAuthorityDefinitionV2,
+    desktopDeadLetterQueueAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopSessionProjectionAuthorityDefinitionV2,

@@ -123,6 +123,7 @@ import { createDesktopProjectSupportOperationsV2 } from './plugins/desktopProjec
 import { createDesktopProjectPlaybooksReadOperationsV2 } from './plugins/desktopProjectPlaybooksReadAuthorityModuleV2';
 import { createDesktopProjectPlaybooksEventsOperationsV2 } from './plugins/desktopProjectPlaybooksEventsAuthorityModuleV2';
 import { createDesktopBackendStoresOperationsV2 } from './plugins/desktopBackendStoresAuthorityModuleV2';
+import { createDesktopDeadLetterQueueOperationsV2 } from './plugins/desktopDeadLetterQueueAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
@@ -1021,6 +1022,13 @@ export function App() {
       ),
     [],
   );
+  const desktopDeadLetterQueueOperationsV2 = useMemo(
+    () =>
+      createDesktopDeadLetterQueueOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantCreationOperationsV2 = useMemo(
     () =>
       createDesktopTenantCreationOperationsV2(
@@ -1370,6 +1378,7 @@ export function App() {
       projectPlaybooksReadOperationsV2: desktopProjectPlaybooksReadOperationsV2,
       projectPlaybooksEventsOperationsV2: desktopProjectPlaybooksEventsOperationsV2,
       backendStoresOperationsV2: desktopBackendStoresOperationsV2,
+      deadLetterQueueOperationsV2: desktopDeadLetterQueueOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1413,6 +1422,7 @@ export function App() {
       desktopProjectPlaybooksReadOperationsV2,
       desktopProjectPlaybooksEventsOperationsV2,
       desktopBackendStoresOperationsV2,
+      desktopDeadLetterQueueOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopRuntimePoolOperationsV2,
@@ -1477,6 +1487,7 @@ export function App() {
         runtimeInstancesOperationsV2: desktopRuntimeInstancesOperationsV2,
         runtimeDeploymentsOperationsV2: desktopRuntimeDeploymentsOperationsV2,
         backendStoresOperationsV2: desktopBackendStoresOperationsV2,
+        deadLetterQueueOperationsV2: desktopDeadLetterQueueOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
         desktopWorkspaceLifecycleOperationsV2,
         tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
@@ -1507,6 +1518,7 @@ export function App() {
       desktopRuntimeClustersOperationsV2,
       desktopRuntimeDeploymentsOperationsV2,
       desktopBackendStoresOperationsV2,
+      desktopDeadLetterQueueOperationsV2,
       desktopWorkspaceCatalogOperationsV2,
       desktopWorkspaceLifecycleOperationsV2,
       desktopTenantAgentBindingsOperationsV2,

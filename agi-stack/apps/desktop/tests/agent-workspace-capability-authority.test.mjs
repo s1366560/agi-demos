@@ -131,6 +131,13 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
           runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+          deadLetterQueueOperationsV2: {
+            async probe({ config }) {
+              return config.mode === 'local'
+                ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+                : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+            },
+          },
           backendStoresOperationsV2: {
             async probeBackendStores({ config }) {
               return config.mode === 'local'
@@ -203,6 +210,13 @@ test('Workbench consumes the revision-bound journey authority in production', as
       runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
       runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+      deadLetterQueueOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+            : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+        },
+      },
       backendStoresOperationsV2: {
         async probeBackendStores({ config }) {
           return config.mode === 'local'
@@ -280,6 +294,13 @@ test('Workbench default production journey authority supports tenant-level scope
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
         runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+        deadLetterQueueOperationsV2: {
+          async probe({ config }) {
+            return config.mode === 'local'
+              ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+              : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+          },
+        },
         backendStoresOperationsV2: {
           async probeBackendStores({ config }) {
             return config.mode === 'local'
@@ -357,6 +378,13 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
       runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
       runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           runtimeDeploymentsOperationsV2: runtimeDeploymentsOperationsV2Fixture(),
+      deadLetterQueueOperationsV2: {
+        async probe({ config }) {
+          return config.mode === 'local'
+            ? { availability: 'not_applicable', reasonCode: 'cloud_message_bus_dlq_not_applicable', allowedActions: [], authorityRevision: null }
+            : { availability: 'available', reasonCode: null, allowedActions: ['view', 'list'], authorityRevision: null };
+        },
+      },
       backendStoresOperationsV2: {
         async probeBackendStores({ config }) {
           return config.mode === 'local'
