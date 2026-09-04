@@ -134,8 +134,10 @@
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
@@ -292,13 +294,17 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantDecisionRecordsPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantDecisionRecordsPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantDecisionRecordsPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_decision_ledger_not_applicable",
       "local_deviation": "Local HITL responses and sealed replay metadata remain scoped runtime records; they must not be promoted into the Cloud tenant decision ledger without its authority.",
-      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals. Web remains degraded because its default workspace placeholder is not a valid tenant workspace. Desktop has a real Cloud route, scoped list/filter/inspect UI and administrator-only resolution controller. Its resource load is now bounded by stable tenant, workspace, membership and scope-revision observations, so the full routed action set is available without converting the scope revision into a decision-record version. Local HITL records remain distinct from this Cloud ledger and the Local surface stays not applicable."
+      "judgment_rationale": "DecisionRecords lists persisted trust decisions and approval outcomes, inspects the selected list record without a detail GET, and resolves pending approvals. Web remains degraded because its default workspace placeholder is not a valid tenant workspace. Desktop now resolves route and workbench reads plus administrator-only approval resolution through one Decision Records V2 Provider, with each operation pinned to a tenant generation and an exact workspace input. The Cloud projection preserves stable tenant, workspace, membership and scope-revision observations without converting the scope revision into a record version. Local uses the same generation authority but fails before network access with cloud_tenant_decision_ledger_not_applicable; Local HITL records remain distinct and the Local surface stays not applicable."
     },
     {
       "id": "tenant-tenant-billing",
