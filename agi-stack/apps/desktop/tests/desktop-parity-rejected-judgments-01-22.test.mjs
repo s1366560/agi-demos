@@ -911,10 +911,14 @@ test("renderer-declared Cloud route slices retain entries but expose no actions"
 
   for (const [fragment, capabilityId, localDeclared] of cases) {
     const capability = readCapability(fragment, capabilityId);
+    const expectedReason =
+      capabilityId === "tenant-tenant-instances"
+        ? "capability_authority_revision_unavailable"
+        : "renderer_capability_authority_unobserved";
     assert.equal(capability.cloud_status, "unavailable", capabilityId);
     assert.equal(
       capability.cloud_reason_code,
-      "renderer_capability_authority_unobserved",
+      expectedReason,
       capabilityId,
     );
     assert.deepEqual(capability.cloud_actions, [], capabilityId);
@@ -930,17 +934,21 @@ test("renderer-declared Cloud route slices retain entries but expose no actions"
     }
     assert.match(
       capability.judgment_rationale,
-      /renderer_capability_authority_unobserved/u,
+      new RegExp(expectedReason, "u"),
       capabilityId,
     );
     if (localDeclared) {
       assert.equal(capability.local_status, "unavailable", capabilityId);
       assert.equal(
         capability.local_reason_code,
-        "renderer_capability_authority_unobserved",
+        expectedReason,
         capabilityId,
       );
-      assert.notDeepEqual(capability.local_actions, [], capabilityId);
+      if (capabilityId === "tenant-tenant-instances") {
+        assert.deepEqual(capability.local_actions, [], capabilityId);
+      } else {
+        assert.notDeepEqual(capability.local_actions, [], capabilityId);
+      }
       for (const entry of [
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
@@ -1050,7 +1058,7 @@ test("Runtime Instances excludes the unbound general config contract", () => {
   assert.ok(permissionActions(capability, "web").includes("configure"));
 });
 
-test("Runtime Instances records direct dependencies and current member and scope defects", () => {
+test("Runtime Instances records direct dependencies and its current Web defect boundary", () => {
   const capability = readCapability(
     "parity-capability-definitions.10-runtime-instances.v2.json",
     "tenant-tenant-instances",
@@ -1092,11 +1100,8 @@ test("Runtime Instances records direct dependencies and current member and scope
     capability.web_reason_code,
     "runtime_instance_contract_and_authorization_incomplete",
   );
-  assert.match(capability.judgment_rationale, /member.*identifier/iu);
-  assert.match(
-    capability.judgment_rationale,
-    /selected tenant.*default tenant/iu,
-  );
+  assert.match(capability.judgment_rationale, /Web remains partial/iu);
+  assert.match(capability.judgment_rationale, /contract and authorization gaps/iu);
 });
 
 test("Clusters excludes the unbound runner-pool update contract", () => {

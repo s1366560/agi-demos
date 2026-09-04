@@ -515,13 +515,17 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
   for (const capabilityId of declaredCapabilityIds) {
     const capability = byId.get(capabilityId);
     assert.ok(capability, capabilityId);
+    const reasonCode =
+      capabilityId === "tenant-tenant-instances"
+        ? "capability_authority_revision_unavailable"
+        : "renderer_capability_authority_unobserved";
     assert.deepEqual(
       capability.surfaces.desktop_cloud,
       {
         disposition: "native_equivalent",
         implementation_status: "partial",
         availability: "unavailable",
-        reason_code: "renderer_capability_authority_unobserved",
+        reason_code: reasonCode,
         authority: "cloud_service",
         allowed_actions: [],
         intentional_deviation: null,
@@ -610,7 +614,9 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     assert.equal(surface.availability, "unavailable", capabilityId);
     assert.equal(
       surface.reason_code,
-      "renderer_capability_authority_unobserved",
+      capabilityId === "tenant-tenant-instances"
+        ? "capability_authority_revision_unavailable"
+        : "renderer_capability_authority_unobserved",
       capabilityId,
     );
     assert.equal(surface.authority, "sidecar", capabilityId);
