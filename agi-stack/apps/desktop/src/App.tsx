@@ -141,6 +141,7 @@ import { createDesktopTenantBillingOperationsV2 } from './plugins/desktopTenantB
 import { createDesktopTenantAuditOperationsV2 } from './plugins/desktopTenantAuditAuthorityModuleV2';
 import { createDesktopTenantGovernanceOperationsV2 } from './plugins/desktopTenantGovernanceAuthorityModuleV2';
 import { createDesktopTenantTrustOperationsV2 } from './plugins/desktopTenantTrustAuthorityModuleV2';
+import { createDesktopUserProfileOperationsV2 } from './plugins/desktopUserProfileAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
@@ -1088,6 +1089,13 @@ export function App() {
       ),
     [],
   );
+  const desktopUserProfileOperationsV2 = useMemo(
+    () =>
+      createDesktopUserProfileOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopProjectChannelsOperationsV2 = useMemo(
     () =>
       createDesktopProjectChannelsOperationsV2(
@@ -1516,6 +1524,7 @@ export function App() {
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
       tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
       tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
+      userProfileOperationsV2: desktopUserProfileOperationsV2,
       tenantGenesOperationsV2: desktopTenantGenesOperationsV2,
       tenantOrganizationSettingsOperationsV2:
         desktopTenantOrganizationSettingsOperationsV2,
@@ -1585,6 +1594,7 @@ export function App() {
       desktopTenantCreationOperationsV2,
       desktopTenantGenesOperationsV2,
       desktopTenantTemplatesOperationsV2,
+      desktopUserProfileOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
       desktopTenantOverviewOperationsV2,
       desktopTenantProjectsOperationsV2,
@@ -1648,6 +1658,7 @@ export function App() {
         tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
+        userProfileOperationsV2: desktopUserProfileOperationsV2,
         tenantGenesOperationsV2: desktopTenantGenesOperationsV2,
         tenantOrganizationSettingsOperationsV2:
           desktopTenantOrganizationSettingsOperationsV2,
@@ -1694,6 +1705,7 @@ export function App() {
       desktopInstanceTemplatesOperationsV2,
       desktopTenantEvolutionOperationsV2,
       desktopTenantTemplatesOperationsV2,
+      desktopUserProfileOperationsV2,
       desktopTenantGenesOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
       desktopWorkspaceCatalogOperationsV2,

@@ -8,7 +8,6 @@ import type { ChannelsRouteClient, ChannelsRouteScope } from './channelsRouteCli
 import type { EvolutionRouteClient, EvolutionRouteScope } from './evolutionRouteClient';
 import { NativeRouteClientError } from './nativeRouteHttpClient';
 import {
-  createProfileRouteClient,
   type ProfileRouteClient,
   type ProfileRouteScope,
 } from './profileRouteClient';
@@ -47,7 +46,7 @@ export type P2ThirdBatchCapabilityDependencies = Readonly<{
   evolution: Pick<EvolutionRouteClient, 'observe'>;
   channels: Pick<ChannelsRouteClient, 'observe'>;
   templates: Pick<TemplatesRouteClient, 'observe'>;
-  profile?: Pick<ProfileRouteClient, 'observe'>;
+  profile: Pick<ProfileRouteClient, 'observe'>;
 }>;
 
 type RouteObservation = Readonly<{
@@ -111,7 +110,7 @@ export function createP2ThirdBatchCapabilityClient(
     evolution: dependencies.evolution,
     channels: dependencies.channels,
     templates: dependencies.templates,
-    profile: dependencies.profile ?? createProfileRouteClient(runtime),
+    profile: dependencies.profile,
   });
 
   return Object.freeze({

@@ -231,6 +231,7 @@ async function loadSnapshot(config, clients) {
     evolutionRouteClient,
     channelsRouteClient,
     templatesRouteClient,
+    profileRouteClient,
     ...remainingClients
   } = clients;
   const originalFetch = globalThis.fetch;
@@ -260,6 +261,10 @@ async function loadSnapshot(config, clients) {
         tenantTemplatesOperationsV2: {
           loadTenantTemplates: ({ scope, signal }) =>
             templatesRouteClient.observe(scope, {}, signal),
+        },
+        userProfileOperationsV2: {
+          observeUserProfile: ({ scope, signal }) =>
+            profileRouteClient.observe(scope, signal),
         },
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),

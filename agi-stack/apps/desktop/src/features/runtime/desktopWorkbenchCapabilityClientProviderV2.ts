@@ -33,6 +33,7 @@ import type { DesktopTenantWebhooksOperationsV2 } from '../../plugins/desktopTen
 import type { DesktopTenantBillingOperationsV2 } from '../../plugins/desktopTenantBillingAuthorityModuleV2';
 import type { DesktopTenantAuditOperationsV2 } from '../../plugins/desktopTenantAuditAuthorityModuleV2';
 import type { DesktopTenantTrustOperationsV2 } from '../../plugins/desktopTenantTrustAuthorityModuleV2';
+import type { DesktopUserProfileOperationsV2 } from '../../plugins/desktopUserProfileAuthorityModuleV2';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
@@ -166,6 +167,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   tenantAuditOperationsV2: DesktopTenantAuditOperationsV2;
   tenantGovernanceOperationsV2: import('../../plugins/desktopTenantGovernanceAuthorityModuleV2').DesktopTenantGovernanceOperationsV2;
   tenantTrustOperationsV2: DesktopTenantTrustOperationsV2;
+  userProfileOperationsV2: DesktopUserProfileOperationsV2;
   desktopWorkspaceCatalogOperationsV2: Pick<
     DesktopWorkspaceCatalogOperationsV2,
     'listWorkspacesForProject'
@@ -275,6 +277,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       tenantAuditOperationsV2: input.tenantAuditOperationsV2,
       tenantGovernanceOperationsV2: input.tenantGovernanceOperationsV2,
       tenantTrustOperationsV2: input.tenantTrustOperationsV2,
+      userProfileOperationsV2: input.userProfileOperationsV2,
       projectWorkspacesClient: createProjectWorkspacesV2Client(config, {
         catalogOperations: input.desktopWorkspaceCatalogOperationsV2,
         lifecycleOperations: input.desktopWorkspaceLifecycleOperationsV2,

@@ -23,7 +23,9 @@ const { createDesktopTenantTemplatesHttpProjectionV2 } = require(
 );
 const { createTemplatesRouteController } = require(`${root}/templatesRouteController.js`);
 const { createTemplatesRouteModuleLoader } = require(`${root}/templatesRouteModule.js`);
-const { createProfileRouteClient } = require(`${root}/profileRouteClient.js`);
+const { createDesktopUserProfileHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopUserProfileHttpProjectionV2.js',
+);
 const { createProfileRouteController } = require(`${root}/profileRouteController.js`);
 const { createProfileRouteModuleLoader } = require(`${root}/profileRouteModule.js`);
 const { EvolutionRoutePage } = require(`${root}/EvolutionRoutePage.js`);
@@ -293,7 +295,7 @@ test('Profile client is Cloud editable and Local observed read-only with stable 
   ]);
   try {
     const scope = { authority: 'cloud' };
-    const client = createProfileRouteClient(cloudConfig);
+    const client = createDesktopUserProfileHttpProjectionV2(cloudConfig);
     const observed = await client.observe(scope);
     assert.equal(observed.user.email, 'user@example.test');
     assert.deepEqual(observed.allowedActions, [
@@ -326,7 +328,7 @@ test('Profile client is Cloud editable and Local observed read-only with stable 
   const localRequests = [];
   const restoreLocal = mockFetch(localRequests, [currentUser({ user_id: 'local-user' })]);
   try {
-    const client = createProfileRouteClient(localConfig);
+    const client = createDesktopUserProfileHttpProjectionV2(localConfig);
     const scope = { authority: 'local' };
     const observed = await client.observe(scope);
     assert.equal(observed.availability, 'degraded');
@@ -428,7 +430,7 @@ test('native route errors never promote localized detail text into reason codes'
   ]);
   try {
     await assert.rejects(
-      createProfileRouteClient(cloudConfig).observe({ authority: 'cloud' }),
+      createDesktopUserProfileHttpProjectionV2(cloudConfig).observe({ authority: 'cloud' }),
       (error) => error.status === 403 && error.reasonCode === 'desktop_native_route_http_403',
     );
   } finally {

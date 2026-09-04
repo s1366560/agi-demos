@@ -17,7 +17,6 @@ import type {
   EvolutionRouteBinding,
   EvolutionRouteContext,
 } from './evolutionRouteModule';
-import { createProfileRouteClient } from './profileRouteClient';
 import { createProfileRouteController } from './profileRouteController';
 import type { ProfileRouteBinding } from './profileRouteModule';
 import {
@@ -29,6 +28,10 @@ import type {
   TemplatesRouteBinding,
   TemplatesRouteContext,
 } from './templatesRouteModule';
+import {
+  createDesktopUserProfileClientV2,
+  type DesktopUserProfileOperationsV2,
+} from '../../plugins/desktopUserProfileAuthorityModuleV2';
 
 export function createEvolutionRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
@@ -87,10 +90,11 @@ export function createTemplatesRouteBindingForRuntime(
 
 export function createProfileRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
+  operations: DesktopUserProfileOperationsV2,
   onUserObserved?: (user: CurrentUser) => void,
 ): ProfileRouteBinding {
   const scope = Object.freeze({ authority: config.mode });
-  const source = createProfileRouteClient(config);
+  const source = createDesktopUserProfileClientV2(operations, config);
   const client = Object.freeze({
     ...source,
     async observe(currentScope: typeof scope, signal?: AbortSignal) {

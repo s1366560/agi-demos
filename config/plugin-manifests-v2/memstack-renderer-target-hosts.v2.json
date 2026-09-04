@@ -1477,6 +1477,37 @@
       "contract_digest": "sha256:648fc2ba1645accb861668c77708288e7c14c7071f644a6d17be1b5ab6a477c3"
     },
     {
+      "module_ref": "builtin://memstack/desktop/user-profile-authority",
+      "entrypoint": "applyDesktopUserProfileAuthorityV2",
+      "artifact": {
+        "digest": "sha256:b20ab53c4a08685cbbc68c99b49eb0720b1e5404d8979cda2fb8c392043d4f5a",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopUserProfileAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.user-profile-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:ce385aa1291b5bf9bca7f691d1c8bedcae75be8656528f7389888f75b5541680"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-creation-authority",
       "entrypoint": "applyDesktopTenantCreationAuthorityV2",
       "artifact": {

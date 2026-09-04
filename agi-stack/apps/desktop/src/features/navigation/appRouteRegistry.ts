@@ -304,6 +304,7 @@ import {
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type { DesktopTenantTasksOperationsV2 } from '../../plugins/desktopTenantTasksAuthorityModuleV2';
+import type { DesktopUserProfileOperationsV2 } from '../../plugins/desktopUserProfileAuthorityModuleV2';
 import type {
   DesktopWorkspaceCatalogOperationsV2,
 } from '../../plugins/desktopWorkspaceCatalogAuthorityModuleV2';
@@ -326,6 +327,7 @@ export type AppRouteRegistryRefs = {
   tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
   tenantProjectsOperationsV2: DesktopTenantProjectsOperationsV2;
   tenantTasksOperationsV2: DesktopTenantTasksOperationsV2;
+  userProfileOperationsV2: DesktopUserProfileOperationsV2;
   desktopWorkspaceCatalogOperationsV2: DesktopWorkspaceCatalogOperationsV2;
   desktopWorkspaceLifecycleOperationsV2: DesktopWorkspaceLifecycleOperationsV2;
   desktopProductionRouteLocation: DesktopHashLocationPort;
@@ -390,6 +392,7 @@ export type AppAuxiliaryRouteRegistryRefs = Pick<
   | 'projectPlaybooksReadOperationsV2'
   | 'projectPlaybooksEventsOperationsV2'
   | 'projectSupportOperationsV2'
+  | 'userProfileOperationsV2'
   | 'setAuth'
 >;
 export type AppProjectKnowledgeRouteRegistryRefs = Pick<
@@ -693,11 +696,14 @@ export function createAppAuxiliaryRouteRegistry(refs: AppAuxiliaryRouteRegistryR
   });
   const profileLoader = createProfileRouteModuleLoader({
     createBinding: () =>
-      createProfileRouteBindingForRuntime(configRef.current, (user) =>
-        setAuth((current) =>
-          current.user?.user_id === user.user_id ? { ...current, user } : current,
+      createProfileRouteBindingForRuntime(
+        configRef.current,
+        refs.userProfileOperationsV2,
+        (user) =>
+          setAuth((current) =>
+            current.user?.user_id === user.user_id ? { ...current, user } : current,
+          ),
         ),
-      ),
   });
   const profileDefinition = {
     id: PROFILE_ROUTE_ID,

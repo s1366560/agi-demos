@@ -48,7 +48,6 @@ import {
   type P2ThirdBatchCapabilityClient,
   type P2ThirdBatchCapabilityProjection,
 } from '../settings-routes/p2ThirdBatchCapabilityClient';
-import type { ProfileRouteClient } from '../settings-routes/profileRouteClient';
 import { createProviderRouteClient } from '../settings-routes/providerRouteClient';
 import { createSkillsRouteClient } from '../settings-routes/skillsRouteClient';
 import {
@@ -125,6 +124,10 @@ import { createDesktopTenantGovernanceClientV2, type DesktopTenantGovernanceOper
 import { createDesktopTenantAcpClientV2, type DesktopTenantAcpOperationsV2 } from '../../plugins/desktopTenantAcpAuthorityModuleV2';
 import { type TenantTrustClient } from '../tenant-admin/tenantTrustClient';
 import { createDesktopTenantTrustClientV2, type DesktopTenantTrustOperationsV2 } from '../../plugins/desktopTenantTrustAuthorityModuleV2';
+import {
+  createDesktopUserProfileClientV2,
+  type DesktopUserProfileOperationsV2,
+} from '../../plugins/desktopUserProfileAuthorityModuleV2';
 import {
   createTenantRemainingCapabilityClient,
   type TenantRemainingCapabilityClient,
@@ -358,7 +361,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     TenantRemainingCapabilityClient,
     'load'
   >;
-  profileRouteClient?: Pick<ProfileRouteClient, 'observe'>;
+  userProfileOperationsV2: DesktopUserProfileOperationsV2;
   p2ThirdBatchCapabilityClient?: Pick<P2ThirdBatchCapabilityClient, 'load'>;
   cloudRequestBroker?: VaultBoundCloudRequestBroker | null;
 }>;
@@ -670,7 +673,7 @@ export function createDesktopWorkbenchCapabilityClient(
         options.tenantTemplatesOperationsV2,
         config,
       ),
-      profile: options.profileRouteClient,
+      profile: createDesktopUserProfileClientV2(options.userProfileOperationsV2, config),
     });
   const cloudRequestBroker =
     options.cloudRequestBroker === undefined
