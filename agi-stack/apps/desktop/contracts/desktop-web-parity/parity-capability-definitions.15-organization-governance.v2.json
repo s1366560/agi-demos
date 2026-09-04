@@ -338,8 +338,10 @@
       ],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
@@ -514,13 +516,17 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantSettingsClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantSettingsController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantSettingsPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantSettingsPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantSettingsPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSettingsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSettingsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSettingsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
       "local_reason_code": "cloud_tenant_settings_not_applicable",
       "local_deviation": "Desktop application, runtime, and vault preferences remain separate native settings. Local mode does not present them as Cloud tenant metadata, quota, or deletion authority.",
-      "judgment_rationale": "TenantSettings owns tenant metadata, usage and deletion. Desktop has a distinct canonical Cloud route, App binding, typed client, controller and page; reads and usage remain tenant-member operations while update and deletion remain tenant-owner operations. The client now observes a stable tenant scope revision around resource reads and preserves its owner checks for mutations, so the routed Cloud action set is available. Application and vault settings stay separate, and Local tenant governance remains not applicable."
+      "judgment_rationale": "TenantSettings owns tenant metadata, usage and deletion. Desktop now resolves the canonical route and workbench read plus explicit owner mutations through one Tenant Settings V2 Provider, with every operation pinned to a tenant generation. Reads and usage remain tenant-member operations; update and deletion retain owner observation and are never retried or invoked by lifecycle code. The Cloud projection preserves stable scope observation around the two-resource read. Application, runtime and vault settings stay separate, while all Local operations fail before network access with cloud_tenant_settings_not_applicable."
     }
   ],
   "source_ownership": {
