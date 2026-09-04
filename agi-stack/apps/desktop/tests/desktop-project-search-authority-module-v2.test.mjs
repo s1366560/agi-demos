@@ -53,6 +53,7 @@ const authorityModules = [
   'desktopTenantEventsAuthorityModuleV2',
   'desktopTenantPatternsAuthorityModuleV2',
   'desktopTenantDecisionRecordsAuthorityModuleV2',
+  'desktopTenantSettingsAuthorityModuleV2',
   'desktopRuntimeClustersAuthorityModuleV2',
   'desktopSessionArtifactActionAuthorityModuleV2',
   'desktopSessionProjectionAuthorityModuleV2',

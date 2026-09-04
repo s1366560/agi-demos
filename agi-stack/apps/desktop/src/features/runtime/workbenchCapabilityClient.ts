@@ -58,6 +58,7 @@ import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUn
 import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import { createDesktopTenantPatternsClientV2, type DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
 import { createDesktopTenantDecisionRecordsClientV2, type DesktopTenantDecisionRecordsOperationsV2 } from '../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2';
+import { createDesktopTenantSettingsClientV2, type DesktopTenantSettingsOperationsV2 } from '../../plugins/desktopTenantSettingsAuthorityModuleV2';
 import type {
   ProjectBlackboardScope,
   ProjectBlackboardSnapshot,
@@ -306,6 +307,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
+  tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
   managementRouteClients?: ManagementRouteCapabilityClients;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -619,6 +621,7 @@ export function createDesktopWorkbenchCapabilityClient(
       events: createDesktopTenantEventsClientV2(options.tenantEventsOperationsV2, config),
       patterns: createDesktopTenantPatternsClientV2(options.tenantPatternsOperationsV2, config),
       decisionRecords: createDesktopTenantDecisionRecordsClientV2(options.tenantDecisionRecordsOperationsV2, config),
+      settings: createDesktopTenantSettingsClientV2(options.tenantSettingsOperationsV2, config),
     });
   const p2ThirdBatchCapabilityClient =
     options.p2ThirdBatchCapabilityClient ??

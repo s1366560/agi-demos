@@ -35,7 +35,6 @@ import {
   type TenantPatternsClient,
 } from './tenantPatternsClient';
 import {
-  createTenantSettingsClient,
   TENANT_SETTINGS_LOCAL_REASON,
   TENANT_SETTINGS_ROUTE_ID,
   type TenantSettingsClient,
@@ -77,7 +76,7 @@ export type TenantRemainingCapabilityDependencies = Readonly<{
   events: Pick<TenantEventsClient, 'load'>;
   decisionRecords: Pick<TenantDecisionRecordsClient, 'load'>;
   organizationSettings?: Pick<TenantOrganizationSettingsClient, 'load'>;
-  settings?: Pick<TenantSettingsClient, 'load'>;
+  settings: Pick<TenantSettingsClient, 'load'>;
 }>;
 
 const REASON_PREFIX = Object.freeze({
@@ -181,7 +180,7 @@ export function createTenantRemainingCapabilityClient(
     organizationSettings:
       dependencies.organizationSettings ??
       createTenantOrganizationSettingsClient(runtimeConfig),
-    settings: dependencies.settings ?? createTenantSettingsClient(runtimeConfig),
+    settings: dependencies.settings,
   });
 
   return Object.freeze({

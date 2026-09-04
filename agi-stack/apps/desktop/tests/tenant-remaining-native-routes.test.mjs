@@ -21,7 +21,9 @@ const {
 const { createTenantOrganizationSettingsClient } = require(
   `${featureRoot}/tenantOrganizationSettingsClient.js`
 );
-const { createTenantSettingsClient } = require(`${featureRoot}/tenantSettingsClient.js`);
+const {
+  createDesktopTenantSettingsHttpProjectionV2: createTenantSettingsClient,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantSettingsHttpProjectionV2.js');
 const { createTenantPatternsRouteModuleLoader } = require(
   `${featureRoot}/tenantPatternsRouteModule.js`
 );

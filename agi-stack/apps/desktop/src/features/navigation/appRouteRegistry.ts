@@ -357,6 +357,7 @@ export type AppRouteRegistryRefs = {
   tenantEventsOperationsV2: DesktopTenantEventsOperationsV2;
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantDecisionRecordsOperationsV2: import('../../plugins/desktopTenantDecisionRecordsAuthorityModuleV2').DesktopTenantDecisionRecordsOperationsV2;
+  tenantSettingsOperationsV2: import('../../plugins/desktopTenantSettingsAuthorityModuleV2').DesktopTenantSettingsOperationsV2;
   unifiedRuntimesOperationsV2: DesktopUnifiedRuntimesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
@@ -461,6 +462,7 @@ export type AppTenantGovernanceRouteRegistryRefs = Pick<
   | 'deadLetterQueueOperationsV2'
   | 'tenantEventsOperationsV2'
   | 'tenantDecisionRecordsOperationsV2'
+  | 'tenantSettingsOperationsV2'
   | 'desktopProductionRouteLocation'
 >;
 
@@ -1298,7 +1300,7 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
 export function createAppTenantGovernanceRouteRegistry(
   refs: AppTenantGovernanceRouteRegistryRefs,
 ) {
-  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2 } = refs;
+  const { configRef, desktopProductionRouteLocation, tenantEventsOperationsV2, tenantDecisionRecordsOperationsV2, tenantSettingsOperationsV2 } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_USERS_ROUTE_ID]: createTenantGovernanceRouteModuleLoader({
@@ -1354,7 +1356,11 @@ export function createAppTenantGovernanceRouteRegistry(
       }),
       [TENANT_SETTINGS_ROUTE_ID]: createTenantSettingsRouteModuleLoader({
         createBinding: (context) =>
-          createTenantSettingsRouteBindingForRuntime(configRef.current, context),
+          createTenantSettingsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            tenantSettingsOperationsV2,
+          ),
       }),
     }),
   });

@@ -20,7 +20,7 @@ import type {
 } from './tenantOrganizationSettingsRouteModule';
 import { createTenantPatternsController } from './tenantPatternsController';
 import type { TenantPatternsRouteBinding } from './tenantPatternsRouteModule';
-import { createTenantSettingsClient } from './tenantSettingsClient';
+import { createDesktopTenantSettingsClientV2, type DesktopTenantSettingsOperationsV2 } from '../../plugins/desktopTenantSettingsAuthorityModuleV2';
 import { createTenantSettingsController } from './tenantSettingsController';
 import type { TenantSettingsRouteBinding } from './tenantSettingsRouteModule';
 import { createTenantWebhooksClient } from './tenantWebhooksClient';
@@ -134,12 +134,13 @@ export function createTenantOrganizationSettingsRouteBindingForRuntime(
 export function createTenantSettingsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: TenantManagementRouteContext,
+  operations: DesktopTenantSettingsOperationsV2,
 ): TenantSettingsRouteBinding {
   const scope = tenantScope(config, context);
   return Object.freeze({
     scope,
     controller: createTenantSettingsController({
-      client: createTenantSettingsClient(config),
+      client: createDesktopTenantSettingsClientV2(operations, config),
       initialScope: scope,
     }),
   });
