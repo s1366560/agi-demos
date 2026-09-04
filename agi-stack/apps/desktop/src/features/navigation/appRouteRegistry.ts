@@ -119,7 +119,6 @@ import { createProjectMaintenanceController } from '../project-administration/pr
 import { createProjectMaintenanceRouteModuleLoader } from '../project-administration/projectMaintenanceRouteModule';
 import { createProjectSchemaController } from '../project-administration/projectSchemaController';
 import { createProjectSchemaRouteModuleLoader } from '../project-administration/projectSchemaRouteModule';
-import { createProjectSettingsClient } from '../project-administration/projectSettingsClient';
 import { createProjectSettingsController } from '../project-administration/projectSettingsController';
 import { createProjectSettingsRouteModuleLoader } from '../project-administration/projectSettingsRouteModule';
 import {
@@ -260,6 +259,10 @@ import {
   type DesktopProjectMaintenanceOperationsV2,
 } from '../../plugins/desktopProjectMaintenanceAuthorityModuleV2';
 import {
+  createDesktopProjectSettingsClientV2,
+  type DesktopProjectSettingsOperationsV2,
+} from '../../plugins/desktopProjectSettingsAuthorityModuleV2';
+import {
   createDesktopWorkspaceCollaborationClientV2,
   type DesktopProjectBlackboardOperationsV2,
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -316,6 +319,7 @@ export type AppRouteRegistryRefs = {
   projectTeamOperationsV2: DesktopProjectTeamOperationsV2;
   projectSchemaOperationsV2: DesktopProjectSchemaOperationsV2;
   projectMaintenanceOperationsV2: DesktopProjectMaintenanceOperationsV2;
+  projectSettingsOperationsV2: DesktopProjectSettingsOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
@@ -353,6 +357,7 @@ export type AppProjectAdministrationRouteRegistryRefs = Pick<
   | 'configRef'
   | 'projectCronJobsRouteBindingProviderV2'
   | 'projectMaintenanceOperationsV2'
+  | 'projectSettingsOperationsV2'
   | 'projectSchemaOperationsV2'
 >;
 export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
@@ -805,6 +810,7 @@ export function createAppProjectAdministrationRouteRegistry(
     configRef,
     projectCronJobsRouteBindingProviderV2,
     projectMaintenanceOperationsV2,
+    projectSettingsOperationsV2,
     projectSchemaOperationsV2,
   } = refs;
   return createDesktopProductionRouteRegistry({
@@ -866,7 +872,10 @@ export function createAppProjectAdministrationRouteRegistry(
           });
           return Object.freeze({
             controller: createProjectSettingsController({
-              client: createProjectSettingsClient(currentConfig),
+              client: createDesktopProjectSettingsClientV2(
+                projectSettingsOperationsV2,
+                currentConfig,
+              ),
               initialScope: scope,
             }),
             scope,

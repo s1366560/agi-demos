@@ -118,6 +118,7 @@ import {
 } from './plugins/desktopProjectTeamAuthorityModuleV2';
 import { createDesktopProjectSchemaOperationsV2 } from './plugins/desktopProjectSchemaAuthorityModuleV2';
 import { createDesktopProjectMaintenanceOperationsV2 } from './plugins/desktopProjectMaintenanceAuthorityModuleV2';
+import { createDesktopProjectSettingsOperationsV2 } from './plugins/desktopProjectSettingsAuthorityModuleV2';
 import {
   createDesktopProjectBlackboardOperationsV2,
   createDesktopWorkspaceCollaborationClientV2,
@@ -978,6 +979,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectSettingsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectSettingsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopProjectEntitiesOperationsV2 = useMemo(
     () =>
       createDesktopProjectEntitiesOperationsV2(
@@ -1301,6 +1309,7 @@ export function App() {
       projectTeamOperationsV2: desktopProjectTeamOperationsV2,
       projectSchemaOperationsV2: desktopProjectSchemaOperationsV2,
       projectMaintenanceOperationsV2: desktopProjectMaintenanceOperationsV2,
+      projectSettingsOperationsV2: desktopProjectSettingsOperationsV2,
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1336,6 +1345,7 @@ export function App() {
       desktopProjectTeamOperationsV2,
       desktopProjectSchemaOperationsV2,
       desktopProjectMaintenanceOperationsV2,
+      desktopProjectSettingsOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopProjectSearchOperationsV2,
       desktopRuntimePoolOperationsV2,
@@ -1391,6 +1401,7 @@ export function App() {
         projectTeamOperationsV2: desktopProjectTeamOperationsV2,
         projectSchemaOperationsV2: desktopProjectSchemaOperationsV2,
         projectMaintenanceOperationsV2: desktopProjectMaintenanceOperationsV2,
+        projectSettingsOperationsV2: desktopProjectSettingsOperationsV2,
         projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
         runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1418,6 +1429,7 @@ export function App() {
       desktopProjectTeamOperationsV2,
       desktopProjectSchemaOperationsV2,
       desktopProjectMaintenanceOperationsV2,
+      desktopProjectSettingsOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopRuntimePoolOperationsV2,
       desktopRuntimeClustersOperationsV2,

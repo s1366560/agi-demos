@@ -155,7 +155,12 @@ import {
   createDesktopProjectMaintenanceClientV2,
   type DesktopProjectMaintenanceOperationsV2,
 } from '../../plugins/desktopProjectMaintenanceAuthorityModuleV2';
+import {
+  createDesktopProjectSettingsClientV2,
+  type DesktopProjectSettingsOperationsV2,
+} from '../../plugins/desktopProjectSettingsAuthorityModuleV2';
 import { PROJECT_MAINTENANCE_ROUTE_ID } from '../project-administration/projectMaintenanceClient';
+import { PROJECT_SETTINGS_ROUTE_ID } from '../project-administration/projectSettingsClient';
 import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
@@ -247,6 +252,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   projectMaintenanceOperationsV2: Pick<
     DesktopProjectMaintenanceOperationsV2,
     'loadProjectMaintenance'
+  >;
+  projectSettingsOperationsV2: Pick<
+    DesktopProjectSettingsOperationsV2,
+    'loadProjectSettings'
   >;
   projectEntitiesOperationsV2: Pick<
     DesktopProjectEntitiesOperationsV2,
@@ -422,6 +431,10 @@ export function createDesktopWorkbenchCapabilityClient(
   if (typeof projectMaintenanceOperationsV2?.loadProjectMaintenance !== 'function') {
     throw new Error('desktop_project_maintenance_authority_required');
   }
+  const projectSettingsOperationsV2 = options?.projectSettingsOperationsV2;
+  if (typeof projectSettingsOperationsV2?.loadProjectSettings !== 'function') {
+    throw new Error('desktop_project_settings_authority_required');
+  }
   const projectEntitiesOperationsV2 = options?.projectEntitiesOperationsV2;
   if (
     typeof projectEntitiesOperationsV2?.loadProjectEntities !== 'function' ||
@@ -467,16 +480,22 @@ export function createDesktopWorkbenchCapabilityClient(
     projectMaintenanceOperationsV2,
     config,
   );
+  const projectSettingsClientV2 = createDesktopProjectSettingsClientV2(
+    projectSettingsOperationsV2,
+    config,
+  );
   const projectAdministrationClients = options.projectAdministrationClients
     ? Object.freeze({
         ...options.projectAdministrationClients,
         [PROJECT_SCHEMA_ROUTE_ID]: projectSchemaClientV2,
         [PROJECT_MAINTENANCE_ROUTE_ID]: projectMaintenanceClientV2,
+        [PROJECT_SETTINGS_ROUTE_ID]: projectSettingsClientV2,
       })
     : createProjectAdministrationCapabilityClients(
         config,
         projectSchemaClientV2,
         projectMaintenanceClientV2,
+        projectSettingsClientV2,
       );
   const tenantAdminCapabilityClient =
     options.tenantAdminCapabilityClient ??

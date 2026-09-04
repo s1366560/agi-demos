@@ -14,7 +14,6 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { I18nProvider } = require(`${distRoot}/src/i18n.js`);
 const { DesktopApiError } = require(`${distRoot}/src/api/client.js`);
-const { createProjectSettingsClient } = require(`${compiled}/projectSettingsClient.js`);
 const {
   createProjectSchemaController,
 } = require(`${compiled}/projectSchemaController.js`);
@@ -73,84 +72,13 @@ const cloudScope = Object.freeze({
 });
 const localScope = Object.freeze({ ...cloudScope, authority: 'local' });
 
-test('remaining static project administration client uses trusted-session authority', async () => {
-  const requests = [];
-  await withFetch(
-    async (url, init = {}) => {
-      requests.push({ url: String(url), init });
-      return authorityResponse(String(url), init);
-    },
-    async () => {
-      const settings = await createProjectSettingsClient(cloudConfig).load(cloudScope);
-      assert.equal(settings.scopeRevision, 11);
-      assert.equal(settings.availability, 'available');
-      assert.equal(settings.reasonCode, null);
-      assert.equal(settings.allowedActions.includes('delete'), true);
-      assert.equal(settings.project.name, 'Project One');
-      assert.equal(settings.sandbox?.status, 'running');
-      assert.equal(settings.sandboxStats?.memoryUsage, 128);
-      assert.equal(JSON.stringify(settings).includes('/private/secret-workspace'), false);
-    },
-  );
-
-  assert.equal(requests.length > 0, true);
-  for (const request of requests) {
-    const headers = new Headers(request.init.headers);
-    assert.equal(headers.get('Authorization'), 'Bearer trusted-session');
-    assert.equal(headers.has('X-Agistack-Launch'), false);
-    assert.equal(request.init.credentials, 'omit');
-  }
-});
-
-test('project administration rejects the legacy id-only auth identity contract', async () => {
-  await withFetch(
-    async (url, init = {}) => {
-      if (new URL(String(url)).pathname === '/api/v1/auth/me') {
-        return json({ id: 'user-1', email: 'owner@example.test', name: 'Owner' });
-      }
-      return authorityResponse(String(url), init);
-    },
-    async () => {
-      for (const client of [createProjectSettingsClient(cloudConfig)]) {
-        await assert.rejects(client.load(cloudScope), (error) => {
-          assert.equal(error instanceof DesktopApiError, true);
-          assert.equal(reasonCode(error), 'project_administration_scope_contract_invalid');
-          return true;
-        });
-      }
-    },
-  );
-});
-
-test('remaining Local project administration clients fail closed before network access', async () => {
-  let fetchCalls = 0;
-  await withFetch(
-    async () => {
-      fetchCalls += 1;
-      throw new Error('Local authority must fail before Cloud fetch');
-    },
-    async () => {
-      const cases = [
-        [createProjectSettingsClient(localConfig), 'local_project_settings_authority_unavailable'],
-      ];
-      for (const [client, expectedReason] of cases) {
-        await assert.rejects(client.load(localScope), (error) => {
-          assert.equal(error instanceof DesktopApiError, true);
-          assert.equal(error.status, 501);
-          assert.equal(reasonCode(error), expectedReason);
-          return true;
-        });
-      }
-    },
-  );
-  assert.equal(fetchCalls, 0);
-});
-
 test('Project Administration capability authority observes scoped Cloud clients', async () => {
   const factoryClients = createProjectAdministrationCapabilityClients(cloudConfig, {
     load: async () => schemaSnapshot(),
   }, {
     load: async () => maintenanceSnapshot(),
+  }, {
+    load: async () => settingsSnapshot(),
   });
   assert.deepEqual(
     Object.keys(factoryClients).sort(),

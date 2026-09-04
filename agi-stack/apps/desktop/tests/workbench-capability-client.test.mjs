@@ -11,6 +11,7 @@ import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV
 import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
 import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
 import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -486,6 +487,7 @@ test('workbench capability client requires the Project Maintenance V2 authority'
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -513,6 +515,43 @@ test('workbench capability client requires the Project Maintenance V2 authority'
   }
 });
 
+test('workbench capability client requires the Project Settings V2 authority', () => {
+  const requiredOptions = {
+    projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+    projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
+    projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
+    projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
+    projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
+    projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
+    projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
+    projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
+    projectGraphOperationsV2: projectGraphOperationsV2Fixture(),
+    projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
+    projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
+    projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
+    runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
+    runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+    tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+    tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+    tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+    tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+    tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
+  };
+
+  for (const projectSettingsOperationsV2 of [undefined, {}]) {
+    assert.throws(
+      () =>
+        createDesktopWorkbenchCapabilityClient(
+          { getAutomationCapabilities: async () => automationContract },
+          DEFAULT_CONFIG,
+          { ...requiredOptions, projectSettingsOperationsV2 },
+        ),
+      /desktop_project_settings_authority_required/u,
+    );
+  }
+});
+
 test('workbench capability client requires the Project Graph V2 authority', () => {
   const requiredOptions = {
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
@@ -522,6 +561,7 @@ test('workbench capability client requires the Project Graph V2 authority', () =
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
@@ -565,6 +605,7 @@ test('workbench capability client requires both Project Entities V2 operations',
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectOverviewOperationsV2: projectOverviewOperationsV2Fixture(),
     projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
@@ -1979,6 +2020,7 @@ function createWorkbenchCapabilityClient(automationApi, config, options = {}) {
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
     projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
     projectGraphOperationsV2: projectGraphOperationsV2Fixture(),

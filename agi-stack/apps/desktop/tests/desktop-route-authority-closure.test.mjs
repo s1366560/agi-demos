@@ -12,6 +12,7 @@ import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV
 import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
 import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
 import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -106,6 +107,7 @@ test('runtime snapshot declares tenant workspaces and canonical Agent Workspace 
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),

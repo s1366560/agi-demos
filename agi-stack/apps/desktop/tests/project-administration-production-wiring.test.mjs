@@ -12,6 +12,7 @@ import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV
 import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
 import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
 import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -144,8 +145,24 @@ test('Project Administration Snapshot observes Cloud and declares Local authorit
       instance_id: null,
     },
   });
-  assert.equal(cloud.capabilities['project-project-settings'].availability, 'available');
-  assert.equal(cloud.capabilities['project-project-settings'].authority_revision, 31);
+  assert.deepEqual(cloud.capabilities['project-project-settings'], {
+    availability: 'degraded',
+    reason_code: 'desktop_project_settings_actions_unwired',
+    service_version: '0.1.0',
+    contract_version: '4.0.0',
+    allowed_actions: ['view'],
+    provenance: 'observed',
+    authority_source: 'cloud_service',
+    authority_revision: 68,
+    retryable: false,
+    supporting_authority_sources: [],
+    scope: {
+      tenant_id: 'tenant-1',
+      project_id: 'project-1',
+      workspace_id: null,
+      instance_id: null,
+    },
+  });
 
   let calls = 0;
   const localClients = Object.fromEntries(
@@ -196,6 +213,7 @@ async function loadSnapshot(config, projectAdministrationClients) {
     projectTeamOperationsV2: projectTeamOperationsV2Fixture(),
     projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
     projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+    projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
     projectMemoriesOperationsV2: projectMemoriesOperationsV2Fixture(),
         projectEntitiesOperationsV2: projectEntitiesOperationsV2Fixture(),
         projectGraphOperationsV2: projectGraphOperationsV2Fixture(),

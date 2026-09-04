@@ -12,6 +12,7 @@ import { projectMemoriesOperationsV2Fixture } from './projectMemoriesOperationsV
 import { projectTeamOperationsV2Fixture } from './projectTeamOperationsV2Fixture.mjs';
 import { projectSchemaOperationsV2Fixture } from './projectSchemaOperationsV2Fixture.mjs';
 import { projectMaintenanceOperationsV2Fixture } from './projectMaintenanceOperationsV2Fixture.mjs';
+import { projectSettingsOperationsV2Fixture } from './projectSettingsOperationsV2Fixture.mjs';
 import { projectEntitiesOperationsV2Fixture } from './projectEntitiesOperationsV2Fixture.mjs';
 import { projectGraphOperationsV2Fixture } from './projectGraphOperationsV2Fixture.mjs';
 import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperationsV2Fixture.mjs';
@@ -278,6 +279,7 @@ async function loadSnapshot(
         projectTeamOperationsV2,
         projectSchemaOperationsV2: projectSchemaOperationsV2Fixture(),
         projectMaintenanceOperationsV2: projectMaintenanceOperationsV2Fixture(),
+        projectSettingsOperationsV2: projectSettingsOperationsV2Fixture(),
         projectMemoriesOperationsV2,
         projectEntitiesOperationsV2,
         projectGraphOperationsV2,

@@ -154,6 +154,8 @@ function rendererDefinitions() {
       .desktopProjectSchemaAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectMaintenanceAuthorityModuleV2.js')
       .desktopProjectMaintenanceAuthorityDefinitionV2,
+    require(COMPILED_ROOT + '/src/plugins/desktopProjectSettingsAuthorityModuleV2.js')
+      .desktopProjectSettingsAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectGraphAuthorityModuleV2.js')
       .desktopProjectGraphAuthorityDefinitionV2,
     desktopArtifactContentAuthorityDefinitionV2,

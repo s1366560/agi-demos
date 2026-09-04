@@ -12,6 +12,7 @@ import type { DesktopProjectMemoriesOperationsV2 } from '../../plugins/desktopPr
 import type { DesktopProjectTeamOperationsV2 } from '../../plugins/desktopProjectTeamAuthorityModuleV2';
 import type { DesktopProjectSchemaOperationsV2 } from '../../plugins/desktopProjectSchemaAuthorityModuleV2';
 import type { DesktopProjectMaintenanceOperationsV2 } from '../../plugins/desktopProjectMaintenanceAuthorityModuleV2';
+import type { DesktopProjectSettingsOperationsV2 } from '../../plugins/desktopProjectSettingsAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
@@ -84,6 +85,10 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   projectMaintenanceOperationsV2: Pick<
     DesktopProjectMaintenanceOperationsV2,
     'loadProjectMaintenance'
+  >;
+  projectSettingsOperationsV2: Pick<
+    DesktopProjectSettingsOperationsV2,
+    'loadProjectSettings'
   >;
   projectEntitiesOperationsV2: Pick<
     DesktopProjectEntitiesOperationsV2,
@@ -177,6 +182,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
     projectTeamOperationsV2: input.projectTeamOperationsV2,
     projectSchemaOperationsV2: input.projectSchemaOperationsV2,
     projectMaintenanceOperationsV2: input.projectMaintenanceOperationsV2,
+    projectSettingsOperationsV2: input.projectSettingsOperationsV2,
     projectEntitiesOperationsV2: input.projectEntitiesOperationsV2,
     projectGraphOperationsV2: input.projectGraphOperationsV2,
     projectOverviewOperationsV2: input.projectOverviewOperationsV2,
