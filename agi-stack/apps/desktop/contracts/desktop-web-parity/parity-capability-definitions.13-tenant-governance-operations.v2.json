@@ -184,8 +184,10 @@
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantAdminRouteRuntime.ts",
@@ -468,7 +470,11 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsPresentationModel.ts",
-        "agi-stack/apps/desktop/src/features/tenant-admin/TenantEventsPage.tsx"
+        "agi-stack/apps/desktop/src/features/tenant-admin/TenantEventsPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEventsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEventsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEventsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -476,8 +482,10 @@
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
+        "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantRemainingRouteRuntime.ts",
@@ -487,10 +495,14 @@
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsController.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/tenantEventsPresentationModel.ts",
         "agi-stack/apps/desktop/src/features/tenant-admin/TenantEventsPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEventsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEventsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEventsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
       "local_deviation": "A Local event ledger should contain only sidecar-owned lifecycle events with stable provenance; it must not merge renderer logs or infer Cloud tenant events.",
-      "judgment_rationale": "Events is a direct tenant route backed by the service event log. Desktop now has a real App-bound route with a typed client, controller and page for revision-bound Cloud list, event-type filtering, pagination, refresh and structured error states, so the reviewed Cloud slice is implemented. Local uses the same native route but the private sidecar contracts deliberately return local_event_ledger_authority_unavailable; the Local surface is a real observed terminal state rather than a planned ledger."
+      "judgment_rationale": "Events is a direct tenant route backed by the service event log. Desktop now resolves both route data and workbench capability observation through one tenant-scoped generation lease and the declared Tenant Events V2 Provider. Its HTTP projection retains the revision-bound Cloud list, event-type filtering, pagination, refresh and structured error states, so the reviewed Cloud slice remains implemented. Local uses the same generation-pinned authority but the private sidecar contracts deliberately return local_event_ledger_authority_unavailable; the Local surface remains a real observed terminal state rather than a planned ledger."
     },
     {
       "id": "tenant-tenant-dead-letter-queue",
