@@ -677,7 +677,7 @@ test('App wires the native Runtime Pool loader through the scoped runtime bindin
 test('App wires Runtime Instances through one scoped Cloud or Local binding', () => {
   assert.match(
     registrySource,
-    /TENANT_INSTANCES_ROUTE_ID[\s\S]*createRuntimeInstancesRouteModuleLoader\(\{[\s\S]*createRuntimeInstancesRouteBindingForRuntime\(\s*configRef\.current,\s*context,?\s*\)/u,
+    /TENANT_INSTANCES_ROUTE_ID[\s\S]*createRuntimeInstancesRouteModuleLoader\(\{[\s\S]*createRuntimeInstancesRouteBindingForRuntime\(\s*configRef\.current,\s*context,\s*runtimeInstancesOperationsV2,?\s*\)/u,
   );
 });
 

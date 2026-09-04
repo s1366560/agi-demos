@@ -4,6 +4,7 @@ import { test } from 'node:test';
 
 import { projectOverviewOperationsV2Fixture } from './projectOverviewOperationsV2Fixture.mjs';
 import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -387,6 +388,7 @@ test('Runtime Instances binding preserves exact Cloud and Local tenant authority
   const cloud = createRuntimeInstancesRouteBindingForRuntime(
     runtimeConfig('cloud'),
     { tenantId },
+    runtimeInstancesOperationsV2Fixture(),
   );
   assert.deepEqual(cloud.scope, { authority: 'cloud', tenantId });
   assert.equal(cloud.controller.getSnapshot().authority, 'cloud');
@@ -394,6 +396,7 @@ test('Runtime Instances binding preserves exact Cloud and Local tenant authority
   const local = createRuntimeInstancesRouteBindingForRuntime(
     runtimeConfig('local'),
     { tenantId },
+    runtimeInstancesOperationsV2Fixture(),
   );
   assert.deepEqual(local.scope, { authority: 'local', tenantId });
   assert.equal(local.controller.getSnapshot().authority, 'local');

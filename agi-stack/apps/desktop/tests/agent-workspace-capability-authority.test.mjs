@@ -18,6 +18,7 @@ import { projectBlackboardOperationsV2Fixture } from './projectBlackboardOperati
 import { projectWorkspacesClientV2Fixture } from './projectWorkspacesClientV2Fixture.mjs';
 import { runtimePoolOperationsV2Fixture } from './runtimePoolOperationsV2Fixture.mjs';
 import { runtimeClustersOperationsV2Fixture } from './runtimeClustersOperationsV2Fixture.mjs';
+import { runtimeInstancesOperationsV2Fixture } from './runtimeInstancesOperationsV2Fixture.mjs';
 import { tenantAnalyticsOperationsV2Fixture } from './tenantAnalyticsOperationsV2Fixture.mjs';
 import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOperationsV2Fixture.mjs';
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
@@ -127,6 +128,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
           projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
           runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
           runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+          runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
           projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
           tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
@@ -190,6 +192,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
       projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
       runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
       runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+      runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
       projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
       tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
@@ -258,6 +261,7 @@ test('Workbench default production journey authority supports tenant-level scope
         projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
         runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
         runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+        runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
         projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 
@@ -326,6 +330,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
       projectBlackboardOperationsV2: projectBlackboardOperationsV2Fixture(),
       runtimePoolOperationsV2: runtimePoolOperationsV2Fixture(),
       runtimeClustersOperationsV2: runtimeClustersOperationsV2Fixture(),
+      runtimeInstancesOperationsV2: runtimeInstancesOperationsV2Fixture(),
       projectWorkspacesClient: projectWorkspacesClientV2Fixture(),
       tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
 

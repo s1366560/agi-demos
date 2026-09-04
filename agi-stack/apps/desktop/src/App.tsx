@@ -127,6 +127,7 @@ import {
 } from './plugins/desktopProjectBlackboardAuthorityModuleV2';
 import { createDesktopRuntimePoolOperationsV2 } from './plugins/desktopRuntimePoolAuthorityModuleV2';
 import { createDesktopRuntimeClustersOperationsV2 } from './plugins/desktopRuntimeClustersAuthorityModuleV2';
+import { createDesktopRuntimeInstancesOperationsV2 } from './plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import {
   createDesktopProjectSearchOperationsV2,
 } from './plugins/desktopProjectSearchAuthorityModuleV2';
@@ -1038,6 +1039,13 @@ export function App() {
       ),
     [],
   );
+  const desktopRuntimeInstancesOperationsV2 = useMemo(
+    () =>
+      createDesktopRuntimeInstancesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopConversationConfigOperationsV2 = useMemo(
     () =>
       createDesktopConversationConfigOperationsV2(
@@ -1339,6 +1347,7 @@ export function App() {
       projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
       runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
       runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
+      runtimeInstancesOperationsV2: desktopRuntimeInstancesOperationsV2,
       tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
       tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
       tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
@@ -1435,6 +1444,7 @@ export function App() {
         projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
         runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
+        runtimeInstancesOperationsV2: desktopRuntimeInstancesOperationsV2,
         desktopWorkspaceCatalogOperationsV2,
         desktopWorkspaceLifecycleOperationsV2,
         tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,

@@ -18,6 +18,10 @@ import {
   createDesktopRuntimeClustersClientV2,
   type DesktopRuntimeClustersOperationsV2,
 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
+import {
+  createDesktopRuntimeInstancesClientV2,
+  type DesktopRuntimeInstancesOperationsV2,
+} from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import type {
   ProjectOverviewRouteBinding,
   ProjectOverviewRouteContext,
@@ -29,7 +33,6 @@ import type { RuntimePoolRouteBinding } from '../runtime-pool/runtimePoolRouteMo
 import { createRuntimePoolController } from '../runtime-pool/runtimePoolController';
 import type { RuntimeInstancesRouteBinding } from '../runtime-instances/runtimeInstancesRouteModule';
 import { createRuntimeInstancesController } from '../runtime-instances/runtimeInstancesController';
-import { createRuntimeInstancesClient } from '../runtime-instances/runtimeInstancesClient';
 import type { RuntimeClustersRouteBinding } from '../runtime-clusters/runtimeClustersRouteModule';
 import { createRuntimeClustersController } from '../runtime-clusters/runtimeClustersController';
 import type { RuntimeDeploymentsRouteBinding } from '../runtime-deployments/runtimeDeploymentsRouteModule';
@@ -469,15 +472,17 @@ export function createRuntimePoolRouteBindingForRuntime(
 export function createRuntimeInstancesRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: Readonly<{ tenantId: string }>,
+  runtimeInstancesOperationsV2: DesktopRuntimeInstancesOperationsV2,
 ): RuntimeInstancesRouteBinding {
   if (config.tenantId !== context.tenantId) {
     throw new Error('runtime_instances_runtime_scope_mismatch');
   }
+  requireRuntimeInstancesOperationsV2(runtimeInstancesOperationsV2);
   const scope = Object.freeze({
     authority: config.mode,
     tenantId: context.tenantId,
   });
-  const client = createRuntimeInstancesClient(config);
+  const client = createDesktopRuntimeInstancesClientV2(runtimeInstancesOperationsV2, config);
   return Object.freeze({
     controller: createRuntimeInstancesController({
       authority: config.mode,
@@ -611,5 +616,18 @@ function requireRuntimeClustersOperationsV2(
     typeof operations.probeRuntimeClusters !== 'function'
   ) {
     throw new Error('desktop_runtime_clusters_authority_required');
+  }
+}
+
+function requireRuntimeInstancesOperationsV2(
+  operations: DesktopRuntimeInstancesOperationsV2,
+): void {
+  if (
+    typeof operations?.listRuntimeInstances !== 'function' ||
+    typeof operations.restartRuntimeInstance !== 'function' ||
+    typeof operations.deleteRuntimeInstance !== 'function' ||
+    typeof operations.probeRuntimeInstances !== 'function'
+  ) {
+    throw new Error('desktop_runtime_instances_authority_required');
   }
 }

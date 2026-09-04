@@ -274,6 +274,7 @@ import {
 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
 import type { DesktopRuntimePoolOperationsV2 } from '../../plugins/desktopRuntimePoolAuthorityModuleV2';
 import type { DesktopRuntimeClustersOperationsV2 } from '../../plugins/desktopRuntimeClustersAuthorityModuleV2';
+import type { DesktopRuntimeInstancesOperationsV2 } from '../../plugins/desktopRuntimeInstancesAuthorityModuleV2';
 import type {
   DesktopProjectSearchClientV2,
 } from '../../plugins/desktopProjectSearchAuthorityModuleV2';
@@ -335,6 +336,7 @@ export type AppRouteRegistryRefs = {
   projectPlaybooksReadOperationsV2: DesktopProjectPlaybooksReadOperationsV2;
   runtimePoolOperationsV2: DesktopRuntimePoolOperationsV2;
   runtimeClustersOperationsV2: DesktopRuntimeClustersOperationsV2;
+  runtimeInstancesOperationsV2: DesktopRuntimeInstancesOperationsV2;
   projectSearchOperationsV2: DesktopProjectSearchClientV2;
   projectSearchRouteBindingProviderV2: ProjectSearchRouteBindingProviderV2;
   setAuth: Dispatch<SetStateAction<AuthState>>;
@@ -378,7 +380,10 @@ export type AppProjectAdministrationRouteRegistryRefs = Pick<
 >;
 export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
-  'configRef' | 'runtimeClustersOperationsV2' | 'runtimePoolOperationsV2'
+  | 'configRef'
+  | 'runtimeClustersOperationsV2'
+  | 'runtimeInstancesOperationsV2'
+  | 'runtimePoolOperationsV2'
 >;
 export type AppProjectWorkspaceRouteRegistryRefs = Pick<
   AppRouteRegistryRefs,
@@ -928,7 +933,12 @@ export function createAppProjectAdministrationRouteRegistry(
 export function createAppRuntimeInfrastructureRouteRegistry(
   refs: AppRuntimeInfrastructureRouteRegistryRefs,
 ) {
-  const { configRef, runtimeClustersOperationsV2, runtimePoolOperationsV2 } = refs;
+  const {
+    configRef,
+    runtimeClustersOperationsV2,
+    runtimeInstancesOperationsV2,
+    runtimePoolOperationsV2,
+  } = refs;
   return createDesktopProductionRouteRegistry({
     implementedLoaders: registerDesktopProductionRouteLoaders({
       [TENANT_POOL_ROUTE_ID]: createRuntimePoolRouteModuleLoader({
@@ -941,7 +951,11 @@ export function createAppRuntimeInfrastructureRouteRegistry(
       }),
       [TENANT_INSTANCES_ROUTE_ID]: createRuntimeInstancesRouteModuleLoader({
         createBinding: (context) =>
-          createRuntimeInstancesRouteBindingForRuntime(configRef.current, context),
+          createRuntimeInstancesRouteBindingForRuntime(
+            configRef.current,
+            context,
+            runtimeInstancesOperationsV2,
+          ),
       }),
       [TENANT_CLUSTERS_ROUTE_ID]: createRuntimeClustersRouteModuleLoader({
         createBinding: (context) =>

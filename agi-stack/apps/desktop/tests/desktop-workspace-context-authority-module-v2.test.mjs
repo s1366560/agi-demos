@@ -27,6 +27,9 @@ const { desktopRuntimePoolAuthorityDefinitionV2 } = require(
 const { desktopRuntimeClustersAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopRuntimeClustersAuthorityModuleV2.js',
 );
+const { desktopRuntimeInstancesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopRuntimeInstancesAuthorityModuleV2.js',
+);
 const { desktopSessionArtifactActionAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopSessionArtifactActionAuthorityModuleV2.js',
 );
@@ -170,6 +173,7 @@ function rendererDefinitions() {
     desktopProjectSearchAuthorityDefinitionV2,
     desktopRuntimePoolAuthorityDefinitionV2,
     desktopRuntimeClustersAuthorityDefinitionV2,
+    desktopRuntimeInstancesAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,
     desktopSessionRunControlAuthorityDefinitionV2,
     desktopWorkspaceContextAuthorityDefinitionV2,
