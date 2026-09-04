@@ -516,7 +516,8 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     const capability = byId.get(capabilityId);
     assert.ok(capability, capabilityId);
     const reasonCode =
-      capabilityId === "tenant-tenant-instances"
+      capabilityId === "tenant-tenant-instances" ||
+      capabilityId === "tenant-tenant-deploy"
         ? "capability_authority_revision_unavailable"
         : "renderer_capability_authority_unobserved";
     assert.deepEqual(
