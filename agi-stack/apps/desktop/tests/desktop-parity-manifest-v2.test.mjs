@@ -518,7 +518,8 @@ test("renderer-declared Cloud capabilities stay unavailable despite native loade
     const reasonCode =
       capabilityId === "tenant-tenant-instances" ||
       capabilityId === "tenant-tenant-deploy" ||
-      capabilityId === "tenant-tenant-dead-letter-queue"
+      capabilityId === "tenant-tenant-dead-letter-queue" ||
+      capabilityId === "tenant-tenant-instance-templates"
         ? "capability_authority_revision_unavailable"
         : "renderer_capability_authority_unobserved";
     assert.deepEqual(

@@ -135,7 +135,7 @@ test("Instance Templates limits APIs to production page callers", () => {
   assert.equal(templates.cloud_status, "unavailable");
   assert.equal(
     templates.cloud_reason_code,
-    "renderer_capability_authority_unobserved",
+    "capability_authority_revision_unavailable",
   );
   const cloudContracts = templates.api_contracts.filter(
     (contract) => contract.surface === "desktop_cloud",

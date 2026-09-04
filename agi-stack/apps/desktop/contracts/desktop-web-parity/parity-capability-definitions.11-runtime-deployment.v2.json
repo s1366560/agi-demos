@@ -520,33 +520,41 @@
       "local_reason_code": "local_instance_template_authority_unavailable",
       "local_authority": "none",
       "local_deviation": "Local Desktop keeps the native route and stable zero-network unavailable state until a sidecar template authority can safely describe only supported resources and keep imported files within the workspace root and declared size and MIME limits.",
-      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership. Desktop has a real native loader, App binding, typed client, controller and lifecycle page, but workbenchCapabilityClient still wraps instanceTemplatesCapability with declared renderer provenance. Snapshot v4 therefore closes the active Cloud declaration to renderer_capability_authority_unobserved and exposes no route-reachable actions. Local renders the stable local_instance_template_authority_unavailable terminal state from the same declared renderer boundary; it has no observed sidecar template authority.",
+      "judgment_rationale": "InstanceTemplateList and TemplateDetail form a dedicated canonical lifecycle distinct from the general template marketplace. The production pages expose list, create, detail, list-items, delete, publish, clone, and deploy-from-template, and do not call update, unpublish, add-item, or remove-item APIs. Web is degraded because template calls and instance creation do not carry the route tenant while the backend resolves get_current_user_tenant from the user's first membership. Desktop now resolves the typed instance-template service through a tenant-scoped generation lease and routes every Cloud operation through the V2 authority. The Cloud probe remains unavailable because the service response has no authority revision, so Snapshot v4 fails closed with capability_authority_revision_unavailable instead of exposing route actions. Local retains the zero-network local_instance_template_authority_unavailable result because no sidecar template authority exists.",
       "cloud_actions": [],
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesCapability.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesClient.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesController.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx"
+        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ],
-      "cloud_reason_code": "renderer_capability_authority_unobserved",
+      "cloud_reason_code": "capability_authority_revision_unavailable",
       "local_actions": [],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRegistry.ts",
         "agi-stack/apps/desktop/src/features/navigation/desktopProductionRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/runtime/capabilitySnapshot.ts",
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts",
-        "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesCapability.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesClient.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesController.ts",
         "agi-stack/apps/desktop/src/features/instance-templates/instanceTemplatesRouteModule.tsx",
-        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx"
+        "agi-stack/apps/desktop/src/features/instance-templates/InstanceTemplatesPage.tsx",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
       ]
     }
   ],
