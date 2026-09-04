@@ -658,6 +658,10 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksController.ts",
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksEventSource.ts",
       "agi-stack/apps/desktop/src/features/project-playbooks/projectPlaybooksRouteModule.tsx",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadAuthorityModuleV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadHttpProjectionV2.ts",
+      "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksReadOperationContractV2.ts",
+      "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
     ],
   };
 
@@ -692,6 +696,14 @@ test("backend-store and playbook routes use Cloud authority and fail closed offl
         requirementsForAction(capability, "desktop_cloud", action).length > 0,
         `${capabilityId}: missing desktop_cloud permission for ${action}`,
       );
+    }
+    if (capabilityId === "project-playbooks") {
+      assert.match(capability.judgment_rationale, /static createProjectPlaybooksClient transport was removed/u);
+      assert.match(capability.judgment_rationale, /generated-catalog V2 root Provider/u);
+      assert.match(capability.judgment_rationale, /project-scoped operation lease/u);
+      assert.match(capability.judgment_rationale, /renderer implementation consistency only/u);
+      assert.match(capability.judgment_rationale, /does not make those three backend reads transactionally snapshot-isolated/u);
+      assert.match(capability.judgment_rationale, /retained static WebSocket event source/u);
     }
   }
 });
