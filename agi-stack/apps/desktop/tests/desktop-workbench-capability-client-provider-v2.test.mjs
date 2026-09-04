@@ -92,6 +92,7 @@ test('each publication returns one frozen generation-pinned capability client bi
       },
     },
     backendStoresOperationsV2: backendStoresOperationsV2(),
+    projectChannelsOperationsV2: projectChannelsOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -156,6 +157,7 @@ test('each publication returns one frozen generation-pinned capability client bi
       },
     },
     backendStoresOperationsV2: backendStoresOperationsV2(),
+    projectChannelsOperationsV2: projectChannelsOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -232,6 +234,7 @@ test('failed capability client publication keeps the last-good binding', () => {
       },
     },
     backendStoresOperationsV2: backendStoresOperationsV2(),
+    projectChannelsOperationsV2: projectChannelsOperationsV2(),
     projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
     projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
     projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -305,6 +308,7 @@ test('failed capability client publication keeps the last-good binding', () => {
           },
         },
         backendStoresOperationsV2: backendStoresOperationsV2(),
+        projectChannelsOperationsV2: projectChannelsOperationsV2(),
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -475,6 +479,29 @@ function backendStoresOperationsV2() {
             allowedActions: Object.freeze(['view', 'list', 'create', 'update', 'delete', 'test']),
             authorityRevision: 23,
           });
+    },
+  });
+}
+
+function projectChannelsOperationsV2() {
+  return Object.freeze({
+    loadProjectChannels: async () => {
+      throw new Error('project_channels_not_exercised');
+    },
+    getProjectChannelSchema: async () => {
+      throw new Error('project_channels_not_exercised');
+    },
+    createProjectChannelConfig: async () => {
+      throw new Error('project_channels_not_exercised');
+    },
+    updateProjectChannelConfig: async () => {
+      throw new Error('project_channels_not_exercised');
+    },
+    testProjectChannelConfig: async () => {
+      throw new Error('project_channels_not_exercised');
+    },
+    removeProjectChannelConfig: async () => {
+      throw new Error('project_channels_not_exercised');
     },
   });
 }

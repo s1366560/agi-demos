@@ -125,10 +125,15 @@ test('P2 third-batch and Profile loaders are owned by the V2 route registry', ()
   assert.doesNotMatch(appSource, /matchProfileAuxiliaryRoute|profileAuxiliaryRouteActiveRef/u);
   assert.doesNotMatch(evolutionClientSource, /createEvolutionRouteClient|requestNativeRouteJson/u);
   assert.match(p2RuntimeSource, /createDesktopTenantEvolutionClientV2/u);
+  assert.match(p2RuntimeSource, /createDesktopProjectChannelsClientV2/u);
   assert.match(registrySource, /tenantEvolutionOperationsV2/u);
+  assert.match(registrySource, /projectChannelsOperationsV2/u);
   assert.match(workbenchSource, /tenantEvolutionOperationsV2/u);
+  assert.match(workbenchSource, /projectChannelsOperationsV2/u);
   assert.doesNotMatch(workbenchSource, /evolutionRouteClient\?/u);
+  assert.doesNotMatch(workbenchSource, /channelsRouteClient\?/u);
   assert.match(appSource, /createDesktopTenantEvolutionOperationsV2/u);
+  assert.match(appSource, /createDesktopProjectChannelsOperationsV2/u);
   assert.doesNotMatch(
     appSource,
     /(?:evolution|channels|templates|profile)[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
@@ -222,7 +227,12 @@ test('Capability catalog contains four P2 third-batch IDs exactly once', () => {
 });
 
 async function loadSnapshot(config, clients) {
-  const { evolutionRouteClient, templatesRouteClient, ...remainingClients } = clients;
+  const {
+    evolutionRouteClient,
+    channelsRouteClient,
+    templatesRouteClient,
+    ...remainingClients
+  } = clients;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     new Response(JSON.stringify({ reason_code: 'unrelated_authority_unavailable' }), {
@@ -242,6 +252,10 @@ async function loadSnapshot(config, clients) {
         tenantEvolutionOperationsV2: {
           observeTenantEvolution: ({ scope, signal }) =>
             evolutionRouteClient.observe(scope, signal),
+        },
+        projectChannelsOperationsV2: {
+          loadProjectChannels: ({ scope, signal }) =>
+            channelsRouteClient.observe(scope, signal),
         },
         tenantTemplatesOperationsV2: {
           loadTenantTemplates: ({ scope, signal }) =>

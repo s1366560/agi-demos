@@ -1,5 +1,8 @@
 import type { CurrentUser, DesktopRuntimeConfig } from '../../types';
-import { createChannelsRouteClient } from './channelsRouteClient';
+import {
+  createDesktopProjectChannelsClientV2,
+  type DesktopProjectChannelsOperationsV2,
+} from '../../plugins/desktopProjectChannelsAuthorityModuleV2';
 import { createChannelsRouteController } from './channelsRouteController';
 import type {
   ChannelsRouteBinding,
@@ -48,6 +51,7 @@ export function createEvolutionRouteBindingForRuntime(
 export function createChannelsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ChannelsRouteContext,
+  operations: DesktopProjectChannelsOperationsV2,
 ): ChannelsRouteBinding {
   const scope = Object.freeze({
     authority: config.mode,
@@ -56,7 +60,7 @@ export function createChannelsRouteBindingForRuntime(
   });
   return Object.freeze({
     controller: createChannelsRouteController({
-      client: createChannelsRouteClient(config),
+      client: createDesktopProjectChannelsClientV2(operations, config),
       initialScope: scope,
     }),
     scope,

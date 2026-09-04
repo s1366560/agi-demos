@@ -28,6 +28,7 @@ import type {
 } from '../types';
 import { DEFAULT_CONFIG } from '../types';
 import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
+import { createDesktopProjectChannelsQaOperationsV2 } from './desktopProjectChannelsAuthorityQaV2';
 import '../styles/global.css';
 
 declare global {
@@ -40,6 +41,7 @@ const QA_PROJECT_ID = 'project-desktop-client';
 const QA_WORKSPACE_ID = 'workspace-desktop-client';
 const NOW = '2026-07-14T09:40:00.000Z';
 const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2();
+const projectChannelsOperationsV2 = createDesktopProjectChannelsQaOperationsV2();
 const QA_ENVIRONMENT_SECRETS = new Set(['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
 
 const qaProviderTypes = [
@@ -1827,6 +1829,7 @@ function ProviderSettingsQa() {
       agentDefinitionEvent={agentDefinitionEvent}
       pluginMarketplaceOperationsV2={qaPluginMarketplaceOperationsV2}
       tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
+      projectChannelsOperationsV2={projectChannelsOperationsV2}
       onClose={() => undefined}
       onConfigChange={setConfig}
       onRuntimeStatusRefresh={async () => undefined}

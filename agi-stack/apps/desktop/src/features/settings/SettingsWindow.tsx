@@ -23,6 +23,7 @@ import type { DesktopRouteModule } from '../navigation/desktopRouteModule';
 import type { DesktopRouteRegistry } from '../navigation/desktopRouteRegistry';
 import type { DesktopPluginMarketplaceOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopTenantTemplatesOperationsV2 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
+import type { DesktopProjectChannelsOperationsV2 } from '../../plugins/desktopProjectChannelsAuthorityModuleV2';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
 import { PROFILE_ROUTE_ID } from '../settings-routes/profileRoutePresentationModel';
@@ -91,6 +92,7 @@ type SettingsWindowProps = {
   rendererRouteRegistry?: DesktopRouteRegistry<DesktopRouteModule>;
   pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
+  projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -112,6 +114,7 @@ export function SettingsWindow({
   rendererRouteRegistry,
   pluginMarketplaceOperationsV2,
   tenantTemplatesOperationsV2,
+  projectChannelsOperationsV2,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -277,6 +280,7 @@ export function SettingsWindow({
     config,
     contextKey: resourceContextKey,
     canManage: canManagePluginControlPlane,
+    projectChannelsOperationsV2,
   });
   const mcpServerManagement = useMCPServerManagement({
     active: open && section === 'mcp',

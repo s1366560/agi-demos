@@ -1446,6 +1446,37 @@
       "contract_digest": "sha256:0a1cdc178d1744c6e161cb27f251d02a4974d3966c348b143a0fc96ca356e63d"
     },
     {
+      "module_ref": "builtin://memstack/desktop/project-channels-authority",
+      "entrypoint": "applyDesktopProjectChannelsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:7cb9eaa01cd0b5fe1a90825ecd97efc8717b1471812d942ed08e55a2f9ea2a8c",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectChannelsAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-channels-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:648fc2ba1645accb861668c77708288e7c14c7071f644a6d17be1b5ab6a477c3"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-creation-authority",
       "entrypoint": "applyDesktopTenantCreationAuthorityV2",
       "artifact": {

@@ -258,6 +258,7 @@ import {
   createDesktopProjectSettingsClientV2,
   type DesktopProjectSettingsOperationsV2,
 } from '../../plugins/desktopProjectSettingsAuthorityModuleV2';
+import type { DesktopProjectChannelsOperationsV2 } from '../../plugins/desktopProjectChannelsAuthorityModuleV2';
 import {
   createDesktopProjectSupportClientV2,
   type DesktopProjectSupportOperationsV2,
@@ -346,6 +347,7 @@ export type AppRouteRegistryRefs = {
   projectSchemaOperationsV2: DesktopProjectSchemaOperationsV2;
   projectMaintenanceOperationsV2: DesktopProjectMaintenanceOperationsV2;
   projectSettingsOperationsV2: DesktopProjectSettingsOperationsV2;
+  projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
   projectSupportOperationsV2: DesktopProjectSupportOperationsV2;
   projectPlaybooksReadOperationsV2: DesktopProjectPlaybooksReadOperationsV2;
   projectPlaybooksEventsOperationsV2: DesktopProjectPlaybooksEventsOperationsV2;
@@ -412,6 +414,7 @@ export type AppProjectAdministrationRouteRegistryRefs = Pick<
   | 'projectCronJobsRouteBindingProviderV2'
   | 'projectMaintenanceOperationsV2'
   | 'projectSettingsOperationsV2'
+  | 'projectChannelsOperationsV2'
   | 'projectSchemaOperationsV2'
 >;
 export type AppRuntimeInfrastructureRouteRegistryRefs = Pick<
@@ -914,6 +917,7 @@ export function createAppProjectAdministrationRouteRegistry(
     projectCronJobsRouteBindingProviderV2,
     projectMaintenanceOperationsV2,
     projectSettingsOperationsV2,
+    projectChannelsOperationsV2,
     projectSchemaOperationsV2,
   } = refs;
   return createDesktopProductionRouteRegistry({
@@ -940,7 +944,11 @@ export function createAppProjectAdministrationRouteRegistry(
       }),
       [PROJECT_CHANNELS_ROUTE_ID]: createChannelsRouteModuleLoader({
         createBinding: (context) =>
-          createChannelsRouteBindingForRuntime(configRef.current, context),
+          createChannelsRouteBindingForRuntime(
+            configRef.current,
+            context,
+            projectChannelsOperationsV2,
+          ),
       }),
       [PROJECT_MAINTENANCE_ROUTE_ID]: createProjectMaintenanceRouteModuleLoader({
         createBinding: (context) => {

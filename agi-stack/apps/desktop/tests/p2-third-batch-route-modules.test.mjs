@@ -13,7 +13,9 @@ const { createDesktopTenantEvolutionHttpProjectionV2 } = require(
 );
 const { createEvolutionRouteController } = require(`${root}/evolutionRouteController.js`);
 const { createEvolutionRouteModuleLoader } = require(`${root}/evolutionRouteModule.js`);
-const { createChannelsRouteClient } = require(`${root}/channelsRouteClient.js`);
+const { createDesktopProjectChannelsHttpProjectionV2 } = require(
+  '/tmp/agistack-desktop-test-dist/src/plugins/desktopProjectChannelsHttpProjectionV2.js',
+);
 const { createChannelsRouteController } = require(`${root}/channelsRouteController.js`);
 const { createChannelsRouteModuleLoader } = require(`${root}/channelsRouteModule.js`);
 const { createDesktopTenantTemplatesHttpProjectionV2 } = require(
@@ -169,8 +171,8 @@ test('Channels client exposes project CRUD/test authority and fails closed in Lo
       tenantId: 'tenant-1',
       projectId: 'project-1',
     };
-    const client = createChannelsRouteClient(cloudConfig);
-    const observed = await client.observe(scope);
+    const client = createDesktopProjectChannelsHttpProjectionV2(cloudConfig);
+    const observed = await client.load(scope);
     assert.equal(observed.itemCount, 1);
     assert.equal(observed.catalog.length, 1);
     await client.create(scope, {
@@ -203,7 +205,7 @@ test('Channels client exposes project CRUD/test authority and fails closed in Lo
   ]);
   try {
     await assert.rejects(
-      createChannelsRouteClient(localConfig).observe({
+      createDesktopProjectChannelsHttpProjectionV2(localConfig).load({
         authority: 'local',
         tenantId: 'tenant-1',
         projectId: 'project-1',

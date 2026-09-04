@@ -38,6 +38,7 @@ import { desktopProjectTeamAuthorityDefinitionV2 } from './desktopProjectTeamAut
 import { desktopProjectSchemaAuthorityDefinitionV2 } from './desktopProjectSchemaAuthorityModuleV2';
 import { desktopProjectMaintenanceAuthorityDefinitionV2 } from './desktopProjectMaintenanceAuthorityModuleV2';
 import { desktopProjectSettingsAuthorityDefinitionV2 } from './desktopProjectSettingsAuthorityModuleV2';
+import { desktopProjectChannelsAuthorityDefinitionV2 } from './desktopProjectChannelsAuthorityModuleV2';
 import { desktopProjectSupportAuthorityDefinitionV2 } from './desktopProjectSupportAuthorityModuleV2';
 import { desktopProjectPlaybooksReadAuthorityDefinitionV2 } from './desktopProjectPlaybooksReadAuthorityModuleV2';
 import { desktopProjectPlaybooksEventsAuthorityDefinitionV2 } from './desktopProjectPlaybooksEventsAuthorityModuleV2';
@@ -126,6 +127,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopProjectSchemaAuthorityDefinitionV2,
     desktopProjectMaintenanceAuthorityDefinitionV2,
     desktopProjectSettingsAuthorityDefinitionV2,
+    desktopProjectChannelsAuthorityDefinitionV2,
     desktopProjectSupportAuthorityDefinitionV2,
     desktopProjectPlaybooksReadAuthorityDefinitionV2,
     desktopProjectPlaybooksEventsAuthorityDefinitionV2,

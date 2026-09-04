@@ -32,7 +32,6 @@ import { deviceApprovalCapability } from '../device-approval/deviceApprovalCapab
 import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapability';
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
 import { createAgentDefinitionsRouteClient } from '../settings-routes/agentDefinitionsRouteClient';
-import type { ChannelsRouteClient } from '../settings-routes/channelsRouteClient';
 import {
   managementRouteObservation,
   managementRouteReasonPrefix,
@@ -56,6 +55,10 @@ import {
   createDesktopTenantTemplatesClientV2,
   type DesktopTenantTemplatesOperationsV2,
 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
+import {
+  createDesktopProjectChannelsClientV2,
+  type DesktopProjectChannelsOperationsV2,
+} from '../../plugins/desktopProjectChannelsAuthorityModuleV2';
 import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUnifiedRuntimesAuthorityModuleV2';
 import { createDesktopTenantEventsClientV2, type DesktopTenantEventsOperationsV2 } from '../../plugins/desktopTenantEventsAuthorityModuleV2';
 import { createDesktopTenantPatternsClientV2, type DesktopTenantPatternsOperationsV2 } from '../../plugins/desktopTenantPatternsAuthorityModuleV2';
@@ -326,6 +329,7 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantPatternsOperationsV2: DesktopTenantPatternsOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
+  projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
   tenantGenesOperationsV2: DesktopTenantGenesOperationsV2;
   tenantOrganizationSettingsOperationsV2: DesktopTenantOrganizationSettingsOperationsV2;
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
@@ -354,7 +358,6 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
     TenantRemainingCapabilityClient,
     'load'
   >;
-  channelsRouteClient?: Pick<ChannelsRouteClient, 'observe'>;
   profileRouteClient?: Pick<ProfileRouteClient, 'observe'>;
   p2ThirdBatchCapabilityClient?: Pick<P2ThirdBatchCapabilityClient, 'load'>;
   cloudRequestBroker?: VaultBoundCloudRequestBroker | null;
@@ -659,7 +662,10 @@ export function createDesktopWorkbenchCapabilityClient(
         options.tenantEvolutionOperationsV2,
         config,
       ),
-      channels: options.channelsRouteClient,
+      channels: createDesktopProjectChannelsClientV2(
+        options.projectChannelsOperationsV2,
+        config,
+      ),
       templates: createDesktopTenantTemplatesClientV2(
         options.tenantTemplatesOperationsV2,
         config,

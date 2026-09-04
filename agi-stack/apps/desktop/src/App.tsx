@@ -119,6 +119,7 @@ import {
 import { createDesktopProjectSchemaOperationsV2 } from './plugins/desktopProjectSchemaAuthorityModuleV2';
 import { createDesktopProjectMaintenanceOperationsV2 } from './plugins/desktopProjectMaintenanceAuthorityModuleV2';
 import { createDesktopProjectSettingsOperationsV2 } from './plugins/desktopProjectSettingsAuthorityModuleV2';
+import { createDesktopProjectChannelsOperationsV2 } from './plugins/desktopProjectChannelsAuthorityModuleV2';
 import { createDesktopProjectSupportOperationsV2 } from './plugins/desktopProjectSupportAuthorityModuleV2';
 import { createDesktopProjectPlaybooksReadOperationsV2 } from './plugins/desktopProjectPlaybooksReadAuthorityModuleV2';
 import { createDesktopProjectPlaybooksEventsOperationsV2 } from './plugins/desktopProjectPlaybooksEventsAuthorityModuleV2';
@@ -1087,6 +1088,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectChannelsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectChannelsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopTenantGenesOperationsV2 = useMemo(
     () =>
       createDesktopTenantGenesOperationsV2(
@@ -1496,6 +1504,7 @@ export function App() {
       projectSchemaOperationsV2: desktopProjectSchemaOperationsV2,
       projectMaintenanceOperationsV2: desktopProjectMaintenanceOperationsV2,
       projectSettingsOperationsV2: desktopProjectSettingsOperationsV2,
+      projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
       projectSupportOperationsV2: desktopProjectSupportOperationsV2,
       projectPlaybooksReadOperationsV2: desktopProjectPlaybooksReadOperationsV2,
       projectPlaybooksEventsOperationsV2: desktopProjectPlaybooksEventsOperationsV2,
@@ -1557,6 +1566,7 @@ export function App() {
       desktopProjectSchemaOperationsV2,
       desktopProjectMaintenanceOperationsV2,
       desktopProjectSettingsOperationsV2,
+      desktopProjectChannelsOperationsV2,
       desktopProjectSupportOperationsV2,
       desktopProjectPlaybooksReadOperationsV2,
       desktopProjectPlaybooksEventsOperationsV2,
@@ -1624,6 +1634,7 @@ export function App() {
         projectSchemaOperationsV2: desktopProjectSchemaOperationsV2,
         projectMaintenanceOperationsV2: desktopProjectMaintenanceOperationsV2,
         projectSettingsOperationsV2: desktopProjectSettingsOperationsV2,
+        projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
         projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
         runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
         runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
@@ -1673,6 +1684,7 @@ export function App() {
       desktopProjectSchemaOperationsV2,
       desktopProjectMaintenanceOperationsV2,
       desktopProjectSettingsOperationsV2,
+      desktopProjectChannelsOperationsV2,
       desktopProjectOverviewOperationsV2,
       desktopRuntimePoolOperationsV2,
       desktopRuntimeClustersOperationsV2,
@@ -7580,6 +7592,7 @@ export function App() {
         rendererRouteRegistry: desktopProductionRouteRegistry,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
+        projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
         onClose: () => {
           const closeRoute = settingsRouteCloseNavigationRef.current;
           settingsRouteCloseNavigationRef.current = null;

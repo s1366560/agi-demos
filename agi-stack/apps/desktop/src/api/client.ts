@@ -54,10 +54,6 @@ import type {
   ManagedAgentDefinition,
   ManagedAgentDefinitionMutation,
   ManagedExternalAcpAgent,
-  ManagedChannelConfig,
-  ManagedChannelPluginCatalogItem,
-  ManagedChannelPluginConfigSchema,
-  ManagedChannelTestResult,
   ManagedLlmProvider,
   ManagedPlugin,
   MarketplacePluginCatalogEntry,
@@ -105,8 +101,6 @@ import type {
   WorkspaceMemberSummary,
   WorkspaceSummary,
   WorkspaceTask,
-  CreateManagedChannelConfigRequest,
-  UpdateManagedChannelConfigRequest,
 } from '../types';
 import { managedPluginFromMarketplaceEntry } from './pluginMarketplaceModel';
 import {
@@ -2351,66 +2345,6 @@ export class DesktopApiClient {
         },
       },
     );
-  }
-
-  async listManagedChannelCatalog(signal?: AbortSignal): Promise<ManagedChannelPluginCatalogItem[]> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    const payload = await this.request<unknown>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/channel-catalog`,
-      { signal },
-    );
-    return readArray<ManagedChannelPluginCatalogItem>(payload, ['items', 'data']);
-  }
-
-  async getManagedChannelSchema(channelType: string): Promise<ManagedChannelPluginConfigSchema> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    return this.request<ManagedChannelPluginConfigSchema>(
-      `/api/v1/channels/tenants/${encodeURIComponent(tenantId)}/plugins/channel-catalog/${encodeURIComponent(
-        channelType,
-      )}/schema`,
-    );
-  }
-
-  async listManagedChannelConfigs(signal?: AbortSignal): Promise<ManagedChannelConfig[]> {
-    const projectId = requireValue(this.config.projectId, 'project id');
-    const payload = await this.request<unknown>(
-      `/api/v1/channels/projects/${encodeURIComponent(projectId)}/configs`,
-      { signal },
-    );
-    return readArray<ManagedChannelConfig>(payload, ['items', 'data']);
-  }
-
-  async createManagedChannelConfig(
-    body: CreateManagedChannelConfigRequest,
-  ): Promise<ManagedChannelConfig> {
-    const projectId = requireValue(this.config.projectId, 'project id');
-    return this.request<ManagedChannelConfig>(
-      `/api/v1/channels/projects/${encodeURIComponent(projectId)}/configs`,
-      { method: 'POST', body },
-    );
-  }
-
-  async updateManagedChannelConfig(
-    configId: string,
-    body: UpdateManagedChannelConfigRequest,
-  ): Promise<ManagedChannelConfig> {
-    return this.request<ManagedChannelConfig>(
-      `/api/v1/channels/configs/${encodeURIComponent(configId)}`,
-      { method: 'PUT', body },
-    );
-  }
-
-  async testManagedChannelConfig(configId: string): Promise<ManagedChannelTestResult> {
-    return this.request<ManagedChannelTestResult>(
-      `/api/v1/channels/configs/${encodeURIComponent(configId)}/test`,
-      { method: 'POST' },
-    );
-  }
-
-  async deleteManagedChannelConfig(configId: string): Promise<void> {
-    await this.request<unknown>(`/api/v1/channels/configs/${encodeURIComponent(configId)}`, {
-      method: 'DELETE',
-    });
   }
 
   async listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]> {
