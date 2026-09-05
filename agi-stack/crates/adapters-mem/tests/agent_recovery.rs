@@ -156,8 +156,11 @@ fn observed_tool_failure_becomes_observation_and_run_recovers() {
     );
     // The failure is fed back to the planner as this round's observation.
     assert!(
-        state.transcript.iter().any(|entry| entry.role == Role::Observation
-            && entry.content.contains("tool error: missing path alias")),
+        state
+            .transcript
+            .iter()
+            .any(|entry| entry.role == Role::Observation
+                && entry.content.contains("tool error: missing path alias")),
         "transcript should contain the failure observation: {:?}",
         state.transcript
     );

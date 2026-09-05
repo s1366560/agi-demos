@@ -461,7 +461,13 @@ impl ReActEngine {
                     if !tool_failed {
                         if let Some(observer) = observer.as_deref() {
                             observer
-                                .on_tool_result(session_id, state.round, &tool, &input_json, &output)
+                                .on_tool_result(
+                                    session_id,
+                                    state.round,
+                                    &tool,
+                                    &input_json,
+                                    &output,
+                                )
                                 .await?;
                         }
                     }

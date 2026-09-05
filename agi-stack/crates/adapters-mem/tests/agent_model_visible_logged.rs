@@ -27,7 +27,9 @@ struct RecordingLlm {
 #[async_trait]
 impl LlmPort for RecordingLlm {
     async fn extract_memory(&self, _episode: &Episode) -> CoreResult<MemoryDraft> {
-        Err(CoreError::Llm("RecordingLlm does not extract memory".into()))
+        Err(CoreError::Llm(
+            "RecordingLlm does not extract memory".into(),
+        ))
     }
 
     async fn decide(
@@ -64,9 +66,8 @@ impl ToolHost for EchoToolHost {
 }
 
 fn transcript_contains(log: &[TranscriptEntry], entry: &TranscriptEntry) -> bool {
-    log.iter().any(|e| {
-        e.round == entry.round && e.role == entry.role && e.content == entry.content
-    })
+    log.iter()
+        .any(|e| e.round == entry.round && e.role == entry.role && e.content == entry.content)
 }
 
 #[test]
@@ -95,7 +96,11 @@ fn every_model_visible_entry_is_in_the_session_log() {
     assert_eq!(done.status, SessionStatus::Finished);
 
     let seen = llm.seen.lock().expect("seen lock");
-    assert!(seen.len() >= 2, "model decided at least twice: {:?}", seen.len());
+    assert!(
+        seen.len() >= 2,
+        "model decided at least twice: {:?}",
+        seen.len()
+    );
     // Round 1 must have observed round 0's tool activity (the observation entry).
     let round_one = &seen[1];
     assert!(
