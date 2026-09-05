@@ -9,11 +9,14 @@ import {
   type DesktopTenantPromptTemplatesOperationsV2,
 } from '../../plugins/desktopTenantPromptTemplatesAuthorityModuleV2';
 import type { DesktopWorkspaceRosterOperationsV2 } from '../../plugins/desktopWorkspaceRosterAuthorityModuleV2';
+import {
+  createDesktopTenantSubAgentDefinitionsClientV2,
+  type DesktopTenantSubAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
 import type { DesktopRuntimeConfig, ManagedAgentDefinition } from '../../types';
 
 type DesktopNewThreadComposerStaticCatalogMethod =
   | 'listManagedSkills'
-  | 'listManagedSubAgents'
   | 'listMarketplacePlugins'
   | 'listWorkspaceAgents'
   | 'uploadSandboxFile';
@@ -21,6 +24,9 @@ type DesktopNewThreadComposerStaticCatalogMethod =
 export type DesktopNewThreadComposerCatalogClient = Readonly<
   Pick<DesktopApiClient, DesktopNewThreadComposerStaticCatalogMethod> & {
     listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]>;
+    listManagedSubAgents: ReturnType<
+      typeof createDesktopTenantSubAgentDefinitionsClientV2
+    >['listManagedSubAgents'];
     listPromptTemplates: ReturnType<
       typeof createDesktopTenantPromptTemplatesClientV2
     >['listPromptTemplates'];
@@ -58,6 +64,7 @@ export type DesktopNewThreadComposerCatalogClientProviderInputV2 = Readonly<{
   >;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
   tenantPromptTemplatesOperationsV2: DesktopTenantPromptTemplatesOperationsV2;
+  tenantSubAgentDefinitionsOperationsV2: DesktopTenantSubAgentDefinitionsOperationsV2;
 }>;
 
 export type DesktopNewThreadComposerCatalogClientBindingV2 = Readonly<{
@@ -102,6 +109,10 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
     input.tenantAgentDefinitionsOperationsV2,
     config,
   );
+  const subAgentDefinitions = createDesktopTenantSubAgentDefinitionsClientV2(
+    input.tenantSubAgentDefinitionsOperationsV2,
+    config,
+  );
   const promptTemplates = createDesktopTenantPromptTemplatesClientV2(
     input.tenantPromptTemplatesOperationsV2,
     config,
@@ -124,9 +135,7 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
     listMarketplacePlugins: (
       ...args: Parameters<DesktopApiClient['listMarketplacePlugins']>
     ) => input.pluginMarketplaceOperationsV2.listMarketplacePlugins(config, ...args),
-    listManagedSubAgents: (
-      ...args: Parameters<DesktopApiClient['listManagedSubAgents']>
-    ) => authority.listManagedSubAgents(...args),
+    listManagedSubAgents: (signal) => subAgentDefinitions.listManagedSubAgents(signal),
     uploadSandboxFile: (
       ...args: Parameters<DesktopApiClient['uploadSandboxFile']>
     ) => authority.uploadSandboxFile(...args),

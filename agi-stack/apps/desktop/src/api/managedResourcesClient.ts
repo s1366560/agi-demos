@@ -16,8 +16,6 @@ import type {
   ManagedSkillVersionDetail,
   ManagedSkillVersionList,
   ManagedSkillZipImportInput,
-  ManagedSubAgent,
-  ManagedSubAgentMutation,
 } from '../types';
 
 type ManagedResourcesRequestOptions = {
@@ -274,86 +272,6 @@ export class ManagedResourcesClient {
 
   async rejectManagedSkillEvolutionJob(jobId: string): Promise<ManagedSkillEvolutionJob> {
     return this.mutateManagedSkillEvolutionJob(jobId, 'reject');
-  }
-
-  async listManagedSubAgents(signal?: AbortSignal): Promise<ManagedSubAgent[]> {
-    const params = new URLSearchParams({ limit: '100', include_filesystem: 'true' });
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const payload = await this.request<unknown>(`/api/v1/subagents/?${params.toString()}`, {
-      signal,
-    });
-    return readArray<ManagedSubAgent>(
-      payload,
-      ['subagents', 'items', 'data'],
-      'subagents',
-      this.createError,
-    );
-  }
-
-  async setManagedSubAgentEnabled(
-    subagentId: string,
-    enabled: boolean,
-    expectedRevision?: number,
-  ): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams({ enabled: String(enabled) });
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(
-      `/api/v1/subagents/${encodeURIComponent(subagentId)}/enable?${params.toString()}`,
-      {
-        method: 'PATCH',
-        body:
-          this.config.mode === 'local'
-            ? this.mutationBody({ enabled }, expectedRevision)
-            : undefined,
-      },
-    );
-  }
-
-  async importManagedFilesystemSubAgent(
-    name: string,
-    projectId?: string,
-  ): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams();
-    if (projectId) params.set('project_id', projectId);
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(
-      `/api/v1/subagents/filesystem/${encodeURIComponent(name)}/import?${params.toString()}`,
-      { method: 'POST' },
-    );
-  }
-
-  async createManagedSubAgent(input: ManagedSubAgentMutation): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(`/api/v1/subagents/?${params.toString()}`, {
-      method: 'POST',
-      body: this.mutationBody(input, 0, crypto.randomUUID()),
-    });
-  }
-
-  async updateManagedSubAgent(
-    subagentId: string,
-    input: ManagedSubAgentMutation,
-    expectedRevision?: number,
-  ): Promise<ManagedSubAgent> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    return this.request<ManagedSubAgent>(
-      `/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}`,
-      { method: 'PUT', body: this.mutationBody(input, expectedRevision) },
-    );
-  }
-
-  async deleteManagedSubAgent(
-    subagentId: string,
-    expectedRevision?: number,
-  ): Promise<void> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    await this.request<void>(
-      `/api/v1/subagents/${encodeURIComponent(subagentId)}?${params.toString()}`,
-      { method: 'DELETE', body: this.mutationBody(null, expectedRevision) },
-    );
   }
 
   private async mutateManagedSkillEvolutionJob(

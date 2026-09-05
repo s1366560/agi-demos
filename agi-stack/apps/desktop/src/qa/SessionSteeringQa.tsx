@@ -80,6 +80,7 @@ const qaApi: ComposerCatalogClient = {
   listWorkspaceAgents: async () => [],
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
+  listManagedSubAgents: async () => [],
   listMarketplacePlugins: async () => [],
   listPromptTemplates: async () => [],
   createPromptTemplate: async () => {

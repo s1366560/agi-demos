@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { createTenantSubAgentDefinitionsHttpClientV2Fixture } from './tenantSubAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const clientModule = require(
@@ -4715,9 +4716,11 @@ test('managed subagent APIs preserve tenant scope and enabled mutation contracts
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSubAgentDefinitionsHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
+      mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
+      apiKey: 'subagent-trusted-session',
       localApiToken: 'local-session-token',
       tenantId: 'tenant 1',
       projectId: 'project/1',
@@ -4727,6 +4730,11 @@ test('managed subagent APIs preserve tenant scope and enabled mutation contracts
     const updated = await client.setManagedSubAgentEnabled(subagents[0].id, true, 0);
 
     assert.equal(updated.enabled, true);
+    for (const call of calls) {
+      const headers = new Headers(call.init.headers);
+      assert.equal(headers.get('Authorization'), 'Bearer subagent-trusted-session');
+      assert.equal(headers.get('X-Agistack-Launch'), 'local-session-token');
+    }
     assert.deepEqual(
       calls.map((call) => [String(call.input), call.init?.method]),
       [

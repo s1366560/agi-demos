@@ -69,6 +69,7 @@ const authorityModules = [
   'desktopTenantGenesAuthorityModuleV2',
   'desktopTenantTemplatesAuthorityModuleV2',
   'desktopTenantPromptTemplatesAuthorityModuleV2',
+  'desktopTenantSubAgentDefinitionsAuthorityModuleV2',
   'desktopProjectChannelsAuthorityModuleV2',
   'desktopUserProfileAuthorityModuleV2',
   'desktopTenantAgentDefinitionsAuthorityModuleV2',

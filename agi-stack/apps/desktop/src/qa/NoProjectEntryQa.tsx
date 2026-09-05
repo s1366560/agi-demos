@@ -23,6 +23,7 @@ import type {
 import { createDesktopNewTaskFlowQaOperationsV2 } from './desktopNewTaskFlowAuthorityQaV2';
 import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
 import { createDesktopTenantAgentDefinitionsQaOperationsV2 } from './desktopTenantAgentDefinitionsAuthorityQaV2';
+import { createDesktopTenantSubAgentDefinitionsQaOperationsV2 } from './desktopTenantSubAgentDefinitionsAuthorityQaV2';
 import { createDesktopProjectChannelsQaOperationsV2 } from './desktopProjectChannelsAuthorityQaV2';
 import '../styles/global.css';
 
@@ -36,6 +37,8 @@ const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2()
 const projectChannelsOperationsV2 = createDesktopProjectChannelsQaOperationsV2();
 const tenantAgentDefinitionsOperationsV2 =
   createDesktopTenantAgentDefinitionsQaOperationsV2();
+const tenantSubAgentDefinitionsOperationsV2 =
+  createDesktopTenantSubAgentDefinitionsQaOperationsV2();
 const qaSearchParams = new URLSearchParams(window.location.search);
 const qaScenario = qaSearchParams.get('scenario');
 const qaWindowState = qaSearchParams.get('state');
@@ -330,6 +333,7 @@ function NoProjectEntryQa() {
           tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
           projectChannelsOperationsV2={projectChannelsOperationsV2}
           tenantAgentDefinitionsOperationsV2={tenantAgentDefinitionsOperationsV2}
+          tenantSubAgentDefinitionsOperationsV2={tenantSubAgentDefinitionsOperationsV2}
           onClose={() => setSettingsOpen(false)}
           onConfigChange={setConfig}
           onRuntimeStatusRefresh={async () => undefined}

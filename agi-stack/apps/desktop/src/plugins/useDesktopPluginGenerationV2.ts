@@ -74,6 +74,7 @@ import { desktopTenantEvolutionAuthorityDefinitionV2 } from './desktopTenantEvol
 import { desktopTenantTemplatesAuthorityDefinitionV2 } from './desktopTenantTemplatesAuthorityModuleV2';
 import { desktopTenantAgentDefinitionsAuthorityDefinitionV2 } from './desktopTenantAgentDefinitionsAuthorityModuleV2';
 import { desktopTenantPromptTemplatesAuthorityDefinitionV2 } from './desktopTenantPromptTemplatesAuthorityModuleV2';
+import { desktopTenantSubAgentDefinitionsAuthorityDefinitionV2 } from './desktopTenantSubAgentDefinitionsAuthorityModuleV2';
 import { desktopTenantGenesAuthorityDefinitionV2 } from './desktopTenantGenesAuthorityModuleV2';
 import { desktopTenantOrganizationSettingsAuthorityDefinitionV2 } from './desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { desktopTenantDecisionRecordsAuthorityDefinitionV2 } from './desktopTenantDecisionRecordsAuthorityModuleV2';
@@ -162,6 +163,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopTenantTemplatesAuthorityDefinitionV2,
     desktopTenantAgentDefinitionsAuthorityDefinitionV2,
     desktopTenantPromptTemplatesAuthorityDefinitionV2,
+    desktopTenantSubAgentDefinitionsAuthorityDefinitionV2,
     desktopTenantGenesAuthorityDefinitionV2,
     desktopTenantOrganizationSettingsAuthorityDefinitionV2,
     desktopTenantDecisionRecordsAuthorityDefinitionV2,

@@ -802,6 +802,48 @@
       "contract_digest": "sha256:11874933f8ad9c05649d3c6378a0ac2749c8984b3728597dce87d0fc2f5b2726"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-subagent-definitions-authority",
+      "entrypoint": "applyDesktopTenantSubAgentDefinitionsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:74905d9a7b758e23414360d7a76be8830b9b88aa1e4a0a1cd2da6e3d460cbff6",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-subagent-definitions-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:93c5586b56db98dca8e8d0c2af592915d290a9d121e01fbeb87a66e4e34a1ddf"
+    },
+
+    {
       "module_ref": "builtin://memstack/desktop/tenant-organization-settings-authority",
       "entrypoint": "applyDesktopTenantOrganizationSettingsAuthorityV2",
       "artifact": {

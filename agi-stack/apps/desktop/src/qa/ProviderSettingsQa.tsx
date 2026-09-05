@@ -29,6 +29,7 @@ import type {
 import { DEFAULT_CONFIG } from '../types';
 import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
 import { createDesktopTenantAgentDefinitionsQaOperationsV2 } from './desktopTenantAgentDefinitionsAuthorityQaV2';
+import { createDesktopTenantSubAgentDefinitionsQaOperationsV2 } from './desktopTenantSubAgentDefinitionsAuthorityQaV2';
 import { createDesktopProjectChannelsQaOperationsV2 } from './desktopProjectChannelsAuthorityQaV2';
 import '../styles/global.css';
 
@@ -45,6 +46,8 @@ const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2()
 const projectChannelsOperationsV2 = createDesktopProjectChannelsQaOperationsV2();
 const tenantAgentDefinitionsOperationsV2 =
   createDesktopTenantAgentDefinitionsQaOperationsV2();
+const tenantSubAgentDefinitionsOperationsV2 =
+  createDesktopTenantSubAgentDefinitionsQaOperationsV2();
 const QA_ENVIRONMENT_SECRETS = new Set(['ANTHROPIC_API_KEY', 'OPENAI_API_KEY']);
 
 const qaProviderTypes = [
@@ -1834,6 +1837,7 @@ function ProviderSettingsQa() {
       tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
       projectChannelsOperationsV2={projectChannelsOperationsV2}
       tenantAgentDefinitionsOperationsV2={tenantAgentDefinitionsOperationsV2}
+      tenantSubAgentDefinitionsOperationsV2={tenantSubAgentDefinitionsOperationsV2}
       onClose={() => undefined}
       onConfigChange={setConfig}
       onRuntimeStatusRefresh={async () => undefined}

@@ -16,7 +16,7 @@ export type ComposerCatalogClient = {
   listManagedAgents: (signal?: AbortSignal) => Promise<ManagedAgentDefinition[]>;
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
   listMarketplacePlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
-  listManagedSubAgents?: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
+  listManagedSubAgents: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
   listPromptTemplates: (
     tenantId: string,
     signal?: AbortSignal,
@@ -77,7 +77,7 @@ export async function loadComposerCatalog(
     api.listManagedAgents(signal),
     api.listManagedSkills(signal),
     api.listMarketplacePlugins(signal),
-    api.listManagedSubAgents?.(signal) ?? Promise.resolve([]),
+    api.listManagedSubAgents(signal),
   ]);
   return { workspaceAgents, agents, skills, plugins, subagents };
 }
@@ -85,7 +85,7 @@ export async function loadComposerCatalog(
 export function unboundComposerCatalogClient(
   api: ComposerCatalogClient,
 ): ComposerCatalogClient {
-  const listManagedSubAgents = api.listManagedSubAgents?.bind(api);
+  const listManagedSubAgents = api.listManagedSubAgents.bind(api);
   const listPromptTemplates = api.listPromptTemplates.bind(api);
   const createPromptTemplate = api.createPromptTemplate.bind(api);
   const deletePromptTemplate = api.deletePromptTemplate.bind(api);
@@ -97,7 +97,7 @@ export function unboundComposerCatalogClient(
     listManagedAgents: (signal) => api.listManagedAgents(signal),
     listManagedSkills: (signal) => api.listManagedSkills(signal),
     listMarketplacePlugins: (signal) => api.listMarketplacePlugins(signal),
-    ...(listManagedSubAgents ? { listManagedSubAgents } : {}),
+    listManagedSubAgents,
     listPromptTemplates,
     createPromptTemplate,
     deletePromptTemplate,

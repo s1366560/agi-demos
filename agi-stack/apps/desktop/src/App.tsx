@@ -139,6 +139,10 @@ import {
   createDesktopTenantPromptTemplatesClientV2,
   createDesktopTenantPromptTemplatesOperationsV2,
 } from './plugins/desktopTenantPromptTemplatesAuthorityModuleV2';
+import {
+  createDesktopTenantSubAgentDefinitionsClientV2,
+  createDesktopTenantSubAgentDefinitionsOperationsV2,
+} from './plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
 import { createDesktopTenantGenesOperationsV2 } from './plugins/desktopTenantGenesAuthorityModuleV2';
 import { createDesktopTenantOrganizationSettingsOperationsV2 } from './plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAuthorityModuleV2';
@@ -1104,6 +1108,12 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantSubAgentDefinitionsOperationsV2 = useMemo(
+    () => createDesktopTenantSubAgentDefinitionsOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
   const desktopTenantPromptTemplatesOperationsV2 = useMemo(
     () =>
       createDesktopTenantPromptTemplatesOperationsV2(
@@ -1523,6 +1533,12 @@ export function App() {
       ),
     [config, desktopTenantAgentDefinitionsOperationsV2],
   );
+  const desktopTenantSubAgentDefinitionsClientV2 = useMemo(
+    () => createDesktopTenantSubAgentDefinitionsClientV2(
+      desktopTenantSubAgentDefinitionsOperationsV2, config,
+    ),
+    [config, desktopTenantSubAgentDefinitionsOperationsV2],
+  );
   const desktopTenantPromptTemplatesClientV2 = useMemo(
     () =>
       createDesktopTenantPromptTemplatesClientV2(
@@ -1779,7 +1795,7 @@ export function App() {
       listMarketplacePlugins: (signal?: AbortSignal) =>
         remainingComposerCatalogAuthority.listMarketplacePlugins(signal),
       listManagedSubAgents: (signal?: AbortSignal) =>
-        remainingComposerCatalogAuthority.listManagedSubAgents(signal),
+        desktopTenantSubAgentDefinitionsClientV2.listManagedSubAgents(signal),
       listPromptTemplates: (tenantId: string, signal?: AbortSignal) =>
         desktopTenantPromptTemplatesClientV2.listPromptTemplates(tenantId, signal),
       createPromptTemplate: (
@@ -1804,6 +1820,7 @@ export function App() {
     config.workspaceId,
     desktopTenantAgentDefinitionsClientV2,
     desktopTenantPromptTemplatesClientV2,
+    desktopTenantSubAgentDefinitionsClientV2,
   ]);
   const socket = useAgentSocket(
     config,
@@ -1974,12 +1991,15 @@ export function App() {
           desktopTenantAgentDefinitionsOperationsV2,
         tenantPromptTemplatesOperationsV2:
           desktopTenantPromptTemplatesOperationsV2,
+        tenantSubAgentDefinitionsOperationsV2:
+          desktopTenantSubAgentDefinitionsOperationsV2,
       }),
     [
       desktopNewThreadComposerCatalogClientProviderV2,
       desktopPluginMarketplaceOperationsV2,
       desktopTenantAgentDefinitionsOperationsV2,
       desktopTenantPromptTemplatesOperationsV2,
+      desktopTenantSubAgentDefinitionsOperationsV2,
       desktopWorkspaceRosterOperationsV2,
       newThreadRuntimeConfig,
     ],
@@ -7686,6 +7706,8 @@ export function App() {
         runtimeDisabledReason,
         agentDefinitionEvent,
         rendererRouteRegistry: desktopProductionRouteRegistry,
+        tenantSubAgentDefinitionsOperationsV2:
+          desktopTenantSubAgentDefinitionsOperationsV2,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,

@@ -68,8 +68,6 @@ import type {
   ManagedSkillVersionDetail,
   ManagedSkillVersionList,
   ManagedSkillZipImportInput,
-  ManagedSubAgent,
-  ManagedSubAgentMutation,
   PaginatedConversationsResponse,
   PlanSnapshot,
   ProjectMyWorkResponse,
@@ -2338,55 +2336,6 @@ export class DesktopApiClient {
           version: requireValue(version, 'plugin version'),
         },
       },
-    );
-  }
-
-  async listManagedSubAgents(signal?: AbortSignal): Promise<ManagedSubAgent[]> {
-    return this.managedResourcesClient.listManagedSubAgents(signal);
-  }
-
-  async setManagedSubAgentEnabled(
-    subagentId: string,
-    enabled: boolean,
-    expectedRevision?: number,
-  ): Promise<ManagedSubAgent> {
-    return this.managedResourcesClient.setManagedSubAgentEnabled(
-      subagentId,
-      enabled,
-      expectedRevision,
-    );
-  }
-
-  async importManagedFilesystemSubAgent(
-    name: string,
-    projectId?: string,
-  ): Promise<ManagedSubAgent> {
-    return this.managedResourcesClient.importManagedFilesystemSubAgent(name, projectId);
-  }
-
-  async createManagedSubAgent(input: ManagedSubAgentMutation): Promise<ManagedSubAgent> {
-    return this.managedResourcesClient.createManagedSubAgent(input);
-  }
-
-  async updateManagedSubAgent(
-    subagentId: string,
-    input: ManagedSubAgentMutation,
-    expectedRevision?: number,
-  ): Promise<ManagedSubAgent> {
-    return this.managedResourcesClient.updateManagedSubAgent(
-      subagentId,
-      input,
-      expectedRevision,
-    );
-  }
-
-  async deleteManagedSubAgent(
-    subagentId: string,
-    expectedRevision?: number,
-  ): Promise<void> {
-    return this.managedResourcesClient.deleteManagedSubAgent(
-      subagentId,
-      expectedRevision,
     );
   }
 

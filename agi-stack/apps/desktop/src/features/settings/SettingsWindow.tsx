@@ -28,6 +28,10 @@ import {
   createDesktopTenantAgentDefinitionsClientV2,
   type DesktopTenantAgentDefinitionsOperationsV2,
 } from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
+import {
+  createDesktopTenantSubAgentDefinitionsClientV2,
+  type DesktopTenantSubAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
 import { PROFILE_ROUTE_ID } from '../settings-routes/profileRoutePresentationModel';
@@ -98,6 +102,7 @@ type SettingsWindowProps = {
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
+  tenantSubAgentDefinitionsOperationsV2: DesktopTenantSubAgentDefinitionsOperationsV2;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -121,6 +126,7 @@ export function SettingsWindow({
   tenantTemplatesOperationsV2,
   projectChannelsOperationsV2,
   tenantAgentDefinitionsOperationsV2,
+  tenantSubAgentDefinitionsOperationsV2,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -142,6 +148,7 @@ export function SettingsWindow({
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const resourceRequestId = useRef(0);
+  const resourceActionRequestId = useRef(0);
   const agentDefinitionEventRef = useRef<AgentWsEvent | null>(null);
   const agentDefinitionEventsReadyRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -150,6 +157,12 @@ export function SettingsWindow({
   const resourceContextKeyRef = useRef(resourceContextKey);
   activeSectionRef.current = section;
   resourceContextKeyRef.current = resourceContextKey;
+  const tenantSubAgentDefinitionsClientV2 = useMemo(
+    () => createDesktopTenantSubAgentDefinitionsClientV2(
+      tenantSubAgentDefinitionsOperationsV2, config,
+    ),
+    [config, tenantSubAgentDefinitionsOperationsV2],
+  );
   const tenantAgentDefinitionsClientV2 = useMemo(
     () =>
       createDesktopTenantAgentDefinitionsClientV2(
@@ -239,7 +252,7 @@ export function SettingsWindow({
               ? await pluginMarketplaceOperationsV2.listMarketplacePlugins(config, signal)
               : resourceSection === 'agents'
                 ? await tenantAgentDefinitionsClientV2.listManagedAgents(signal)
-                : await managedResources.listManagedSubAgents(signal);
+                : await tenantSubAgentDefinitionsClientV2.listManagedSubAgents(signal);
         if (requestId !== resourceRequestId.current) return;
         setResourceItems(items);
         setLoadedResourceSection(resourceSection);
@@ -264,7 +277,7 @@ export function SettingsWindow({
         if (requestId === resourceRequestId.current) setResourceLoading(false);
       }
     },
-    [config, pluginMarketplaceOperationsV2, resourceContextKey, tenantAgentDefinitionsClientV2]
+    [config, pluginMarketplaceOperationsV2, resourceContextKey, tenantAgentDefinitionsClientV2, tenantSubAgentDefinitionsClientV2]
   );
   const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
   const reloadSkillResources = useCallback(() => loadResources('skills'), [loadResources]);
@@ -331,6 +344,7 @@ export function SettingsWindow({
   const subAgentLibrary = useSubAgentLibraryManagement({
     active: open,
     config,
+    client: tenantSubAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
     tenantTemplatesOperationsV2,
@@ -338,7 +352,7 @@ export function SettingsWindow({
   });
   const subAgentDefinitions = useSubAgentDefinitionManagement({
     active: open,
-    config,
+    client: tenantSubAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
     onReload: reloadSubAgentResources,
@@ -347,6 +361,8 @@ export function SettingsWindow({
   useEffect(() => {
     if (!open || !isResourceSection) return;
     const controller = new AbortController();
+    resourceActionRequestId.current += 1;
+    setActionBusyId(null);
     setResourceQuery('');
     setResourceFilter('all');
     setResourceActionError(null);
@@ -486,6 +502,11 @@ export function SettingsWindow({
     );
     const action = managedResourceAction(section, item, canManageResource, config.mode);
     if (!action) return;
+    const mutationRequestId = ++resourceActionRequestId.current;
+    const mutationIsCurrent = () =>
+      resourceActionRequestId.current === mutationRequestId &&
+      activeSectionRef.current === mutationSection &&
+      resourceContextKeyRef.current === mutationContextKey;
     setActionBusyId(item.id);
     setResourceActionError(null);
     try {
@@ -499,7 +520,7 @@ export function SettingsWindow({
         );
       } else if (action.kind === 'set_subagent_enabled') {
         const subagent = item as ManagedSubAgent;
-        await managedResources.setManagedSubAgentEnabled(
+        await tenantSubAgentDefinitionsClientV2.setManagedSubAgentEnabled(
           subagent.id,
           action.nextActive,
           subagent.revision,
@@ -512,21 +533,15 @@ export function SettingsWindow({
           agent.revision,
         );
       }
-      if (
-        activeSectionRef.current === mutationSection &&
-        resourceContextKeyRef.current === mutationContextKey
-      ) {
+      if (mutationIsCurrent()) {
         await loadResources(mutationSection);
       }
     } catch (error) {
-      if (
-        activeSectionRef.current === mutationSection &&
-        resourceContextKeyRef.current === mutationContextKey
-      ) {
+      if (mutationIsCurrent()) {
         setResourceActionError(error instanceof Error ? error.message : String(error));
       }
     } finally {
-      setActionBusyId(null);
+      if (mutationIsCurrent()) setActionBusyId(null);
     }
   };
 

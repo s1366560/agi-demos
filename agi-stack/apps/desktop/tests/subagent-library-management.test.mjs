@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { createTenantSubAgentDefinitionsHttpClientV2Fixture } from './tenantSubAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
-const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { createDesktopTenantTemplatesHttpProjectionV2 } = require(
   '/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantTemplatesHttpProjectionV2.js',
 );
@@ -77,7 +77,7 @@ test('managed SubAgent library APIs preserve template install and filesystem imp
       tenantId: 'tenant-1',
       projectId: 'project-1',
     };
-    const client = new DesktopApiClient(config);
+    const client = createTenantSubAgentDefinitionsHttpClientV2Fixture(config);
     const authority = createDesktopTenantTemplatesHttpProjectionV2(config);
     const templates = await authority.load(
       { authority: 'cloud', tenantId: 'tenant-1' },
@@ -182,7 +182,7 @@ test('managed SubAgent CRUD preserves tenant scope and authoritative mutation fi
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSubAgentDefinitionsHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',

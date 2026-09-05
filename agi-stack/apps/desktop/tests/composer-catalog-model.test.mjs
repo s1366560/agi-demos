@@ -53,6 +53,7 @@ test('composer catalog keeps workspace scope behavior for bound clients', async 
     listWorkspaceAgents: async () => [{ id: 'binding-1' }],
     listManagedAgents: async () => [],
     listManagedSkills: async () => [],
+    listManagedSubAgents: async () => [],
     listMarketplacePlugins: async () => [],
     listPromptTemplates: async () => [],
     createPromptTemplate: async () => ({ id: 'template-1' }),

@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
-import type { DesktopRuntimeConfig, ManagedSubAgent, ManagedSubAgentMutation } from '../../types';
+import type { DesktopTenantSubAgentDefinitionsClientV2 } from '../../plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
+import type { ManagedSubAgent, ManagedSubAgentMutation } from '../../types';
 
 export function useSubAgentDefinitionManagement({
   active,
-  config,
+  client,
   contextKey,
   canManage,
   onReload,
   onDeleted,
 }: {
   active: boolean;
-  config: DesktopRuntimeConfig;
+  client: DesktopTenantSubAgentDefinitionsClientV2;
   contextKey: string;
   canManage: boolean;
   onReload: (preferredSelectionId?: string) => Promise<void>;
@@ -52,7 +52,6 @@ export function useSubAgentDefinitionManagement({
       setBusy(true);
       setError(null);
       try {
-        const client = new ManagedResourcesClient(config);
         const saved = definition
           ? await client.updateManagedSubAgent(
               definition.id,
@@ -69,7 +68,7 @@ export function useSubAgentDefinitionManagement({
         if (contextKeyRef.current === requestContextKey) setBusy(false);
       }
     },
-    [canManage, config, contextKey, definition, onReload],
+    [canManage, client, contextKey, definition, onReload],
   );
 
   const remove = useCallback(async () => {
@@ -78,7 +77,7 @@ export function useSubAgentDefinitionManagement({
     setBusy(true);
     setError(null);
     try {
-      await new ManagedResourcesClient(config).deleteManagedSubAgent(
+      await client.deleteManagedSubAgent(
         definition.id,
         definition.revision,
       );
@@ -91,7 +90,7 @@ export function useSubAgentDefinitionManagement({
     } finally {
       if (contextKeyRef.current === requestContextKey) setBusy(false);
     }
-  }, [canManage, config, contextKey, definition, onDeleted, onReload]);
+  }, [canManage, client, contextKey, definition, onDeleted, onReload]);
 
   return {
     dialog: definition === undefined ? null : { key: dialogKey, definition },

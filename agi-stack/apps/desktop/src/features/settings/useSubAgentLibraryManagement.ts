@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
+import type { DesktopTenantSubAgentDefinitionsClientV2 } from '../../plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
 import type { DesktopTenantTemplatesOperationsV2 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import type {
   DesktopRuntimeConfig,
@@ -17,6 +17,7 @@ export type SubAgentLibraryDialogState = {
 export function useSubAgentLibraryManagement({
   active,
   config,
+  client,
   contextKey,
   canManage,
   tenantTemplatesOperationsV2,
@@ -24,6 +25,7 @@ export function useSubAgentLibraryManagement({
 }: {
   active: boolean;
   config: DesktopRuntimeConfig;
+  client: DesktopTenantSubAgentDefinitionsClientV2;
   contextKey: string;
   canManage: boolean;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
@@ -100,7 +102,7 @@ export function useSubAgentLibraryManagement({
       setImportBusyId(subagent.id);
       setError(null);
       try {
-        const created = await new ManagedResourcesClient(config).importManagedFilesystemSubAgent(
+        const created = await client.importManagedFilesystemSubAgent(
           subagent.name,
           config.projectId || undefined,
         );
@@ -112,7 +114,7 @@ export function useSubAgentLibraryManagement({
         if (contextKeyRef.current === requestContextKey) setImportBusyId(null);
       }
     },
-    [canManage, config, contextKey, importBusyId, onReload],
+    [canManage, client, config, contextKey, importBusyId, onReload],
   );
 
   return { dialog, busyId, importBusyId, error, open, close, install, importFilesystem };

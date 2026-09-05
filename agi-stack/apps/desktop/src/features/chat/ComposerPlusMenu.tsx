@@ -81,7 +81,13 @@ export function ComposerPlusMenu({
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Category['id'] | null>(null);
-  const [catalog, setCatalog] = useState<ComposerCatalog | null>(null);
+  const [catalogState, setCatalogState] = useState<{
+    api: ComposerCatalogClient;
+    value: ComposerCatalog;
+  } | null>(null);
+  const catalog = catalogState?.api === api ? catalogState.value : null;
+  const catalogApiRef = useRef(api);
+  catalogApiRef.current = api;
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [screenshotPreview, setScreenshotPreview] =
     useState<DesktopScreenshotPreview | null>(null);
@@ -117,13 +123,22 @@ export function ComposerPlusMenu({
   }, [open]);
 
   useEffect(() => {
+    setCatalogState(null);
+    setCatalogError(null);
+  }, [api]);
+
+  useEffect(() => {
     if (!open || catalog) return;
     const controller = new AbortController();
     setCatalogError(null);
     void loadComposerCatalog(api, controller.signal)
-      .then(setCatalog)
+      .then((value) => {
+        if (!controller.signal.aborted && catalogApiRef.current === api) {
+          setCatalogState({ api, value });
+        }
+      })
       .catch((caught) => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && catalogApiRef.current === api) {
           setCatalogError(caught instanceof Error ? caught.message : String(caught));
         }
       });
@@ -258,7 +273,7 @@ export function ComposerPlusMenu({
   }, [catalog, conversations, excludedConversationId, t]);
 
   function openMenu() {
-    setCatalog(null);
+    setCatalogState(null);
     setCatalogError(null);
     setOpen(true);
   }

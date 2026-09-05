@@ -529,7 +529,7 @@ test('composer catalog reloads managed resources whenever the same-scope menu re
   assert.ok(openMenu, 'ComposerPlusMenu should own an explicit open boundary');
   assert.match(
     openMenu[0],
-    /setCatalog\(null\);[\s\S]*setCatalogError\(null\);[\s\S]*setOpen\(true\);/u,
+    /setCatalogState\(null\);[\s\S]*setCatalogError\(null\);[\s\S]*setOpen\(true\);/u,
   );
   assert.doesNotMatch(openMenu[0], /window\.(?:addEventListener|dispatchEvent)/u);
   assert.match(

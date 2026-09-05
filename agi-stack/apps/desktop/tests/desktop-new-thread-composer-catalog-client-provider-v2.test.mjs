@@ -47,6 +47,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
+    tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   firstConfig.apiBaseUrl = 'http://127.0.0.1:49999';
@@ -56,6 +57,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
+    tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const originalFetch = globalThis.fetch;
@@ -87,11 +89,18 @@ test('bound publications pin one frozen composer catalog client to each workspac
 
 test('unbound publications hide workspace agents while retaining project catalogs and upload', async () => {
   const provider = createDesktopNewThreadComposerCatalogClientProviderV2();
+  const subAgentCalls = [];
   const publication = provider.publish({
     config: runtimeConfig('http://127.0.0.1:42003', ''),
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
+    tenantSubAgentDefinitionsOperationsV2: {
+      loadTenantSubAgentDefinitions: async (input) => {
+        subAgentCalls.push(input);
+        return [];
+      },
+    },
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const originalFetch = globalThis.fetch;
@@ -158,8 +167,11 @@ test('unbound publications hide workspace agents while retaining project catalog
     );
     assert.equal(
       calls.some((url) => url.includes('/subagents/?')),
-      true
+      false
     );
+    assert.equal(subAgentCalls.length, 1);
+    assert.equal(subAgentCalls[0].config.tenantId, 'tenant-1');
+    assert.equal(subAgentCalls[0].config.projectId, 'project-1');
     assert.equal(
       calls.some((url) => url.endsWith('/sandbox/execute')),
       true
@@ -176,6 +188,7 @@ test('failed composer catalog publication keeps the last-good binding', () => {
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
+    tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const poisonedConfig = {
@@ -192,11 +205,35 @@ test('failed composer catalog publication keeps the last-good binding', () => {
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
         tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
+    tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
         workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
       }),
     /candidate_new_thread_composer_catalog_config_invalid/u
   );
   assert.equal(provider.resolve(), lastGood);
+});
+
+test('SubAgent catalog operations keep the published tenant and abort signal', async () => {
+  const calls = [];
+  const config = runtimeConfig('http://127.0.0.1:42001', 'workspace-1');
+  const provider = createDesktopNewThreadComposerCatalogClientProviderV2();
+  const publication = provider.publish({
+    config,
+    pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
+    tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
+    tenantSubAgentDefinitionsOperationsV2: {
+      async loadTenantSubAgentDefinitions(input) { calls.push(input); return []; },
+    },
+    workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
+  });
+  config.tenantId = 'tenant-replaced';
+  const signal = new AbortController().signal;
+  assert.deepEqual(await publication.client.listManagedSubAgents(signal), []);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].scope.tenantId, 'tenant-1');
+  assert.equal(calls[0].config.tenantId, 'tenant-1');
+  assert.equal(calls[0].signal, signal);
 });
 
 test('App consumes the published V2 catalog client without constructing a new-thread API client', () => {
