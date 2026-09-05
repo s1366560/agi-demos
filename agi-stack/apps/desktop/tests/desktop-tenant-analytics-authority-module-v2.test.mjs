@@ -126,7 +126,12 @@ const MANIFEST_PATH = new URL(
 );
 
 function bootstrap() {
-  return JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
+  const profile = JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
+  // This focused Loader fixture does not exercise the coordinating snapshot module.
+  profile.entries = profile.entries.filter(
+    (entry) => entry.module_ref !== 'builtin://memstack/desktop/workbench-snapshot-authority',
+  );
+  return profile;
 }
 
 test('generated contract declares one credential-free root tenant analytics Provider', () => {

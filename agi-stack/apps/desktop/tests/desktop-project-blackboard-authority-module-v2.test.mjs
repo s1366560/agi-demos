@@ -755,7 +755,17 @@ test('all production consumers use the V2 operations facade with no parallel cli
   assert.match(app, /createDesktopWorkspaceCollaborationClientV2/u);
   assert.match(routeRegistry, /projectBlackboardOperationsV2/u);
   assert.match(workbench, /projectBlackboardOperationsV2/u);
-  assert.match(provider, /projectBlackboardOperationsV2/u);
+  const dependencies = source('src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts');
+  const snapshotAuthority = source('src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.ts');
+  assert.match(provider, /snapshotOperationsV2: DesktopWorkbenchSnapshotOperationsV2/u);
+  assert.match(provider, /desktop_workbench_snapshot_operations_required/u);
+  assert.match(provider, /operations\.loadSnapshot/u);
+  assert.match(app, /snapshotOperationsV2:\s*desktopWorkbenchSnapshotOperationsV2/u);
+  assert.match(snapshotAuthority, /createDesktopWorkbenchSnapshotDependenciesV2\(operationConfig, \(\) => actions\)/u);
+  assert.match(dependencies, /createDesktopProjectBlackboardOperationsV2\(resolveActions\)/u);
+  assert.match(dependencies, /const resolveActions = \(\) => parentActions/u);
+  assert.match(dependencies, /projectBlackboardOperationsV2,/u);
+  assert.doesNotMatch(dependencies, /GenerationActionsRefV2|new DesktopApiClient/u);
   assert.match(generation, /desktopProjectBlackboardAuthorityDefinitionV2/u);
   assert.doesNotMatch(app, /workspaceCollaborationClientProviderV2/u);
   assert.doesNotMatch(routeRegistry, /createProjectBlackboard(?:Cloud|Local)Client/u);

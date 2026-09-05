@@ -309,6 +309,10 @@ test('project agent V2 route composition binds only its three native loaders', (
 });
 
 test('project administration V2 route composition binds its five configuration loaders', () => {
+  const snapshotDependencies = readFileSync(
+    new URL('../src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts', import.meta.url),
+    'utf8',
+  );
   const projectAdministrationFactoryStart = registrySource.indexOf(
     'export function createAppProjectAdministrationRouteRegistry',
   );
@@ -365,8 +369,10 @@ test('project administration V2 route composition binds its five configuration l
     appSource.match(
       /projectSchemaOperationsV2:\s*desktopProjectSchemaOperationsV2/gu,
     )?.length,
-    2,
+    1,
   );
+  assert.match(snapshotDependencies, /createDesktopProjectSchemaOperationsV2\(resolveActions\)/u);
+  assert.match(snapshotDependencies, /projectSchemaOperationsV2: projectSchemaOperationsV2/u);
   assert.doesNotMatch(appSource, /createProjectSchemaClient\(/u);
   assert.match(
     appSource,
@@ -376,8 +382,10 @@ test('project administration V2 route composition binds its five configuration l
     appSource.match(
       /projectMaintenanceOperationsV2:\s*desktopProjectMaintenanceOperationsV2/gu,
     )?.length,
-    2,
+    1,
   );
+  assert.match(snapshotDependencies, /createDesktopProjectMaintenanceOperationsV2\(resolveActions\)/u);
+  assert.match(snapshotDependencies, /projectMaintenanceOperationsV2: projectMaintenanceOperationsV2/u);
   assert.doesNotMatch(appSource, /createProjectMaintenanceClient\(/u);
 });
 

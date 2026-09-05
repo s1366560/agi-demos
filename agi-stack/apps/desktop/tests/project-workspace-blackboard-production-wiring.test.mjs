@@ -503,7 +503,15 @@ test('App binds both typed route modules without browser handoff or DesktopApiCl
   assert.match(registrySource, /desktopWorkspaceCatalogOperationsV2/u);
   assert.match(registrySource, /desktopWorkspaceLifecycleOperationsV2/u);
   assert.doesNotMatch(registrySource, /createProjectWorkspacesHttpClient\(/u);
-  assert.match(providerSource, /createProjectWorkspacesV2Client\(config,\s*\{/u);
+  const snapshotDependencies = readFileSync(
+    new URL('../src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(providerSource, /operations\.loadSnapshot\(/u);
+  assert.doesNotMatch(providerSource, /createProjectWorkspacesV2Client/u);
+  assert.match(snapshotDependencies, /createProjectWorkspacesV2Client\(config,\s*\{/u);
+  assert.match(snapshotDependencies, /catalogOperations: desktopWorkspaceCatalogOperationsV2/u);
+  assert.match(snapshotDependencies, /lifecycleOperations: desktopWorkspaceLifecycleOperationsV2/u);
   assert.match(workbenchSource, /projectWorkspacesClient:\s*Pick<ProjectWorkspacesClient/u);
   assert.doesNotMatch(workbenchSource, /projectWorkspacesClient\?\s*:/u);
   assert.doesNotMatch(workbenchSource, /createProjectWorkspacesHttpClient/u);

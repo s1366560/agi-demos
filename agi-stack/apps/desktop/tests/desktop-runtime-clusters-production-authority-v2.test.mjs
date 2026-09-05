@@ -43,7 +43,17 @@ test('Runtime Clusters route requires one stable V2 operations facade', () => {
 });
 
 test('Workbench observes Runtime Clusters only through the V2 probe', () => {
-  assert.match(providerSource, /runtimeClustersOperationsV2:\s*input\.runtimeClustersOperationsV2/u);
+  const dependencies = readFileSync(new URL('../src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts', import.meta.url), 'utf8');
+  const snapshotAuthority = readFileSync(new URL('../src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.ts', import.meta.url), 'utf8');
+  assert.match(providerSource, /snapshotOperationsV2: DesktopWorkbenchSnapshotOperationsV2/u);
+  assert.match(providerSource, /desktop_workbench_snapshot_operations_required/u);
+  assert.match(providerSource, /operations\.loadSnapshot/u);
+  assert.match(appSource, /snapshotOperationsV2:\s*desktopWorkbenchSnapshotOperationsV2/u);
+  assert.match(snapshotAuthority, /createDesktopWorkbenchSnapshotDependenciesV2\(operationConfig, \(\) => actions\)/u);
+  assert.match(dependencies, /createDesktopRuntimeClustersOperationsV2\(resolveActions\)/u);
+  assert.match(dependencies, /const resolveActions = \(\) => parentActions/u);
+  assert.match(dependencies, /runtimeClustersOperationsV2,/u);
+  assert.doesNotMatch(dependencies, /GenerationActionsRefV2|new DesktopApiClient/u);
   assert.match(workbenchSource, /runtimeClustersOperationsV2/u);
   assert.match(workbenchSource, /probeRuntimeClusters/u);
   assert.match(

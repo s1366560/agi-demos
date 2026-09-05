@@ -232,6 +232,13 @@ export class GenerationLeaseV2 {
     private readonly manager: GenerationManagerV2
   ) {}
 
+  fork(): GenerationLeaseV2 {
+    if (this.released) {
+      throw new RuntimeV2Error('generation_lease_released', 'cannot fork a released generation lease');
+    }
+    return this.manager.acquire(this.generation);
+  }
+
   async release(): Promise<void> {
     if (this.released) return;
     this.released = true;

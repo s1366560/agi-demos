@@ -384,6 +384,7 @@ import {
 } from './features/runtime/desktopWorkbenchCapabilityClientProviderV2';
 import { desktopCapability } from './features/runtime/capabilitySnapshot';
 import { useDesktopCapabilitySnapshot } from './features/runtime/useDesktopCapabilitySnapshot';
+import { createDesktopWorkbenchSnapshotOperationsV2 } from './plugins/desktopWorkbenchSnapshotAuthorityModuleV2';
 import { createProjectSearchRouteBindingProviderV2 } from './features/search/projectSearchRouteBindingProviderV2';
 import {
   countMyWorkGroups,
@@ -895,6 +896,12 @@ export function App() {
   );
   const desktopPluginMarketplaceGenerationActionsRefV2 =
     useRef<DesktopRendererGenerationActionsV2 | null>(null);
+  const desktopWorkbenchSnapshotOperationsV2 = useMemo(
+    () => createDesktopWorkbenchSnapshotOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
   const desktopProjectBlackboardOperationsV2 = useMemo(
     () =>
       createDesktopProjectBlackboardOperationsV2(
@@ -1810,105 +1817,15 @@ export function App() {
     routeRegistry: desktopProductionRouteRegistry,
   } = desktopRendererGenerationV2.state;
   const desktopWorkbenchCapabilityClientV2 = useMemo(
-    () =>
-      desktopWorkbenchCapabilityClientProviderV2.publish({
-        automationApi: desktopAutomationApiV2,
-        config,
-        pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
-        projectBlackboardOperationsV2: desktopProjectBlackboardOperationsV2,
-        projectAgentDashboardOperationsV2: desktopProjectAgentDashboardOperationsV2,
-        projectAgentLogsOperationsV2: desktopProjectAgentLogsOperationsV2,
-        projectAgentPatternsOperationsV2: desktopProjectAgentPatternsOperationsV2,
-        projectCommunitiesOperationsV2: desktopProjectCommunitiesOperationsV2,
-        projectEntitiesOperationsV2: desktopProjectEntitiesOperationsV2,
-        projectGraphOperationsV2: desktopProjectGraphOperationsV2,
-        projectMemoriesOperationsV2: desktopProjectMemoriesOperationsV2,
-        projectTeamOperationsV2: desktopProjectTeamOperationsV2,
-        projectSchemaOperationsV2: desktopProjectSchemaOperationsV2,
-        projectMaintenanceOperationsV2: desktopProjectMaintenanceOperationsV2,
-        projectSettingsOperationsV2: desktopProjectSettingsOperationsV2,
-        projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
-        projectOverviewOperationsV2: desktopProjectOverviewOperationsV2,
-        runtimePoolOperationsV2: desktopRuntimePoolOperationsV2,
-        runtimeClustersOperationsV2: desktopRuntimeClustersOperationsV2,
-        runtimeInstancesOperationsV2: desktopRuntimeInstancesOperationsV2,
-        runtimeDeploymentsOperationsV2: desktopRuntimeDeploymentsOperationsV2,
-        backendStoresOperationsV2: desktopBackendStoresOperationsV2,
-        deadLetterQueueOperationsV2: desktopDeadLetterQueueOperationsV2,
-        instanceTemplatesOperationsV2: desktopInstanceTemplatesOperationsV2,
-        unifiedRuntimesOperationsV2: desktopUnifiedRuntimesOperationsV2,
-        tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
-        tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
-        tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
-        tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
-        tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
-        projectMcpServersOperationsV2: desktopProjectMcpServersOperationsV2,
-        tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
-        tenantAgentDefinitionsOperationsV2:
-          desktopTenantAgentDefinitionsOperationsV2,
-        userProfileOperationsV2: desktopUserProfileOperationsV2,
-        tenantGenesOperationsV2: desktopTenantGenesOperationsV2,
-        tenantOrganizationSettingsOperationsV2:
-          desktopTenantOrganizationSettingsOperationsV2,
-        tenantAcpOperationsV2: desktopTenantAcpOperationsV2,
-        tenantDecisionRecordsOperationsV2: desktopTenantDecisionRecordsOperationsV2,
-        tenantSettingsOperationsV2: desktopTenantSettingsOperationsV2,
-        tenantWebhooksOperationsV2: desktopTenantWebhooksOperationsV2,
-        tenantBillingOperationsV2: desktopTenantBillingOperationsV2,
-        tenantAuditOperationsV2: desktopTenantAuditOperationsV2,
-        tenantGovernanceOperationsV2: desktopTenantGovernanceOperationsV2,
-        tenantTrustOperationsV2: desktopTenantTrustOperationsV2,
-        desktopWorkspaceCatalogOperationsV2,
-        desktopWorkspaceLifecycleOperationsV2,
-        tenantAgentBindingsOperationsV2: desktopTenantAgentBindingsOperationsV2,
-        tenantAgentDashboardOperationsV2: desktopTenantAgentDashboardOperationsV2,
-        tenantAnalyticsOperationsV2: desktopTenantAnalyticsOperationsV2,
-        tenantOverviewOperationsV2: desktopTenantOverviewOperationsV2,
-        tenantProjectsOperationsV2: desktopTenantProjectsOperationsV2,
-        tenantTasksOperationsV2: desktopTenantTasksOperationsV2,
-      }),
+    () => desktopWorkbenchCapabilityClientProviderV2.publish({
+      config,
+      snapshotOperationsV2: desktopWorkbenchSnapshotOperationsV2,
+    }),
     [
       config,
-      desktopAutomationApiV2,
-      desktopPluginMarketplaceOperationsV2,
-      desktopProjectBlackboardOperationsV2,
-      desktopProjectAgentDashboardOperationsV2,
-      desktopProjectAgentLogsOperationsV2,
-      desktopProjectAgentPatternsOperationsV2,
-      desktopProjectCommunitiesOperationsV2,
-      desktopProjectEntitiesOperationsV2,
-      desktopProjectGraphOperationsV2,
-      desktopProjectMemoriesOperationsV2,
-      desktopProjectTeamOperationsV2,
-      desktopProjectSchemaOperationsV2,
-      desktopProjectMaintenanceOperationsV2,
-      desktopProjectSettingsOperationsV2,
-      desktopProjectChannelsOperationsV2,
-      desktopProjectOverviewOperationsV2,
-      desktopRuntimePoolOperationsV2,
-      desktopRuntimeClustersOperationsV2,
-      desktopRuntimeDeploymentsOperationsV2,
-      desktopBackendStoresOperationsV2,
-      desktopDeadLetterQueueOperationsV2,
-      desktopInstanceTemplatesOperationsV2,
-      desktopTenantEvolutionOperationsV2,
-      desktopTenantSkillDefinitionsOperationsV2,
-      desktopTenantProvidersOperationsV2,
-      desktopProjectMcpServersOperationsV2,
-      desktopTenantTemplatesOperationsV2,
-      desktopTenantAgentDefinitionsOperationsV2,
-      desktopUserProfileOperationsV2,
-      desktopTenantGenesOperationsV2,
-      desktopTenantOrganizationSettingsOperationsV2,
-      desktopWorkspaceCatalogOperationsV2,
-      desktopWorkspaceLifecycleOperationsV2,
-      desktopTenantAgentBindingsOperationsV2,
-      desktopTenantAgentDashboardOperationsV2,
-      desktopTenantAnalyticsOperationsV2,
-      desktopTenantOverviewOperationsV2,
-      desktopTenantProjectsOperationsV2,
-      desktopTenantTasksOperationsV2,
+      desktopWorkbenchSnapshotOperationsV2,
       desktopWorkbenchCapabilityClientProviderV2,
+      desktopRendererGenerationV2.actions,
     ],
   );
   const sandboxRuntime = useSandboxRuntimeSurface(

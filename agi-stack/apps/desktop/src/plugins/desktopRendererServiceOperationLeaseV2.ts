@@ -17,6 +17,9 @@ export type DesktopRendererServiceOperationLeaseAdmissionV2<TService> =
       status: 'accepted';
       digest: string;
       useService: <TResult>(operation: (service: TService) => TResult) => TResult;
+      acquireChildServiceLease?: <TChild>(
+        request: DesktopRendererServiceOperationLeaseRequestV2,
+      ) => Promise<DesktopRendererServiceOperationLeaseAdmissionV2<TChild>>;
       release: () => Promise<void>;
     }>
   | Readonly<{
@@ -53,9 +56,7 @@ export async function acquireDesktopRendererServiceOperationLeaseV2<TService>(
   }
   const digest = generation.snapshot.digest.trim();
   if (!digest) {
-    return rejectServiceOperationLeaseV2(
-      'desktop_renderer_service_generation_digest_missing',
-    );
+    return rejectServiceOperationLeaseV2('desktop_renderer_service_generation_digest_missing');
   }
 
   let leaseCandidate: unknown;
@@ -87,8 +88,37 @@ export async function acquireDesktopRendererServiceOperationLeaseV2<TService>(
 
   let released = false;
   let releasePromise: Promise<void> | undefined;
+  // Older release-only adapters remain valid, but cannot grant a generation-bound child lease.
+  const fork =
+    lease.generation === generation && typeof lease.fork === 'function'
+      ? lease.fork.bind(lease)
+      : undefined;
   return Object.freeze({
     digest,
+    ...(fork === undefined
+      ? {}
+      : {
+          acquireChildServiceLease: <TChild>(
+            childRequest: DesktopRendererServiceOperationLeaseRequestV2,
+          ): Promise<DesktopRendererServiceOperationLeaseAdmissionV2<TChild>> => {
+            if (released) {
+              return Promise.resolve(
+                rejectServiceOperationLeaseV2(
+                  'desktop_renderer_service_generation_lease_acquire_failed',
+                  new RuntimeV2Error(
+                    'generation_lease_released',
+                    'parent service lease is released',
+                  ),
+                ),
+              );
+            }
+            return acquireDesktopRendererServiceOperationLeaseV2<TChild>(
+              generation,
+              childRequest,
+              () => fork(),
+            );
+          },
+        }),
     release: () => {
       if (releasePromise === undefined) {
         released = true;
@@ -130,23 +160,15 @@ function cloneServiceOperationScopeV2(
   if (typeof value.kind !== 'string' || !SCOPE_KINDS_V2.has(value.kind)) return undefined;
   for (const key of ['project_id', 'session_id', 'tenant_id'] as const) {
     const identifier = value[key];
-    if (
-      identifier !== undefined &&
-      identifier !== null &&
-      !isCanonicalStringV2(identifier)
-    ) {
+    if (identifier !== undefined && identifier !== null && !isCanonicalStringV2(identifier)) {
       return undefined;
     }
   }
   return Object.freeze({
     kind: value.kind as DesktopRendererServiceOperationLeaseRequestV2['scope']['kind'],
     ...(value.tenant_id === undefined ? {} : { tenant_id: value.tenant_id as string | null }),
-    ...(value.project_id === undefined
-      ? {}
-      : { project_id: value.project_id as string | null }),
-    ...(value.session_id === undefined
-      ? {}
-      : { session_id: value.session_id as string | null }),
+    ...(value.project_id === undefined ? {} : { project_id: value.project_id as string | null }),
+    ...(value.session_id === undefined ? {} : { session_id: value.session_id as string | null }),
   });
 }
 

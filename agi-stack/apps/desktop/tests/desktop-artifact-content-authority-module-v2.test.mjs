@@ -244,7 +244,12 @@ const SERVER_HASH = `sha256:${'a'.repeat(64)}`;
 const DRAFT_HASH = `sha256:${'b'.repeat(64)}`;
 
 function loadBootstrap() {
-  return JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
+  const profile = JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
+  // This focused Loader fixture does not exercise the coordinating snapshot module.
+  profile.entries = profile.entries.filter(
+    (entry) => entry.module_ref !== 'builtin://memstack/desktop/workbench-snapshot-authority',
+  );
+  return profile;
 }
 
 function rendererDefinitions() {

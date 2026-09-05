@@ -1,3 +1,7 @@
+import {
+  requireActiveWorkbenchSnapshotV2,
+  settleWorkbenchSnapshotBranchesV2,
+} from './desktopWorkbenchSnapshotSettlementV2';
 import type { McpServersRouteAuthority } from '../settings-routes/mcpServersRouteClient';
 import type { ProviderRouteAuthority } from '../settings-routes/providerRouteClient';
 import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
@@ -728,6 +732,7 @@ export function createDesktopWorkbenchCapabilityClient(
     async loadSnapshot(
       signal?: AbortSignal,
     ): Promise<DesktopCapabilitySnapshot> {
+      requireActiveWorkbenchSnapshotV2(signal);
       const [
         search,
         automationCapabilities,
@@ -758,7 +763,7 @@ export function createDesktopWorkbenchCapabilityClient(
         tenantRemainingCapabilities,
         p2ThirdBatchCapabilities,
         auxiliaryCloudCapabilities,
-      ] = await Promise.all([
+      ] = await settleWorkbenchSnapshotBranchesV2([
         loadSearchCapability(config, signal),
         loadAutomationCapabilities(automationApi, config.projectId, signal),
         loadWorkspaceCollaborationCapability(
@@ -857,7 +862,7 @@ export function createDesktopWorkbenchCapabilityClient(
         tenantRemainingCapabilityClient.load(signal),
         p2ThirdBatchCapabilityClient.load(signal),
         loadAuxiliaryCloudCapabilities(config, cloudRequestBroker, signal),
-      ]);
+      ] as const, signal);
       const tenantScope = tenantCapabilityScope(config);
       const projectScope = projectCapabilityScope(config);
       const workspaceScope = workspaceCapabilityScope(config);
@@ -1746,7 +1751,7 @@ async function loadManagementRouteCapabilities(
   config: DesktopRuntimeConfig,
   signal?: AbortSignal,
 ): Promise<Record<ManagementRouteCapability, DesktopCapabilityAvailability>> {
-  const entries = await Promise.all(
+  const entries = await settleWorkbenchSnapshotBranchesV2(
     MANAGEMENT_ROUTE_CAPABILITY_NAMES.map(
       async (capability) =>
         [

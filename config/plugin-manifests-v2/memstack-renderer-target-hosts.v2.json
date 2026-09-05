@@ -2934,6 +2934,47 @@
         }
       },
       "contract_digest": "sha256:212f0d67dc5b6077648619866b1939a18a94375db32decae9761a0a838637f98"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/workbench-snapshot-authority",
+      "entrypoint": "applyDesktopWorkbenchSnapshotAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.ts",
+        "digest": "sha256:49a9b4c4bcec9407ec3a821e4bbef6abd031ecee9f79bf142803a07f26744c0f"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workbench-snapshot-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "same-generation-snapshot",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:4e6917880e2aa16eb9713b94e0c72f9bca5a8111bbdfdad24d8ddb4e53634f3d"
     }
   ],
   "permissions": [],

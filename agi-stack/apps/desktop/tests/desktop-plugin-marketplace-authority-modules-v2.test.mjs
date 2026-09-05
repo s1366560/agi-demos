@@ -243,9 +243,14 @@ function loadBootstrap() {
   return JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
 }
 
+const { desktopWorkbenchSnapshotAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.js',
+);
+
 function rendererDefinitions() {
   return [
     ...createDesktopRendererDefinitionsV2(),
+    desktopWorkbenchSnapshotAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopProjectBlackboardAuthorityModuleV2.js')
       .desktopProjectBlackboardAuthorityDefinitionV2,
     require(COMPILED_ROOT + '/src/plugins/desktopSessionRunInputAuthorityModuleV2.js')
@@ -844,7 +849,17 @@ test('production and QA wiring remove every direct Marketplace transport fallbac
   assert.match(routeClient, /projectMarketplacePlugins/u);
   assert.match(routeRuntime, /createClient/u);
   assert.match(routeRegistry, /pluginMarketplaceOperationsV2/u);
-  assert.match(workbenchProvider, /pluginMarketplaceOperationsV2/u);
+  const dependencies = source('agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchSnapshotDependenciesV2.ts');
+  const snapshotAuthority = source('agi-stack/apps/desktop/src/plugins/desktopWorkbenchSnapshotAuthorityModuleV2.ts');
+  assert.match(workbenchProvider, /snapshotOperationsV2: DesktopWorkbenchSnapshotOperationsV2/u);
+  assert.match(workbenchProvider, /desktop_workbench_snapshot_operations_required/u);
+  assert.match(workbenchProvider, /operations\.loadSnapshot/u);
+  assert.match(app, /snapshotOperationsV2:\s*desktopWorkbenchSnapshotOperationsV2/u);
+  assert.match(snapshotAuthority, /createDesktopWorkbenchSnapshotDependenciesV2\(operationConfig, \(\) => actions\)/u);
+  assert.match(dependencies, /createDesktopPluginMarketplaceOperationsV2\(resolveActions\)/u);
+  assert.match(dependencies, /const resolveActions = \(\) => parentActions/u);
+  assert.match(dependencies, /pluginMarketplaceOperationsV2,/u);
+  assert.doesNotMatch(dependencies, /GenerationActionsRefV2|new DesktopApiClient/u);
   assert.match(composerProvider, /pluginMarketplaceOperationsV2/u);
   assert.match(noProjectQa, /noProjectPluginMarketplaceOperationsV2/u);
   assert.match(providerQa, /qaPluginMarketplaceOperationsV2/u);

@@ -445,7 +445,7 @@ test('Run Review V2 real Loader reuses both modules with disabled generation zer
       'utf8',
     ),
   );
-  assert.equal(profile.entries.length, 428);
+  assert.equal(profile.entries.length, 429);
   const loader = new runtime.LoaderV2(
     [...runtime.createDesktopRendererDefinitionsV2(), ...authorities],
     'desktop-renderer',
