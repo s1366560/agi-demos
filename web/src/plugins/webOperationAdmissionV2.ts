@@ -5,6 +5,14 @@ import {
   type RuntimeGenerationV2,
 } from '@agistack/plugin-runtime';
 
+/** Explicit resource cleanup failures survive a consumer catching its child operation. */
+export class WebOperationCleanupErrorV2 extends AggregateError {
+  constructor(errors: Iterable<unknown>, message = 'Web operation cleanup failed') {
+    super(errors, message);
+    this.name = 'WebOperationCleanupErrorV2';
+  }
+}
+
 export interface WebOperationContextV2 {
   readonly signal: AbortSignal;
   readonly generation: RuntimeGenerationV2;
@@ -24,9 +32,8 @@ interface OperationState {
   readonly lease: GenerationLeaseV2;
   readonly controller: AbortController;
   readonly children: Set<Promise<unknown>>;
+  readonly cleanupFailures: Set<unknown>;
   active: boolean;
-  cleanupFailed?: boolean;
-  cleanupFailure?: unknown;
 }
 const operationStates = new WeakMap<WebOperationContextV2, OperationState>();
 const cancelled = () => new DOMException('Web operation cancelled', 'AbortError');
@@ -39,6 +46,7 @@ export class WebOperationAdmissionV2 {
   private closed = false;
   private closing: Promise<void> | undefined;
   private readonly pending = new Map<OperationState, Promise<unknown>>();
+  private readonly cleanupFailures = new Set<unknown>();
   private readonly unsubscribe: () => void;
   private readonly listeners = new Set<() => void>();
   private availability: WebOperationAvailabilityV2 = Object.freeze({
@@ -85,12 +93,10 @@ export class WebOperationAdmissionV2 {
     this.closed = true;
     this.setEnabled(false);
     this.unsubscribe();
-    const states = [...this.pending.keys()];
     this.closing = Promise.allSettled([...this.pending.values()]).then(() => {
-      const failures = states
-        .filter((state) => state.cleanupFailed)
-        .map((state) => state.cleanupFailure);
-      if (failures.length > 0) throw new AggregateError(failures, 'Web operation cleanup failed');
+      if (this.cleanupFailures.size > 0) {
+        throw new AggregateError([...this.cleanupFailures], 'Web operation cleanup failed');
+      }
     });
     return this.closing;
   }
@@ -129,7 +135,20 @@ export class WebOperationAdmissionV2 {
         if (source.aborted) controller.abort();
         source.addEventListener('abort', abort, { once: true });
       }
-      const state: OperationState = { lease, controller, children: new Set(), active: true };
+      const state: OperationState = {
+        lease,
+        controller,
+        children: new Set(),
+        cleanupFailures: new Set(),
+        active: true,
+      };
+      const recordCleanup = (error: unknown): void => {
+        const errors = error instanceof WebOperationCleanupErrorV2 ? error.errors : [error];
+        for (const item of errors) {
+          state.cleanupFailures.add(item);
+          this.cleanupFailures.add(item);
+        }
+      };
       const context: WebOperationContextV2 = Object.freeze({
         signal: controller.signal,
         generation: lease.generation,
@@ -159,10 +178,19 @@ export class WebOperationAdmissionV2 {
         } catch (error) {
           failed = true;
           failure = error;
+          if (error instanceof WebOperationCleanupErrorV2) recordCleanup(error);
         }
         state.active = false;
         // Children admitted before the parent returned still own their pinned leases.
         await Promise.allSettled([...state.children]);
+        if (state.cleanupFailures.size > 0) {
+          if (!failed) {
+            failed = true;
+            failure = new WebOperationCleanupErrorV2(state.cleanupFailures);
+          } else if (failure instanceof DOMException && failure.name === 'AbortError') {
+            failure = new WebOperationCleanupErrorV2([failure, ...state.cleanupFailures]);
+          }
+        }
         try {
           await lease.release();
           if (!failed && controller.signal.aborted) {
@@ -170,8 +198,7 @@ export class WebOperationAdmissionV2 {
             failure = cancelled();
           }
         } catch (error) {
-          state.cleanupFailed = true;
-          state.cleanupFailure = error;
+          recordCleanup(error);
           if (failed && failure instanceof DOMException && failure.name === 'AbortError') {
             failure = new AggregateError([failure, error], 'Web operation cleanup failed');
           } else if (!failed) {
@@ -181,6 +208,10 @@ export class WebOperationAdmissionV2 {
               : error;
           }
         } finally {
+          // Persist cleanup evidence before the settled child leaves its parent's pending set.
+          if (parent) {
+            for (const error of state.cleanupFailures) parent.cleanupFailures.add(error);
+          }
           for (const source of sources) source.removeEventListener('abort', abort);
           this.pending.delete(state);
         }

@@ -362,7 +362,9 @@ describe('Web operation admission with production Loader', () => {
       })
     ).rejects.toThrow('primary');
     expect(runtime.getSnapshot()!.leaseCount).toBe(0);
-    await admission.close();
+    await expect(admission.close()).rejects.toMatchObject({
+      errors: [expect.objectContaining({ message: 'release failure' })],
+    });
     await runtime.close();
   });
 });

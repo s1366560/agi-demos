@@ -111,6 +111,46 @@
         {
           "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
           "source_entry": "web/src/stores/agent/conversationsStore.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/InputBar.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/InputToolbar.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/chat/VoiceCallPanel.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/chat/VoiceWaveform.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/chat/useVoiceSessionMediaV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useVoiceChat.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useVoiceTranscribe.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useAudioQueue.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/voiceRetainedSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/voiceCallStore.ts"
         }
       ],
       "api_method": "WS",

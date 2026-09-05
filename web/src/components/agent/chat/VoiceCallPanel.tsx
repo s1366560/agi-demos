@@ -10,7 +10,14 @@
  */
 
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -30,13 +37,19 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { type DeviceInfo, useVoiceCallStore } from '@/stores/voiceCallStore';
+import { useVoiceCallStore } from '@/stores/voiceCallStore';
 
 import { useAudioQueue } from '@/hooks/useAudioQueue';
 import { useVoiceChat } from '@/hooks/useVoiceChat';
 
 import { formatCallDuration } from '@/utils/format';
 
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '../../../plugins/webOperationAdmissionV2';
+
+import { useVoiceSessionMediaV2 } from './useVoiceSessionMediaV2';
 import { VoiceWaveform } from './VoiceWaveform';
 
 // ---- Drag Hook --------------------------------------------------------------
@@ -210,12 +223,18 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
   const [duration, setDuration] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
 
   useDrag(panelRef);
 
   const {
     status,
+    callId,
+    owner,
     conversationId,
     projectId,
     isMuted,
@@ -233,6 +252,8 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
   } = useVoiceCallStore(
     useShallow((state) => ({
       status: state.status,
+      callId: state.callId,
+      owner: state.owner,
       conversationId: state.conversationId,
       projectId: state.projectId,
       isMuted: state.isMuted,
@@ -283,159 +304,120 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
   );
 
   // Voice chat hook (WebSocket-based pipeline)
-  const { enqueueChunk, stop: stopAudio, clear: clearAudio } = useAudioQueue();
-
-  // Keep a ref to disconnect for the unmount cleanup.
-  // This ensures the WebSocket is torn down if the panel is unmounted
-  // without an explicit handleEndCall (e.g., parent navigates away).
-  const disconnectRef = useRef<() => void>(() => {});
-
-  const { isConnected, isRecording, connect, disconnect, startRecording, stopRecording } =
-    useVoiceChat({
-      projectId: projectId || '',
-      conversationId: conversationId || '',
-      onAsrInterim: (text) => {
-        setAsrInterimText(text);
-      },
-      onAsrFinal: (text) => {
-        setAsrFinalText(text);
-      },
-      onAgentToken: (token) => {
-        appendAgentToken(token);
+  const { enqueueChunk, stop: stopAudio } = useAudioQueue();
+  const current = () => {
+    const state = useVoiceCallStore.getState();
+    return (
+      state.callId === callId &&
+      state.owner === owner &&
+      getWebOperationAvailabilityV2().owner === owner &&
+      getWebOperationAvailabilityV2().available
+    );
+  };
+  const {
+    isConnected,
+    isRecording,
+    connect,
+    disconnect,
+    startRecording,
+    stopRecording,
+    operation,
+    analyser,
+    session,
+  } = useVoiceChat({
+    projectId: projectId || '',
+    conversationId: conversationId || '',
+    onAsrInterim: (text) => {
+      if (current()) setAsrInterimText(text);
+    },
+    onAsrFinal: (text) => {
+      if (current()) setAsrFinalText(text);
+    },
+    onAgentToken: (text) => {
+      if (current()) {
+        appendAgentToken(text);
         setAgentStreaming(true);
-      },
-      onAgentComplete: (content) => {
-        setAgentComplete(content);
-      },
-      onTtsStart: () => {
-        setAiSpeaking(true);
-      },
-      onTtsEnd: () => {
-        setAiSpeaking(false);
-      },
-      onTtsAudio: (data) => {
-        void enqueueChunk(data);
-      },
-      onError: (err) => {
-        useVoiceCallStore.setState({ status: 'error', error: err });
-      },
-    });
-
-  // Keep disconnectRef in sync so the cleanup effect always calls the latest version.
-  useEffect(() => {
-    disconnectRef.current = disconnect;
+      }
+    },
+    onAgentComplete: (text) => {
+      if (current()) setAgentComplete(text);
+    },
+    onTtsStart: () => {
+      if (current()) setAiSpeaking(true);
+    },
+    onTtsEnd: () => {
+      if (current()) setAiSpeaking(false);
+    },
+    onTtsAudio: (data, voiceOperation) => {
+      if (!current()) return;
+      void enqueueChunk(data, voiceOperation).catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError'))
+          console.warn('Voice playback failed');
+      });
+    },
+    onError: (error) => {
+      if (current()) useVoiceCallStore.setState({ status: 'error', error });
+    },
   });
-
-  // Cleanup: when VoiceCallPanel is truly unmounted (not StrictMode), tear down WS.
-  useEffect(() => {
+  const close = useCallback(async () => {
+    const results = await Promise.allSettled([disconnect(), stopAudio()]);
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+  }, [disconnect, stopAudio]);
+  useLayoutEffect(() => {
+    const unbind = useVoiceCallStore.getState().bindCallCleanup(callId, close);
     return () => {
-      disconnectRef.current();
+      unbind();
+      void close().catch(() => {
+        console.warn('Voice cleanup failed');
+      });
     };
-  }, []);
+  }, [callId, close]);
+  useEffect(() => {
+    if (!availability.available || availability.owner !== owner) {
+      void endCall(callId).catch(() => {
+        console.warn('Voice cleanup failed');
+      });
+    }
+  }, [availability, owner, callId, endCall]);
+  useVoiceSessionMediaV2(session, isCameraOn && callMode === 'video', localVideoRef, setDevices);
 
   // Connect when status becomes 'connecting'
   useEffect(() => {
-    if (status === 'connecting' && conversationId && projectId) {
-      connect();
+    if (
+      status === 'connecting' &&
+      conversationId &&
+      projectId &&
+      availability.available &&
+      availability.owner === owner
+    ) {
+      void connect().catch(() => {
+        console.warn('Voice connection failed');
+      });
     }
-  }, [status, conversationId, projectId, connect]);
+  }, [status, conversationId, projectId, connect, availability, owner]);
 
   // When connected, update store and start recording
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected && operation && !operation.signal.aborted) {
+      operation.check();
       setConnected();
-      void startRecording();
     }
-  }, [isConnected, setConnected, startRecording]);
-
-  // Disconnect on endCall (status reset to 'idle')
-  useEffect(() => {
-    if (status === 'idle') {
-      disconnect();
-      stopAudio();
-    }
-  }, [status, disconnect, stopAudio]);
-
-  // Enumerate devices on connect
-  useEffect(() => {
-    if (isConnected) {
-      void navigator.mediaDevices
-        .enumerateDevices()
-        .then((devices) => {
-          const audioInputs: DeviceInfo[] = devices
-            .filter((d) => d.kind === 'audioinput')
-            .map((d) => ({
-              deviceId: d.deviceId,
-              label: d.label || `Mic ${d.deviceId.slice(0, 4)}`,
-              kind: 'audioinput' as const,
-            }));
-          const audioOutputs: DeviceInfo[] = devices
-            .filter((d) => d.kind === 'audiooutput')
-            .map((d) => ({
-              deviceId: d.deviceId,
-              label: d.label || `Speaker ${d.deviceId.slice(0, 4)}`,
-              kind: 'audiooutput' as const,
-            }));
-          const videoInputs: DeviceInfo[] = devices
-            .filter((d) => d.kind === 'videoinput')
-            .map((d) => ({
-              deviceId: d.deviceId,
-              label: d.label || `Camera ${d.deviceId.slice(0, 4)}`,
-              kind: 'videoinput' as const,
-            }));
-          setDevices({ audioInputs, audioOutputs, videoInputs });
-        })
-        .catch(() => {
-          setDevices({ audioInputs: [], audioOutputs: [], videoInputs: [] });
-        });
-    }
-  }, [isConnected, setDevices]);
+  }, [isConnected, operation, setConnected]);
 
   // Mute sync: stop/start recording when mute state changes
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected || !operation || operation.signal.aborted) return;
     if (isMuted) {
-      stopRecording();
+      void stopRecording().catch(() => {
+        console.warn('Voice capture cleanup failed');
+      });
     } else if (!isRecording) {
-      void startRecording();
+      void startRecording().catch(() => {
+        console.warn('Voice capture failed');
+      });
     }
-  }, [isMuted, isConnected, isRecording, stopRecording, startRecording]);
-
-  // Local camera preview
-  useEffect(() => {
-    if (isCameraOn && callMode === 'video') {
-      navigator.mediaDevices
-        .getUserMedia({ video: true })
-        .then((stream) => {
-          localStreamRef.current = stream;
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-        })
-        .catch(() => {
-          // Camera access denied or unavailable
-        });
-    } else {
-      if (localStreamRef.current) {
-        for (const track of localStreamRef.current.getTracks()) {
-          track.stop();
-        }
-        localStreamRef.current = null;
-      }
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
-      }
-    }
-
-    return () => {
-      if (localStreamRef.current) {
-        for (const track of localStreamRef.current.getTracks()) {
-          track.stop();
-        }
-        localStreamRef.current = null;
-      }
-    };
-  }, [isCameraOn, callMode]);
+  }, [isMuted, isConnected, isRecording, stopRecording, startRecording, operation]);
 
   // Duration timer
   useEffect(() => {
@@ -451,12 +433,11 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
   }, [status, callStartTime]);
 
   const handleEndCall = useCallback(() => {
-    disconnect();
-    stopAudio();
-    clearAudio();
-    void endCall();
+    void endCall(callId).catch(() => {
+      console.warn('Voice cleanup failed');
+    });
     onClose();
-  }, [disconnect, stopAudio, clearAudio, endCall, onClose]);
+  }, [endCall, callId, onClose]);
 
   // ---- Minimized view -------------------------------------------------------
 
@@ -609,7 +590,11 @@ export const VoiceCallPanel: React.FC<VoiceCallPanelProps> = ({ onClose }) => {
               </div>
               {/* Waveform under avatar */}
               <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-24 z-10">
-                <VoiceWaveform active={!isMuted && status === 'connected'} />
+                <VoiceWaveform
+                  active={!isMuted && status === 'connected'}
+                  analyser={analyser}
+                  operation={operation}
+                />
               </div>
             </div>
           </div>

@@ -60,7 +60,9 @@ describe('WebSocketConnection reconnect recovery', () => {
   let runtime: RendererPluginRuntimeV2;
   let admission: WebOperationAdmissionV2;
   let uninstall: () => void;
+  let expectedCleanupFailure: Error | undefined;
   beforeEach(async () => {
+    expectedCleanupFailure = undefined;
     runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
     await runtime.bootstrap(profile);
     admission = new WebOperationAdmissionV2(runtime);
@@ -76,14 +78,27 @@ describe('WebSocketConnection reconnect recovery', () => {
   });
 
   afterEach(async () => {
-    admission.setEnabled(false);
-    for (const socket of ManualWebSocket.instances) socket.finishClose();
-    await admission.close();
-    uninstall();
-    await runtime.close();
-    localStorage.clear();
-    vi.unstubAllGlobals();
-    vi.useRealTimers();
+    try {
+      admission.setEnabled(false);
+      for (const socket of ManualWebSocket.instances) socket.finishClose();
+      if (expectedCleanupFailure) {
+        await expect(admission.close()).rejects.toMatchObject({
+          name: 'AggregateError',
+          errors: [expectedCleanupFailure],
+        });
+      } else {
+        await admission.close();
+      }
+    } finally {
+      uninstall();
+      try {
+        await runtime.close();
+      } finally {
+        localStorage.clear();
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+      }
+    }
   });
 
   it('does not let a pre-open close pin the reconnect path to a stale promise', async () => {
@@ -314,6 +329,8 @@ describe('WebSocketConnection reconnect recovery', () => {
   it('actual generation release failure remains visible from disconnect after socket closes', async () => {
     uninstall();
     await admission.close();
+    const cleanupFailure = new Error('release-failed');
+    expectedCleanupFailure = cleanupFailure;
     admission = new WebOperationAdmissionV2({
       getSnapshot: runtime.getSnapshot,
       subscribe: runtime.subscribe,
@@ -322,7 +339,7 @@ describe('WebSocketConnection reconnect recovery', () => {
         const release = lease.release.bind(lease);
         lease.release = async () => {
           await release();
-          throw new Error('release-failed');
+          throw cleanupFailure;
         };
         return lease;
       },

@@ -27,6 +27,7 @@ import { ModelSwitchPopover } from './chat/ModelSwitchPopover';
 import { VoiceWaveform } from './chat/VoiceWaveform';
 
 import type { PendingAttachment } from './FileUploader';
+import type { WebOperationContextV2 } from '../../plugins/webOperationAdmissionV2';
 
 export interface InputToolbarProps {
   /** Ref to the hidden file input */
@@ -40,6 +41,8 @@ export interface InputToolbarProps {
   setTemplateLibraryVisible: React.Dispatch<React.SetStateAction<boolean>>;
   /** Voice input state */
   isListening: boolean;
+  voiceAnalyser: AnalyserNode | null;
+  voiceOperation: WebOperationContextV2 | null;
   toggleVoiceInput: () => Promise<void>;
   /** Voice call state */
   voiceCallStatus: string;
@@ -73,6 +76,8 @@ export const InputToolbar = memo<InputToolbarProps>(
     templateLibraryVisible,
     setTemplateLibraryVisible,
     isListening,
+    voiceAnalyser,
+    voiceOperation,
     toggleVoiceInput,
     voiceCallStatus,
     handleVoiceCall,
@@ -204,7 +209,7 @@ export const InputToolbar = memo<InputToolbarProps>(
               `}
             />
           </LazyTooltip>
-          <VoiceWaveform active={isListening} />
+          <VoiceWaveform active={isListening} analyser={voiceAnalyser} operation={voiceOperation} />
 
           <LazyTooltip title={voiceCallLabel}>
             <LazyButton
@@ -294,8 +299,7 @@ export const InputToolbar = memo<InputToolbarProps>(
             <LazyTooltip
               title={t('agent.inputBar.charLimitHint', {
                 count: 4000,
-                defaultValue:
-                  'Messages over {{count}} characters may be truncated by the model',
+                defaultValue: 'Messages over {{count}} characters may be truncated by the model',
               })}
             >
               <span
@@ -334,9 +338,7 @@ export const InputToolbar = memo<InputToolbarProps>(
                 transition-colors duration-200
               `}
             >
-              <span className="hidden min-[1280px]:inline">
-                {t('agent.inputBar.send', 'Send')}
-              </span>
+              <span className="hidden min-[1280px]:inline">{t('agent.inputBar.send', 'Send')}</span>
             </LazyButton>
           )}
           {/* I3: plugin composer actions mount after the send control. */}
