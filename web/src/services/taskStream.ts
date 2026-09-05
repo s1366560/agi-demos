@@ -1,4 +1,5 @@
 import { apiFetch } from './client/urlUtils';
+import type { WebOperationContextV2 } from '@/plugins/webOperationAdmissionV2';
 
 export interface TaskSseEvent {
   event: string;
@@ -59,76 +60,92 @@ function findEventSeparator(buffer: string): { index: number; length: number } |
 export async function streamTaskEvents(
   taskId: string,
   signal: AbortSignal,
-  handlers: TaskStreamHandlers
+  handlers: TaskStreamHandlers,
+  parent?: WebOperationContextV2
 ): Promise<void> {
-  const response = await apiFetch.get(`/tasks/${encodeURIComponent(taskId)}/stream`, {
-    headers: {
-      Accept: 'text/event-stream',
-    },
-    signal,
-  });
+  return apiFetch.get(
+    `/tasks/${encodeURIComponent(taskId)}/stream`,
+    async (response, operation) => {
+      operation.check();
 
-  if (!response.body) {
-    throw new Error('Task stream response has no body');
-  }
-
-  handlers.onOpen?.();
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  const consumeEvent = async (rawEvent: string): Promise<boolean> => {
-    const event = parseTaskSseEvent(rawEvent);
-    if (!event) {
-      return false;
-    }
-
-    if (event.event === 'progress') {
-      handlers.onProgress?.(event);
-      return false;
-    }
-    if (event.event === 'completed') {
-      handlers.onCompleted?.(event);
-      await reader.cancel().catch(() => undefined);
-      return true;
-    }
-    if (event.event === 'failed') {
-      handlers.onFailed?.(event);
-      await reader.cancel().catch(() => undefined);
-      return true;
-    }
-    if (event.event === 'error') {
-      handlers.onError?.(new Error(event.data));
-      await reader.cancel().catch(() => undefined);
-      return true;
-    }
-
-    return false;
-  };
-
-  while (!signal.aborted) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    let separator = findEventSeparator(buffer);
-    while (separator) {
-      const rawEvent = buffer.slice(0, separator.index);
-      buffer = buffer.slice(separator.index + separator.length);
-      if (await consumeEvent(rawEvent)) {
-        return;
+      if (!response.body) {
+        throw new Error('Task stream response has no body');
       }
-      separator = findEventSeparator(buffer);
-    }
-  }
 
-  buffer += decoder.decode();
-  if (buffer.trim()) {
-    await consumeEvent(buffer);
-  }
+      handlers.onOpen?.();
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const consumeEvent = async (rawEvent: string): Promise<boolean> => {
+        operation.check();
+        const event = parseTaskSseEvent(rawEvent);
+        if (!event) {
+          return false;
+        }
+
+        if (event.event === 'progress') {
+          handlers.onProgress?.(event);
+          return false;
+        }
+        if (event.event === 'completed') {
+          handlers.onCompleted?.(event);
+          await reader.cancel().catch(() => undefined);
+          return true;
+        }
+        if (event.event === 'failed') {
+          handlers.onFailed?.(event);
+          await reader.cancel().catch(() => undefined);
+          return true;
+        }
+        if (event.event === 'error') {
+          handlers.onError?.(new Error(event.data));
+          await reader.cancel().catch(() => undefined);
+          return true;
+        }
+
+        return false;
+      };
+
+      try {
+        while (!operation.signal.aborted) {
+          const { done, value } = await reader.read();
+          operation.check();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          let separator = findEventSeparator(buffer);
+          while (separator) {
+            const rawEvent = buffer.slice(0, separator.index);
+            buffer = buffer.slice(separator.index + separator.length);
+            if (await consumeEvent(rawEvent)) {
+              return;
+            }
+            separator = findEventSeparator(buffer);
+          }
+        }
+
+        operation.check();
+        buffer += decoder.decode();
+        if (buffer.trim()) {
+          await consumeEvent(buffer);
+        }
+      } finally {
+        await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
+    },
+    {
+      headers: {
+        Accept: 'text/event-stream',
+      },
+      signal,
+      ...(parent ? { parent } : {}),
+    }
+  );
 }
 
 export function subscribeToTaskEvents(taskId: string, handlers: TaskStreamHandlers): () => void {

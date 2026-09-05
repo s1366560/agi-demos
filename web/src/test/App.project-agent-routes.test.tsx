@@ -46,7 +46,10 @@ const routeAuthority = vi.hoisted(() => ({
 }));
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: (selector: (state: typeof authState) => unknown) => selector(authState),
+  useAuthStore: Object.assign(
+    (selector: (state: typeof authState) => unknown) => selector(authState),
+    { getState: () => authState, subscribe: () => () => undefined },
+  ),
 }));
 
 vi.mock('@/components/common/ErrorBoundary', () => ({

@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { installHttpAdmissionFixtureV2 } from '../webHttpAdmissionFixtureV2';
 
 import {
   createApiUrl,
@@ -105,6 +106,13 @@ describe('createWebSocketUrl', () => {
 });
 
 describe('apiFetch', () => {
+  let uninstallAdmission: () => Promise<void>;
+  beforeEach(() => {
+    uninstallAdmission = installHttpAdmissionFixtureV2();
+  });
+  afterEach(async () => {
+    await uninstallAdmission();
+  });
   beforeEach(() => {
     // Mock localStorage for auth token
     vi.spyOn(Storage.prototype, 'getItem').mockReturnValue('test-token');
@@ -123,7 +131,7 @@ describe('apiFetch', () => {
     });
     global.fetch = mockFetch;
 
-    await apiFetch.get('/test');
+    await apiFetch.get('/test', (response) => response.json());
 
     const callArgs = mockFetch.mock.calls[0];
     expect(callArgs[0]).toBe('/api/v1/test');
@@ -139,7 +147,7 @@ describe('apiFetch', () => {
     });
     global.fetch = mockFetch;
 
-    await apiFetch.post('/test', { message: 'hello' });
+    await apiFetch.post('/test', { message: 'hello' }, (response) => response.json());
 
     const callArgs = mockFetch.mock.calls[0];
     expect(callArgs[0]).toBe('/api/v1/test');

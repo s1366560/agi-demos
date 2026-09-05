@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  PLUGIN_MODULE_CATALOG_V2,
   createDesktopRendererDefinitionsV2,
   DesktopRendererDistributionReconcilerV2,
   desktopRendererDefinitionsV2,
@@ -14,7 +15,19 @@ import {
   type ProfileSnapshotV2,
 } from '@agistack/plugin-runtime';
 
-import bootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
+import generatedBootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
+
+// This suite exercises shared renderer host/contribution definitions, not Desktop application
+// services. Keep the real generated profile entries for those definitions and re-sign the fixture.
+const sharedDesktopModules = new Set(desktopRendererDefinitionsV2.map(definition => definition.moduleRef));
+const applicationDesktopModules = new Set(PLUGIN_MODULE_CATALOG_V2.modules
+  .filter(module => module.targets.includes('desktop-renderer') && !sharedDesktopModules.has(module.module_ref))
+  .map(module => module.module_ref));
+const bootstrapProfile = structuredClone(generatedBootstrapProfile);
+bootstrapProfile.entries = bootstrapProfile.entries.filter(entry => !applicationDesktopModules.has(entry.module_ref));
+const { digest: _fixtureDigest, ...fixtureUnsigned } = bootstrapProfile;
+bootstrapProfile.digest = await digestV2(fixtureUnsigned);
+
 
 async function snapshotAt(generation: number): Promise<ProfileSnapshotV2> {
   const snapshot = structuredClone(bootstrapProfile);

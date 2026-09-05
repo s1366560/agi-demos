@@ -2,6 +2,8 @@
  * Service for fetching project context data (stats, trending, skills).
  */
 
+import { runWebOperationV2, type WebOperationContextV2 } from '@/plugins/webOperationAdmissionV2';
+
 import { apiFetch } from './client/urlUtils';
 
 const PROJECT_SUMMARY_CACHE_TTL_MS = 10_000;
@@ -10,44 +12,60 @@ interface ProjectSummaryRequest<T> {
   promise: Promise<T>;
   expiresAt: number;
   pending: boolean;
+  signal: AbortSignal;
 }
 
-const projectSummaryRequests = new Map<string, ProjectSummaryRequest<unknown>>();
+let projectSummaryRequests = new WeakMap<object, Map<string, ProjectSummaryRequest<unknown>>>();
 
 function buildSummaryKey(kind: string, projectId: string, limit?: number): string {
   return JSON.stringify([kind, projectId, limit ?? null]);
 }
 
-function loadProjectSummary<T>(key: string, loader: () => Promise<T>): Promise<T> {
-  const existing = projectSummaryRequests.get(key);
-  const now = Date.now();
-
-  if (existing) {
-    if (existing.pending || existing.expiresAt > now) {
+function loadProjectSummary<T>(
+  key: string,
+  loader: (operation: WebOperationContextV2) => Promise<T>
+): Promise<T> {
+  return runWebOperationV2(async (operation) => {
+    operation.check();
+    let requests = projectSummaryRequests.get(operation.owner);
+    if (!requests) {
+      requests = new Map();
+      projectSummaryRequests.set(operation.owner, requests);
+    }
+    const existing = requests.get(key);
+    if (
+      existing &&
+      !existing.signal.aborted &&
+      (existing.pending || existing.expiresAt > Date.now())
+    ) {
       return existing.promise as Promise<T>;
     }
-    projectSummaryRequests.delete(key);
-  }
-
-  const entry: ProjectSummaryRequest<T> = {
-    pending: true,
-    expiresAt: Number.POSITIVE_INFINITY,
-    promise: Promise.resolve(undefined as T),
-  };
-
-  entry.promise = loader()
-    .then((data) => {
-      entry.pending = false;
-      entry.expiresAt = Date.now() + PROJECT_SUMMARY_CACHE_TTL_MS;
-      return data;
-    })
-    .catch((error: unknown) => {
-      projectSummaryRequests.delete(key);
-      throw error;
-    });
-
-  projectSummaryRequests.set(key, entry as ProjectSummaryRequest<unknown>);
-  return entry.promise;
+    const entry: ProjectSummaryRequest<T> = {
+      pending: true,
+      expiresAt: Number.POSITIVE_INFINITY,
+      signal: operation.signal,
+      promise: Promise.resolve(undefined as T),
+    };
+    const ownedRequests = requests;
+    entry.promise = Promise.resolve()
+      .then(() => {
+        operation.check();
+        return loader(operation);
+      })
+      .then((data) => {
+        operation.check();
+        entry.pending = false;
+        entry.expiresAt = Date.now() + PROJECT_SUMMARY_CACHE_TTL_MS;
+        return data;
+      })
+      .catch((error: unknown) => {
+        // An older failed request must not remove a replacement admitted after cancellation.
+        if (ownedRequests.get(key) === entry) ownedRequests.delete(key);
+        throw error;
+      });
+    ownedRequests.set(key, entry as ProjectSummaryRequest<unknown>);
+    return entry.promise;
+  });
 }
 
 export interface ProjectStats {
@@ -75,29 +93,47 @@ export interface RecentSkill {
 
 export const projectStatsService = {
   async getStats(projectId: string): Promise<ProjectStats> {
-    return loadProjectSummary(buildSummaryKey('stats', projectId), async () => {
-      const res = await apiFetch.get(`/projects/${projectId}/stats`);
-      return (await res.json()) as ProjectStats;
+    return loadProjectSummary(buildSummaryKey('stats', projectId), async (operation) => {
+      return apiFetch.get(
+        `/projects/${projectId}/stats`,
+        async (res) => {
+          return (await res.json()) as ProjectStats;
+        },
+        { parent: operation, signal: operation.signal }
+      );
     });
   },
 
   async getTrending(projectId: string, limit = 10): Promise<TrendingEntity[]> {
-    return loadProjectSummary(buildSummaryKey('trending', projectId, limit), async () => {
-      const res = await apiFetch.get(`/projects/${projectId}/trending?limit=${String(limit)}`);
-      const data = (await res.json()) as { entities: TrendingEntity[] };
-      return data.entities;
+    return loadProjectSummary(buildSummaryKey('trending', projectId, limit), async (operation) => {
+      return apiFetch.get(
+        `/projects/${projectId}/trending?limit=${String(limit)}`,
+        async (res) => {
+          const data = (await res.json()) as { entities: TrendingEntity[] };
+          return data.entities;
+        },
+        { parent: operation, signal: operation.signal }
+      );
     });
   },
 
   async getRecentSkills(projectId: string, limit = 5): Promise<RecentSkill[]> {
-    return loadProjectSummary(buildSummaryKey('recent-skills', projectId, limit), async () => {
-      const res = await apiFetch.get(`/projects/${projectId}/recent-skills?limit=${String(limit)}`);
-      const data = (await res.json()) as { skills: RecentSkill[] };
-      return data.skills;
-    });
+    return loadProjectSummary(
+      buildSummaryKey('recent-skills', projectId, limit),
+      async (operation) => {
+        return apiFetch.get(
+          `/projects/${projectId}/recent-skills?limit=${String(limit)}`,
+          async (res) => {
+            const data = (await res.json()) as { skills: RecentSkill[] };
+            return data.skills;
+          },
+          { parent: operation, signal: operation.signal }
+        );
+      }
+    );
   },
 };
 
 export function clearProjectStatsSummaryCache(): void {
-  projectSummaryRequests.clear();
+  projectSummaryRequests = new WeakMap();
 }

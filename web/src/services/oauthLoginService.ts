@@ -1,5 +1,5 @@
 import { ApiError } from './client/ApiError';
-import { httpClient } from './client/httpClient';
+import { kernelHttpClient } from './client/kernelHttpClient';
 
 export interface OAuthProviderDescriptor {
   id: string;
@@ -134,7 +134,7 @@ export function oauthReasonCode(error: unknown): string | null {
 
 export const oauthLoginService = {
   async listProviders(): Promise<OAuthProviderDescriptor[]> {
-    const response = await httpClient.get<{ providers: unknown }>('/auth/oauth/providers');
+    const response = await kernelHttpClient.get<{ providers: unknown }>('/auth/oauth/providers');
     if (!isRecord(response) || !Array.isArray(response.providers)) {
       throw new Error('OAuth provider response is invalid');
     }
@@ -147,7 +147,7 @@ export const oauthLoginService = {
   ): Promise<OAuthAuthorizationResponse> {
     const provider = requireProviderId(providerId);
     const redirect_to = requireSameOriginPath(redirectTo);
-    const response = await httpClient.post<OAuthAuthorizationResponse>(
+    const response = await kernelHttpClient.post<OAuthAuthorizationResponse>(
       `/auth/oauth/${encodeURIComponent(provider)}/authorize`,
       { redirect_to }
     );
@@ -163,7 +163,7 @@ export const oauthLoginService = {
     if (code.length === 0 || state.length === 0) {
       throw new Error('OAuth callback parameters are invalid');
     }
-    const response = await httpClient.post<OAuthCallbackResponse>(
+    const response = await kernelHttpClient.post<OAuthCallbackResponse>(
       `/auth/oauth/${encodeURIComponent(provider)}/callback`,
       { code, state }
     );

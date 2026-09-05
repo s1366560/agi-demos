@@ -13,7 +13,11 @@ import {
 
 import { validateWebRendererContributionsV2 } from '../routes/v2/webRendererArtifactCatalogV2';
 import { ApiError } from '../services/client/ApiError';
-import { httpClient } from '../services/client/httpClient';
+import { kernelHttpClient } from '../services/client/kernelHttpClient';
+import { useAuthStore } from '../stores/auth';
+import { useTenantStore } from '../stores/tenant';
+import { useProjectStore } from '../stores/project';
+import { WebOperationAdmissionV2, installWebOperationAdmissionV2 } from './webOperationAdmissionV2';
 import { logger } from '../utils/logger';
 
 const POLL_INTERVAL_MS = 30_000;
@@ -24,15 +28,54 @@ const webRendererRuntimeV2 = new RendererPluginRuntimeV2(
 const webRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(webRendererRuntimeV2);
 const webRendererStatusStoreV2 = new RendererGenerationStatusStoreV2();
 let pendingClose: ReturnType<typeof setTimeout> | null = null;
+let operationAdmission: WebOperationAdmissionV2 | undefined;
+let detachOperations: (() => void) | undefined;
+let identitySubscriptions: Array<() => void> = [];
 
 export type WebPluginDistributionSourceV2 = (signal: AbortSignal) => Promise<unknown | null>;
 
 export function activateWebPluginGenerationRootV2(): void {
+  if (pendingClose !== null) {
+    clearTimeout(pendingClose);
+    pendingClose = null;
+  }
   webRendererLeaseStoreV2.activateRoot();
+  operationAdmission = new WebOperationAdmissionV2(webRendererRuntimeV2);
+  detachOperations = installWebOperationAdmissionV2(operationAdmission);
+  const admission = operationAdmission;
+  admission.setEnabled(useAuthStore.getState().isAuthenticated);
+  identitySubscriptions = [
+    useAuthStore.subscribe((state, previous) => {
+      if (
+        state.token !== previous.token ||
+        state.user?.id !== previous.user?.id ||
+        state.isAuthenticated !== previous.isAuthenticated
+      )
+        admission.invalidate();
+      admission.setEnabled(state.isAuthenticated);
+    }),
+    useTenantStore.subscribe((state, previous) => {
+      if (state.currentTenant?.id !== previous.currentTenant?.id) admission.invalidate();
+    }),
+    useProjectStore.subscribe((state, previous) => {
+      if (state.currentProject?.id !== previous.currentProject?.id) admission.invalidate();
+    }),
+  ];
 }
 
 export async function deactivateWebPluginGenerationRootV2(): Promise<void> {
-  await webRendererLeaseStoreV2.deactivateRoot();
+  const admission = operationAdmission;
+  operationAdmission = undefined;
+  detachOperations?.();
+  detachOperations = undefined;
+  for (const unsubscribe of identitySubscriptions) unsubscribe();
+  identitySubscriptions = [];
+  // Revoke the old root synchronously so a replacement root can mount while I/O drains.
+  const rootClosing = webRendererLeaseStoreV2.deactivateRoot();
+  const operationsClosing = admission?.close();
+  const results = await Promise.allSettled([rootClosing, operationsClosing]);
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed?.status === 'rejected') throw failed.reason;
 }
 
 export function startWebPluginGenerationPollingV2(
@@ -50,6 +93,12 @@ export function useWebPluginGenerationV2(enabled: boolean): RendererPluginGenera
     webRendererLeaseStoreV2,
     webRendererStatusStoreV2
   );
+
+  useLayoutEffect(() => {
+    const admission = operationAdmission;
+    admission?.setEnabled(enabled);
+    return () => admission?.setEnabled(false);
+  }, [enabled]);
 
   useEffect(() => {
     if (pendingClose !== null) {
@@ -103,7 +152,7 @@ export function useRendererGenerationLeaseV2(
 
 async function fetchWebPluginDistributionV2(signal: AbortSignal): Promise<unknown | null> {
   try {
-    return await httpClient.get<unknown>('/platform-plugins/v2/distribution', { signal });
+    return await kernelHttpClient.get<unknown>('/platform-plugins/v2/distribution', { signal });
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 404) return null;
     throw error;

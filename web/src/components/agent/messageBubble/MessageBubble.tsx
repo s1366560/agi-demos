@@ -370,35 +370,37 @@ async function openArtifactUrlInCanvas(params: {
     return true;
   }
 
-  const response = await fetchArtifactResource(url);
-  if (!response.ok) return false;
-  const responseType = response.headers.get('content-type')?.toLowerCase() || '';
-  if (shouldPreviewSandboxFileByUrl(title, responseType)) {
-    openSandboxUrlPreviewTab({
+  return fetchArtifactResource(url, async (response, operation) => {
+    if (!response.ok) return false;
+    const responseType = response.headers.get('content-type')?.toLowerCase() || '';
+    if (shouldPreviewSandboxFileByUrl(title, responseType)) {
+      openSandboxUrlPreviewTab({
+        id,
+        title,
+        url,
+        mimeType: responseType || mime,
+        artifactId,
+      });
+      return true;
+    }
+
+    const content = await response.text();
+    operation.check();
+    const contentType = getCanvasTypeForSandboxFile(title, responseType || mime);
+    useCanvasStore.getState().openTab({
       id,
       title,
-      url,
-      mimeType: responseType || mime,
+      type: contentType,
+      content,
+      language: getFileExtension(title) || undefined,
+      mimeType: params.mimeType,
       artifactId,
+      artifactUrl: url,
     });
+    useLayoutModeStore.getState().setMode('canvas');
+    requestCanvasViewMode();
     return true;
-  }
-
-  const content = await response.text();
-  const contentType = getCanvasTypeForSandboxFile(title, responseType || mime);
-  useCanvasStore.getState().openTab({
-    id,
-    title,
-    type: contentType,
-    content,
-    language: getFileExtension(title) || undefined,
-    mimeType: params.mimeType,
-    artifactId,
-    artifactUrl: url,
   });
-  useLayoutModeStore.getState().setMode('canvas');
-  requestCanvasViewMode();
-  return true;
 }
 
 async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): Promise<boolean> {
@@ -544,7 +546,10 @@ const ExecutionSummaryPanel: React.FC<{
         />
       ) : null}
       {summary.totalCost > 0 ? (
-        <SummaryPill label={t('agent.messageBubble.pill.cost', 'Cost')} value={summary.totalCostFormatted} />
+        <SummaryPill
+          label={t('agent.messageBubble.pill.cost', 'Cost')}
+          value={summary.totalCostFormatted}
+        />
       ) : null}
     </div>
   );
@@ -797,10 +802,7 @@ const ArtifactReferenceList: React.FC<{
                 {formatFileSize(artifact.size_bytes)}
               </span>
             ) : null}
-            <Download
-              size={14}
-              className="ml-auto flex-shrink-0 text-content-tertiary"
-            />
+            <Download size={14} className="ml-auto flex-shrink-0 text-content-tertiary" />
           </a>
         );
       })}
@@ -874,7 +876,16 @@ const SandboxAwareInlineCode: Components['code'] = ({ children, className, ...pr
 
 // User Message Component - Modern floating style with action bar
 const UserMessage: React.FC<UserMessageProps> = memo(
-  ({ content, timestamp, onReply, onEdit, onDelete, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
+  ({
+    content,
+    timestamp,
+    onReply,
+    onEdit,
+    onDelete,
+    forcedSkillName,
+    forcedSubAgentName,
+    fileMetadata,
+  }) => {
     const { t } = useTranslation();
 
     if (!content) return null;
@@ -1531,57 +1542,59 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
 
     try {
       // Fetch content from the artifact URL
-      const response = await fetchArtifactResource(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
-      }
-      const responseType = response.headers.get('content-type')?.toLowerCase() || '';
-      if (responseType.includes('application/pdf')) {
-        canvasOpenTab({
-          id: event.artifactId,
-          title: event.filename,
-          type: 'preview',
-          content: url,
-          mimeType: 'application/pdf',
-          pdfVerified: true,
-          artifactId: event.artifactId,
-          artifactUrl: url,
-        });
+      await fetchArtifactResource(url, async (response, operation) => {
+        if (!response.ok) {
+          throw new Error(`Failed to fetch artifact content: ${String(response.status)}`);
+        }
+        const responseType = response.headers.get('content-type')?.toLowerCase() || '';
+        if (responseType.includes('application/pdf')) {
+          canvasOpenTab({
+            id: event.artifactId,
+            title: event.filename,
+            type: 'preview',
+            content: url,
+            mimeType: 'application/pdf',
+            pdfVerified: true,
+            artifactId: event.artifactId,
+            artifactUrl: url,
+          });
+          setLayoutMode('canvas');
+          return;
+        }
+        const content = await response.text();
+        operation.check();
+
+        // Check if this is HTML content - should use preview mode with iframe
+        const isHtmlFile =
+          event.filename.toLowerCase().endsWith('.html') || event.mimeType === 'text/html';
+
+        if (isHtmlFile) {
+          // HTML files should be rendered in preview mode using iframe
+          canvasOpenTab({
+            id: event.artifactId,
+            title: event.filename,
+            type: 'preview',
+            content,
+            artifactId: event.artifactId,
+            artifactUrl: url,
+          });
+        } else {
+          const contentType = getCanvasTypeForSandboxFile(event.filename, responseType || mime);
+          const ext = event.filename.split('.').pop()?.toLowerCase();
+
+          canvasOpenTab({
+            id: event.artifactId,
+            title: event.filename,
+            type: contentType,
+            content,
+            language: ext,
+            artifactId: event.artifactId,
+            artifactUrl: url,
+          });
+        }
         setLayoutMode('canvas');
-        return;
-      }
-      const content = await response.text();
-
-      // Check if this is HTML content - should use preview mode with iframe
-      const isHtmlFile =
-        event.filename.toLowerCase().endsWith('.html') || event.mimeType === 'text/html';
-
-      if (isHtmlFile) {
-        // HTML files should be rendered in preview mode using iframe
-        canvasOpenTab({
-          id: event.artifactId,
-          title: event.filename,
-          type: 'preview',
-          content,
-          artifactId: event.artifactId,
-          artifactUrl: url,
-        });
-      } else {
-        const contentType = getCanvasTypeForSandboxFile(event.filename, responseType || mime);
-        const ext = event.filename.split('.').pop()?.toLowerCase();
-
-        canvasOpenTab({
-          id: event.artifactId,
-          title: event.filename,
-          type: contentType,
-          content,
-          language: ext,
-          artifactId: event.artifactId,
-          artifactUrl: url,
-        });
-      }
-      setLayoutMode('canvas');
-      requestCanvasViewMode();
+        requestCanvasViewMode();
+      });
     } catch {
       // Silently fail - user can still download the file directly
     }

@@ -173,6 +173,16 @@
       "domain": "runtime-infrastructure",
       "scope": ["tenant", "instance"],
       "web_route_ids": ["tenant-tenant-deploy"],
+      "reviewed_production_dependencies": [
+        {
+          "routed_source_entry": "web/src/pages/tenant/DeployProgress.tsx",
+          "source_entry": "web/src/pages/tenant/deployProgressStream.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/DeployProgress.tsx",
+          "source_entry": "web/src/services/client/webFetchV2.ts"
+        }
+      ],
       "api_method": "GET",
       "api_path": "/api/v1/deploys/",
       "api_contracts": [

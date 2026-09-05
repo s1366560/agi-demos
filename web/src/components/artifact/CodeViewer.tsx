@@ -109,23 +109,30 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     const fetchContent = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const response = await fetchArtifactResource(url);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status.toString()}: ${response.statusText}`);
-        }
+        await fetchArtifactResource(
+          url,
+          async (response, operation) => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status.toString()}: ${response.statusText}`);
+            }
 
-        const text = await response.text();
-        if (!cancelled) {
-          setContent(formatContent(text, mimeType, filename));
-          setLoading(false);
-          onLoad?.();
-        }
+            const text = await response.text();
+            operation.check();
+            if (!cancelled) {
+              setContent(formatContent(text, mimeType, filename));
+              setLoading(false);
+              onLoad?.();
+            }
+          },
+          { signal: controller.signal }
+        );
       } catch (err) {
         if (!cancelled) {
           const errMsg =
@@ -145,6 +152,7 @@ export const CodeViewer: React.FC<CodeViewerProps> = ({
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [url, mimeType, filename, onLoad, onError, t]);
 

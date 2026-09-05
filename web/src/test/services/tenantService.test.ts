@@ -37,17 +37,30 @@ describe('tenantService', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.get).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => mockMembers,
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.get).mockImplementationOnce(async (...args: any[]) =>
+        args[1](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => mockMembers,
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[2]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       const result = await tenantService.listMembers(tenantId);
 
-      expect(apiFetch.get).toHaveBeenCalledWith(`/tenants/${tenantId}/members`);
+      expect(apiFetch.get).toHaveBeenCalledWith(
+        `/tenants/${tenantId}/members`,
+        expect.any(Function)
+      );
       expect(result).toEqual(mockMembers);
     });
 
@@ -68,20 +81,34 @@ describe('tenantService', () => {
   describe('addMember', () => {
     it('should add member to tenant', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.post).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.post).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({}),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await tenantService.addMember('tenant-1', 'user-2', 'member');
 
-      expect(apiFetch.post).toHaveBeenCalledWith(`/tenants/tenant-1/members`, {
-        user_id: 'user-2',
-        role: 'member',
-      });
+      expect(apiFetch.post).toHaveBeenCalledWith(
+        `/tenants/tenant-1/members`,
+        {
+          user_id: 'user-2',
+          role: 'member',
+        },
+        expect.any(Function)
+      );
     });
 
     it('should propagate ApiError on failed add', async () => {
@@ -103,17 +130,30 @@ describe('tenantService', () => {
   describe('removeMember', () => {
     it('should remove member from tenant', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.delete).mockImplementationOnce(async (...args: any[]) =>
+        args[1](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({}),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[2]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await tenantService.removeMember('tenant-1', 'user-2');
 
-      expect(apiFetch.delete).toHaveBeenCalledWith(`/tenants/tenant-1/members/user-2`);
+      expect(apiFetch.delete).toHaveBeenCalledWith(
+        `/tenants/tenant-1/members/user-2`,
+        expect.any(Function)
+      );
     });
 
     it('should propagate ApiError on failed removal', async () => {
@@ -133,19 +173,33 @@ describe('tenantService', () => {
   describe('updateMemberRole', () => {
     it('should update member role', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.patch).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({}),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await tenantService.updateMemberRole('tenant-1', 'user-2', 'admin');
 
-      expect(apiFetch.patch).toHaveBeenCalledWith(`/tenants/tenant-1/members/user-2`, {
-        role: 'admin',
-      });
+      expect(apiFetch.patch).toHaveBeenCalledWith(
+        `/tenants/tenant-1/members/user-2`,
+        {
+          role: 'admin',
+        },
+        expect.any(Function)
+      );
     });
 
     it('should propagate ApiError on failed update', async () => {
@@ -177,17 +231,27 @@ describe('tenantService', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.get).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => mockTenant,
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.get).mockImplementationOnce(async (...args: any[]) =>
+        args[1](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => mockTenant,
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[2]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       const result = await tenantService.getTenant(tenantId);
 
-      expect(apiFetch.get).toHaveBeenCalledWith(`/tenants/${tenantId}`);
+      expect(apiFetch.get).toHaveBeenCalledWith(`/tenants/${tenantId}`, expect.any(Function));
       expect(result).toEqual(mockTenant);
     });
   });
@@ -206,20 +270,34 @@ describe('tenantService', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.post).mockResolvedValueOnce({
-        ok: true,
-        status: 201,
-        statusText: 'Created',
-        json: async () => mockTenant,
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.post).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            status: 201,
+            statusText: 'Created',
+            json: async () => mockTenant,
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       const result = await tenantService.createTenant(name, description);
 
-      expect(apiFetch.post).toHaveBeenCalledWith('/tenants', {
-        name,
-        description,
-      });
+      expect(apiFetch.post).toHaveBeenCalledWith(
+        '/tenants',
+        {
+          name,
+          description,
+        },
+        expect.any(Function)
+      );
       expect(result).toEqual(mockTenant);
     });
 
@@ -246,17 +324,31 @@ describe('tenantService', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.put).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({ id: tenantId, ...updates }),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.put).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({ id: tenantId, ...updates }),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await tenantService.updateTenant(tenantId, updates);
 
-      expect(apiFetch.put).toHaveBeenCalledWith(`/tenants/${tenantId}`, updates);
+      expect(apiFetch.put).toHaveBeenCalledWith(
+        `/tenants/${tenantId}`,
+        updates,
+        expect.any(Function)
+      );
     });
 
     it('should propagate ApiError on failed update', async () => {

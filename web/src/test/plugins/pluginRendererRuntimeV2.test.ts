@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  PLUGIN_MODULE_CATALOG_V2,
   createDesktopRendererDefinitionsV2,
   digestV2,
   DESKTOP_RENDERER_CONTRIBUTION_REGISTRY_SERVICE_V2,
@@ -13,7 +14,19 @@ import {
   webRendererDefinitionsV2,
 } from '@agistack/plugin-runtime';
 
-import bootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
+import generatedBootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
+
+// This suite exercises shared renderer host/contribution definitions, not Desktop application
+// services. Keep the real generated profile entries for those definitions and re-sign the fixture.
+const sharedDesktopModules = new Set(createDesktopRendererDefinitionsV2().map(definition => definition.moduleRef));
+const applicationDesktopModules = new Set(PLUGIN_MODULE_CATALOG_V2.modules
+  .filter(module => module.targets.includes('desktop-renderer') && !sharedDesktopModules.has(module.module_ref))
+  .map(module => module.module_ref));
+const bootstrapProfile = structuredClone(generatedBootstrapProfile);
+bootstrapProfile.entries = bootstrapProfile.entries.filter(entry => !applicationDesktopModules.has(entry.module_ref));
+const { digest: _fixtureDigest, ...fixtureUnsigned } = bootstrapProfile;
+bootstrapProfile.digest = await digestV2(fixtureUnsigned);
+
 
 function distribution(snapshot: typeof bootstrapProfile) {
   return {
@@ -320,8 +333,28 @@ describe('RendererPluginRuntimeV2', () => {
 
   it('lets the desktop target catalog nack an unknown artifact and retain last-good', async () => {
     const knownArtifactRefs = new Set([
-      'desktop.ui-slots.authenticated-shell-surface.v1',
+      'desktop.ui-slots.authenticated-shell-surface.v2',
+      'desktop.ui-slots.settings-window-surface.v1',
+      'desktop.ui-slots.keyboard-shortcuts-surface.v1',
+      'desktop.ui-slots.status-bar-surface.v1',
+      'desktop.ui-slots.command-palette-surface.v1',
+      'desktop.ui-slots.session-canvas-surface.v1',
+      'desktop.ui-slots.workspace-create-surface.v1',
+      'desktop.ui-slots.workspace-settings-surface.v1',
+      'desktop.ui-slots.titlebar-surface.v1',
+      'desktop.ui-slots.workbench-tab-bar-surface.v1',
       'desktop.ui-slots.workbench-surface.v2',
+      'desktop.ui-slots.session-workspace-surface.v1',
+      'desktop.ui-slots.workspace-collaboration-surface.v1',
+      'desktop.ui-slots.new-thread-composer-surface.v1',
+      'desktop.ui-slots.my-work-queue-surface.v1',
+      'desktop.ui-slots.activity-inbox-surface.v1',
+      'desktop.ui-slots.conversation-surface.v1',
+      'desktop.ui-slots.conversation-renderer.v1',
+      'desktop.ui-slots.tool-result-renderer.v1',
+      'desktop.ui-slots.sidebar-surface.v1',
+      'desktop.ui-slots.right-sidebar-surface.v1',
+      'desktop.ui-slots.new-task-flow-surface.v1',
       'desktop.routes.tenant-creation.v1',
       'desktop.routes.auxiliary.v1',
       'desktop.routes.project-knowledge.v1',
@@ -366,8 +399,28 @@ describe('RendererPluginRuntimeV2', () => {
     );
     expect(registry?.list().map(({ id, kind }) => [id, kind])).toEqual([
       ['desktop.authenticated-shell-surface', 'ui-slot'],
+      ['desktop.settings-window-surface', 'ui-slot'],
+      ['desktop.keyboard-shortcuts-surface', 'ui-slot'],
+      ['desktop.status-bar-surface', 'ui-slot'],
+      ['desktop.command-palette-surface', 'ui-slot'],
+      ['desktop.session-canvas-surface', 'ui-slot'],
+      ['desktop.workspace-create-surface', 'ui-slot'],
+      ['desktop.workspace-settings-surface', 'ui-slot'],
+      ['desktop.titlebar-surface', 'ui-slot'],
+      ['desktop.workbench-tab-bar-surface', 'ui-slot'],
       ['desktop.workbench-surface', 'ui-slot'],
+      ['desktop.session-workspace-surface', 'ui-slot'],
+      ['desktop.workspace-collaboration-surface', 'ui-slot'],
+      ['desktop.new-thread-composer-surface', 'ui-slot'],
+      ['desktop.my-work-queue-surface', 'ui-slot'],
+      ['desktop.activity-inbox-surface', 'ui-slot'],
+      ['desktop.conversation-surface', 'ui-slot'],
+      ['desktop.conversation-renderer', 'ui-slot'],
+      ['desktop.tool-result-renderer', 'ui-slot'],
+      ['desktop.sidebar-surface', 'ui-slot'],
       ['desktop.tenant-creation-routes', 'route'],
+      ['desktop.right-sidebar-surface', 'ui-slot'],
+      ['desktop.new-task-flow-surface', 'ui-slot'],
       ['desktop.auxiliary-routes', 'route'],
       ['desktop.project-knowledge-routes', 'route'],
       ['desktop.project-agent-routes', 'route'],
@@ -456,8 +509,28 @@ describe('RendererPluginRuntimeV2', () => {
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.authenticated-shell-surface',
+      'desktop.settings-window-surface',
+      'desktop.keyboard-shortcuts-surface',
+      'desktop.status-bar-surface',
+      'desktop.command-palette-surface',
+      'desktop.session-canvas-surface',
+      'desktop.workspace-create-surface',
+      'desktop.workspace-settings-surface',
+      'desktop.titlebar-surface',
+      'desktop.workbench-tab-bar-surface',
       'desktop.workbench-surface',
+      'desktop.session-workspace-surface',
+      'desktop.workspace-collaboration-surface',
+      'desktop.new-thread-composer-surface',
+      'desktop.my-work-queue-surface',
+      'desktop.activity-inbox-surface',
+      'desktop.conversation-surface',
+      'desktop.conversation-renderer',
+      'desktop.tool-result-renderer',
+      'desktop.sidebar-surface',
       'desktop.tenant-creation-routes',
+      'desktop.right-sidebar-surface',
+      'desktop.new-task-flow-surface',
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
@@ -515,8 +588,28 @@ describe('RendererPluginRuntimeV2', () => {
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.authenticated-shell-surface',
+      'desktop.settings-window-surface',
+      'desktop.keyboard-shortcuts-surface',
+      'desktop.status-bar-surface',
+      'desktop.command-palette-surface',
+      'desktop.session-canvas-surface',
+      'desktop.workspace-create-surface',
+      'desktop.workspace-settings-surface',
+      'desktop.titlebar-surface',
+      'desktop.workbench-tab-bar-surface',
       'desktop.workbench-surface',
+      'desktop.session-workspace-surface',
+      'desktop.workspace-collaboration-surface',
+      'desktop.new-thread-composer-surface',
+      'desktop.my-work-queue-surface',
+      'desktop.activity-inbox-surface',
+      'desktop.conversation-surface',
+      'desktop.conversation-renderer',
+      'desktop.tool-result-renderer',
+      'desktop.sidebar-surface',
       'desktop.tenant-creation-routes',
+      'desktop.right-sidebar-surface',
+      'desktop.new-task-flow-surface',
       'desktop.auxiliary-routes',
       'desktop.project-agent-routes',
       'desktop.project-administration-routes',
@@ -574,8 +667,28 @@ describe('RendererPluginRuntimeV2', () => {
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.authenticated-shell-surface',
+      'desktop.settings-window-surface',
+      'desktop.keyboard-shortcuts-surface',
+      'desktop.status-bar-surface',
+      'desktop.command-palette-surface',
+      'desktop.session-canvas-surface',
+      'desktop.workspace-create-surface',
+      'desktop.workspace-settings-surface',
+      'desktop.titlebar-surface',
+      'desktop.workbench-tab-bar-surface',
       'desktop.workbench-surface',
+      'desktop.session-workspace-surface',
+      'desktop.workspace-collaboration-surface',
+      'desktop.new-thread-composer-surface',
+      'desktop.my-work-queue-surface',
+      'desktop.activity-inbox-surface',
+      'desktop.conversation-surface',
+      'desktop.conversation-renderer',
+      'desktop.tool-result-renderer',
+      'desktop.sidebar-surface',
       'desktop.tenant-creation-routes',
+      'desktop.right-sidebar-surface',
+      'desktop.new-task-flow-surface',
       'desktop.auxiliary-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-administration-routes',
@@ -633,8 +746,28 @@ describe('RendererPluginRuntimeV2', () => {
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.authenticated-shell-surface',
+      'desktop.settings-window-surface',
+      'desktop.keyboard-shortcuts-surface',
+      'desktop.status-bar-surface',
+      'desktop.command-palette-surface',
+      'desktop.session-canvas-surface',
+      'desktop.workspace-create-surface',
+      'desktop.workspace-settings-surface',
+      'desktop.titlebar-surface',
+      'desktop.workbench-tab-bar-surface',
       'desktop.workbench-surface',
+      'desktop.session-workspace-surface',
+      'desktop.workspace-collaboration-surface',
+      'desktop.new-thread-composer-surface',
+      'desktop.my-work-queue-surface',
+      'desktop.activity-inbox-surface',
+      'desktop.conversation-surface',
+      'desktop.conversation-renderer',
+      'desktop.tool-result-renderer',
+      'desktop.sidebar-surface',
       'desktop.tenant-creation-routes',
+      'desktop.right-sidebar-surface',
+      'desktop.new-task-flow-surface',
       'desktop.auxiliary-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
@@ -692,8 +825,28 @@ describe('RendererPluginRuntimeV2', () => {
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.authenticated-shell-surface',
+      'desktop.settings-window-surface',
+      'desktop.keyboard-shortcuts-surface',
+      'desktop.status-bar-surface',
+      'desktop.command-palette-surface',
+      'desktop.session-canvas-surface',
+      'desktop.workspace-create-surface',
+      'desktop.workspace-settings-surface',
+      'desktop.titlebar-surface',
+      'desktop.workbench-tab-bar-surface',
       'desktop.workbench-surface',
+      'desktop.session-workspace-surface',
+      'desktop.workspace-collaboration-surface',
+      'desktop.new-thread-composer-surface',
+      'desktop.my-work-queue-surface',
+      'desktop.activity-inbox-surface',
+      'desktop.conversation-surface',
+      'desktop.conversation-renderer',
+      'desktop.tool-result-renderer',
+      'desktop.sidebar-surface',
       'desktop.tenant-creation-routes',
+      'desktop.right-sidebar-surface',
+      'desktop.new-task-flow-surface',
       'desktop.auxiliary-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
@@ -751,8 +904,28 @@ describe('RendererPluginRuntimeV2', () => {
     expect(receipt.status).toBe('ack');
     expect(registry?.list().map(({ id }) => id)).toEqual([
       'desktop.authenticated-shell-surface',
+      'desktop.settings-window-surface',
+      'desktop.keyboard-shortcuts-surface',
+      'desktop.status-bar-surface',
+      'desktop.command-palette-surface',
+      'desktop.session-canvas-surface',
+      'desktop.workspace-create-surface',
+      'desktop.workspace-settings-surface',
+      'desktop.titlebar-surface',
+      'desktop.workbench-tab-bar-surface',
       'desktop.workbench-surface',
+      'desktop.session-workspace-surface',
+      'desktop.workspace-collaboration-surface',
+      'desktop.new-thread-composer-surface',
+      'desktop.my-work-queue-surface',
+      'desktop.activity-inbox-surface',
+      'desktop.conversation-surface',
+      'desktop.conversation-renderer',
+      'desktop.tool-result-renderer',
+      'desktop.sidebar-surface',
       'desktop.tenant-creation-routes',
+      'desktop.right-sidebar-surface',
+      'desktop.new-task-flow-surface',
       'desktop.auxiliary-routes',
       'desktop.project-knowledge-routes',
       'desktop.project-agent-routes',
@@ -809,7 +982,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(24);
+    expect(contributionIds).toHaveLength(44);
     expect(contributionIds).not.toContain('desktop.project-discovery-routes');
     expect(contributionIds).not.toContain('desktop.project-discovery-navigation');
     await runtime.close();
@@ -846,7 +1019,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(24);
+    expect(contributionIds).toHaveLength(44);
     expect(contributionIds).not.toContain('desktop.tenant-core-routes');
     expect(contributionIds).not.toContain('desktop.tenant-core-navigation');
     await runtime.close();
@@ -883,7 +1056,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(24);
+    expect(contributionIds).toHaveLength(44);
     expect(contributionIds).not.toContain('desktop.tenant-agent-building-routes');
     expect(contributionIds).not.toContain('desktop.tenant-agent-building-navigation');
     await runtime.close();
@@ -922,7 +1095,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(24);
+    expect(contributionIds).toHaveLength(44);
     expect(contributionIds).not.toContain('desktop.tenant-extensions-integrations-routes');
     expect(contributionIds).not.toContain('desktop.tenant-extensions-integrations-navigation');
     await runtime.close();
@@ -959,7 +1132,7 @@ describe('RendererPluginRuntimeV2', () => {
     const contributionIds = registry?.list().map(({ id }) => id);
 
     expect(receipt.status).toBe('ack');
-    expect(contributionIds).toHaveLength(24);
+    expect(contributionIds).toHaveLength(44);
     expect(contributionIds).not.toContain('desktop.tenant-governance-routes');
     expect(contributionIds).not.toContain('desktop.tenant-governance-navigation');
     await runtime.close();

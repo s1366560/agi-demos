@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  PLUGIN_MODULE_CATALOG_V2,
   DESKTOP_RENDERER_HOST_SERVICE_V2,
   desktopRendererDefinitionsV2,
   LoaderV2,
+  digestV2,
   parseProfileSnapshotV2,
   type RendererContributionRegistryV2,
   type TargetHostDescriptorV2,
@@ -13,7 +15,19 @@ import {
   webRendererDefinitionsV2,
 } from '@agistack/plugin-runtime';
 
-import bootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
+import generatedBootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
+
+// This suite exercises shared renderer host/contribution definitions, not Desktop application
+// services. Keep the real generated profile entries for those definitions and re-sign the fixture.
+const sharedDesktopModules = new Set(desktopRendererDefinitionsV2.map(definition => definition.moduleRef));
+const applicationDesktopModules = new Set(PLUGIN_MODULE_CATALOG_V2.modules
+  .filter(module => module.targets.includes('desktop-renderer') && !sharedDesktopModules.has(module.module_ref))
+  .map(module => module.module_ref));
+const bootstrapProfile = structuredClone(generatedBootstrapProfile);
+bootstrapProfile.entries = bootstrapProfile.entries.filter(entry => !applicationDesktopModules.has(entry.module_ref));
+const { digest: _fixtureDigest, ...fixtureUnsigned } = bootstrapProfile;
+bootstrapProfile.digest = await digestV2(fixtureUnsigned);
+
 
 describe('production protocol-v2 renderer target catalogs', () => {
   it('activates the web renderer host from the generated catalog', async () => {
@@ -71,8 +85,8 @@ describe('production protocol-v2 renderer target catalogs', () => {
           { kind: 'root' }
         )
         .list()
-    ).toHaveLength(26);
-    expect(generation.fibers).toHaveLength(28);
+    ).toHaveLength(46);
+    expect(generation.fibers).toHaveLength(48);
     await generation.dispose();
   });
 

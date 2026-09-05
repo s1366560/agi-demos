@@ -109,59 +109,75 @@ export const subagentTemplateService = {
 
     const qs = query.toString();
     const url = `/subagents/templates/list${qs ? `?${qs}` : ''}`;
-    const response = await apiFetch.get(url);
-    const data = (await response.json()) as BackendSubAgentTemplateListResponse;
-    return {
-      ...data,
-      page,
-      page_size: pageSize,
-    };
+    return apiFetch.get(url, async (response) => {
+      const data = (await response.json()) as BackendSubAgentTemplateListResponse;
+      return {
+        ...data,
+        page,
+        page_size: pageSize,
+      };
+    });
   },
 
   getCategories: async (): Promise<string[]> => {
-    const response = await apiFetch.get('/subagents/templates/categories');
-    const data = (await response.json()) as { categories?: string[] | undefined };
-    return data.categories ?? [];
+    return apiFetch.get('/subagents/templates/categories', async (response) => {
+      const data = (await response.json()) as { categories?: string[] | undefined };
+      return data.categories ?? [];
+    });
   },
 
   get: async (templateId: string): Promise<SubAgentTemplateDetail> => {
-    const response = await apiFetch.get(`/subagents/templates/${templateId}`);
-    return (await response.json()) as SubAgentTemplateDetail;
+    return apiFetch.get(`/subagents/templates/${templateId}`, async (response) => {
+      return (await response.json()) as SubAgentTemplateDetail;
+    });
   },
 
   create: async (data: SubAgentTemplateCreateRequest): Promise<SubAgentTemplateDetail> => {
-    const response = await apiFetch.post('/subagents/templates/', data);
-    return (await response.json()) as SubAgentTemplateDetail;
+    return apiFetch.post('/subagents/templates/', data, async (response) => {
+      return (await response.json()) as SubAgentTemplateDetail;
+    });
   },
 
   update: async (
     templateId: string,
     data: SubAgentTemplateUpdateRequest
   ): Promise<SubAgentTemplateDetail> => {
-    const response = await apiFetch.put(`/subagents/templates/${templateId}`, data);
-    return (await response.json()) as SubAgentTemplateDetail;
+    return apiFetch.put(`/subagents/templates/${templateId}`, data, async (response) => {
+      return (await response.json()) as SubAgentTemplateDetail;
+    });
   },
 
   delete: async (templateId: string): Promise<void> => {
-    await apiFetch.delete(`/subagents/templates/${templateId}`);
+    await apiFetch.delete(`/subagents/templates/${templateId}`, () => undefined);
   },
 
   install: async (templateId: string): Promise<SubAgentResponse> => {
-    const response = await apiFetch.post(`/subagents/templates/${templateId}/install`);
-    return (await response.json()) as SubAgentResponse;
+    return apiFetch.post(
+      `/subagents/templates/${templateId}/install`,
+      undefined,
+      async (response) => {
+        return (await response.json()) as SubAgentResponse;
+      }
+    );
   },
 
   exportFromSubAgent: async (subagentId: string): Promise<SubAgentTemplateDetail> => {
-    const response = await apiFetch.post(`/subagents/templates/from-subagent/${subagentId}`);
-    return (await response.json()) as SubAgentTemplateDetail;
+    return apiFetch.post(
+      `/subagents/templates/from-subagent/${subagentId}`,
+      undefined,
+      async (response) => {
+        return (await response.json()) as SubAgentTemplateDetail;
+      }
+    );
   },
 
   seed: async (): Promise<{ seeded: number }> => {
-    const response = await apiFetch.post('/subagents/templates/seed');
-    const data = (await response.json()) as Partial<BackendSubAgentTemplateSeedResponse>;
-    if (!Number.isSafeInteger(data.created) || (data.created ?? -1) < 0) {
-      throw new Error('subagent_template_seed_contract_invalid');
-    }
-    return { seeded: data.created as number };
+    return apiFetch.post('/subagents/templates/seed', undefined, async (response) => {
+      const data = (await response.json()) as Partial<BackendSubAgentTemplateSeedResponse>;
+      if (!Number.isSafeInteger(data.created) || (data.created ?? -1) < 0) {
+        throw new Error('subagent_template_seed_contract_invalid');
+      }
+      return { seeded: data.created as number };
+    });
   },
 };

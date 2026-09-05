@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { installResourceOperationFixtureV2 } from './webResourceOperationFixtureV2';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import { clearAuthState, getAuthToken } from '@/utils/tokenResolver';
 
@@ -20,11 +21,16 @@ vi.mock('../../services/client/httpClient', () => ({
 }));
 
 describe('attachmentService', () => {
+  let fixture: ReturnType<typeof installResourceOperationFixtureV2>;
+  afterEach(async () => {
+    await fixture.close();
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     vi.mocked(getAuthToken).mockReturnValue('token-1');
+    fixture = installResourceOperationFixtureV2();
   });
 
   const completedAttachment: AttachmentResponse = {
@@ -142,6 +148,8 @@ describe('attachmentService', () => {
         } else {
           loadListener?.handleEvent(event);
         }
+        const end = this.listeners.get('loadend');
+        if (typeof end === 'function') end(new Event('loadend'));
       }
     }
 
@@ -207,11 +215,15 @@ describe('attachmentService', () => {
         [3, 2],
       ]
     );
-    expect(completeSpy).toHaveBeenCalledWith('attachment-1', [
-      { part_number: 1, etag: 'etag-1-4' },
-      { part_number: 2, etag: 'etag-2-4' },
-      { part_number: 3, etag: 'etag-3-2' },
-    ]);
+    expect(completeSpy).toHaveBeenCalledWith(
+      'attachment-1',
+      [
+        { part_number: 1, etag: 'etag-1-4' },
+        { part_number: 2, etag: 'etag-2-4' },
+        { part_number: 3, etag: 'etag-3-2' },
+      ],
+      expect.objectContaining({ parent: expect.any(Object), signal: expect.any(AbortSignal) })
+    );
     expect(progress).toHaveBeenLastCalledWith({
       loaded: 10,
       total: 10,
@@ -237,7 +249,10 @@ describe('attachmentService', () => {
       attachmentService.uploadMultipart('conversation-1', 'project-1', file)
     ).rejects.toThrow('Invalid upload session');
 
-    expect(abortSpy).toHaveBeenCalledWith('attachment-1');
+    expect(abortSpy).toHaveBeenCalledWith(
+      'attachment-1',
+      expect.objectContaining({ parent: expect.any(Object) })
+    );
     expect(uploadPartSpy).not.toHaveBeenCalled();
   });
 
@@ -245,5 +260,136 @@ describe('attachmentService', () => {
     expect(attachmentService.getDownloadUrl('attachment-1')).toBe(
       '/api/v1/attachments/attachment-1/download'
     );
+  });
+  it('waits for failed multipart cleanup and preserves the primary error', async () => {
+    vi.spyOn(attachmentService, 'initiateUpload').mockResolvedValue({
+      attachmentId: 'attachment-1',
+      uploadId: 'upload-1',
+      totalParts: 1,
+      partSize: 10,
+    });
+    const primary = new Error('part failed');
+    vi.spyOn(attachmentService, 'uploadPart').mockRejectedValue(primary);
+    let finish!: () => void;
+    const cleanup = vi.spyOn(attachmentService, 'abortUpload').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const task = attachmentService.uploadMultipart(
+      'conversation-1',
+      'project-1',
+      new File(['x'], 'x')
+    );
+    const outcome = task.catch((error: unknown) => error);
+    await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
+    expect(fixture.released()).toBe(0);
+    finish();
+    expect(await outcome).toBe(primary);
+    expect(fixture.released()).toBe(1);
+  });
+
+  it('does not start remote abort or another part after generation cancellation', async () => {
+    vi.spyOn(attachmentService, 'initiateUpload').mockResolvedValue({
+      attachmentId: 'attachment-1',
+      uploadId: 'upload-1',
+      totalParts: 2,
+      partSize: 1,
+    });
+    let finish!: () => void;
+    const part = vi.spyOn(attachmentService, 'uploadPart').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ part_number: 1, etag: 'one' });
+        })
+    );
+    const cleanup = vi.spyOn(attachmentService, 'abortUpload');
+    const progress = vi.fn();
+    const task = attachmentService.uploadMultipart(
+      'conversation-1',
+      'project-1',
+      new File(['xy'], 'x'),
+      'both',
+      progress
+    );
+    const outcome = task.catch((error: unknown) => error);
+    await vi.waitFor(() => expect(part).toHaveBeenCalledOnce());
+    fixture.admission.invalidate();
+    expect(fixture.released()).toBe(0);
+    finish();
+    expect(await outcome).toMatchObject({ name: 'AbortError' });
+    expect(part).toHaveBeenCalledOnce();
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(progress).not.toHaveBeenCalled();
+  });
+
+  it('holds the XHR lease until abort is followed by loadend', async () => {
+    let request!: PendingXHR;
+    class PendingXHR extends EventTarget {
+      upload = new EventTarget();
+      constructor() {
+        super();
+        request = this;
+      }
+      open() {}
+      setRequestHeader() {}
+      send() {}
+      abort() {
+        this.dispatchEvent(new Event('abort'));
+      }
+    }
+    vi.stubGlobal('XMLHttpRequest', PendingXHR);
+    const controller = new AbortController();
+    const task = attachmentService.uploadSimple(
+      'conversation-1',
+      'project-1',
+      new File(['x'], 'x'),
+      'both',
+      undefined,
+      { signal: controller.signal }
+    );
+    const outcome = task.catch((error: unknown) => error);
+    await vi.waitFor(() => expect(request).toBeDefined());
+    controller.abort();
+    await Promise.resolve();
+    expect(fixture.released()).toBe(0);
+    request.dispatchEvent(new Event('loadend'));
+    expect(await outcome).toMatchObject({ name: 'AbortError' });
+    expect(fixture.released()).toBe(1);
+  });
+
+  it('disabled admission does not construct an upload request', async () => {
+    const xhr = vi.fn();
+    vi.stubGlobal('XMLHttpRequest', xhr);
+    fixture.admission.setEnabled(false);
+    await expect(
+      attachmentService.uploadSimple('conversation-1', 'project-1', new File(['x'], 'x'))
+    ).rejects.toThrow('web_operation_generation_unavailable');
+    expect(xhr).not.toHaveBeenCalled();
+  });
+  it('keeps real part fetch children under the multipart parent through completion', async () => {
+    vi.mocked(httpClient.post)
+      .mockResolvedValueOnce({
+        attachment_id: 'attachment-1',
+        upload_id: 'upload-1',
+        total_parts: 2,
+        part_size: 1,
+      })
+      .mockResolvedValueOnce(completedAttachment);
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(
+        async () => new Response(JSON.stringify({ part_number: 1, etag: 'part' }))
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    await attachmentService.uploadMultipart('conversation-1', 'project-1', new File(['xy'], 'x'));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const initiateOptions = vi.mocked(httpClient.post).mock.calls[0]?.[2];
+    const completeOptions = vi.mocked(httpClient.post).mock.calls[1]?.[2];
+    expect(initiateOptions?.operation).toBeDefined();
+    expect(completeOptions?.operation).toBe(initiateOptions?.operation);
+    expect(fixture.acquired()).toBe(3);
+    expect(fixture.released()).toBe(3);
   });
 });

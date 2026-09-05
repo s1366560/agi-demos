@@ -633,23 +633,26 @@ export const CanvasFileExplorer = memo<CanvasFileExplorerProps>(({ projectId }) 
       const url = getArtifactUrl(artifact);
 
       if (isTextArtifact(artifact)) {
-        const response = await fetchArtifactResource(url);
-        if (!response.ok) {
-          throw new Error(
-            t('agent.canvas.fileExplorer.openFailed', {
-              defaultValue: 'Failed to open file',
-            })
-          );
-        }
-        const responseMimeType = response.headers.get('content-type')?.toLowerCase() || undefined;
-        const content = await response.text();
-        openTextTab({
-          id: `artifact:${artifact.id}`,
-          title: artifact.filename,
-          content,
-          mimeType: responseMimeType || artifact.mimeType,
-          artifactId: artifact.id,
-          artifactUrl: url,
+        await fetchArtifactResource(url, async (response, operation) => {
+          if (!response.ok) {
+            throw new Error(
+              t('agent.canvas.fileExplorer.openFailed', {
+                defaultValue: 'Failed to open file',
+              })
+            );
+          }
+          const responseMimeType = response.headers.get('content-type')?.toLowerCase() || undefined;
+          const content = await response.text();
+          operation.check();
+          openTextTab({
+            id: `artifact:${artifact.id}`,
+            title: artifact.filename,
+            content,
+            mimeType: responseMimeType || artifact.mimeType,
+            artifactId: artifact.id,
+            artifactUrl: url,
+          });
+          return;
         });
         return;
       }
@@ -740,7 +743,10 @@ export const CanvasFileExplorer = memo<CanvasFileExplorerProps>(({ projectId }) 
           className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           disabled={activeState.loading}
         >
-          <RefreshCw size={14} className={activeState.loading ? 'animate-spin motion-reduce:animate-none' : undefined} />
+          <RefreshCw
+            size={14}
+            className={activeState.loading ? 'animate-spin motion-reduce:animate-none' : undefined}
+          />
         </button>
         <button
           type="button"

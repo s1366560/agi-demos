@@ -131,8 +131,9 @@ export const memoryService = {
    * ```
    */
   updateMemory: async (memoryId: string, updates: MemoryUpdate): Promise<Memory> => {
-    const response = await apiFetch.patch(`/memories/${memoryId}`, updates);
-    return (await response.json()) as Memory;
+    return apiFetch.patch(`/memories/${memoryId}`, updates, async (response) => {
+      return (await response.json()) as Memory;
+    });
   },
 
   /**
@@ -172,8 +173,9 @@ export const memoryService = {
     memoryId: string,
     shareData: MemoryShareCreate
   ): Promise<MemoryShareResponse> => {
-    const response = await apiFetch.post(`/memories/${memoryId}/shares`, shareData);
-    return (await response.json()) as MemoryShareResponse;
+    return apiFetch.post(`/memories/${memoryId}/shares`, shareData, async (response) => {
+      return (await response.json()) as MemoryShareResponse;
+    });
   },
 
   /**
@@ -193,6 +195,6 @@ export const memoryService = {
    * ```
    */
   deleteMemoryShare: async (memoryId: string, shareId: string): Promise<void> => {
-    await apiFetch.delete(`/memories/${memoryId}/shares/${shareId}`);
+    await apiFetch.delete(`/memories/${memoryId}/shares/${shareId}`, () => undefined);
   },
 };

@@ -69,7 +69,9 @@ describe('CanvasPanel file explorer', () => {
       content: [{ type: 'text', text: '' }],
     });
     listArtifactsMock.mockResolvedValue({ artifacts: [], total: 0 });
-    fetchArtifactResourceMock.mockResolvedValue(new Response('', { status: 200 }));
+    fetchArtifactResourceMock.mockImplementation(async (_url, consume) =>
+      consume(new Response('', { status: 200 }), { check() {} })
+    );
   });
 
   it('renders source sections and opens a sandbox text file', async () => {
@@ -115,11 +117,14 @@ describe('CanvasPanel file explorer', () => {
       url: '/api/v1/artifacts/artifact-1/download',
     });
     listArtifactsMock.mockResolvedValueOnce({ artifacts: [artifact], total: 1 });
-    fetchArtifactResourceMock.mockResolvedValueOnce(
-      new Response('# Notes', {
-        status: 200,
-        headers: { 'content-type': 'text/markdown' },
-      })
+    fetchArtifactResourceMock.mockImplementationOnce(async (_url, consume) =>
+      consume(
+        new Response('# Notes', {
+          status: 200,
+          headers: { 'content-type': 'text/markdown' },
+        }),
+        { check() {} }
+      )
     );
 
     render(<CanvasPanel projectId="project-1" tenantId="tenant-1" workspaceId="workspace-1" />);
@@ -138,6 +143,9 @@ describe('CanvasPanel file explorer', () => {
       });
     });
     expect(artifactService.list).toHaveBeenCalledWith('project-1', { limit: 500 });
-    expect(fetchArtifactResource).toHaveBeenCalledWith('/api/v1/artifacts/artifact-1/download');
+    expect(fetchArtifactResource).toHaveBeenCalledWith(
+      '/api/v1/artifacts/artifact-1/download',
+      expect.any(Function)
+    );
   });
 });

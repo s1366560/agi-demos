@@ -783,7 +783,10 @@ function DeliveryPanel({
                     className="mt-2 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-status-text-info hover:underline"
                   >
                     {previewOpeningUrl === previewUrl ? (
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden />
+                      <Loader2
+                        className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none"
+                        aria-hidden
+                      />
                     ) : (
                       <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     )}
@@ -1573,7 +1576,7 @@ export function PlanRunSnapshotSection({
       const isSandboxProxyUrl =
         launchUrl.startsWith('/api/v1/projects/') && launchUrl.includes('/sandbox/http-services/');
       if (isSandboxProxyUrl && !serviceId) {
-        await apiFetch.get(launchUrl, {
+        await apiFetch.get(launchUrl, () => undefined, {
           credentials: 'include',
         });
       }
@@ -1602,7 +1605,9 @@ export function PlanRunSnapshotSection({
             <h3 className="text-lg font-semibold leading-6 text-text-primary dark:text-text-inverse">
               {t('blackboard.planRunTitle', 'Plan run')}
             </h3>
-            {isLoading && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-text-muted" />}
+            {isLoading && (
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none text-text-muted" />
+            )}
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-secondary dark:text-text-muted">
             <span>{stage}</span>

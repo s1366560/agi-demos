@@ -11,6 +11,40 @@
       "web_route_ids": [
         "agent-workspace-tenant-agent-workspace"
       ],
+      "reviewed_production_dependencies": [
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/client/httpClient.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/client/kernelHttpClient.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/client/urlUtils.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/client/webFetchV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/attachmentService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/artifactService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/projectStatsService.ts"
+        }
+      ],
       "api_method": "WS",
       "api_path": "/api/v1/agent/ws",
       "api_contracts": [

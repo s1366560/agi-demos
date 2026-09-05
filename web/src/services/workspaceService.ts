@@ -95,18 +95,27 @@ function normalizeListResponse<T>(
 
 export const workspaceService = {
   listByProject: async (tenantId: string, projectId: string): Promise<Workspace[]> => {
-    const response = await apiFetch.get(workspaceBase(tenantId, projectId), {
-      retry: {
-        maxRetries: 1,
+    return apiFetch.get(
+      workspaceBase(tenantId, projectId),
+      async (response) => {
+        const payload: unknown = await response.json();
+        return normalizeListResponse<Workspace>(payload, ['items', 'workspaces']);
       },
-    });
-    const payload: unknown = await response.json();
-    return normalizeListResponse<Workspace>(payload, ['items', 'workspaces']);
+      {
+        retry: {
+          maxRetries: 1,
+        },
+      }
+    );
   },
 
   getById: async (tenantId: string, projectId: string, workspaceId: string): Promise<Workspace> => {
-    const response = await apiFetch.get(`${workspaceBase(tenantId, projectId)}/${workspaceId}`);
-    return response.json() as Promise<Workspace>;
+    return apiFetch.get(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}`,
+      async (response) => {
+        return response.json() as Promise<Workspace>;
+      }
+    );
   },
 
   create: async (
@@ -114,8 +123,9 @@ export const workspaceService = {
     projectId: string,
     data: WorkspaceCreateRequest
   ): Promise<Workspace> => {
-    const response = await apiFetch.post(workspaceBase(tenantId, projectId), data);
-    return response.json() as Promise<Workspace>;
+    return apiFetch.post(workspaceBase(tenantId, projectId), data, async (response) => {
+      return response.json() as Promise<Workspace>;
+    });
   },
 
   update: async (
@@ -124,15 +134,17 @@ export const workspaceService = {
     workspaceId: string,
     data: WorkspaceUpdateRequest
   ): Promise<Workspace> => {
-    const response = await apiFetch.patch(
+    return apiFetch.patch(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<Workspace>;
+      }
     );
-    return response.json() as Promise<Workspace>;
   },
 
   remove: async (tenantId: string, projectId: string, workspaceId: string): Promise<void> => {
-    await apiFetch.delete(`${workspaceBase(tenantId, projectId)}/${workspaceId}`);
+    await apiFetch.delete(`${workspaceBase(tenantId, projectId)}/${workspaceId}`, () => undefined);
   },
 
   listMembers: async (
@@ -140,11 +152,13 @@ export const workspaceService = {
     projectId: string,
     workspaceId: string
   ): Promise<WorkspaceMember[]> => {
-    const response = await apiFetch.get(
-      `${workspaceBase(tenantId, projectId)}/${workspaceId}/members`
+    return apiFetch.get(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/members`,
+      async (response) => {
+        const payload: unknown = await response.json();
+        return normalizeListResponse<WorkspaceMember>(payload, ['items', 'members']);
+      }
     );
-    const payload: unknown = await response.json();
-    return normalizeListResponse<WorkspaceMember>(payload, ['items', 'members']);
   },
 
   addMember: async (
@@ -153,11 +167,13 @@ export const workspaceService = {
     workspaceId: string,
     data: { user_id: string; role: string }
   ): Promise<WorkspaceMember> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/members`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<WorkspaceMember>;
+      }
     );
-    return response.json() as Promise<WorkspaceMember>;
   },
 
   removeMember: async (
@@ -167,7 +183,8 @@ export const workspaceService = {
     memberId: string
   ): Promise<void> => {
     await apiFetch.delete(
-      `${workspaceBase(tenantId, projectId)}/${workspaceId}/members/${memberId}`
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/members/${memberId}`,
+      () => undefined
     );
   },
 
@@ -178,11 +195,13 @@ export const workspaceService = {
     memberId: string,
     role: string
   ): Promise<WorkspaceMember> => {
-    const response = await apiFetch.patch(
+    return apiFetch.patch(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/members/${memberId}`,
-      { role }
+      { role },
+      async (response) => {
+        return response.json() as Promise<WorkspaceMember>;
+      }
     );
-    return response.json() as Promise<WorkspaceMember>;
   },
 
   listAgents: async (
@@ -190,11 +209,13 @@ export const workspaceService = {
     projectId: string,
     workspaceId: string
   ): Promise<WorkspaceAgent[]> => {
-    const response = await apiFetch.get(
-      `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents`
+    return apiFetch.get(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents`,
+      async (response) => {
+        const payload: unknown = await response.json();
+        return normalizeListResponse<WorkspaceAgent>(payload, ['items', 'agents']);
+      }
     );
-    const payload: unknown = await response.json();
-    return normalizeListResponse<WorkspaceAgent>(payload, ['items', 'agents']);
   },
 
   bindAgent: async (
@@ -213,11 +234,13 @@ export const workspaceService = {
       label?: string;
     }
   ): Promise<WorkspaceAgent> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<WorkspaceAgent>;
+      }
     );
-    return response.json() as Promise<WorkspaceAgent>;
   },
 
   updateAgentBinding: async (
@@ -227,11 +250,13 @@ export const workspaceService = {
     workspaceAgentId: string,
     data: WorkspaceAgentUpdateRequest
   ): Promise<WorkspaceAgent> => {
-    const response = await apiFetch.patch(
+    return apiFetch.patch(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents/${workspaceAgentId}`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<WorkspaceAgent>;
+      }
     );
-    return response.json() as Promise<WorkspaceAgent>;
   },
 
   unbindAgent: async (
@@ -241,7 +266,8 @@ export const workspaceService = {
     workspaceAgentId: string
   ): Promise<void> => {
     await apiFetch.delete(
-      `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents/${workspaceAgentId}`
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/agents/${workspaceAgentId}`,
+      () => undefined
     );
   },
 };
@@ -252,15 +278,17 @@ export const workspaceBlackboardService = {
     projectId: string,
     workspaceId: string
   ): Promise<WorkspaceExecutionDiagnostics> => {
-    const response = await apiFetch.get(
+    return apiFetch.get(
       `${blackboardBase(tenantId, projectId, workspaceId)}/execution-diagnostics`,
+      async (response) => {
+        return response.json() as Promise<WorkspaceExecutionDiagnostics>;
+      },
       {
         retry: {
           maxRetries: 1,
         },
       }
     );
-    return response.json() as Promise<WorkspaceExecutionDiagnostics>;
   },
 
   listPosts: async (
@@ -268,16 +296,18 @@ export const workspaceBlackboardService = {
     projectId: string,
     workspaceId: string
   ): Promise<BlackboardPost[]> => {
-    const response = await apiFetch.get(
+    return apiFetch.get(
       `${blackboardBase(tenantId, projectId, workspaceId)}/posts`,
+      async (response) => {
+        const payload = (await response.json()) as { items?: BlackboardPost[] };
+        return payload.items ?? [];
+      },
       {
         retry: {
           maxRetries: 1,
         },
       }
     );
-    const payload = (await response.json()) as { items?: BlackboardPost[] };
-    return payload.items ?? [];
   },
 
   createPost: async (
@@ -287,11 +317,13 @@ export const workspaceBlackboardService = {
     data: Pick<BlackboardPost, 'title' | 'content'> &
       Partial<Pick<BlackboardPost, 'status' | 'is_pinned'>>
   ): Promise<BlackboardPost> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${blackboardBase(tenantId, projectId, workspaceId)}/posts`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<BlackboardPost>;
+      }
     );
-    return response.json() as Promise<BlackboardPost>;
   },
 
   listReplies: async (
@@ -300,11 +332,13 @@ export const workspaceBlackboardService = {
     workspaceId: string,
     postId: string
   ): Promise<BlackboardReply[]> => {
-    const response = await apiFetch.get(
-      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/replies`
+    return apiFetch.get(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/replies`,
+      async (response) => {
+        const payload = (await response.json()) as { items?: BlackboardReply[] };
+        return payload.items ?? [];
+      }
     );
-    const payload = (await response.json()) as { items?: BlackboardReply[] };
-    return payload.items ?? [];
   },
 
   createReply: async (
@@ -314,11 +348,13 @@ export const workspaceBlackboardService = {
     postId: string,
     data: Pick<BlackboardReply, 'content'>
   ): Promise<BlackboardReply> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/replies`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<BlackboardReply>;
+      }
     );
-    return response.json() as Promise<BlackboardReply>;
   },
 
   updatePost: async (
@@ -328,11 +364,13 @@ export const workspaceBlackboardService = {
     postId: string,
     data: Partial<Pick<BlackboardPost, 'title' | 'content' | 'status' | 'is_pinned'>>
   ): Promise<BlackboardPost> => {
-    const response = await apiFetch.patch(
+    return apiFetch.patch(
       `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<BlackboardPost>;
+      }
     );
-    return response.json() as Promise<BlackboardPost>;
   },
 
   deletePost: async (
@@ -341,7 +379,10 @@ export const workspaceBlackboardService = {
     workspaceId: string,
     postId: string
   ): Promise<void> => {
-    await apiFetch.delete(`${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`);
+    await apiFetch.delete(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}`,
+      () => undefined
+    );
   },
 
   pinPost: async (
@@ -350,10 +391,13 @@ export const workspaceBlackboardService = {
     workspaceId: string,
     postId: string
   ): Promise<BlackboardPost> => {
-    const response = await apiFetch.post(
-      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/pin`
+    return apiFetch.post(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/pin`,
+      undefined,
+      async (response) => {
+        return response.json() as Promise<BlackboardPost>;
+      }
     );
-    return response.json() as Promise<BlackboardPost>;
   },
 
   unpinPost: async (
@@ -362,10 +406,13 @@ export const workspaceBlackboardService = {
     workspaceId: string,
     postId: string
   ): Promise<BlackboardPost> => {
-    const response = await apiFetch.post(
-      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/unpin`
+    return apiFetch.post(
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/unpin`,
+      undefined,
+      async (response) => {
+        return response.json() as Promise<BlackboardPost>;
+      }
     );
-    return response.json() as Promise<BlackboardPost>;
   },
 
   updateReply: async (
@@ -376,11 +423,13 @@ export const workspaceBlackboardService = {
     replyId: string,
     data: Pick<BlackboardReply, 'content'>
   ): Promise<BlackboardReply> => {
-    const response = await apiFetch.patch(
+    return apiFetch.patch(
       `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/replies/${replyId}`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<BlackboardReply>;
+      }
     );
-    return response.json() as Promise<BlackboardReply>;
   },
 
   deleteReply: async (
@@ -391,43 +440,59 @@ export const workspaceBlackboardService = {
     replyId: string
   ): Promise<void> => {
     await apiFetch.delete(
-      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/replies/${replyId}`
+      `${blackboardBase(tenantId, projectId, workspaceId)}/posts/${postId}/replies/${replyId}`,
+      () => undefined
     );
   },
 };
 
 export const workspaceTaskService = {
   list: async (workspaceId: string): Promise<WorkspaceTask[]> => {
-    const response = await apiFetch.get(taskBase(workspaceId), {
-      retry: {
-        maxRetries: 1,
+    return apiFetch.get(
+      taskBase(workspaceId),
+      async (response) => {
+        return response.json() as Promise<WorkspaceTask[]>;
       },
-    });
-    return response.json() as Promise<WorkspaceTask[]>;
+      {
+        retry: {
+          maxRetries: 1,
+        },
+      }
+    );
   },
 
   getExperience: async (
     workspaceId: string,
     taskId: string
   ): Promise<WorkspaceTaskExperienceSummary> => {
-    const response = await apiFetch.get(`${taskBase(workspaceId)}/${taskId}/experience`, {
-      retry: {
-        maxRetries: 1,
+    return apiFetch.get(
+      `${taskBase(workspaceId)}/${taskId}/experience`,
+      async (response) => {
+        return response.json() as Promise<WorkspaceTaskExperienceSummary>;
       },
-    });
-    return response.json() as Promise<WorkspaceTaskExperienceSummary>;
+      {
+        retry: {
+          maxRetries: 1,
+        },
+      }
+    );
   },
 
   getExecutionSession: async (
     workspaceId: string,
     taskId: string
   ): Promise<TaskExecutionSession> => {
-    const response = await apiFetch.get(`${taskBase(workspaceId)}/${taskId}/execution-session`, {
-      retry: {
-        maxRetries: 1,
+    return apiFetch.get(
+      `${taskBase(workspaceId)}/${taskId}/execution-session`,
+      async (response) => {
+        return response.json() as Promise<TaskExecutionSession>;
       },
-    });
-    return response.json() as Promise<TaskExecutionSession>;
+      {
+        retry: {
+          maxRetries: 1,
+        },
+      }
+    );
   },
 
   applyRecoveryAction: async (
@@ -435,11 +500,13 @@ export const workspaceTaskService = {
     taskId: string,
     data: TaskRecoveryActionRequest
   ): Promise<TaskRecoveryActionResult> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${taskBase(workspaceId)}/${taskId}/recovery-actions`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<TaskRecoveryActionResult>;
+      }
     );
-    return response.json() as Promise<TaskRecoveryActionResult>;
   },
 
   create: async (
@@ -452,11 +519,16 @@ export const workspaceTaskService = {
         >
       >
   ): Promise<WorkspaceTask> => {
-    const response = await apiFetch.post(taskBase(workspaceId), {
-      ...data,
-      preferred_language: getPreferredLanguage(),
-    });
-    return response.json() as Promise<WorkspaceTask>;
+    return apiFetch.post(
+      taskBase(workspaceId),
+      {
+        ...data,
+        preferred_language: getPreferredLanguage(),
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspaceTask>;
+      }
+    );
   },
 
   update: async (
@@ -475,8 +547,9 @@ export const workspaceTaskService = {
       >
     >
   ): Promise<WorkspaceTask> => {
-    const response = await apiFetch.patch(`${taskBase(workspaceId)}/${taskId}`, data);
-    return response.json() as Promise<WorkspaceTask>;
+    return apiFetch.patch(`${taskBase(workspaceId)}/${taskId}`, data, async (response) => {
+      return response.json() as Promise<WorkspaceTask>;
+    });
   },
 
   assignToAgent: async (
@@ -484,16 +557,26 @@ export const workspaceTaskService = {
     taskId: string,
     workspaceAgentId: string
   ): Promise<WorkspaceTask> => {
-    const response = await apiFetch.post(`${taskBase(workspaceId)}/${taskId}/assign-agent`, {
-      workspace_agent_id: workspaceAgentId,
-      preferred_language: getPreferredLanguage(),
-    });
-    return response.json() as Promise<WorkspaceTask>;
+    return apiFetch.post(
+      `${taskBase(workspaceId)}/${taskId}/assign-agent`,
+      {
+        workspace_agent_id: workspaceAgentId,
+        preferred_language: getPreferredLanguage(),
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspaceTask>;
+      }
+    );
   },
 
   unassignAgent: async (workspaceId: string, taskId: string): Promise<WorkspaceTask> => {
-    const response = await apiFetch.post(`${taskBase(workspaceId)}/${taskId}/unassign-agent`);
-    return response.json() as Promise<WorkspaceTask>;
+    return apiFetch.post(
+      `${taskBase(workspaceId)}/${taskId}/unassign-agent`,
+      undefined,
+      async (response) => {
+        return response.json() as Promise<WorkspaceTask>;
+      }
+    );
   },
 };
 
@@ -508,10 +591,15 @@ export const workspaceAutonomyService = {
     workspaceId: string,
     options: { force?: boolean } = {}
   ): Promise<WorkspaceAutonomyTickResult> => {
-    const response = await apiFetch.post(`${autonomyBase(workspaceId)}/tick`, {
-      force: options.force ?? false,
-    });
-    return response.json() as Promise<WorkspaceAutonomyTickResult>;
+    return apiFetch.post(
+      `${autonomyBase(workspaceId)}/tick`,
+      {
+        force: options.force ?? false,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspaceAutonomyTickResult>;
+      }
+    );
   },
 };
 
@@ -543,12 +631,17 @@ export const workspacePlanService = {
       params.set('plan_id', options.planId);
     }
     const query = params.toString();
-    const response = await apiFetch.get(`${planBase(workspaceId)}${query ? `?${query}` : ''}`, {
-      retry: {
-        maxRetries: 1,
+    return apiFetch.get(
+      `${planBase(workspaceId)}${query ? `?${query}` : ''}`,
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanSnapshot>;
       },
-    });
-    return response.json() as Promise<WorkspacePlanSnapshot>;
+      {
+        retry: {
+          maxRetries: 1,
+        },
+      }
+    );
   },
 
   retryOutboxItem: async (
@@ -556,20 +649,30 @@ export const workspacePlanService = {
     outboxId: string,
     options: { reason?: string } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/outbox/${outboxId}/retry`, {
-      reason: options.reason ?? null,
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/outbox/${outboxId}/retry`,
+      {
+        reason: options.reason ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 
   recoverStaleAttempts: async (
     workspaceId: string,
     options: { reason?: string } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/recover-stale-attempts`, {
-      reason: options.reason ?? null,
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/recover-stale-attempts`,
+      {
+        reason: options.reason ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 
   requestNodeReplan: async (
@@ -577,13 +680,15 @@ export const workspacePlanService = {
     nodeId: string,
     options: { reason?: string } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${planBase(workspaceId)}/nodes/${nodeId}/request-replan`,
       {
         reason: options.reason ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
       }
     );
-    return response.json() as Promise<WorkspacePlanActionResult>;
   },
 
   reopenBlockedNode: async (
@@ -591,10 +696,15 @@ export const workspacePlanService = {
     nodeId: string,
     options: { reason?: string } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/nodes/${nodeId}/reopen`, {
-      reason: options.reason ?? null,
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/nodes/${nodeId}/reopen`,
+      {
+        reason: options.reason ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 
   acceptNodeAfterReview: async (
@@ -602,90 +712,131 @@ export const workspacePlanService = {
     nodeId: string,
     options: { reason?: string; evidenceRefs?: string[] } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/nodes/${nodeId}/accept-review`, {
-      reason: options.reason ?? null,
-      evidence_refs: options.evidenceRefs ?? [],
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/nodes/${nodeId}/accept-review`,
+      {
+        reason: options.reason ?? null,
+        evidence_refs: options.evidenceRefs ?? [],
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 
   pauseAutoLoop: async (
     workspaceId: string,
     options: { reason?: string } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/iteration/pause`, {
-      reason: options.reason ?? null,
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/iteration/pause`,
+      {
+        reason: options.reason ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 
   resumeAutoLoop: async (
     workspaceId: string,
     options: { reason?: string } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/iteration/resume`, {
-      reason: options.reason ?? null,
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/iteration/resume`,
+      {
+        reason: options.reason ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 
   triggerNextIteration: async (
     workspaceId: string,
     options: { reason?: string } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/iteration/trigger-next`, {
-      reason: options.reason ?? null,
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/iteration/trigger-next`,
+      {
+        reason: options.reason ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 
   requestPipelineRun: async (
     workspaceId: string,
     options: { reason?: string; nodeId?: string | null } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/delivery/run-pipeline`, {
-      reason: options.reason ?? null,
-      node_id: options.nodeId ?? null,
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/delivery/run-pipeline`,
+      {
+        reason: options.reason ?? null,
+        node_id: options.nodeId ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 
   regenerateDeliveryContract: async (
     workspaceId: string,
     options: { reason?: string } = {}
   ): Promise<WorkspacePlanActionResult> => {
-    const response = await apiFetch.post(`${planBase(workspaceId)}/delivery/regenerate-contract`, {
-      reason: options.reason ?? null,
-    });
-    return response.json() as Promise<WorkspacePlanActionResult>;
+    return apiFetch.post(
+      `${planBase(workspaceId)}/delivery/regenerate-contract`,
+      {
+        reason: options.reason ?? null,
+      },
+      async (response) => {
+        return response.json() as Promise<WorkspacePlanActionResult>;
+      }
+    );
   },
 };
 
 export const workspaceTopologyService = {
   listNodes: async (workspaceId: string): Promise<TopologyNode[]> => {
-    const response = await apiFetch.get(`${topologyBase(workspaceId)}/nodes`, {
-      retry: {
-        maxRetries: 1,
+    return apiFetch.get(
+      `${topologyBase(workspaceId)}/nodes`,
+      async (response) => {
+        return response.json() as Promise<TopologyNode[]>;
       },
-    });
-    return response.json() as Promise<TopologyNode[]>;
+      {
+        retry: {
+          maxRetries: 1,
+        },
+      }
+    );
   },
 
   listEdges: async (workspaceId: string): Promise<TopologyEdge[]> => {
-    const response = await apiFetch.get(`${topologyBase(workspaceId)}/edges`, {
-      retry: {
-        maxRetries: 1,
+    return apiFetch.get(
+      `${topologyBase(workspaceId)}/edges`,
+      async (response) => {
+        return response.json() as Promise<TopologyEdge[]>;
       },
-    });
-    return response.json() as Promise<TopologyEdge[]>;
+      {
+        retry: {
+          maxRetries: 1,
+        },
+      }
+    );
   },
 
   createNode: async (
     workspaceId: string,
     data: TopologyNodeCreateRequest
   ): Promise<TopologyNode> => {
-    const response = await apiFetch.post(`${topologyBase(workspaceId)}/nodes`, data);
-    return response.json() as Promise<TopologyNode>;
+    return apiFetch.post(`${topologyBase(workspaceId)}/nodes`, data, async (response) => {
+      return response.json() as Promise<TopologyNode>;
+    });
   },
 
   updateNode: async (
@@ -693,20 +844,26 @@ export const workspaceTopologyService = {
     nodeId: string,
     data: TopologyNodeUpdateRequest
   ): Promise<TopologyNode> => {
-    const response = await apiFetch.patch(`${topologyBase(workspaceId)}/nodes/${nodeId}`, data);
-    return response.json() as Promise<TopologyNode>;
+    return apiFetch.patch(
+      `${topologyBase(workspaceId)}/nodes/${nodeId}`,
+      data,
+      async (response) => {
+        return response.json() as Promise<TopologyNode>;
+      }
+    );
   },
 
   deleteNode: async (workspaceId: string, nodeId: string): Promise<void> => {
-    await apiFetch.delete(`${topologyBase(workspaceId)}/nodes/${nodeId}`);
+    await apiFetch.delete(`${topologyBase(workspaceId)}/nodes/${nodeId}`, () => undefined);
   },
 
   createEdge: async (
     workspaceId: string,
     data: TopologyEdgeCreateRequest
   ): Promise<TopologyEdge> => {
-    const response = await apiFetch.post(`${topologyBase(workspaceId)}/edges`, data);
-    return response.json() as Promise<TopologyEdge>;
+    return apiFetch.post(`${topologyBase(workspaceId)}/edges`, data, async (response) => {
+      return response.json() as Promise<TopologyEdge>;
+    });
   },
 
   updateEdge: async (
@@ -714,12 +871,17 @@ export const workspaceTopologyService = {
     edgeId: string,
     data: TopologyEdgeUpdateRequest
   ): Promise<TopologyEdge> => {
-    const response = await apiFetch.patch(`${topologyBase(workspaceId)}/edges/${edgeId}`, data);
-    return response.json() as Promise<TopologyEdge>;
+    return apiFetch.patch(
+      `${topologyBase(workspaceId)}/edges/${edgeId}`,
+      data,
+      async (response) => {
+        return response.json() as Promise<TopologyEdge>;
+      }
+    );
   },
 
   deleteEdge: async (workspaceId: string, edgeId: string): Promise<void> => {
-    await apiFetch.delete(`${topologyBase(workspaceId)}/edges/${edgeId}`);
+    await apiFetch.delete(`${topologyBase(workspaceId)}/edges/${edgeId}`, () => undefined);
   },
 };
 
@@ -729,11 +891,15 @@ export const workspaceObjectiveService = {
     projectId: string,
     workspaceId: string
   ): Promise<import('@/types/workspace').CyberObjective[]> => {
-    const response = await apiFetch.get(
-      `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives`
+    return apiFetch.get(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives`,
+      async (response) => {
+        const payload: unknown = await response.json();
+        return normalizeListResponse<import('@/types/workspace').CyberObjective>(payload, [
+          'items',
+        ]);
+      }
     );
-    const payload: unknown = await response.json();
-    return normalizeListResponse<import('@/types/workspace').CyberObjective>(payload, ['items']);
   },
 
   create: async (
@@ -747,11 +913,13 @@ export const workspaceObjectiveService = {
       parent_id?: string;
     }
   ): Promise<import('@/types/workspace').CyberObjective> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<import('@/types/workspace').CyberObjective>;
+      }
     );
-    return response.json() as Promise<import('@/types/workspace').CyberObjective>;
   },
 
   update: async (
@@ -761,11 +929,13 @@ export const workspaceObjectiveService = {
     objectiveId: string,
     data: Partial<{ title: string; description: string; progress: number }>
   ): Promise<import('@/types/workspace').CyberObjective> => {
-    const response = await apiFetch.patch(
+    return apiFetch.patch(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives/${objectiveId}`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<import('@/types/workspace').CyberObjective>;
+      }
     );
-    return response.json() as Promise<import('@/types/workspace').CyberObjective>;
   },
 
   remove: async (
@@ -775,7 +945,8 @@ export const workspaceObjectiveService = {
     objectiveId: string
   ): Promise<void> => {
     await apiFetch.delete(
-      `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives/${objectiveId}`
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives/${objectiveId}`,
+      () => undefined
     );
   },
 
@@ -785,11 +956,13 @@ export const workspaceObjectiveService = {
     workspaceId: string,
     objectiveId: string
   ): Promise<WorkspaceTask> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/objectives/${objectiveId}/project-to-task`,
-      { preferred_language: getPreferredLanguage() }
+      { preferred_language: getPreferredLanguage() },
+      async (response) => {
+        return response.json() as Promise<WorkspaceTask>;
+      }
     );
-    return response.json() as Promise<WorkspaceTask>;
   },
 };
 
@@ -811,9 +984,10 @@ export const workspaceGeneService = {
         url += `?${qs}`;
       }
     }
-    const response = await apiFetch.get(url);
-    const payload: unknown = await response.json();
-    return normalizeListResponse<import('@/types/workspace').CyberGene>(payload, ['items']);
+    return apiFetch.get(url, async (response) => {
+      const payload: unknown = await response.json();
+      return normalizeListResponse<import('@/types/workspace').CyberGene>(payload, ['items']);
+    });
   },
 
   create: async (
@@ -829,11 +1003,13 @@ export const workspaceGeneService = {
       is_active?: boolean;
     }
   ): Promise<import('@/types/workspace').CyberGene> => {
-    const response = await apiFetch.post(
+    return apiFetch.post(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/genes`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<import('@/types/workspace').CyberGene>;
+      }
     );
-    return response.json() as Promise<import('@/types/workspace').CyberGene>;
   },
 
   update: async (
@@ -850,11 +1026,13 @@ export const workspaceGeneService = {
       version: string;
     }>
   ): Promise<import('@/types/workspace').CyberGene> => {
-    const response = await apiFetch.patch(
+    return apiFetch.patch(
       `${workspaceBase(tenantId, projectId)}/${workspaceId}/genes/${geneId}`,
-      data
+      data,
+      async (response) => {
+        return response.json() as Promise<import('@/types/workspace').CyberGene>;
+      }
     );
-    return response.json() as Promise<import('@/types/workspace').CyberGene>;
   },
 
   remove: async (
@@ -863,7 +1041,10 @@ export const workspaceGeneService = {
     workspaceId: string,
     geneId: string
   ): Promise<void> => {
-    await apiFetch.delete(`${workspaceBase(tenantId, projectId)}/${workspaceId}/genes/${geneId}`);
+    await apiFetch.delete(
+      `${workspaceBase(tenantId, projectId)}/${workspaceId}/genes/${geneId}`,
+      () => undefined
+    );
   },
 };
 
@@ -885,9 +1066,14 @@ export const workspaceChatService = {
       const qs = sp.toString();
       if (qs) url += `?${qs}`;
     }
-    const response = await apiFetch.get(url, { retry: { maxRetries: 1 } });
-    const payload = (await response.json()) as import('@/types/workspace').MessageListResponse;
-    return payload.items;
+    return apiFetch.get(
+      url,
+      async (response) => {
+        const payload = (await response.json()) as import('@/types/workspace').MessageListResponse;
+        return payload.items;
+      },
+      { retry: { maxRetries: 1 } }
+    );
   },
 
   sendMessage: async (
@@ -896,7 +1082,8 @@ export const workspaceChatService = {
     workspaceId: string,
     data: import('@/types/workspace').SendMessageRequest
   ): Promise<import('@/types/workspace').WorkspaceMessage> => {
-    const response = await apiFetch.post(chatBase(tenantId, projectId, workspaceId), data);
-    return response.json() as Promise<import('@/types/workspace').WorkspaceMessage>;
+    return apiFetch.post(chatBase(tenantId, projectId, workspaceId), data, async (response) => {
+      return response.json() as Promise<import('@/types/workspace').WorkspaceMessage>;
+    });
   },
 };

@@ -47,22 +47,25 @@ export const templateService = {
     if (category) {
       params.set('category', category);
     }
-    const res = await apiFetch.get(`/agent/templates?${params.toString()}`);
-    return (await res.json()) as PromptTemplateData[];
+    return apiFetch.get(`/agent/templates?${params.toString()}`, async (res) => {
+      return (await res.json()) as PromptTemplateData[];
+    });
   },
 
   async create(tenantId: string, data: CreateTemplateRequest): Promise<PromptTemplateData> {
     const params = new URLSearchParams({ tenant_id: tenantId });
-    const res = await apiFetch.post(`/agent/templates?${params.toString()}`, data);
-    return (await res.json()) as PromptTemplateData;
+    return apiFetch.post(`/agent/templates?${params.toString()}`, data, async (res) => {
+      return (await res.json()) as PromptTemplateData;
+    });
   },
 
   async update(templateId: string, data: UpdateTemplateRequest): Promise<PromptTemplateData> {
-    const res = await apiFetch.put(`/agent/templates/${templateId}`, data);
-    return (await res.json()) as PromptTemplateData;
+    return apiFetch.put(`/agent/templates/${templateId}`, data, async (res) => {
+      return (await res.json()) as PromptTemplateData;
+    });
   },
 
   async delete(templateId: string): Promise<void> {
-    await apiFetch.delete(`/agent/templates/${templateId}`);
+    await apiFetch.delete(`/agent/templates/${templateId}`, () => undefined);
   },
 };

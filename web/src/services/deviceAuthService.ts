@@ -8,7 +8,7 @@
  *
  * The frontend only needs `approve` (the CLI handles the others).
  */
-import { httpClient } from './client/httpClient';
+import { kernelHttpClient } from './client/kernelHttpClient';
 
 export interface DeviceApproveResponse {
   status: 'approved';
@@ -24,7 +24,7 @@ export const deviceAuthService = {
    * user with 30-day expiry and hands it to the waiting CLI.
    */
   approve: async (userCode: string): Promise<DeviceApproveResponse> => {
-    return await httpClient.post<DeviceApproveResponse>('/auth/device/approve', {
+    return await kernelHttpClient.post<DeviceApproveResponse>('/auth/device/approve', {
       user_code: userCode.trim().toUpperCase(),
     });
   },

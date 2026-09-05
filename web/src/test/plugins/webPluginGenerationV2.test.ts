@@ -5,8 +5,8 @@ const { getDistributionMock } = vi.hoisted(() => ({
   getDistributionMock: vi.fn(),
 }));
 
-vi.mock('../../services/client/httpClient', () => ({
-  httpClient: { get: getDistributionMock },
+vi.mock('../../services/client/kernelHttpClient', () => ({
+  kernelHttpClient: { get: getDistributionMock },
 }));
 
 import {
@@ -24,6 +24,8 @@ import {
 } from '../../plugins/webPluginGenerationV2';
 
 import bootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
+import { runWebOperationV2 } from '../../plugins/webOperationAdmissionV2';
+import { useAuthStore } from '../../stores/auth';
 
 function distribution() {
   return {
@@ -71,6 +73,74 @@ describe('web plugin generation polling', () => {
     expect(source).toHaveBeenCalledTimes(2);
     expect(runtime.getSnapshot()).toBeDefined();
     await runtime.close();
+  });
+
+  it('permits a replacement root while retired operations are still draining', async () => {
+    getDistributionMock.mockResolvedValue(distribution());
+    activateWebPluginGenerationRootV2();
+    const first = renderHook(() => useWebPluginGenerationV2(true));
+    await waitFor(() => expect(first.result.current.status).toBe('ready'));
+    let finish!: () => void;
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const task = runWebOperationV2(async () => {
+      started();
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const rejected = expect(task).rejects.toMatchObject({ name: 'AbortError' });
+    await ready;
+    first.unmount();
+    const closing = deactivateWebPluginGenerationRootV2();
+    activateWebPluginGenerationRootV2();
+    const second = renderHook(() => useWebPluginGenerationV2(true));
+    await waitFor(() => expect(second.result.current.status).toBe('ready'));
+    finish();
+    await rejected;
+    await closing;
+    await expect(runWebOperationV2(async (operation) => operation.generation)).resolves.toBe(
+      second.result.current.generation
+    );
+    second.unmount();
+  });
+
+  it('revokes in-flight work when the auth store logs out and isolates a replacement token', async () => {
+    const original = useAuthStore.getState();
+    useAuthStore.setState({ isAuthenticated: true, token: 'test-owner-one' });
+    getDistributionMock.mockResolvedValue(distribution());
+    activateWebPluginGenerationRootV2();
+    const rendered = renderHook(() => useWebPluginGenerationV2(true));
+    try {
+      await waitFor(() => expect(rendered.result.current.status).toBe('ready'));
+      const firstOwner = await runWebOperationV2(async (operation) => operation.owner);
+      let finish!: () => void;
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const task = runWebOperationV2(async () => {
+        started();
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      });
+      const rejected = expect(task).rejects.toMatchObject({ name: 'AbortError' });
+      await ready;
+      useAuthStore.setState({ isAuthenticated: false, token: null });
+      await expect(runWebOperationV2(async () => 'unexpected')).rejects.toThrow(
+        'web_operation_generation_unavailable'
+      );
+      finish();
+      await rejected;
+      useAuthStore.setState({ isAuthenticated: true, token: 'test-owner-two' });
+      expect(await runWebOperationV2(async (operation) => operation.owner)).not.toBe(firstOwner);
+    } finally {
+      rendered.unmount();
+      useAuthStore.setState(original);
+    }
   });
 
   it('releases last-good when the authenticated generation host becomes disabled', async () => {

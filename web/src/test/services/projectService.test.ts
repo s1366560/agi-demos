@@ -52,17 +52,30 @@ describe('projectService - Service Tests', () => {
       ];
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.get).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ users: mockUsers }),
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.get).mockImplementationOnce(async (...args: any[]) =>
+        args[1](
+          {
+            ok: true,
+            json: async () => ({ users: mockUsers }),
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[2]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       const result = await projectService.listMembers(mockProjectId);
 
-      expect(apiFetch.get).toHaveBeenCalledWith(`/projects/${mockProjectId}/members`);
+      expect(apiFetch.get).toHaveBeenCalledWith(
+        `/projects/${mockProjectId}/members`,
+        expect.any(Function)
+      );
       expect(result).toEqual({ users: mockUsers });
     });
 
@@ -78,20 +91,34 @@ describe('projectService - Service Tests', () => {
   describe('addMember', () => {
     it('should add member to project successfully', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.post).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.post).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({}),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await projectService.addMember(mockProjectId, mockUserId, mockRole);
 
-      expect(apiFetch.post).toHaveBeenCalledWith(`/projects/${mockProjectId}/members`, {
-        user_id: mockUserId,
-        role: mockRole,
-      });
+      expect(apiFetch.post).toHaveBeenCalledWith(
+        `/projects/${mockProjectId}/members`,
+        {
+          user_id: mockUserId,
+          role: mockRole,
+        },
+        expect.any(Function)
+      );
     });
 
     it('should propagate ApiError when add member fails', async () => {
@@ -108,18 +135,29 @@ describe('projectService - Service Tests', () => {
   describe('removeMember', () => {
     it('should remove member from project successfully', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.delete).mockImplementationOnce(async (...args: any[]) =>
+        args[1](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({}),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[2]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await projectService.removeMember(mockProjectId, mockUserId);
 
       expect(apiFetch.delete).toHaveBeenCalledWith(
-        `/projects/${mockProjectId}/members/${mockUserId}`
+        `/projects/${mockProjectId}/members/${mockUserId}`,
+        expect.any(Function)
       );
     });
 
@@ -138,19 +176,30 @@ describe('projectService - Service Tests', () => {
     it('should update member role successfully', async () => {
       const newRole = 'viewer';
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.patch).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.patch).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({}),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await projectService.updateMemberRole(mockProjectId, mockUserId, newRole);
 
       expect(apiFetch.patch).toHaveBeenCalledWith(
         `/projects/${mockProjectId}/members/${mockUserId}`,
-        { role: newRole }
+        { role: newRole },
+        expect.any(Function)
       );
     });
 
@@ -189,17 +238,31 @@ describe('projectService - Service Tests', () => {
       };
 
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.put).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => updatedProject,
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.put).mockImplementationOnce(async (...args: any[]) =>
+        args[2](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => updatedProject,
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[3]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       const result = await projectService.updateProject(mockProjectId, updates);
 
-      expect(apiFetch.put).toHaveBeenCalledWith(`/projects/${mockProjectId}`, updates);
+      expect(apiFetch.put).toHaveBeenCalledWith(
+        `/projects/${mockProjectId}`,
+        updates,
+        expect.any(Function)
+      );
       expect(result).toEqual(updatedProject);
     });
 
@@ -217,17 +280,30 @@ describe('projectService - Service Tests', () => {
   describe('listProjects', () => {
     it('should list projects through the backend tenant_id query parameter', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.get).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({ projects: [{ id: mockProjectId, name: 'Project' }] }),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.get).mockImplementationOnce(async (...args: any[]) =>
+        args[1](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({ projects: [{ id: mockProjectId, name: 'Project' }] }),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[2]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       const result = await projectService.listProjects('tenant-1');
 
-      expect(apiFetch.get).toHaveBeenCalledWith('/projects/?tenant_id=tenant-1');
+      expect(apiFetch.get).toHaveBeenCalledWith(
+        '/projects/?tenant_id=tenant-1',
+        expect.any(Function)
+      );
       expect(result).toEqual([{ id: mockProjectId, name: 'Project' }]);
     });
   });
@@ -235,17 +311,30 @@ describe('projectService - Service Tests', () => {
   describe('deleteProject', () => {
     it('should delete project successfully', async () => {
       const { apiFetch } = await import('../../services/client/urlUtils');
-      vi.mocked(apiFetch.delete).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: async () => ({}),
-        headers: new Headers(),
-      } as Response);
+      vi.mocked(apiFetch.delete).mockImplementationOnce(async (...args: any[]) =>
+        args[1](
+          {
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({}),
+            headers: new Headers(),
+          } as Response,
+          {
+            signal: args[2]?.signal ?? new AbortController().signal,
+            check() {
+              if (this.signal.aborted) throw new DOMException('cancelled', 'AbortError');
+            },
+          }
+        )
+      );
 
       await projectService.deleteProject(mockProjectId);
 
-      expect(apiFetch.delete).toHaveBeenCalledWith(`/projects/${mockProjectId}`);
+      expect(apiFetch.delete).toHaveBeenCalledWith(
+        `/projects/${mockProjectId}`,
+        expect.any(Function)
+      );
     });
 
     it('should propagate ApiError when delete project fails', async () => {

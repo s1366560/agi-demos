@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { httpClient } from '../../services/client/httpClient';
+import { kernelHttpClient } from '../../services/client/kernelHttpClient';
 import { authAPI, tenantAPI } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 import { clearAuthState } from '../../utils/tokenResolver';
 
-vi.mock('../../services/client/httpClient', () => ({
-  httpClient: {
+vi.mock('../../services/client/kernelHttpClient', () => ({
+  kernelHttpClient: {
     get: vi.fn().mockResolvedValue([]),
   },
 }));
@@ -55,7 +55,9 @@ describe('AuthStore', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
-    vi.mocked(httpClient.get).mockResolvedValue([]);
+    vi.mocked(kernelHttpClient.get).mockImplementation(async (url) =>
+      url === '/system/features' ? [] : { tenants: [], total: 0, page: 1, page_size: 20 }
+    );
     vi.mocked(tenantAPI.list).mockResolvedValue({ tenants: [], total: 0, page: 1, page_size: 20 });
     useAuthStore.setState({
       user: null,
@@ -98,16 +100,19 @@ describe('AuthStore', () => {
     const mockTenant = { id: 'tenant-1', name: 'Existing Tenant' };
 
     vi.mocked(authAPI.login).mockResolvedValue({ user: mockUser, token: mockToken } as any);
-    vi.mocked(tenantAPI.list).mockResolvedValue({
-      tenants: [mockTenant],
-      total: 1,
-      page: 1,
-      page_size: 20,
-    } as any);
+    vi.mocked(kernelHttpClient.get)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({
+        tenants: [mockTenant],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      } as any);
 
     await useAuthStore.getState().login('test@example.com', 'password');
 
-    expect(tenantAPI.list).toHaveBeenCalled();
+    expect(kernelHttpClient.get).toHaveBeenCalledWith('/tenants/');
+    expect(tenantAPI.list).not.toHaveBeenCalled();
     expect(useTenantStore.getState().tenants).toEqual([mockTenant]);
     expect(useTenantStore.getState().currentTenant).toEqual(mockTenant);
     expect(useAuthStore.getState().orgSetupComplete).toBe(true);
@@ -142,8 +147,8 @@ describe('AuthStore', () => {
     const mockTenant = { id: 'tenant-1', name: 'Existing Tenant' };
 
     vi.mocked(authAPI.login).mockResolvedValue({ user: mockUser, token: mockToken } as any);
-    vi.mocked(httpClient.get).mockRejectedValueOnce(new Error('features unavailable'));
-    vi.mocked(tenantAPI.list).mockResolvedValue({
+    vi.mocked(kernelHttpClient.get).mockRejectedValueOnce(new Error('features unavailable'));
+    vi.mocked(kernelHttpClient.get).mockResolvedValueOnce({
       tenants: [mockTenant],
       total: 1,
       page: 1,
@@ -158,6 +163,23 @@ describe('AuthStore', () => {
 
     expect(useTenantStore.getState().currentTenant).toEqual(mockTenant);
     expect(useAuthStore.getState().orgSetupComplete).toBe(true);
+  });
+
+  it('late bootstrap roster after logout cannot restore tenant state', async () => {
+    let release!: (value: unknown) => void;
+    const waiting = new Promise((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(authAPI.login).mockResolvedValue({ user: { id: '1' }, token: 'old' } as any);
+    vi.mocked(kernelHttpClient.get).mockResolvedValueOnce([]).mockReturnValueOnce(waiting);
+    const login = useAuthStore.getState().login('old@example.com', 'password');
+    await vi.waitFor(() => expect(kernelHttpClient.get).toHaveBeenCalledWith('/tenants/'));
+    useAuthStore.getState().logout();
+    release({ tenants: [{ id: 'old-tenant', name: 'Old' }], total: 1, page: 1, page_size: 20 });
+    await login;
+    expect(useTenantStore.getState().currentTenant).toBeNull();
+    expect(useTenantStore.getState().tenants).toEqual([]);
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 
   it('login should set error on failure', async () => {
