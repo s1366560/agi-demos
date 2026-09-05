@@ -6,6 +6,47 @@
   "trust": "builtin",
   "modules": [
     {
+      "module_ref": "builtin://memstack/desktop/project-sandbox-surface-authority",
+      "entrypoint": "applyDesktopProjectSandboxSurfaceAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceAuthorityModuleV2.ts",
+        "digest": "sha256:de7672b69bd4e3cb86023f6581dcb4b6dffa2f165559078aa5f84e0721d8ed30"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-sandbox-surface-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:699fdb4b3ea949d735b797f5a9b2168dd7268e423a4dce2d5d7bf3de344eb4cd"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-sandbox-upload-authority",
       "entrypoint": "applyDesktopProjectSandboxUploadAuthorityV2",
       "artifact": {

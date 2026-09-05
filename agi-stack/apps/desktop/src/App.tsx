@@ -148,6 +148,10 @@ import {
   createDesktopProjectMcpAppsClientV2,
 } from './plugins/desktopProjectMcpAppsAuthorityModuleV2';
 import {
+  createDesktopProjectSandboxSurfaceOperationsV2,
+  createDesktopProjectSandboxSurfaceClientV2,
+} from './plugins/desktopProjectSandboxSurfaceAuthorityModuleV2';
+import {
   createDesktopProjectSandboxUploadOperationsV2,
 } from './plugins/desktopProjectSandboxUploadAuthorityModuleV2';
 import { createDesktopBrowserIntegrationOperationsV2 } from './plugins/desktopBrowserIntegrationAuthorityModuleV2';
@@ -1129,6 +1133,12 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectSandboxSurfaceOperationsV2 = useMemo(
+    () => createDesktopProjectSandboxSurfaceOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
   const desktopProjectSandboxUploadOperationsV2 = useMemo(
     () => createDesktopProjectSandboxUploadOperationsV2(
       () => desktopPluginMarketplaceGenerationActionsRefV2.current,
@@ -1601,6 +1611,10 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
+  const desktopProjectSandboxSurfaceClientV2 = useMemo(
+    () => createDesktopProjectSandboxSurfaceClientV2(desktopProjectSandboxSurfaceOperationsV2, config),
+    [config, desktopProjectSandboxSurfaceOperationsV2],
+  );
   const desktopProjectMcpAppsClientV2 = useMemo(
     () => createDesktopProjectMcpAppsClientV2(desktopProjectMcpAppsOperationsV2, config),
     [config, desktopProjectMcpAppsOperationsV2],
@@ -1884,6 +1898,7 @@ export function App() {
   const sandboxRuntime = useSandboxRuntimeSurface(
     config,
     showRuntimeConfig && connection === 'ready' && Boolean(config.projectId.trim()),
+    desktopProjectSandboxSurfaceClientV2,
   );
   const chatComposerApi = useMemo(() => {
     const client = createDesktopChatComposerCatalogClientV2({

@@ -21,7 +21,7 @@ const BROKER_BOUND_CLIENTS = [
   'src/plugins/desktopRuntimeInstancesHttpProjectionV2.ts',
   'src/plugins/desktopRuntimeDeploymentsHttpProjectionV2.ts',
   'src/plugins/desktopDeadLetterQueueHttpProjectionV2.ts',
-  'src/features/sandbox/sandboxRuntimeSurfaceClient.ts',
+  'src/plugins/desktopProjectSandboxSurfaceHttpProjectionV2.ts',
   'src/features/sandbox/terminalSessionV2Client.ts',
 ];
 
@@ -71,5 +71,15 @@ test('Cloud-only creation, approval, invitation, and settings gates accept vault
   ]) {
     const source = readFileSync(new URL(path, desktopRoot), 'utf8');
     assert.match(source, /desktopApiAuthenticationAvailable\(/u, path);
+  }
+});
+
+test('Sandbox surface wrappers contain no retired HTTP transport fallback', () => {
+  for (const path of [
+    'src/features/sandbox/sandboxRuntimeClient.ts',
+    'src/features/sandbox/sandboxRuntimeSurfaceClient.ts',
+  ]) {
+    const source = readFileSync(new URL(path, desktopRoot), 'utf8');
+    assert.doesNotMatch(source, /\b(?:desktopApiFetch|fetch|DesktopRuntimeConfig)\b/u, path);
   }
 });

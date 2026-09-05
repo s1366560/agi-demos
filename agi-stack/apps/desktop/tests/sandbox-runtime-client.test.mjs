@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { createProjectSandboxSurfaceFileClientV2Fixture } from './projectSandboxSurfaceOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -10,6 +11,9 @@ const {
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/sandbox/sandboxRuntimeClient.js'
 );
+const { createCloudTerminalSession, resumeCloudTerminalSession } = require(
+  '/tmp/agistack-desktop-test-dist/src/features/sandbox/terminalSessionV2Client.js',
+);
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
 const availableFiles = {
@@ -18,54 +22,12 @@ const availableFiles = {
   reason_code: null,
 };
 
-test('cloud terminal operations fail closed without canonical run authority', async () => {
-  const originalFetch = globalThis.fetch;
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    throw new Error('legacy project-only terminal routes must not be probed');
-  };
-  try {
-    const client = createSandboxRuntimeClient(
-      {
-        ...DEFAULT_CONFIG,
-        apiBaseUrl: 'https://api.memstack.test',
-        mode: 'cloud',
-        projectId: 'project-1',
-      },
-      {
-        ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
-        terminal_interactive: {
-          availability: 'degraded',
-          contract_version: 1,
-          reason_code: 'terminal_interactive_canonical_run_authority_unavailable',
-        },
-        terminal_resume: {
-          availability: 'unavailable',
-          contract_version: 2,
-          reason_code: 'terminal_session_v2_canonical_run_authority_unavailable',
-        },
-      }
-    );
-
-    assert.deepEqual(
-      await client.createTerminalSession('project-1', 'run-1', 4),
-      {
-        status: 'unavailable',
-        reason_code: 'terminal_session_v2_canonical_run_authority_unavailable',
-      }
-    );
-    assert.deepEqual(
-      await client.resumeTerminalSession('project-1', 'session-1', 'resume-token'),
-      {
-        status: 'unavailable',
-        reason_code: 'terminal_session_v2_canonical_run_authority_unavailable',
-      }
-    );
-    assert.equal(calls, 0);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('retired runtime config overload cannot create a static HTTP client', () => {
+  assert.throws(
+    () => createSandboxRuntimeClient({ ...DEFAULT_CONFIG, projectId: 'project-1' },
+      SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE),
+    /sandbox runtime authority is required/,
+  );
 });
 
 test('cloud terminal operations use strict TerminalSessionV2 create and resume routes', async () => {
@@ -97,35 +59,15 @@ test('cloud terminal operations use strict TerminalSessionV2 create and resume r
   };
 
   try {
-    const client = createSandboxRuntimeClient(
-      {
-        ...DEFAULT_CONFIG,
-        apiBaseUrl: 'https://api.memstack.test',
-        apiKey: 'session-credential',
-        mode: 'cloud',
-        projectId: 'project/1',
-      },
-      {
-        ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
-        terminal_interactive: {
-          availability: 'available',
-          contract_version: 1,
-          reason_code: null,
-        },
-        terminal_resume: {
-          availability: 'available',
-          contract_version: 2,
-          reason_code: null,
-        },
-      }
-    );
-
-    const created = await client.createTerminalSession('project/1', 'run-1', 4);
-    const resumed = await client.resumeTerminalSession(
-      'project/1',
-      'session-1',
-      'resume-token'
-    );
+    const config = {
+      ...DEFAULT_CONFIG,
+      apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'session-credential',
+      mode: 'cloud',
+      projectId: 'project/1',
+    };
+    const created = await createCloudTerminalSession(config, 'project/1', 'run-1', 4);
+    const resumed = await resumeCloudTerminalSession(config, 'project/1', 'session-1', 'resume-token');
 
     assert.equal(created.status, 'ready');
     assert.equal(created.value.session_id, 'session-created');
@@ -160,8 +102,8 @@ test('sandbox file operations fail closed without a declared structured authorit
     throw new Error('unavailable routes must not be probed');
   };
   try {
-    const client = createSandboxRuntimeClient(
-      { ...DEFAULT_CONFIG, projectId: 'project-1' },
+    const client = createProjectSandboxSurfaceFileClientV2Fixture(
+      { ...DEFAULT_CONFIG, apiKey: 'session-credential', projectId: 'project-1' },
       SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE
     );
     assert.deepEqual(await client.listFiles({ path: '/workspace' }), {
@@ -223,7 +165,6 @@ test('sandbox files use distinct structured list, read, and download routes', as
         contract_version: 1,
         authority: 'native_workspace',
         isolation: 'not_applicable',
-        root: '/',
         path: '/workspace',
         entries: [
           {
@@ -242,7 +183,7 @@ test('sandbox files use distinct structured list, read, and download routes', as
   };
 
   try {
-    const client = createSandboxRuntimeClient(
+    const client = createProjectSandboxSurfaceFileClientV2Fixture(
       {
         ...DEFAULT_CONFIG,
         apiBaseUrl: 'https://api.memstack.test',
@@ -264,6 +205,7 @@ test('sandbox files use distinct structured list, read, and download routes', as
     assert.equal(listed.status, 'ready');
     assert.equal(listed.value.authority, 'native_workspace');
     assert.equal(listed.value.isolation, 'not_applicable');
+    assert.equal(listed.value.root, '/workspace');
     assert.equal(read.status, 'ready');
     assert.equal(read.value.authority, 'native_workspace');
     assert.equal(read.value.isolation, 'not_applicable');
@@ -321,15 +263,17 @@ test('sandbox authority and isolation pairs fail closed across runtime modes', a
       revision: 'files-local-r1',
     },
   ];
-  globalThis.fetch = async () =>
-    new Response(JSON.stringify(responses.shift()), {
+  globalThis.fetch = async (input) => String(input).includes('/projects/project-1?')
+    ? Response.json({ id: 'project-1', tenant_id: 'default' })
+    : new Response(JSON.stringify(responses.shift()), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     });
-  const cloudClient = createSandboxRuntimeClient(
+  const cloudClient = createProjectSandboxSurfaceFileClientV2Fixture(
     {
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'session-credential',
       mode: 'cloud',
       projectId: 'project-1',
     },
@@ -338,8 +282,8 @@ test('sandbox authority and isolation pairs fail closed across runtime modes', a
       files: availableFiles,
     }
   );
-  const localClient = createSandboxRuntimeClient(
-    { ...DEFAULT_CONFIG, projectId: 'project-1' },
+  const localClient = createProjectSandboxSurfaceFileClientV2Fixture(
+    { ...DEFAULT_CONFIG, apiKey: 'session-credential', projectId: 'project-1' },
     {
       ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
       files: availableFiles,
@@ -374,8 +318,8 @@ test('sandbox file paths and oversized downloads fail closed', async () => {
       headers: { 'content-length': '2048' },
     });
   };
-  const client = createSandboxRuntimeClient(
-    { ...DEFAULT_CONFIG, projectId: 'project-1' },
+  const client = createProjectSandboxSurfaceFileClientV2Fixture(
+    { ...DEFAULT_CONFIG, apiKey: 'session-credential', projectId: 'project-1' },
     {
       ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
       files: availableFiles,
@@ -390,7 +334,7 @@ test('sandbox file paths and oversized downloads fail closed', async () => {
     assert.equal(calls, 0);
     await assert.rejects(
       client.downloadFile({ path: '/workspace/large.bin', max_bytes: 1024 }),
-      /sandbox file exceeds the download limit/
+      /sandbox_file_download_too_large/
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -414,8 +358,8 @@ test('sandbox native download requests share the 16 MiB file-dialog boundary', a
       },
     });
   };
-  const client = createSandboxRuntimeClient(
-    { ...DEFAULT_CONFIG, projectId: 'project-1' },
+  const client = createProjectSandboxSurfaceFileClientV2Fixture(
+    { ...DEFAULT_CONFIG, apiKey: 'session-credential', projectId: 'project-1' },
     {
       ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
       files: availableFiles,
@@ -449,8 +393,8 @@ test('sandbox text reads enforce the actual encoded byte limit', async () => {
       }),
       { status: 200, headers: { 'content-type': 'application/json' } }
     );
-  const client = createSandboxRuntimeClient(
-    { ...DEFAULT_CONFIG, projectId: 'project-1' },
+  const client = createProjectSandboxSurfaceFileClientV2Fixture(
+    { ...DEFAULT_CONFIG, apiKey: 'session-credential', projectId: 'project-1' },
     {
       ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
       files: availableFiles,
@@ -481,8 +425,8 @@ test('sandbox file payloads reject undeclared fields', async () => {
       revision: 'files-r1',
       credential: 'must-not-be-accepted',
     });
-  const client = createSandboxRuntimeClient(
-    { ...DEFAULT_CONFIG, projectId: 'project-1' },
+  const client = createProjectSandboxSurfaceFileClientV2Fixture(
+    { ...DEFAULT_CONFIG, apiKey: 'session-credential', projectId: 'project-1' },
     {
       ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
       files: availableFiles,
@@ -513,8 +457,8 @@ test('sandbox downloads prefer a bounded RFC 5987 filename', async () => {
         'x-memstack-file-isolation': 'not_applicable',
       },
     });
-  const client = createSandboxRuntimeClient(
-    { ...DEFAULT_CONFIG, projectId: 'project-1' },
+  const client = createProjectSandboxSurfaceFileClientV2Fixture(
+    { ...DEFAULT_CONFIG, apiKey: 'session-credential', projectId: 'project-1' },
     {
       ...SANDBOX_RUNTIME_CAPABILITIES_UNAVAILABLE,
       files: availableFiles,

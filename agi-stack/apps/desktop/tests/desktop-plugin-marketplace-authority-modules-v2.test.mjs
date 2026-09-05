@@ -113,6 +113,9 @@ const { desktopBrowserIntegrationAuthorityDefinitionV2 } = require(
 const { desktopProjectSandboxUploadAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopProjectSandboxUploadAuthorityModuleV2.js',
 );
+const { desktopProjectSandboxSurfaceAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopProjectSandboxSurfaceAuthorityModuleV2.js',
+);
 const { desktopWorkspaceAgentPolicyAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceAgentPolicyAuthorityModuleV2.js',
 );
@@ -309,6 +312,7 @@ function rendererDefinitions() {
     desktopProjectMcpAppsAuthorityDefinitionV2,
     desktopBrowserIntegrationAuthorityDefinitionV2,
     desktopProjectSandboxUploadAuthorityDefinitionV2,
+    desktopProjectSandboxSurfaceAuthorityDefinitionV2,
     desktopWorkspaceAgentPolicyAuthorityDefinitionV2,
     desktopTenantSkillPackagesAuthorityDefinitionV2,
     desktopTenantSkillEvolutionAuthorityDefinitionV2,

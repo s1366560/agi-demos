@@ -132,6 +132,8 @@ const readyRuntime: SessionSandboxRuntimeSurface = {
   remoteDesktopCapability: available,
   runtimeClient: fileClient,
   fileClient,
+  fileRootPath: '/',
+  stopRemoteDesktop: async () => {},
   remoteDesktopSession: {
     descriptor: {
       contract_version: 1,

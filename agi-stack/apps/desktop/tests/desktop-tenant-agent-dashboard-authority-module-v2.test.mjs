@@ -73,6 +73,7 @@ const authorityModuleNames = [
   'desktopProjectMcpAppsAuthorityModuleV2',
   'desktopBrowserIntegrationAuthorityModuleV2',
   'desktopProjectSandboxUploadAuthorityModuleV2',
+  'desktopProjectSandboxSurfaceAuthorityModuleV2',
   'desktopWorkspaceAgentPolicyAuthorityModuleV2',
   'desktopTenantSkillPackagesAuthorityModuleV2',
   'desktopTenantSkillEvolutionAuthorityModuleV2',

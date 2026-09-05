@@ -1,11 +1,4 @@
 import {
-  desktopApiCredential,
-  desktopLaunchCapability,
-} from '../../api/client';
-import { desktopApiFetch } from '../../api/cloudRequestBroker';
-import type { DesktopRuntimeConfig } from '../../types';
-import {
-  parseKasmProxySession,
   type KasmProxySession,
   type SandboxRuntimeCapabilities,
   type SandboxRuntimeCapability,
@@ -19,11 +12,7 @@ export type SandboxRuntimeCapabilitySnapshot = SandboxRuntimeCapabilities & {
   contract_version: number;
 };
 
-export type RemoteDesktopResolution =
-  | '1280x720'
-  | '1600x900'
-  | '1920x1080'
-  | '2560x1440';
+export type RemoteDesktopResolution = '1280x720' | '1600x900' | '1920x1080' | '2560x1440';
 
 export type RemoteDesktopSession = {
   descriptor: KasmProxySession;
@@ -39,26 +28,13 @@ export type SandboxRuntimeSurfaceClient = {
   ): Promise<SandboxRuntimeResult<RemoteDesktopSession>>;
 };
 
-const CAPABILITY_KEYS = [
-  'terminal_interactive',
-  'terminal_resume',
-  'files',
-  'kasm_vnc',
-] as const;
+const CAPABILITY_KEYS = ['terminal_interactive', 'terminal_resume', 'files', 'kasm_vnc'] as const;
 const EXPECTED_CAPABILITY_VERSIONS = {
   terminal_interactive: 1,
   terminal_resume: 2,
   files: 1,
   kasm_vnc: 1,
 } as const;
-const ALLOWED_RESOLUTIONS = new Set<RemoteDesktopResolution>([
-  '1280x720',
-  '1600x900',
-  '1920x1080',
-  '2560x1440',
-]);
-const MAX_RESPONSE_BYTES = 64 * 1024;
-
 export function parseSandboxRuntimeCapabilitySnapshot(
   input: unknown,
 ): SandboxRuntimeCapabilitySnapshot | null {
@@ -89,67 +65,15 @@ export function parseSandboxRuntimeCapabilitySnapshot(
 }
 
 export function createSandboxRuntimeSurfaceClient(
-  config: DesktopRuntimeConfig,
+  authority: SandboxRuntimeSurfaceClient,
 ): SandboxRuntimeSurfaceClient {
   return Object.freeze({
-    async loadCapabilities(signal?: AbortSignal): Promise<SandboxRuntimeCapabilitySnapshot> {
-      const projectId = requireProjectId(config);
-      const payload = await requestJson(
-        config,
-        `/api/v1/projects/${encodeURIComponent(projectId)}/sandbox/capabilities`,
-        { signal },
-      );
-      const snapshot = parseSandboxRuntimeCapabilitySnapshot(payload);
-      if (!snapshot) {
-        throw new Error('sandbox runtime capability contract is invalid');
-      }
-      return snapshot;
-    },
-
-    async openRemoteDesktop(
+    loadCapabilities: (signal?: AbortSignal) => authority.loadCapabilities(signal),
+    openRemoteDesktop: (
       capabilities: SandboxRuntimeCapabilitySnapshot,
       request: { resolution: RemoteDesktopResolution },
       signal?: AbortSignal,
-    ): Promise<SandboxRuntimeResult<RemoteDesktopSession>> {
-      const parsedCapabilities = parseSandboxRuntimeCapabilitySnapshot(capabilities);
-      if (!parsedCapabilities) {
-        return {
-          status: 'unavailable',
-          reason_code: 'sandbox_runtime_capability_contract_invalid',
-        };
-      }
-      if (parsedCapabilities.kasm_vnc.availability !== 'available') {
-        return {
-          status: 'unavailable',
-          reason_code:
-            parsedCapabilities.kasm_vnc.reason_code ?? 'kasm_proxy_contract_unavailable',
-        };
-      }
-      if (!ALLOWED_RESOLUTIONS.has(request.resolution)) {
-        throw new Error('sandbox remote desktop resolution is invalid');
-      }
-
-      const projectId = requireProjectId(config);
-      const query = new URLSearchParams({ resolution: request.resolution });
-      const payload = await requestJson(
-        config,
-        `/api/v1/projects/${encodeURIComponent(
-          projectId,
-        )}/sandbox/desktop/session?${query.toString()}`,
-        { method: 'POST', signal },
-      );
-      const descriptor = parseKasmProxySession(payload, projectId);
-      if (!descriptor) {
-        throw new Error('sandbox remote desktop descriptor is invalid');
-      }
-      return {
-        status: 'ready',
-        value: {
-          descriptor,
-          frame_url: trustedFrameUrl(config.apiBaseUrl, descriptor.proxy_url),
-        },
-      };
-    },
+    ) => authority.openRemoteDesktop(capabilities, request, signal),
   });
 }
 
@@ -182,83 +106,7 @@ function parseCapability(
   };
 }
 
-async function requestJson(
-  config: DesktopRuntimeConfig,
-  path: string,
-  options: { method?: 'GET' | 'POST'; signal?: AbortSignal },
-): Promise<unknown> {
-  const headers = new Headers({ Accept: 'application/json' });
-  const credential = desktopApiCredential(config);
-  if (credential) headers.set('Authorization', `Bearer ${credential}`);
-  const launchCapability = desktopLaunchCapability(config);
-  if (launchCapability) headers.set('X-Agistack-Launch', launchCapability);
-
-  const response = await desktopApiFetch(config, path, {
-    method: options.method ?? 'GET',
-    headers,
-    credentials: config.mode === 'local' ? 'omit' : 'include',
-    signal: options.signal,
-  });
-  if (!response.ok) {
-    throw new Error('sandbox runtime request failed');
-  }
-  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
-  if (!contentType.includes('application/json')) {
-    throw new Error('sandbox runtime response is not JSON');
-  }
-  const declaredLength = parseContentLength(response.headers.get('content-length'));
-  if (declaredLength !== null && declaredLength > MAX_RESPONSE_BYTES) {
-    throw new Error('sandbox runtime response exceeds the metadata limit');
-  }
-  const text = await response.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
-    throw new Error('sandbox runtime response exceeds the metadata limit');
-  }
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new Error('sandbox runtime response is malformed');
-  }
-}
-
-function trustedFrameUrl(apiBaseUrl: string, proxyUrl: string): string {
-  const base = new URL(apiBaseUrl);
-  if (
-    (base.protocol !== 'http:' && base.protocol !== 'https:') ||
-    base.username ||
-    base.password
-  ) {
-    throw new Error('sandbox API origin is invalid');
-  }
-  const frame = new URL(proxyUrl, base.origin);
-  if (
-    frame.origin !== base.origin ||
-    (frame.protocol !== 'http:' && frame.protocol !== 'https:') ||
-    frame.username ||
-    frame.password ||
-    frame.search ||
-    frame.hash
-  ) {
-    throw new Error('sandbox remote desktop descriptor is invalid');
-  }
-  return frame.toString();
-}
-
-function requireProjectId(config: DesktopRuntimeConfig): string {
-  const projectId = config.projectId.trim();
-  if (!projectId) throw new Error('sandbox project scope is unavailable');
-  return projectId;
-}
-
-function parseContentLength(input: string | null): number | null {
-  if (input === null) return null;
-  const value = Number(input);
-  return Number.isSafeInteger(value) && value >= 0 ? value : null;
-}
-
-function isAvailability(
-  input: unknown,
-): input is SandboxRuntimeCapability['availability'] {
+function isAvailability(input: unknown): input is SandboxRuntimeCapability['availability'] {
   return (
     input === 'available' ||
     input === 'degraded' ||

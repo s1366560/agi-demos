@@ -93,12 +93,14 @@ export function SessionSandboxTools({ runtime }: SessionSandboxToolsProps) {
           onResolutionChange={runtime.setRemoteDesktopResolution}
           onStart={runtime.startRemoteDesktop}
           onReconnect={runtime.startRemoteDesktop}
+          onStop={runtime.stopRemoteDesktop}
         />
       ) : runtime.fileClient ? (
         <div className="session-sandbox-tools__files">
           <SandboxFileBrowser
             capability={runtime.filesCapability}
             client={runtime.fileClient}
+            rootPath={runtime.fileRootPath}
             onOpenFile={setPreviewFile}
             onDownloadFile={downloadSandboxFile}
           />

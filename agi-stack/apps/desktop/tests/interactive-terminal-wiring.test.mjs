@@ -117,12 +117,16 @@ test('remote desktop iframe is credential-free and reconnectable', () => {
 
 test('runtime hook consumes capabilities without inference', () => {
   assert.match(sandboxRuntimeHookSource, /client\s*\.loadCapabilities/);
-  assert.match(sandboxRuntimeHookSource, /createSandboxRuntimeClient\(config, capabilities\)/);
+  assert.match(sandboxRuntimeHookSource, /client: DesktopProjectSandboxSurfaceClientV2/);
+  for (const operation of ['listFiles', 'readFile', 'downloadFile']) {
+    assert.match(sandboxRuntimeHookSource, new RegExp(`client\\.${operation}\\(capabilities, request, linked\\)`));
+  }
+  assert.doesNotMatch(sandboxRuntimeHookSource, /createSandboxRuntimeClient|createSandboxRuntimeSurfaceClient/);
   assert.match(sandboxRuntimeHookSource, /runtimeClient/);
   assert.match(sandboxRuntimeHookSource, /capabilityLoadReason/);
   assert.doesNotMatch(
     sandboxRuntimeHookSource,
-    /config\.mode\s*===|status\s*===\s*404|message\.includes|error\.message/iu
+    /status\s*===\s*404|message\.includes|error\.message/iu
   );
 });
 

@@ -1,3 +1,7 @@
+import {
+  isCloudSandboxDownloadPath,
+  requireCloudSandboxFileAuthority,
+} from '../../src/api/cloudSandboxDownloadAuthority';
 import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
 
@@ -843,6 +847,20 @@ async function boundedBinary(
   protectedCredential: string,
   requestPath: string,
 ): Promise<Readonly<Record<string, unknown>>> {
+  let fileAuthority;
+  if (isCloudSandboxDownloadPath(requestPath)) {
+    try {
+      fileAuthority = requireCloudSandboxFileAuthority({
+        contract_version:
+          response.headers.get('x-memstack-file-contract-version') === '1' ? 1 : null,
+        authority: response.headers.get('x-memstack-file-authority'),
+        isolation: response.headers.get('x-memstack-file-isolation'),
+      });
+    } catch (error) {
+      await cancelResponseBody(response);
+      throw error;
+    }
+  }
   const declaredLengthHeader = response.headers.get('content-length');
   const declaredLength = Number(declaredLengthHeader ?? '0');
   if (
@@ -869,6 +887,7 @@ async function boundedBinary(
     size_bytes: bytes.byteLength,
     mime_type: mimeType,
     filename,
+    ...(fileAuthority ? { file_authority: fileAuthority } : {}),
   });
 }
 

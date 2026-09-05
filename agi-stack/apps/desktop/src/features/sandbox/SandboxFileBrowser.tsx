@@ -9,13 +9,13 @@ import type {
   SandboxFileEntry,
   SandboxFileAuthority,
   SandboxRuntimeCapability,
-  SandboxRuntimeClient,
+  SandboxRuntimeFileClient,
 } from './sandboxRuntimeClient';
 import './SandboxFileBrowser.css';
 
 type SandboxFileBrowserProps = {
   capability: SandboxRuntimeCapability;
-  client: SandboxRuntimeClient;
+  client: SandboxRuntimeFileClient;
   rootPath?: string;
   onOpenFile?: (file: SandboxFileContent) => void;
   onDownloadFile?: (file: SandboxFileDownload) => void | Promise<void>;
