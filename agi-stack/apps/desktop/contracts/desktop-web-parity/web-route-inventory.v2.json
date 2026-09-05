@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "632e6d77ddba11aa4eeff6c6c95343f2b4768a26",
+  "source_revision": "9a1be4d9f27bfe19bf05669509eb30a84dfdbf77",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 710,
+    "audited_sources": 712,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1933,
-    "production_dependency_ownership": 709,
-    "production_dependency_sources": 709,
+    "production_dependency_edges": 1940,
+    "production_dependency_ownership": 711,
+    "production_dependency_sources": 711,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 5
@@ -155,14 +155,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:1f9ba67dda821064dbcd64e91505d7731bbc46837dd069ddc76eb59248db54a8"
+      "sha256": "sha256:658b18347f4c0c5e346015a38fb41dc24d2a0a49c3297ecef10bce6405d78e52"
     },
     {
       "source_entry": "web/src/components/agent/InputToolbar.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d225bf2e94244f2386a566c43de1ae09c25239142ccca6def71dc2284009dd00"
+      "sha256": "sha256:90d578621edc05186da320f2d2aed5ccf7d03732ba8bdcc003ef452e3cf8b38b"
     },
     {
       "source_entry": "web/src/components/agent/MentionPicker.tsx",
@@ -540,14 +540,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:20c69f809cbd68e8a106ecc968d39a66e521c0f375654906d85587f3cb22ad04"
+      "sha256": "sha256:b5c68d9761084aa85a14705bfd06d88a1a2971215146f643f5ab27619460ca32"
     },
     {
       "source_entry": "web/src/components/agent/chat/VoiceWaveform.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:316ee9f9597b18c7ee1ce3a6e7f87396a5cd585a994cdd28954020d600e2be57"
+      "sha256": "sha256:418d43da0d2b5ec37801b7b362993d5a1c1fd94669ba5b333753c0eeb66e5928"
     },
     {
       "source_entry": "web/src/components/agent/chat/composerEvents.ts",
@@ -590,6 +590,13 @@
         "production_dependency"
       ],
       "sha256": "sha256:dad4f50c91c0167a71424b07cbacb627c5614e177e7ae8941dd3ddd5281d574e"
+    },
+    {
+      "source_entry": "web/src/components/agent/chat/useVoiceSessionMediaV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:534259aeca6a2983baa75edb9a923c2011c4e94e6c0a64d29d54a3221beb6011"
     },
     {
       "source_entry": "web/src/components/agent/comparison/ConversationCompareView.tsx",
@@ -2249,7 +2256,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:56191eafa485630663a4f09844678b6c752abe1cf5b64004b3ad2d5ef8e2cecd"
+      "sha256": "sha256:488dd8de9d810ce79b35147e9cb25fda42dfa71c64cfd906438ec561eb68939f"
     },
     {
       "source_entry": "web/src/hooks/useBlackboardActions.ts",
@@ -2396,14 +2403,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:01f9fe004735de8d583384ca791768493eed523f1dcc9b0de791ffd2b8cf97a9"
+      "sha256": "sha256:0f519ad5fcf8fe70b3dbd6eb88a33d7d50e90adc72be4575881056176b6aba02"
     },
     {
       "source_entry": "web/src/hooks/useVoiceTranscribe.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:23388815f5c1c180694603f07c926d882e75c589034c74eb39eafc994689a46e"
+      "sha256": "sha256:4e8300b45b03c3f7dcb4c0e63518b8c0eb77973024a90df3b2d2f99a9dd94881"
     },
     {
       "source_entry": "web/src/hooks/useWorkspaceConversations.ts",
@@ -3341,7 +3348,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:b3f4a685312aa197073c31213f126ed8d7fdbbe308ff871ac6a7c1add7e8b79c"
+      "sha256": "sha256:5ece883950136ba800ddc2cb7c565412bc46844d54ff62b138c57d5e1e2e7f09"
     },
     {
       "source_entry": "web/src/plugins/webPluginGenerationV2.ts",
@@ -4009,6 +4016,13 @@
       "sha256": "sha256:3d561e05f741e00ff1c9d5382f72fc7b59be7ec9f4ae1a86f0ce4ef4a739581b"
     },
     {
+      "source_entry": "web/src/services/voiceRetainedSessionV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:6aa3c3e7031af8eb03f4f530793c0705d8a52aee2caa30e0d829a36fb368c67a"
+    },
+    {
       "source_entry": "web/src/services/webhookService.ts",
       "roles": [
         "production_dependency"
@@ -4370,7 +4384,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:629984bb652c853180bba13fe8ca72aaf1f98ca5f9443783f51b886533d05d65"
+      "sha256": "sha256:fed17488e40cfa276025685cae03515389ceaa9ef14f0894c3ad0239f81824d9"
     },
     {
       "source_entry": "web/src/stores/workspace.ts",
@@ -10181,6 +10195,11 @@
     {
       "from_source_entry": "web/src/components/agent/InputBar.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/InputBar.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/services/attachmentService.ts"
     },
     {
@@ -10951,12 +10970,22 @@
     {
       "from_source_entry": "web/src/components/agent/chat/VoiceCallPanel.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/agent/chat/useVoiceSessionMediaV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/chat/VoiceCallPanel.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/hooks/useAudioQueue.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/chat/VoiceCallPanel.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/hooks/useVoiceChat.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/chat/VoiceCallPanel.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/chat/VoiceCallPanel.tsx",
@@ -13564,6 +13593,11 @@
       "to_source_entry": "web/src/stores/auth.ts"
     },
     {
+      "from_source_entry": "web/src/hooks/useAudioQueue.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
       "from_source_entry": "web/src/hooks/useBlackboardActions.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
@@ -13741,22 +13775,17 @@
     {
       "from_source_entry": "web/src/hooks/useVoiceChat.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/urlUtils.ts"
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/hooks/useVoiceChat.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/utils/tokenResolver.ts"
+      "to_source_entry": "web/src/services/voiceRetainedSessionV2.ts"
     },
     {
       "from_source_entry": "web/src/hooks/useVoiceTranscribe.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/urlUtils.ts"
-    },
-    {
-      "from_source_entry": "web/src/hooks/useVoiceTranscribe.ts",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/utils/tokenResolver.ts"
+      "to_source_entry": "web/src/hooks/useVoiceChat.ts"
     },
     {
       "from_source_entry": "web/src/hooks/useWorkspaceConversations.ts",
@@ -17934,6 +17963,21 @@
       "to_source_entry": "web/src/utils/logger.ts"
     },
     {
+      "from_source_entry": "web/src/services/voiceRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/voiceRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/voiceRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/utils/tokenResolver.ts"
+    },
+    {
       "from_source_entry": "web/src/services/webhookService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
@@ -18727,6 +18771,11 @@
       "from_source_entry": "web/src/stores/trust.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/trustService.ts"
+    },
+    {
+      "from_source_entry": "web/src/stores/voiceCallStore.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/stores/workspace.ts",
@@ -19920,6 +19969,15 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/components/agent/chat/trendingEntitiesModel.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/agent/chat/useVoiceSessionMediaV2.ts"
     },
     {
       "classification": "shared",
@@ -25412,6 +25470,15 @@
       "classification": "shared",
       "owner_source_entries": [
         "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/voiceRetainedSessionV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
         "web/src/pages/tenant/Webhooks.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
@@ -27203,6 +27270,7 @@
     "web/src/components/agent/chat/safeMarkdownComponents.ts",
     "web/src/components/agent/chat/searchEvents.ts",
     "web/src/components/agent/chat/trendingEntitiesModel.ts",
+    "web/src/components/agent/chat/useVoiceSessionMediaV2.ts",
     "web/src/components/agent/comparison/ConversationCompareView.tsx",
     "web/src/components/agent/comparison/ConversationPickerModal.tsx",
     "web/src/components/agent/context/ContextDetailPanel.tsx",
@@ -27691,6 +27759,7 @@
     "web/src/services/trustService.ts",
     "web/src/services/unifiedEventConnectionV2.ts",
     "web/src/services/unifiedEventService.ts",
+    "web/src/services/voiceRetainedSessionV2.ts",
     "web/src/services/webhookService.ts",
     "web/src/services/workspaceService.ts",
     "web/src/stores/agent/a2uiEnvelopeContract.ts",
