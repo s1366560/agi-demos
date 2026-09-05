@@ -17,12 +17,8 @@ import {
   isPlainRecordV2,
 } from './desktopNewTaskFlowContractV2';
 
-export type NewThreadAgentConfigV2 = Parameters<
-  DesktopApiClient['createAgentConversation']
->[4];
-export type NewThreadAgentExecutionV2 = Parameters<
-  DesktopApiClient['runAgentMessage']
->[5];
+export type NewThreadAgentConfigV2 = Parameters<DesktopApiClient['createAgentConversation']>[4];
+export type NewThreadAgentExecutionV2 = Parameters<DesktopApiClient['runAgentMessage']>[5];
 
 export type ClonedAgentConversationArgumentsV2 = Readonly<{
   title: string;
@@ -42,16 +38,9 @@ export type ClonedAgentMessageArgumentsV2 = Readonly<{
 }>;
 
 const CAPABILITY_MODES_V2 = new Set<AgentCapabilityMode>(['code', 'work']);
-const ROUTING_ROLES_V2 = new Set<LlmRoutingRole>([
-  'coding',
-  'default',
-  'fast',
-  'vision',
-]);
+const ROUTING_ROLES_V2 = new Set<LlmRoutingRole>(['coding', 'default', 'fast', 'vision']);
 
-export function cloneNewThreadRuntimeConfigV2(
-  config: DesktopRuntimeConfig,
-): DesktopRuntimeConfig {
+export function cloneNewThreadRuntimeConfigV2(config: DesktopRuntimeConfig): DesktopRuntimeConfig {
   try {
     return cloneRuntimeConfigV2(config);
   } catch {
@@ -86,9 +75,7 @@ export function cloneAgentConversationArgumentsV2(
     ...(capabilityMode === undefined
       ? {}
       : { capabilityMode: capabilityMode as AgentCapabilityMode }),
-    ...(agentConfig === undefined
-      ? {}
-      : { agentConfig: cloneAgentConfigV2(agentConfig) }),
+    ...(agentConfig === undefined ? {} : { agentConfig: cloneAgentConfigV2(agentConfig) }),
   });
 }
 
@@ -122,29 +109,18 @@ export function cloneAgentMessageArgumentsV2(
   execution?: unknown,
 ): ClonedAgentMessageArgumentsV2 {
   const checkedProjectId =
-    projectId === undefined
-      ? config.projectId
-      : canonicalIdentifierV2(projectId);
+    projectId === undefined ? config.projectId : canonicalIdentifierV2(projectId);
   if (checkedProjectId !== config.projectId) throw newThreadScopeMismatchV2();
-  if (
-    workloadRole !== undefined &&
-    !ROUTING_ROLES_V2.has(workloadRole as LlmRoutingRole)
-  ) {
+  if (workloadRole !== undefined && !ROUTING_ROLES_V2.has(workloadRole as LlmRoutingRole)) {
     throw newThreadInputInvalidV2();
   }
   return Object.freeze({
     conversationId: canonicalIdentifierV2(conversationId),
     message: canonicalTextV2(message),
-    ...(messageId === undefined
-      ? {}
-      : { messageId: canonicalIdentifierV2(messageId) }),
+    ...(messageId === undefined ? {} : { messageId: canonicalIdentifierV2(messageId) }),
     projectId: checkedProjectId,
-    ...(workloadRole === undefined
-      ? {}
-      : { workloadRole: workloadRole as LlmRoutingRole }),
-    ...(execution === undefined
-      ? {}
-      : { execution: cloneAgentExecutionV2(execution) }),
+    ...(workloadRole === undefined ? {} : { workloadRole: workloadRole as LlmRoutingRole }),
+    ...(execution === undefined ? {} : { execution: cloneAgentExecutionV2(execution) }),
   });
 }
 
@@ -191,13 +167,29 @@ export function assertNewThreadTaskSessionResponseV2(
   return response;
 }
 
-export function assertQueuedAgentMessageV2(
-  value: unknown,
-): Readonly<{ queued: boolean }> {
+export type QueuedAgentMessageReceiptV2 = Readonly<{
+  queued: boolean;
+  message_id?: string;
+  created?: boolean;
+  replayed?: boolean;
+}>;
+
+export function assertQueuedAgentMessageV2(value: unknown): QueuedAgentMessageReceiptV2 {
   if (!isPlainRecordV2(value) || typeof value.queued !== 'boolean') {
     throw newThreadResponseInvalidV2();
   }
-  return Object.freeze({ queued: value.queued });
+  const result: Record<string, unknown> = { queued: value.queued };
+  for (const key of ['created', 'replayed'] as const) {
+    if (value[key] !== undefined) {
+      if (typeof value[key] !== 'boolean') throw newThreadResponseInvalidV2();
+      result[key] = value[key];
+    }
+  }
+  if (value.message_id !== undefined) {
+    if (!canonicalIdentifierOrNullV2(value.message_id)) throw newThreadResponseInvalidV2();
+    result.message_id = value.message_id;
+  }
+  return Object.freeze(result) as QueuedAgentMessageReceiptV2;
 }
 
 export function newThreadInputInvalidV2(): RuntimeV2Error {
@@ -214,32 +206,23 @@ export function newThreadScopeMismatchV2(): RuntimeV2Error {
   );
 }
 
-export function isNewThreadPlainRecordV2(
-  value: unknown,
-): value is Record<string, unknown> {
+export function isNewThreadPlainRecordV2(value: unknown): value is Record<string, unknown> {
   return isPlainRecordV2(value);
 }
 
 function cloneAgentConfigV2(value: unknown): NewThreadAgentConfigV2 {
   if (!isPlainRecordV2(value)) throw newThreadInputInvalidV2();
   const allowed = new Set(['llm_model_override', 'llm_route_override']);
-  if (Object.keys(value).some((key) => !allowed.has(key)))
-    throw newThreadInputInvalidV2();
+  if (Object.keys(value).some((key) => !allowed.has(key))) throw newThreadInputInvalidV2();
   const model = value.llm_model_override;
   const route = value.llm_route_override;
-  if (
-    model !== undefined &&
-    model !== null &&
-    !canonicalIdentifierOrNullV2(model)
-  ) {
+  if (model !== undefined && model !== null && !canonicalIdentifierOrNullV2(model)) {
     throw newThreadInputInvalidV2();
   }
   if (route !== undefined && route !== null) {
     if (
       !isPlainRecordV2(route) ||
-      Object.keys(route).some(
-        (key) => key !== 'provider_id' && key !== 'model_id',
-      ) ||
+      Object.keys(route).some((key) => key !== 'provider_id' && key !== 'model_id') ||
       !canonicalIdentifierOrNullV2(route.provider_id) ||
       !canonicalIdentifierOrNullV2(route.model_id)
     ) {
@@ -259,8 +242,7 @@ function cloneAgentExecutionV2(value: unknown): NewThreadAgentExecutionV2 {
   ] as const) {
     const candidate = value[sourceKey];
     if (candidate === undefined) continue;
-    if (!canonicalIdentifierOrNullV2(candidate))
-      throw newThreadInputInvalidV2();
+    if (!canonicalIdentifierOrNullV2(candidate)) throw newThreadInputInvalidV2();
     copy[targetKey] = candidate;
   }
   return Object.freeze(copy) as NewThreadAgentExecutionV2;
@@ -274,9 +256,7 @@ function canonicalTextV2(value: unknown): string {
 }
 
 function canonicalIdentifierOrNullV2(value: unknown): value is string {
-  return (
-    typeof value === 'string' && value.length > 0 && value === value.trim()
-  );
+  return typeof value === 'string' && value.length > 0 && value === value.trim();
 }
 
 function cloneValueV2<T>(value: T): T {

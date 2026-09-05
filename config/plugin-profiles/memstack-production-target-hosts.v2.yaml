@@ -973,6 +973,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-conversation-messaging-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/conversation-messaging-authority
+      enabled: true
+      config:
+        strategy: parent-bound-messaging
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-workbench-snapshot-authority
       parent_entry_id: builtin-desktop-renderer-host
       plugin_ref: memstack-renderer-target-hosts

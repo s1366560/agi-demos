@@ -98,6 +98,7 @@ export type DesktopNewTaskFlowOperationInputV2 =
       parentMessageId?: string;
       contextItems?: ComposerContextItem[];
       mentions?: string[];
+      signal?: AbortSignal;
     }>
   | Readonly<{
       kind: 'get-conversation-messages';
@@ -147,9 +148,7 @@ type GenerationActionsUnavailableV2 = Readonly<{
   reasonCode: 'desktop_renderer_generation_actions_unavailable';
   runtimeCode?: undefined;
 }>;
-type AuthorityAdmissionRejectionV2 =
-  | ServiceAdmissionRejectionV2
-  | GenerationActionsUnavailableV2;
+type AuthorityAdmissionRejectionV2 = ServiceAdmissionRejectionV2 | GenerationActionsUnavailableV2;
 
 const AUTHORITY_METHODS_V2 = new Set<DesktopNewTaskFlowMethodV2>([
   'approvePlanAndStart',
@@ -211,8 +210,10 @@ function createGenerationBoundClientV2(
   return Object.freeze({
     async listWorkspaces(signal?: AbortSignal) {
       const prepared = prepareOperationV2({ kind: 'list-workspaces', config, signal });
-      return await runOperationV2(requireGenerationActionsV2(resolveActions()), prepared, (client) =>
-        client.listWorkspaces(prepared.signal),
+      return await runOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (client) => client.listWorkspaces(prepared.signal),
       );
     },
     async supportsAgentPlanWorkflow(signal?: AbortSignal) {
@@ -221,14 +222,18 @@ function createGenerationBoundClientV2(
         config,
         signal,
       });
-      return await runOperationV2(requireGenerationActionsV2(resolveActions()), prepared, (client) =>
-        client.supportsAgentPlanWorkflow(prepared.signal),
+      return await runOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (client) => client.supportsAgentPlanWorkflow(prepared.signal),
       );
     },
     async createTaskSession(input: CreateTaskSessionRequest) {
       const prepared = prepareOperationV2({ kind: 'create-task-session', config, input });
-      return await runOperationV2(requireGenerationActionsV2(resolveActions()), prepared, (client) =>
-        client.createTaskSession(prepared.input as CreateTaskSessionRequest),
+      return await runOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (client) => client.createTaskSession(prepared.input as CreateTaskSessionRequest),
       );
     },
     async sendMessage(
@@ -236,6 +241,7 @@ function createGenerationBoundClientV2(
       parentMessageId?: string,
       contextItems: ComposerContextItem[] = [],
       mentions: string[] = [],
+      signal?: AbortSignal,
     ) {
       const prepared = prepareOperationV2({
         kind: 'send-message',
@@ -244,14 +250,19 @@ function createGenerationBoundClientV2(
         parentMessageId,
         contextItems,
         mentions,
+        signal,
       });
-      return await runOperationV2(requireGenerationActionsV2(resolveActions()), prepared, (client) =>
-        client.sendMessage(
-          prepared.content as string,
-          prepared.parentMessageId,
-          prepared.contextItems,
-          prepared.mentions,
-        ),
+      return await runOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (client) =>
+          client.sendMessage(
+            prepared.content as string,
+            prepared.parentMessageId,
+            prepared.contextItems,
+            prepared.mentions,
+            prepared.signal,
+          ),
       );
     },
     async getConversationMessages(
@@ -266,12 +277,15 @@ function createGenerationBoundClientV2(
         projectId,
         options,
       });
-      return await runOperationV2(requireGenerationActionsV2(resolveActions()), prepared, (client) =>
-        client.getConversationMessages(
-          prepared.conversationId as string,
-          prepared.projectId,
-          prepared.options,
-        ),
+      return await runOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (client) =>
+          client.getConversationMessages(
+            prepared.conversationId as string,
+            prepared.projectId,
+            prepared.options,
+          ),
       );
     },
     async listAgentPlanTasks(conversationId: string, signal?: AbortSignal) {
@@ -281,8 +295,10 @@ function createGenerationBoundClientV2(
         conversationId,
         signal,
       });
-      return await runOperationV2(requireGenerationActionsV2(resolveActions()), prepared, (client) =>
-        client.listAgentPlanTasks(prepared.conversationId as string, prepared.signal),
+      return await runOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (client) => client.listAgentPlanTasks(prepared.conversationId as string, prepared.signal),
       );
     },
     async switchPlanMode(conversationId: string, mode: AgentPlanMode) {
@@ -292,14 +308,19 @@ function createGenerationBoundClientV2(
         conversationId,
         mode,
       });
-      return await runOperationV2(requireGenerationActionsV2(resolveActions()), prepared, (client) =>
-        client.switchPlanMode(prepared.conversationId as string, prepared.mode as AgentPlanMode),
+      return await runOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (client) =>
+          client.switchPlanMode(prepared.conversationId as string, prepared.mode as AgentPlanMode),
       );
     },
     async approvePlanAndStart(input: ApprovePlanAndStartRequest) {
       const prepared = prepareOperationV2({ kind: 'approve-plan-and-start', config, input });
-      return await runOperationV2(requireGenerationActionsV2(resolveActions()), prepared, (client) =>
-        client.approvePlanAndStart(prepared.input as ApprovePlanAndStartRequest),
+      return await runOperationV2(
+        requireGenerationActionsV2(resolveActions()),
+        prepared,
+        (client) => client.approvePlanAndStart(prepared.input as ApprovePlanAndStartRequest),
       );
     },
   });
@@ -324,6 +345,7 @@ async function runOperationV2<TResult>(
     prepared: PreparedOperationV2,
   ) => TResult | Promise<TResult>,
 ): Promise<TResult> {
+  prepared.signal?.throwIfAborted();
   const admission =
     await actions.acquireServiceOperationLease<DesktopNewTaskFlowAuthorityServiceV2>({
       service: DESKTOP_NEW_TASK_FLOW_AUTHORITY_SERVICE_V2,
@@ -336,19 +358,20 @@ async function runOperationV2<TResult>(
 
   let operationFailed = false;
   let operationActive = true;
+  let consumed = false;
   try {
-    return await admission.useService((candidate) => {
+    return await admission.useService(async (candidate) => {
+      if (!operationActive || consumed) throw invalidInputV2();
+      consumed = true;
+      prepared.signal?.throwIfAborted();
       const service = requireServiceV2(candidate);
       const authority = requireAuthorityV2(service.bindOperation(prepared.config));
-      return operation(
-        createGuardedAuthorityV2(
-          authority,
-          prepared.config,
-          prepared.kind,
-          () => operationActive,
-        ),
+      const result = await operation(
+        createGuardedAuthorityV2(authority, prepared.config, prepared.kind, () => operationActive),
         prepared,
       );
+      prepared.signal?.throwIfAborted();
+      return result;
     });
   } catch (error) {
     operationFailed = true;
@@ -420,8 +443,11 @@ function createGuardedAuthorityV2(
       parentMessageId?: string,
       contextItems: ComposerContextItem[] = [],
       mentions: string[] = [],
+      signal?: AbortSignal,
     ) {
       requireCall('send-message');
+      const checkedSignal = cloneSignalV2(signal);
+      checkedSignal?.throwIfAborted();
       const args = cloneMessageArgumentsV2(
         config,
         content,
@@ -430,8 +456,18 @@ function createGuardedAuthorityV2(
         mentions,
       );
       return authority
-        .sendMessage(args.content, args.parentMessageId, args.contextItems, args.mentions)
-        .then((value) => assertMessageResponseV2(value, config));
+        .sendMessage(
+          args.content,
+          args.parentMessageId,
+          args.contextItems,
+          args.mentions,
+          checkedSignal,
+        )
+        .then((value) => {
+          requireCall('send-message');
+          checkedSignal?.throwIfAborted();
+          return assertMessageResponseV2(value, config);
+        });
     },
     getConversationMessages(
       conversationId: string,
@@ -478,7 +514,11 @@ function prepareOperationV2(input: DesktopNewTaskFlowOperationInputV2): Prepared
     case 'supports-agent-plan-workflow':
       return Object.freeze({ kind: input.kind, config, signal: cloneSignalV2(input.signal) });
     case 'create-task-session':
-      return Object.freeze({ kind: input.kind, config, input: cloneTaskSessionRequestV2(input.input) });
+      return Object.freeze({
+        kind: input.kind,
+        config,
+        input: cloneTaskSessionRequestV2(input.input),
+      });
     case 'send-message': {
       const args = cloneMessageArgumentsV2(
         config,
@@ -487,7 +527,12 @@ function prepareOperationV2(input: DesktopNewTaskFlowOperationInputV2): Prepared
         input.contextItems,
         input.mentions,
       );
-      return Object.freeze({ kind: input.kind, config, ...args });
+      return Object.freeze({
+        kind: input.kind,
+        config,
+        ...args,
+        signal: cloneSignalV2(input.signal),
+      });
     }
     case 'get-conversation-messages': {
       const args = cloneConversationArgumentsV2(
@@ -563,7 +608,9 @@ function requireServiceV2(value: unknown): DesktopNewTaskFlowAuthorityServiceV2 
 function requireAuthorityV2(value: unknown): DesktopNewTaskFlowClientV2 {
   if (
     !isPlainRecordV2(value) ||
-    Object.keys(value).some((key) => !AUTHORITY_METHODS_V2.has(key as DesktopNewTaskFlowMethodV2)) ||
+    Object.keys(value).some(
+      (key) => !AUTHORITY_METHODS_V2.has(key as DesktopNewTaskFlowMethodV2),
+    ) ||
     [...AUTHORITY_METHODS_V2].some((method) => typeof value[method] !== 'function')
   ) {
     throw invalidServiceV2();
@@ -574,7 +621,8 @@ function requireAuthorityV2(value: unknown): DesktopNewTaskFlowClientV2 {
 function requireGenerationActionsV2(
   actions: DesktopRendererGenerationActionsV2 | null,
 ): DesktopRendererGenerationActionsV2 {
-  if (actions !== null && typeof actions.acquireServiceOperationLease === 'function') return actions;
+  if (actions !== null && typeof actions.acquireServiceOperationLease === 'function')
+    return actions;
   throw new DesktopNewTaskFlowAuthorityUnavailableErrorV2({
     reasonCode: 'desktop_renderer_generation_actions_unavailable',
   });

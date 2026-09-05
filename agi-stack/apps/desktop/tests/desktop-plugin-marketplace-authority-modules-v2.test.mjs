@@ -240,7 +240,11 @@ const PROFILE_PATH = new URL(
 );
 
 function loadBootstrap() {
-  return JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
+  const profile = JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
+  profile.entries = profile.entries.filter(
+    (entry) => entry.module_ref !== 'builtin://memstack/desktop/conversation-messaging-authority',
+  );
+  return profile;
 }
 
 const { desktopWorkbenchSnapshotAuthorityDefinitionV2 } = require(

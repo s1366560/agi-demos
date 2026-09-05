@@ -1775,8 +1775,25 @@ function authorizeConversationEndpoint(
       optionalIdentifier(target.searchParams.get('workspace_id')),
     );
   }
+  if (action === 'mode') {
+    const body = request.body;
+    if (
+      request.method !== 'PATCH' || request.mutation !== undefined ||
+      !allowedQueryKeys(target.searchParams, new Set(['project_id']), ['project_id']) ||
+      !body ||
+      Object.keys(body).some((key) =>
+        !['conversation_mode', 'workspace_id', 'linked_workspace_task_id'].includes(key))
+    ) return null;
+    if ('conversation_mode' in body && body.conversation_mode !== null &&
+      !['single_agent', 'multi_agent_shared', 'multi_agent_isolated', 'autonomous']
+        .includes(body.conversation_mode as string)) return null;
+    for (const key of ['workspace_id', 'linked_workspace_task_id']) {
+      if (key in body && body[key] !== null) requiredBodyIdentifier(body, key);
+    }
+    return endpoint('project', null, requiredIdentifier(target.searchParams.get('project_id')), null);
+  }
   if (
-    ['mode', 'config', 'title', 'summary'].includes(action ?? '') &&
+    ['config', 'title', 'summary'].includes(action ?? '') &&
     ((action === 'summary' && request.method === 'POST') ||
       (action !== 'summary' && request.method === 'PATCH')) &&
     allowedQueryKeys(target.searchParams, new Set(['project_id']), ['project_id'])

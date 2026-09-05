@@ -1077,10 +1077,13 @@ export class DesktopApiClient {
     parentMessageId?: string,
     contextItems: ComposerContextItem[] = [],
     mentions: string[] = [],
+    signal?: AbortSignal,
   ): Promise<WorkspaceMessage> {
+    signal?.throwIfAborted();
     const path = this.workspacePath('/messages');
     return this.request<WorkspaceMessage>(path, {
       method: 'POST',
+      signal,
       body: {
         content,
         sender_type: 'human',
@@ -1100,12 +1103,15 @@ export class DesktopApiClient {
       llm_model_override?: string | null;
       llm_route_override?: { provider_id: string; model_id: string } | null;
     },
+    signal?: AbortSignal,
   ): Promise<AgentConversation> {
+    signal?.throwIfAborted();
     const requiredTenantId = requireValue(this.config.tenantId, 'tenant id');
     const requiredProjectId = requireValue(projectId, 'project id');
     const requiredUserId = requireValue(expectedUserId, 'user id');
     const payload = await this.request<unknown>('/api/v1/agent/conversations', {
       method: 'POST',
+      signal,
       body: {
         project_id: requiredProjectId,
         title,
@@ -1142,7 +1148,9 @@ export class DesktopApiClient {
       capability_mode?: AgentCapabilityMode | null;
     },
     projectId = this.config.projectId,
+    signal?: AbortSignal,
   ): Promise<AgentConversation> {
+    signal?.throwIfAborted();
     const requiredProjectId = requireValue(projectId, 'project id');
     return this.request<AgentConversation>(
       `/api/v1/agent/conversations/${encodeURIComponent(
@@ -1150,6 +1158,7 @@ export class DesktopApiClient {
       )}/mode?project_id=${encodeURIComponent(requiredProjectId)}`,
       {
         method: 'PATCH',
+        signal,
         body: payload,
       },
     );
@@ -1415,12 +1424,15 @@ export class DesktopApiClient {
       forcedSkillName?: string;
       subAgentId?: string;
     },
+    signal?: AbortSignal,
   ): Promise<{ queued: boolean }> {
+    signal?.throwIfAborted();
     const requiredProjectId = requireValue(projectId, 'project id');
     return this.request<{ queued: boolean }>(
       `/api/v1/agent/conversations/${encodeURIComponent(conversationId)}/messages`,
       {
         method: 'POST',
+        signal,
         body: {
           project_id: requiredProjectId,
           message,

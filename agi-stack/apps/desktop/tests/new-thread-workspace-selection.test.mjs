@@ -189,14 +189,14 @@ test('bound new threads keep the atomic task-session behavior', () => {
 
 test('unbound conversation messages bypass workspace message persistence', () => {
   const unboundIndex = sendMessageSource.indexOf('if (!config.workspaceId.trim())');
-  const workspaceMessageIndex = sendMessageSource.indexOf('api.sendMessage(');
+  const workspaceMessageIndex = sendMessageSource.indexOf('client.sendMessage(');
   assert.notEqual(unboundIndex, -1);
   assert.notEqual(workspaceMessageIndex, -1);
   assert.ok(unboundIndex < workspaceMessageIndex);
   const unboundBranch = sendMessageSource.slice(unboundIndex, workspaceMessageIndex);
   assert.match(unboundBranch, /ensureAgentConversation\(content\)/);
   assert.match(unboundBranch, /dispatchAgentConversationMessage\(/);
-  assert.doesNotMatch(unboundBranch, /api\.sendMessage\(/);
+  assert.doesNotMatch(unboundBranch, /client\.sendMessage\(/);
   assert.doesNotMatch(chatDisabledSource, /!config\.workspaceId/);
 });
 

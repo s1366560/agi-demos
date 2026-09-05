@@ -130,6 +130,10 @@ function serviceFixture(received = [], values = {}) {
             conversation({ title, user_id: expectedUserId })
           );
         },
+        async bindConversationWorkspace(value, signal) {
+          received.push({ kind: 'bindConversationWorkspace', conversation: value, signal });
+          return values.boundConversation ?? { ...value, workspace_id: config.workspaceId };
+        },
         async createTaskSession(input) {
           received.push({ kind: 'createTaskSession', input });
           return values.taskSession ?? taskSession();

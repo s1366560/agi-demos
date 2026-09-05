@@ -8,9 +8,7 @@ import { useAgentSocket } from './useAgentSocket';
 import type { ConversationSessionProjection } from '../features/session/sessionProjectionTypes';
 import { normalizeSessionTaskListPlan } from '../features/session/sessionPlanApprovalModel';
 import { useWorkspaceAgentPolicy } from '../features/settings/useWorkspaceAgentPolicy';
-import {
-  DesktopApiClient,
-} from '../api/client';
+import type { DesktopConversationMessagingOperationsV2 } from '../plugins/desktopConversationMessagingAuthorityModuleV2';
 import {
   type PermissionPreset,
 } from '../features/chat/permissionPresetModel';
@@ -69,7 +67,7 @@ export type AgentConversationParams = {
   configuredNewThreadWorkspaceId: string;
   localRuntimeMode: boolean;
   canManageWorkspacePolicy: boolean;
-  api: DesktopApiClient;
+  messagingOperationsV2: DesktopConversationMessagingOperationsV2;
   newThreadCreationClientV2: DesktopNewThreadCreationOperationsV2;
   sessionRunInputOperationsV2: DesktopSessionRunInputOperationsV2;
   socket: ReturnType<typeof useAgentSocket>;

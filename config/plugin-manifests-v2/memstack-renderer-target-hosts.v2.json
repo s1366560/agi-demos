@@ -1625,7 +1625,7 @@
       "module_ref": "builtin://memstack/desktop/new-task-flow-authority",
       "entrypoint": "applyDesktopNewTaskFlowAuthorityV2",
       "artifact": {
-        "digest": "sha256:a59065de41b458e712df645e3e741ec6b408463504694341150f9fd438a955e6",
+        "digest": "sha256:02bd9a93f8e73ba6d6fa2a3a818a734f7d060ee8f32e1c772ed8947b7c5b5f76",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts"
       },
       "targets": ["desktop-renderer"],
@@ -1656,7 +1656,7 @@
       "module_ref": "builtin://memstack/desktop/new-thread-creation-authority",
       "entrypoint": "applyDesktopNewThreadCreationAuthorityV2",
       "artifact": {
-        "digest": "sha256:c38b9c89795b373de113f44a9e73ddcda3ced9072603fa4a7c5c4330863e6124",
+        "digest": "sha256:f5342ef9df6ecf80ae961ef171393a3349ee599fc4e23992c3174547dcaa0eff",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopNewThreadCreationAuthorityModuleV2.ts"
       },
       "targets": ["desktop-renderer"],
@@ -2975,6 +2975,47 @@
         }
       },
       "contract_digest": "sha256:4e6917880e2aa16eb9713b94e0c72f9bca5a8111bbdfdad24d8ddb4e53634f3d"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/conversation-messaging-authority",
+      "entrypoint": "applyDesktopConversationMessagingAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopConversationMessagingAuthorityModuleV2.ts",
+        "digest": "sha256:71186edbc0fdc7486e7cee06ee0b587252d4bdf723479b7bd28bb724b8799b46"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.conversation-messaging-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "parent-bound-messaging",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:a594f75a28df175e68c9ff19bc1f9f42a2645a4cd1e1d64d950b29e415125117"
     }
   ],
   "permissions": [],

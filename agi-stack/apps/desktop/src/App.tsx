@@ -1,3 +1,4 @@
+import { createDesktopConversationMessagingOperationsV2 } from './plugins/desktopConversationMessagingAuthorityModuleV2';
 import {
   useCallback,
   useEffect,
@@ -1802,6 +1803,10 @@ export function App() {
     identityAuthenticated,
     desktopRendererCompositionV2,
   );
+  const desktopConversationMessagingOperationsV2 = useMemo(() => {
+    const actions = desktopRendererGenerationV2.actions;
+    return createDesktopConversationMessagingOperationsV2(() => actions);
+  }, [desktopRendererGenerationV2.actions]);
   useLayoutEffect(() => {
     const actions = desktopRendererGenerationV2.actions;
     desktopPluginMarketplaceGenerationActionsRefV2.current = actions;
@@ -6233,7 +6238,7 @@ export function App() {
     startNewSession,
   } = useAgentConversation({
     agentConversationSession,
-    api,
+    messagingOperationsV2: desktopConversationMessagingOperationsV2,
     applySectionSideEffects,
     auth,
     canManageWorkspacePolicy,

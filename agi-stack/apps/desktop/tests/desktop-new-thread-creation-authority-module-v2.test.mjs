@@ -246,9 +246,12 @@ const SERVICE_GRAPH_PATH = new URL(
 
 function loadBootstrap() {
   const profile = JSON.parse(readFileSync(BOOTSTRAP_PATH, 'utf8'));
-  // This focused Loader fixture does not exercise the coordinating snapshot module.
+  // Coordinator graphs have dedicated real Loader tests; this fixture isolates the child authority.
   profile.entries = profile.entries.filter(
-    (entry) => entry.module_ref !== 'builtin://memstack/desktop/workbench-snapshot-authority',
+    (entry) => ![
+      'builtin://memstack/desktop/workbench-snapshot-authority',
+      'builtin://memstack/desktop/conversation-messaging-authority',
+    ].includes(entry.module_ref),
   );
   return profile;
 }
@@ -486,6 +489,10 @@ function serviceFixture(received = [], values = {}) {
             agentConfig,
           });
           return values.conversation ?? conversation({ title, user_id: expectedUserId });
+        },
+        async bindConversationWorkspace(value, signal) {
+          received.push({ kind: 'bindConversationWorkspace', conversation: value, signal });
+          return values.boundConversation ?? { ...value, workspace_id: config.workspaceId };
         },
         async createTaskSession(input) {
           received.push({ kind: 'createTaskSession', input });
