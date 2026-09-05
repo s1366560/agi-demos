@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "97541f5a6a09a6d62be956e4d819d78a2eaf5867",
+  "source_revision": "7180176134af1e638ba9e5d6ff2deab15e5fccd5",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 720,
+    "audited_sources": 721,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1957,
-    "production_dependency_ownership": 719,
-    "production_dependency_sources": 719,
+    "production_dependency_edges": 1961,
+    "production_dependency_ownership": 720,
+    "production_dependency_sources": 720,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 5
@@ -211,7 +211,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d1c8a2987662029435074fdb4b99f768d2364e6404559dacee916fe4b52544db"
+      "sha256": "sha256:d7c3f033881a076e33d0b0a492aa49f43bcb7c31994ffa5099944b3c88e922ab"
     },
     {
       "source_entry": "web/src/components/agent/SlashCommandDropdown.tsx",
@@ -834,14 +834,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:5f321e97df1e539e4fa0ed569978866cb200a3904832ec2129ba0c26d402e40d"
+      "sha256": "sha256:e916c921a941402f04814af3a361d24ac227f102a2bf21fc8686413c3aa6951f"
     },
     {
       "source_entry": "web/src/components/agent/sandbox/RemoteDesktopViewer.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:575d9e0bc3ea1519205ebb88c557b107e124af7be80d8924aa13bb32fbc5e32e"
+      "sha256": "sha256:398a72c16bc09e8ca232ff58b7895697b2b40cb2c633d2bf7dbcb22c60e72762"
     },
     {
       "source_entry": "web/src/components/agent/sandbox/SandboxStatusIndicator.tsx",
@@ -3806,6 +3806,13 @@
       "sha256": "sha256:6016f4241c24aff33f554f8903ebddb79b1589f7057a911db12924ef47a11913"
     },
     {
+      "source_entry": "web/src/services/kasmRetainedSessionV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:6a091992fc24f06c340bb49aeb2a4d2dea86a81cd27fe01b082a84591607ac84"
+    },
+    {
       "source_entry": "web/src/services/mcp/BrowserWebSocketTransport.ts",
       "roles": [
         "production_dependency"
@@ -4790,7 +4797,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:50256a2e44aabc19fd3fbe2e395407d05113ba30759da8adc47c331138aaba01"
+      "sha256": "sha256:ba657f2319d1751036b2b0a99ffb8f1c9d407f63126e484f0622fe9e2f23963a"
     },
     {
       "source_entry": "web/src/vendor/kasmvnc/core/decoders/tightpng.js",
@@ -4825,7 +4832,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d34a201c4b91c1ab609336a00684cd1e845177f1f9f1fb2b09571a205e14054b"
+      "sha256": "sha256:dc8fa7e9040adbfc39949a9a237021fc879f956424e6b4837a73005cb4e7b462"
     },
     {
       "source_entry": "web/src/vendor/kasmvnc/core/encodings.js",
@@ -4874,7 +4881,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:ff1210240f0754eb1a476bc69349c983c7e532509d658ffadac9c00c16c9a917"
+      "sha256": "sha256:19c4c9096d16a4ada78338e1aa8f8e5e796d02be086121a0f073f001439c9b33"
     },
     {
       "source_entry": "web/src/vendor/kasmvnc/core/input/keysym.js",
@@ -4923,7 +4930,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:32bed465df019abcd38aca427f99904ceaaaa0be98da807a127ed519d25937c4"
+      "sha256": "sha256:8177c1ab471c4c1b4083cae7603e7cac7026ff274bb16e64c03fb52895c0729b"
     },
     {
       "source_entry": "web/src/vendor/kasmvnc/core/util/browser.js",
@@ -11311,7 +11318,12 @@
     {
       "from_source_entry": "web/src/components/agent/sandbox/KasmVNCViewer.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/sandboxWebSocketUtils.ts"
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/sandbox/KasmVNCViewer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/kasmRetainedSessionV2.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/sandbox/KasmVNCViewer.tsx",
@@ -17817,6 +17829,21 @@
       "from_source_entry": "web/src/services/invitationService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/kasmRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/kasmRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/sandboxWebSocketUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/kasmRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/utils/tokenResolver.ts"
     },
     {
       "from_source_entry": "web/src/services/mcp/BrowserWebSocketTransport.ts",
@@ -25306,6 +25333,15 @@
         "web/src/pages/tenant/AgentWorkspace.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/kasmRetainedSessionV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/services/mcp/BrowserWebSocketTransport.ts"
     },
     {
@@ -27944,6 +27980,7 @@
     "web/src/services/instanceService.ts",
     "web/src/services/instanceTemplateService.ts",
     "web/src/services/invitationService.ts",
+    "web/src/services/kasmRetainedSessionV2.ts",
     "web/src/services/mcp/BrowserWebSocketTransport.ts",
     "web/src/services/mcp/MCPAppRetainedSessionV2.ts",
     "web/src/services/mcpAppService.ts",
