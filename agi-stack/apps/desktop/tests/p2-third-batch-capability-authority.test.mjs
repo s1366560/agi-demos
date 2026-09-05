@@ -25,6 +25,7 @@ import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOpe
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const root = '/tmp/agistack-desktop-test-dist/src/features/settings-routes';
@@ -196,6 +197,7 @@ test('workbench Snapshot v4 keeps unversioned P2 observations unavailable', asyn
   try {
     const client = createDesktopWorkbenchCapabilityClient(unavailableAutomation, cloudConfig, {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
       projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),

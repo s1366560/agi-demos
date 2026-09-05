@@ -98,6 +98,9 @@ const { desktopProjectChannelsAuthorityDefinitionV2 } = require(
 const { desktopUserProfileAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopUserProfileAuthorityModuleV2.js',
 );
+const { desktopTenantAgentDefinitionsAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantAgentDefinitionsAuthorityModuleV2.js',
+);
 const { desktopTenantOrganizationSettingsAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantOrganizationSettingsAuthorityModuleV2.js',
 );
@@ -274,7 +277,8 @@ function rendererDefinitions() {
   desktopTenantGenesAuthorityDefinitionV2,
   desktopTenantTemplatesAuthorityDefinitionV2,
   desktopProjectChannelsAuthorityDefinitionV2,
-  desktopUserProfileAuthorityDefinitionV2,
+    desktopUserProfileAuthorityDefinitionV2,
+    desktopTenantAgentDefinitionsAuthorityDefinitionV2,
   desktopTenantOrganizationSettingsAuthorityDefinitionV2,
     desktopTenantTrustAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,

@@ -38,6 +38,7 @@ import type { DesktopUnifiedRuntimesOperationsV2 } from '../../plugins/desktopUn
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
+import type { DesktopTenantAgentDefinitionsOperationsV2 } from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import type { DesktopTenantOverviewOperationsV2 } from '../../plugins/desktopTenantOverviewAuthorityModuleV2';
 import type { DesktopTenantProjectsOperationsV2 } from '../../plugins/desktopTenantProjectsAuthorityModuleV2';
 import type { DesktopTenantTasksOperationsV2 } from '../../plugins/desktopTenantTasksAuthorityModuleV2';
@@ -188,6 +189,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     DesktopTenantAgentDashboardOperationsV2,
     'loadTenantAgentDashboard'
   >;
+  tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
   tenantOverviewOperationsV2: Pick<
     DesktopTenantOverviewOperationsV2,
     'loadTenantOverview'
@@ -284,6 +286,8 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       }),
       tenantAgentBindingsOperationsV2: input.tenantAgentBindingsOperationsV2,
       tenantAgentDashboardOperationsV2: input.tenantAgentDashboardOperationsV2,
+      tenantAgentDefinitionsOperationsV2:
+        input.tenantAgentDefinitionsOperationsV2,
       tenantAnalyticsOperationsV2: input.tenantAnalyticsOperationsV2,
       tenantOverviewOperationsV2: input.tenantOverviewOperationsV2,
       tenantProjectsOperationsV2: input.tenantProjectsOperationsV2,

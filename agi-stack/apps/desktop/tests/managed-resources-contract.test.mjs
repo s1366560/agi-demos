@@ -13,8 +13,6 @@ test('managed resource lists reject malformed successful collection payloads', a
   const originalFetch = globalThis.fetch;
   const payloads = [
     { unexpected: [] },
-    { definitions: null },
-    { agents: 'not-an-array' },
     { subagents: {} },
   ];
   globalThis.fetch = async () => {
@@ -34,8 +32,6 @@ test('managed resource lists reject malformed successful collection payloads', a
     });
     for (const load of [
       () => client.listManagedSkills(),
-      () => client.listManagedAgents(),
-      () => client.listManagedExternalAcpAgents(),
       () => client.listManagedSubAgents(),
     ]) {
       await assert.rejects(

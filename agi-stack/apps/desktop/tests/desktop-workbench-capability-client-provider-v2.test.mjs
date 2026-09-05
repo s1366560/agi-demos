@@ -113,6 +113,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
+    tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
     tenantProjectsOperationsV2: tenantProjectsOperationsV2(),
@@ -178,6 +179,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
+    tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
     tenantProjectsOperationsV2: tenantProjectsOperationsV2(),
@@ -255,6 +257,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
+    tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
     tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
     tenantProjectsOperationsV2: tenantProjectsOperationsV2(),
@@ -329,6 +332,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         ...projectWorkspaceOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
         tenantOverviewOperationsV2: tenantOverviewOperationsV2(),
         tenantProjectsOperationsV2: tenantProjectsOperationsV2(),
@@ -439,6 +443,10 @@ test('App consumes the published V2 workbench capability client', () => {
   );
   assert.match(
     providerSource,
+    /tenantAgentDefinitionsOperationsV2:\s*input\.tenantAgentDefinitionsOperationsV2/u,
+  );
+  assert.match(
+    providerSource,
     /tenantAnalyticsOperationsV2:\s*input\.tenantAnalyticsOperationsV2/u,
   );
   assert.match(providerSource, /tenantOverviewOperationsV2:\s*input\.tenantOverviewOperationsV2/u);
@@ -518,6 +526,14 @@ function tenantAgentDashboardOperationsV2() {
   return {
     loadTenantAgentDashboard: async () => {
       throw new Error('tenant_agent_dashboard_not_exercised');
+    },
+  };
+}
+
+function tenantAgentDefinitionsOperationsV2() {
+  return {
+    loadTenantAgentDefinitions: async () => {
+      throw new Error('tenant_agent_definitions_not_exercised');
     },
   };
 }

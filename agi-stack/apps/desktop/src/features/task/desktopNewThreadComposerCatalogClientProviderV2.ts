@@ -1,10 +1,13 @@
 import { DesktopApiClient } from '../../api/client';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
+import {
+  createDesktopTenantAgentDefinitionsClientV2,
+  type DesktopTenantAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import type { DesktopWorkspaceRosterOperationsV2 } from '../../plugins/desktopWorkspaceRosterAuthorityModuleV2';
-import type { DesktopRuntimeConfig } from '../../types';
+import type { DesktopRuntimeConfig, ManagedAgentDefinition } from '../../types';
 
-type DesktopNewThreadComposerCatalogMethod =
-  | 'listManagedAgents'
+type DesktopNewThreadComposerStaticCatalogMethod =
   | 'listManagedSkills'
   | 'listManagedSubAgents'
   | 'listMarketplacePlugins'
@@ -12,7 +15,9 @@ type DesktopNewThreadComposerCatalogMethod =
   | 'uploadSandboxFile';
 
 export type DesktopNewThreadComposerCatalogClient = Readonly<
-  Pick<DesktopApiClient, DesktopNewThreadComposerCatalogMethod>
+  Pick<DesktopApiClient, DesktopNewThreadComposerStaticCatalogMethod> & {
+    listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]>;
+  }
 >;
 
 export type DesktopNewThreadComposerCatalogClientProviderReasonCodeV2 =
@@ -38,6 +43,7 @@ export type DesktopNewThreadComposerCatalogClientProviderInputV2 = Readonly<{
     DesktopWorkspaceRosterOperationsV2,
     'listWorkspaceAgents'
   >;
+  tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
 }>;
 
 export type DesktopNewThreadComposerCatalogClientBindingV2 = Readonly<{
@@ -78,14 +84,16 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
   const config = Object.freeze({ ...input.config });
   const workspaceId = config.workspaceId.trim();
   const authority = new DesktopApiClient(config);
+  const agentDefinitions = createDesktopTenantAgentDefinitionsClientV2(
+    input.tenantAgentDefinitionsOperationsV2,
+    config,
+  );
   const client: DesktopNewThreadComposerCatalogClient = Object.freeze({
     listWorkspaceAgents: (signal?: AbortSignal) =>
       workspaceId
         ? input.workspaceRosterOperationsV2.listWorkspaceAgents({ config, signal })
         : Promise.resolve([]),
-    listManagedAgents: (
-      ...args: Parameters<DesktopApiClient['listManagedAgents']>
-    ) => authority.listManagedAgents(...args),
+    listManagedAgents: (signal) => agentDefinitions.listManagedAgents(signal),
     listManagedSkills: (
       ...args: Parameters<DesktopApiClient['listManagedSkills']>
     ) => authority.listManagedSkills(...args),

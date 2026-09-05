@@ -25,6 +25,7 @@ import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOpe
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -115,6 +116,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
         config,
         {
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+          tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
           projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
           projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
           projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
@@ -231,6 +233,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
     cloudConfig,
     {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
       projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
@@ -352,6 +355,7 @@ test('Workbench default production journey authority supports tenant-level scope
       config,
       {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
         projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
@@ -473,6 +477,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
     cloudConfig,
     {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
       projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),

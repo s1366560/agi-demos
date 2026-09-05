@@ -45,6 +45,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
   const first = provider.publish({
     config: firstConfig,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   firstConfig.apiBaseUrl = 'http://127.0.0.1:49999';
@@ -52,6 +53,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
   const second = provider.publish({
     config: runtimeConfig('http://127.0.0.1:42002', 'workspace-2'),
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const originalFetch = globalThis.fetch;
@@ -86,6 +88,7 @@ test('unbound publications hide workspace agents while retaining project catalog
   const publication = provider.publish({
     config: runtimeConfig('http://127.0.0.1:42003', ''),
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const originalFetch = globalThis.fetch;
@@ -140,7 +143,7 @@ test('unbound publications hide workspace agents while retaining project catalog
     );
     assert.equal(
       calls.some((url) => url.includes('/agent/definitions?')),
-      true
+      false
     );
     assert.equal(
       calls.some((url) => url.includes('/skills/?')),
@@ -168,6 +171,7 @@ test('failed composer catalog publication keeps the last-good binding', () => {
   const lastGood = provider.publish({
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const poisonedConfig = {
@@ -182,6 +186,7 @@ test('failed composer catalog publication keeps the last-good binding', () => {
       provider.publish({
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
         workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
       }),
     /candidate_new_thread_composer_catalog_config_invalid/u
@@ -200,6 +205,10 @@ test('App consumes the published V2 catalog client without constructing a new-th
   assert.match(
     providerSource,
     /input\.pluginMarketplaceOperationsV2\.listMarketplacePlugins\(config/u
+  );
+  assert.match(
+    providerSource,
+    /createDesktopTenantAgentDefinitionsClientV2\(\s*input\.tenantAgentDefinitionsOperationsV2/u
   );
   assert.match(providerSource, /input\.workspaceRosterOperationsV2\.listWorkspaceAgents/u);
   for (const method of [
@@ -223,6 +232,12 @@ function pluginMarketplaceOperationsV2() {
   return {
     listMarketplacePlugins: (config, signal) =>
       new DesktopApiClient(config).listMarketplacePlugins(signal),
+  };
+}
+
+function tenantAgentDefinitionsOperationsV2() {
+  return {
+    loadTenantAgentDefinitions: async () => [],
   };
 }
 

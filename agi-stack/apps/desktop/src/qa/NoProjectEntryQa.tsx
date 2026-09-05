@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import { createDesktopNewTaskFlowQaOperationsV2 } from './desktopNewTaskFlowAuthorityQaV2';
 import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
+import { createDesktopTenantAgentDefinitionsQaOperationsV2 } from './desktopTenantAgentDefinitionsAuthorityQaV2';
 import { createDesktopProjectChannelsQaOperationsV2 } from './desktopProjectChannelsAuthorityQaV2';
 import '../styles/global.css';
 
@@ -33,6 +34,8 @@ const QA_API_ORIGIN = 'https://no-project.qa.memstack.invalid';
 const NOW = '2026-07-18T08:00:00.000Z';
 const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2();
 const projectChannelsOperationsV2 = createDesktopProjectChannelsQaOperationsV2();
+const tenantAgentDefinitionsOperationsV2 =
+  createDesktopTenantAgentDefinitionsQaOperationsV2();
 const qaSearchParams = new URLSearchParams(window.location.search);
 const qaScenario = qaSearchParams.get('scenario');
 const qaWindowState = qaSearchParams.get('state');
@@ -326,6 +329,7 @@ function NoProjectEntryQa() {
           pluginMarketplaceOperationsV2={noProjectPluginMarketplaceOperationsV2}
           tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
           projectChannelsOperationsV2={projectChannelsOperationsV2}
+          tenantAgentDefinitionsOperationsV2={tenantAgentDefinitionsOperationsV2}
           onClose={() => setSettingsOpen(false)}
           onConfigChange={setConfig}
           onRuntimeStatusRefresh={async () => undefined}

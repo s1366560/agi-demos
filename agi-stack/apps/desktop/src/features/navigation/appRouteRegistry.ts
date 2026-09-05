@@ -296,6 +296,7 @@ import type {
 import type { DesktopTenantAnalyticsOperationsV2 } from '../../plugins/desktopTenantAnalyticsAuthorityModuleV2';
 import type { DesktopTenantAgentBindingsOperationsV2 } from '../../plugins/desktopTenantAgentBindingsAuthorityModuleV2';
 import type { DesktopTenantAgentDashboardOperationsV2 } from '../../plugins/desktopTenantAgentDashboardAuthorityModuleV2';
+import type { DesktopTenantAgentDefinitionsOperationsV2 } from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import type { DesktopTenantCatalogOperationsV2 } from '../../plugins/desktopTenantCatalogAuthorityModuleV2';
 import {
   createDesktopTenantCreationClientV2,
@@ -322,6 +323,7 @@ export type AppRouteRegistryRefs = {
   tenantAnalyticsOperationsV2: DesktopTenantAnalyticsOperationsV2;
   tenantAgentBindingsOperationsV2: DesktopTenantAgentBindingsOperationsV2;
   tenantAgentDashboardOperationsV2: DesktopTenantAgentDashboardOperationsV2;
+  tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
   tenantCreationOperationsV2: DesktopTenantCreationOperationsV2;
   tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
@@ -467,6 +469,7 @@ export type AppTenantAgentBuildingRouteRegistryRefs = Pick<
   | 'configRef'
   | 'tenantAgentBindingsOperationsV2'
   | 'tenantAgentDashboardOperationsV2'
+  | 'tenantAgentDefinitionsOperationsV2'
   | 'tenantPatternsOperationsV2'
   | 'tenantEvolutionOperationsV2'
 > &
@@ -1239,6 +1242,7 @@ export function createAppTenantAgentBuildingRouteRegistry(
     configRef,
     tenantAgentBindingsOperationsV2,
     tenantAgentDashboardOperationsV2,
+    tenantAgentDefinitionsOperationsV2,
   } = refs;
   const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
@@ -1265,6 +1269,7 @@ export function createAppTenantAgentBuildingRouteRegistry(
             configRef.current,
             context,
             settingsRouteContent('agents'),
+            tenantAgentDefinitionsOperationsV2,
           ),
       }),
       [TENANT_SKILLS_ROUTE_ID]: createSkillsRouteModuleLoader({

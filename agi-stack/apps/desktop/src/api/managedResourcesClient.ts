@@ -3,9 +3,6 @@ import { parseDocument } from 'yaml';
 import { desktopApiFetch } from './cloudRequestBroker';
 import type {
   DesktopRuntimeConfig,
-  ManagedAgentDefinition,
-  ManagedAgentDefinitionMutation,
-  ManagedExternalAcpAgent,
   ManagedSkill,
   ManagedSkillContent,
   ManagedSkillCreateMutation,
@@ -282,36 +279,6 @@ export class ManagedResourcesClient {
     return this.mutateManagedSkillEvolutionJob(jobId, 'reject');
   }
 
-  async listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]> {
-    const params = new URLSearchParams({ limit: '100', enabled_only: 'false' });
-    if (this.config.projectId) params.set('project_id', this.config.projectId);
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const payload = await this.request<unknown>(
-      `/api/v1/agent/definitions?${params.toString()}`,
-      { signal },
-    );
-    return readArray<ManagedAgentDefinition>(
-      payload,
-      ['definitions', 'items', 'data'],
-      'agent_definitions',
-      this.createError,
-    );
-  }
-
-  async listManagedExternalAcpAgents(signal?: AbortSignal): Promise<ManagedExternalAcpAgent[]> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    const payload = await this.request<unknown>(
-      `/api/v1/acp/tenants/${encodeURIComponent(tenantId)}/external-agents`,
-      { signal },
-    );
-    return readArray<ManagedExternalAcpAgent>(
-      payload,
-      ['agents', 'items', 'externalAgents', 'data'],
-      'external_acp_agents',
-      this.createError,
-    );
-  }
-
   async listPromptTemplates(
     tenantId: string,
     signal?: AbortSignal,
@@ -376,69 +343,6 @@ export class ManagedResourcesClient {
         body: this.mutationBody(null, expectedRevision),
         signal,
       },
-    );
-  }
-
-  async setManagedAgentEnabled(
-    definitionId: string,
-    enabled: boolean,
-    expectedRevision?: number,
-  ): Promise<ManagedAgentDefinition> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    if (this.config.projectId) params.set('project_id', this.config.projectId);
-    const query = params.toString();
-    return this.request<ManagedAgentDefinition>(
-      `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}/enabled${
-        query ? `?${query}` : ''
-      }`,
-      {
-        method: 'PATCH',
-        body: this.mutationBody({ enabled }, expectedRevision),
-      },
-    );
-  }
-
-  async createManagedAgentDefinition(
-    body: ManagedAgentDefinitionMutation,
-  ): Promise<ManagedAgentDefinition> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const query = params.toString();
-    return this.request<ManagedAgentDefinition>(
-      `/api/v1/agent/definitions${query ? `?${query}` : ''}`,
-      { method: 'POST', body: this.mutationBody(body, 0, crypto.randomUUID()) },
-    );
-  }
-
-  async updateManagedAgentDefinition(
-    definitionId: string,
-    body: ManagedAgentDefinitionMutation,
-    expectedRevision?: number,
-  ): Promise<ManagedAgentDefinition> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const query = params.toString();
-    return this.request<ManagedAgentDefinition>(
-      `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${
-        query ? `?${query}` : ''
-      }`,
-      { method: 'PUT', body: this.mutationBody(body, expectedRevision) },
-    );
-  }
-
-  async deleteManagedAgentDefinition(
-    definitionId: string,
-    expectedRevision?: number,
-  ): Promise<{ deleted: boolean; id: string }> {
-    const params = new URLSearchParams();
-    if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
-    const query = params.toString();
-    return this.request<{ deleted: boolean; id: string }>(
-      `/api/v1/agent/definitions/${encodeURIComponent(definitionId)}${
-        query ? `?${query}` : ''
-      }`,
-      { method: 'DELETE', body: this.mutationBody(null, expectedRevision) },
     );
   }
 

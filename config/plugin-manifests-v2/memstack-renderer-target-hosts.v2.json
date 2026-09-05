@@ -744,6 +744,35 @@
       "contract_digest": "sha256:c224c862118ebfe62c08a4f652b5499075dcf7c30518cb0035c5e471842a2655"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-agent-definitions-authority",
+      "entrypoint": "applyDesktopTenantAgentDefinitionsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:6d03142c94737e1496dcd1c613ed61c4859fb8996888f5284520f22bf921a8fc",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantAgentDefinitionsAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-agent-definitions-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:0e9f613d261173faa97573d74cda2f75bbf13870c58e2c6b4c1c0c8f1bf86843"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-organization-settings-authority",
       "entrypoint": "applyDesktopTenantOrganizationSettingsAuthorityV2",
       "artifact": {

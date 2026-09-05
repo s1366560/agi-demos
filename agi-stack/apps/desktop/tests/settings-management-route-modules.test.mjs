@@ -12,8 +12,8 @@ const {
   createProviderRouteClient,
 } = require(`${featureRoot}/providerRouteClient.js`);
 const {
-  createAgentDefinitionsRouteClient,
-} = require(`${featureRoot}/agentDefinitionsRouteClient.js`);
+  createDesktopTenantAgentDefinitionsRouteClientV2,
+} = require('/tmp/agistack-desktop-test-dist/src/plugins/desktopTenantAgentDefinitionsAuthorityModuleV2.js');
 const {
   createSkillsRouteClient,
 } = require(`${featureRoot}/skillsRouteClient.js`);
@@ -172,12 +172,18 @@ test('each route owns a typed authority adapter and validates its runtime scope'
       1,
     ],
     [
-      createAgentDefinitionsRouteClient(config(), {
-        listManagedAgents: async () => {
+      createDesktopTenantAgentDefinitionsRouteClientV2({
+        loadTenantAgentDefinitions: async ({ scope: operationScope }) => {
+          if (
+            operationScope.tenantId !== scope.tenantId ||
+            operationScope.projectId !== scope.projectId
+          ) {
+            throw new Error('management_route_runtime_scope_mismatch');
+          }
           calls.push('agents');
           return [{ id: 'agent-1' }, { id: 'agent-2' }];
         },
-      }),
+      }, config()),
       2,
     ],
     [

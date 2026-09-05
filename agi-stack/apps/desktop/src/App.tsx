@@ -131,6 +131,10 @@ import { createDesktopTenantEventsOperationsV2 } from './plugins/desktopTenantEv
 import { createDesktopTenantPatternsOperationsV2 } from './plugins/desktopTenantPatternsAuthorityModuleV2';
 import { createDesktopTenantEvolutionOperationsV2 } from './plugins/desktopTenantEvolutionAuthorityModuleV2';
 import { createDesktopTenantTemplatesOperationsV2 } from './plugins/desktopTenantTemplatesAuthorityModuleV2';
+import {
+  createDesktopTenantAgentDefinitionsClientV2,
+  createDesktopTenantAgentDefinitionsOperationsV2,
+} from './plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import { createDesktopTenantGenesOperationsV2 } from './plugins/desktopTenantGenesAuthorityModuleV2';
 import { createDesktopTenantOrganizationSettingsOperationsV2 } from './plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAuthorityModuleV2';
@@ -1089,6 +1093,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantAgentDefinitionsOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantAgentDefinitionsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopUserProfileOperationsV2 = useMemo(
     () =>
       createDesktopUserProfileOperationsV2(
@@ -1493,6 +1504,14 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
+  const desktopTenantAgentDefinitionsClientV2 = useMemo(
+    () =>
+      createDesktopTenantAgentDefinitionsClientV2(
+        desktopTenantAgentDefinitionsOperationsV2,
+        config,
+      ),
+    [config, desktopTenantAgentDefinitionsOperationsV2],
+  );
   const desktopRendererRouteRefsV2 = useMemo(
     () => ({
       authRef,
@@ -1524,6 +1543,8 @@ export function App() {
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
       tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
       tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
+      tenantAgentDefinitionsOperationsV2:
+        desktopTenantAgentDefinitionsOperationsV2,
       userProfileOperationsV2: desktopUserProfileOperationsV2,
       tenantGenesOperationsV2: desktopTenantGenesOperationsV2,
       tenantOrganizationSettingsOperationsV2:
@@ -1594,6 +1615,7 @@ export function App() {
       desktopTenantCreationOperationsV2,
       desktopTenantGenesOperationsV2,
       desktopTenantTemplatesOperationsV2,
+      desktopTenantAgentDefinitionsOperationsV2,
       desktopUserProfileOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
       desktopTenantOverviewOperationsV2,
@@ -1658,6 +1680,8 @@ export function App() {
         tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
+        tenantAgentDefinitionsOperationsV2:
+          desktopTenantAgentDefinitionsOperationsV2,
         userProfileOperationsV2: desktopUserProfileOperationsV2,
         tenantGenesOperationsV2: desktopTenantGenesOperationsV2,
         tenantOrganizationSettingsOperationsV2:
@@ -1705,6 +1729,7 @@ export function App() {
       desktopInstanceTemplatesOperationsV2,
       desktopTenantEvolutionOperationsV2,
       desktopTenantTemplatesOperationsV2,
+      desktopTenantAgentDefinitionsOperationsV2,
       desktopUserProfileOperationsV2,
       desktopTenantGenesOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
@@ -1723,10 +1748,37 @@ export function App() {
     config,
     showRuntimeConfig && connection === 'ready' && Boolean(config.projectId.trim()),
   );
-  const chatComposerApi = useMemo(
-    () => (config.workspaceId.trim() ? api : unboundComposerCatalogClient(api)),
-    [api, config.workspaceId],
-  );
+  const chatComposerApi = useMemo(() => {
+    const remainingComposerCatalogAuthority = api;
+    const composedComposerCatalogAuthority = {
+      listWorkspaceAgents: (signal?: AbortSignal) =>
+        remainingComposerCatalogAuthority.listWorkspaceAgents(signal),
+      listManagedAgents: (signal?: AbortSignal) =>
+        desktopTenantAgentDefinitionsClientV2.listManagedAgents(signal),
+      listManagedSkills: (signal?: AbortSignal) =>
+        remainingComposerCatalogAuthority.listManagedSkills(signal),
+      listMarketplacePlugins: (signal?: AbortSignal) =>
+        remainingComposerCatalogAuthority.listMarketplacePlugins(signal),
+      listManagedSubAgents: (signal?: AbortSignal) =>
+        remainingComposerCatalogAuthority.listManagedSubAgents(signal),
+      listPromptTemplates: (tenantId: string, signal?: AbortSignal) =>
+        remainingComposerCatalogAuthority.listPromptTemplates(tenantId, signal),
+      createPromptTemplate: (...args: Parameters<DesktopApiClient['createPromptTemplate']>) =>
+        remainingComposerCatalogAuthority.createPromptTemplate(...args),
+      deletePromptTemplate: (...args: Parameters<DesktopApiClient['deletePromptTemplate']>) =>
+        remainingComposerCatalogAuthority.deletePromptTemplate(...args),
+      listConversations: (...args: Parameters<DesktopApiClient['listConversations']>) =>
+        remainingComposerCatalogAuthority.listConversations(...args),
+      getConversationMessages: (
+        ...args: Parameters<DesktopApiClient['getConversationMessages']>
+      ) => remainingComposerCatalogAuthority.getConversationMessages(...args),
+      uploadSandboxFile: (...args: Parameters<DesktopApiClient['uploadSandboxFile']>) =>
+        remainingComposerCatalogAuthority.uploadSandboxFile(...args),
+    };
+    return config.workspaceId.trim()
+      ? composedComposerCatalogAuthority
+      : unboundComposerCatalogClient(composedComposerCatalogAuthority);
+  }, [api, config.workspaceId, desktopTenantAgentDefinitionsClientV2]);
   const socket = useAgentSocket(
     config,
     showRuntimeConfig && connection === 'ready',
@@ -1892,10 +1944,13 @@ export function App() {
         config: newThreadRuntimeConfig,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
+        tenantAgentDefinitionsOperationsV2:
+          desktopTenantAgentDefinitionsOperationsV2,
       }),
     [
       desktopNewThreadComposerCatalogClientProviderV2,
       desktopPluginMarketplaceOperationsV2,
+      desktopTenantAgentDefinitionsOperationsV2,
       desktopWorkspaceRosterOperationsV2,
       newThreadRuntimeConfig,
     ],
@@ -7605,6 +7660,8 @@ export function App() {
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
+        tenantAgentDefinitionsOperationsV2:
+          desktopTenantAgentDefinitionsOperationsV2,
         onClose: () => {
           const closeRoute = settingsRouteCloseNavigationRef.current;
           settingsRouteCloseNavigationRef.current = null;

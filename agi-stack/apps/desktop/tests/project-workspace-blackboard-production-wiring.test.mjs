@@ -25,6 +25,7 @@ import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOpe
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const compiledNavigationDirectory = '/tmp/agistack-desktop-test-dist/src/features/navigation';
@@ -214,6 +215,7 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
         config,
         {
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+          tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
           projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
           projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
           projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),
@@ -364,6 +366,7 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
       config,
       {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
         projectCommunitiesOperationsV2: projectCommunitiesOperationsV2Fixture(),

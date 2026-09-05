@@ -25,10 +25,11 @@ import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOpe
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
-  createDesktopWorkbenchCapabilityClient,
+  createDesktopWorkbenchCapabilityClient: createDesktopWorkbenchCapabilityClientRaw,
   normalizeAutomationCapabilityContract,
   normalizeLocalSearchCapabilityContract,
   normalizeSearchCapabilityContract,
@@ -36,6 +37,14 @@ const {
   normalizeWorkspaceCollaborationCapabilityContract,
 } = require('/tmp/agistack-desktop-test-dist/src/features/runtime/workbenchCapabilityClient.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
+
+function createDesktopWorkbenchCapabilityClient(automationApi, config, options) {
+  return createDesktopWorkbenchCapabilityClientRaw(automationApi, config, {
+    ...options,
+    tenantAgentDefinitionsOperationsV2:
+      options?.tenantAgentDefinitionsOperationsV2 ?? tenantAgentDefinitionsOperationsV2Fixture(),
+  });
+}
 
 const searchContract = {
   service_version: '0.1.0',
@@ -141,6 +150,23 @@ test('workbench capability client requires the Tenant Agent Dashboard V2 authori
         },
       ),
     /desktop_tenant_agent_dashboard_authority_required/u,
+  );
+});
+
+test('workbench capability client requires the Tenant Agent Definitions V2 authority', () => {
+  assert.throws(
+    () =>
+      createDesktopWorkbenchCapabilityClientRaw(
+        { getAutomationCapabilities: async () => automationContract },
+        DEFAULT_CONFIG,
+        {
+          tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2Fixture(),
+          tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
+          tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
+          tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        },
+      ),
+    /desktop_tenant_agent_definitions_authority_required/u,
   );
 });
 
@@ -1796,6 +1822,9 @@ test('management routes become observed only after their typed clients read curr
         },
         config,
         {
+          tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture({
+            loadTenantAgentDefinitions: async () => [{ id: 'agent-1' }, { id: 'agent-2' }],
+          }),
           managementRouteClients: managementRouteClients(async (scope) => ({
             scope,
             itemCount: 2,
@@ -1850,6 +1879,11 @@ test('management route observation failures stay unavailable and never promote r
         projectId: 'project-1',
       },
       {
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture({
+          loadTenantAgentDefinitions: async () => {
+            throw new Error('authority unavailable');
+          },
+        }),
         managementRouteClients: managementRouteClients(async () => {
           throw new Error('authority unavailable');
         }),

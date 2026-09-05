@@ -26,6 +26,7 @@ import { tenantAgentBindingsOperationsV2Fixture } from './tenantAgentBindingsOpe
 import { tenantProjectsOperationsV2Fixture } from './tenantProjectsOperationsV2Fixture.mjs';
 import { tenantTasksOperationsV2Fixture } from './tenantTasksOperationsV2Fixture.mjs';
 import { tenantAgentDashboardOperationsV2Fixture } from './tenantAgentDashboardOperationsV2Fixture.mjs';
+import { tenantAgentDefinitionsOperationsV2Fixture } from './tenantAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -176,6 +177,7 @@ test('runtime snapshot declares tenant workspaces and canonical Agent Workspace 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
         tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       },
     );

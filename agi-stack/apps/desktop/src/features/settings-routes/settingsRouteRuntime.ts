@@ -1,5 +1,8 @@
 import type { DesktopRuntimeConfig } from '../../types';
-import { createAgentDefinitionsRouteClient } from './agentDefinitionsRouteClient';
+import {
+  createDesktopTenantAgentDefinitionsRouteClientV2,
+  type DesktopTenantAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import { createManagementRouteController } from './managementRouteController';
 import type {
   ManagementRouteBinding,
@@ -42,14 +45,15 @@ export function createAgentDefinitionsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  operations: DesktopTenantAgentDefinitionsOperationsV2,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-agent-definitions',
     config,
     context,
     Content,
-    dependencies.createClient ?? createAgentDefinitionsRouteClient,
+    (runtimeConfig) =>
+      createDesktopTenantAgentDefinitionsRouteClientV2(operations, runtimeConfig),
   );
 }
 

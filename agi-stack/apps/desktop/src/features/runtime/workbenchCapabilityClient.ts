@@ -31,7 +31,6 @@ import {
 import { deviceApprovalCapability } from '../device-approval/deviceApprovalCapability';
 import { tenantCreationCapability } from '../tenant-creation/tenantCreationCapability';
 import { invitationAcceptanceCapability } from '../invitation-acceptance/invitationAcceptanceCapability';
-import { createAgentDefinitionsRouteClient } from '../settings-routes/agentDefinitionsRouteClient';
 import {
   managementRouteObservation,
   managementRouteReasonPrefix,
@@ -54,6 +53,10 @@ import {
   createDesktopTenantTemplatesClientV2,
   type DesktopTenantTemplatesOperationsV2,
 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
+import {
+  createDesktopTenantAgentDefinitionsRouteClientV2,
+  type DesktopTenantAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import {
   createDesktopProjectChannelsClientV2,
   type DesktopProjectChannelsOperationsV2,
@@ -225,6 +228,11 @@ type AuxiliaryCloudCapabilities = Readonly<{
 type ManagementRouteCapabilityClients = Readonly<
   Record<ManagementRouteCapability, ManagementRouteClient>
 >;
+type ManagementRouteCapabilityClientOverrides = Readonly<
+  Partial<
+    Omit<ManagementRouteCapabilityClients, 'tenant-tenant-agent-definitions'>
+  >
+>;
 
 export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantAgentBindingsOperationsV2: Pick<
@@ -338,7 +346,8 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantDecisionRecordsOperationsV2: DesktopTenantDecisionRecordsOperationsV2;
   tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
   tenantWebhooksOperationsV2: DesktopTenantWebhooksOperationsV2;
-  managementRouteClients?: ManagementRouteCapabilityClients;
+  tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
+  managementRouteClients?: ManagementRouteCapabilityClientOverrides;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
     'projectMarketplacePlugins'
@@ -447,6 +456,14 @@ export function createDesktopWorkbenchCapabilityClient(
     'function'
   ) {
     throw new Error('desktop_tenant_agent_dashboard_authority_required');
+  }
+  const tenantAgentDefinitionsOperationsV2 =
+    options?.tenantAgentDefinitionsOperationsV2;
+  if (
+    typeof tenantAgentDefinitionsOperationsV2?.loadTenantAgentDefinitions !==
+    'function'
+  ) {
+    throw new Error('desktop_tenant_agent_definitions_authority_required');
   }
   const tenantProjectsOperationsV2 = options?.tenantProjectsOperationsV2;
   if (typeof tenantProjectsOperationsV2?.listTenantProjects !== 'function') {
@@ -573,13 +590,13 @@ export function createDesktopWorkbenchCapabilityClient(
     throw new Error('desktop_project_graph_authority_required');
   }
   options ??= {} as DesktopWorkbenchCapabilityClientOptions;
-  const managementRouteClients =
-    options.managementRouteClients ??
-    createManagementRouteClients(
-      config,
-      options.pluginMarketplaceOperationsV2 ??
-        UNAVAILABLE_PLUGIN_MARKETPLACE_OPERATIONS_V2,
-    );
+  const managementRouteClients = createManagementRouteClients(
+    config,
+    options.pluginMarketplaceOperationsV2 ??
+      UNAVAILABLE_PLUGIN_MARKETPLACE_OPERATIONS_V2,
+    tenantAgentDefinitionsOperationsV2,
+    options.managementRouteClients,
+  );
   const injectedAgentWorkspaceClient = options.agentWorkspaceClient ?? null;
   const agentWorkspaceJourneyClient =
     options.agentWorkspaceJourneyClient ??
@@ -1669,17 +1686,24 @@ function createManagementRouteClients(
     DesktopPluginMarketplaceCatalogOperationsV2,
     'projectMarketplacePlugins'
   >,
+  tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2,
+  overrides: ManagementRouteCapabilityClientOverrides = {},
 ): ManagementRouteCapabilityClients {
   return Object.freeze({
-    'tenant-tenant-providers': createProviderRouteClient(config),
+    'tenant-tenant-providers':
+      overrides['tenant-tenant-providers'] ?? createProviderRouteClient(config),
     'tenant-tenant-agent-definitions':
-      createAgentDefinitionsRouteClient(config),
-    'tenant-tenant-skills': createSkillsRouteClient(config),
-    'tenant-tenant-plugins': createPluginsRouteClient(
-      config,
-      pluginMarketplaceOperationsV2,
-    ),
-    'tenant-tenant-mcp-servers': createMcpServersRouteClient(config),
+      createDesktopTenantAgentDefinitionsRouteClientV2(
+        tenantAgentDefinitionsOperationsV2,
+        config,
+      ),
+    'tenant-tenant-skills':
+      overrides['tenant-tenant-skills'] ?? createSkillsRouteClient(config),
+    'tenant-tenant-plugins':
+      overrides['tenant-tenant-plugins'] ??
+      createPluginsRouteClient(config, pluginMarketplaceOperationsV2),
+    'tenant-tenant-mcp-servers':
+      overrides['tenant-tenant-mcp-servers'] ?? createMcpServersRouteClient(config),
   });
 }
 

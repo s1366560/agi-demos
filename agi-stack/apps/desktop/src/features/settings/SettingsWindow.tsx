@@ -24,6 +24,10 @@ import type { DesktopRouteRegistry } from '../navigation/desktopRouteRegistry';
 import type { DesktopPluginMarketplaceOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopTenantTemplatesOperationsV2 } from '../../plugins/desktopTenantTemplatesAuthorityModuleV2';
 import type { DesktopProjectChannelsOperationsV2 } from '../../plugins/desktopProjectChannelsAuthorityModuleV2';
+import {
+  createDesktopTenantAgentDefinitionsClientV2,
+  type DesktopTenantAgentDefinitionsOperationsV2,
+} from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
 import { RuntimeConfigPanel } from '../runtime/RuntimeConfigPanel';
 import { ProfileSettingsHost } from '../settings-routes/ProfileSettingsHost';
 import { PROFILE_ROUTE_ID } from '../settings-routes/profileRoutePresentationModel';
@@ -93,6 +97,7 @@ type SettingsWindowProps = {
   pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
+  tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
   onClose: () => void;
   onConfigChange: (config: DesktopRuntimeConfig) => void;
   onRuntimeStatusRefresh: () => Promise<void>;
@@ -115,6 +120,7 @@ export function SettingsWindow({
   pluginMarketplaceOperationsV2,
   tenantTemplatesOperationsV2,
   projectChannelsOperationsV2,
+  tenantAgentDefinitionsOperationsV2,
   onClose,
   onConfigChange,
   onRuntimeStatusRefresh,
@@ -144,6 +150,14 @@ export function SettingsWindow({
   const resourceContextKeyRef = useRef(resourceContextKey);
   activeSectionRef.current = section;
   resourceContextKeyRef.current = resourceContextKey;
+  const tenantAgentDefinitionsClientV2 = useMemo(
+    () =>
+      createDesktopTenantAgentDefinitionsClientV2(
+        tenantAgentDefinitionsOperationsV2,
+        config,
+      ),
+    [config, tenantAgentDefinitionsOperationsV2],
+  );
   const [resourceCounts, setResourceCounts] = useState<SettingsResourceCounts>({
     models: null,
     mcp: null,
@@ -224,7 +238,7 @@ export function SettingsWindow({
             : resourceSection === 'plugins'
               ? await pluginMarketplaceOperationsV2.listMarketplacePlugins(config, signal)
               : resourceSection === 'agents'
-                ? await managedResources.listManagedAgents(signal)
+                ? await tenantAgentDefinitionsClientV2.listManagedAgents(signal)
                 : await managedResources.listManagedSubAgents(signal);
         if (requestId !== resourceRequestId.current) return;
         setResourceItems(items);
@@ -250,7 +264,7 @@ export function SettingsWindow({
         if (requestId === resourceRequestId.current) setResourceLoading(false);
       }
     },
-    [config, pluginMarketplaceOperationsV2, resourceContextKey]
+    [config, pluginMarketplaceOperationsV2, resourceContextKey, tenantAgentDefinitionsClientV2]
   );
   const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
   const reloadSkillResources = useCallback(() => loadResources('skills'), [loadResources]);
@@ -307,7 +321,7 @@ export function SettingsWindow({
   });
   const agentManagement = useAgentDefinitionManagement({
     active: open,
-    config,
+    client: tenantAgentDefinitionsClientV2,
     contextKey: resourceContextKey,
     canManage: canManageAgentDefinitions,
     onReload: reloadAgentResources,
@@ -492,7 +506,7 @@ export function SettingsWindow({
         );
       } else {
         const agent = item as ManagedAgentDefinition;
-        await managedResources.setManagedAgentEnabled(
+        await tenantAgentDefinitionsClientV2.setManagedAgentEnabled(
           agent.id,
           action.nextActive,
           agent.revision,

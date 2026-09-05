@@ -51,9 +51,6 @@ import type {
   LlmProviderUsage,
   LlmProviderUsageStatistic,
   LlmProviderValidationOutcome,
-  ManagedAgentDefinition,
-  ManagedAgentDefinitionMutation,
-  ManagedExternalAcpAgent,
   ManagedLlmProvider,
   ManagedPlugin,
   MarketplacePluginCatalogEntry,
@@ -2347,10 +2344,6 @@ export class DesktopApiClient {
     );
   }
 
-  async listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]> {
-    return this.managedResourcesClient.listManagedAgents(signal);
-  }
-
   async listPromptTemplates(
     tenantId: string,
     signal?: AbortSignal,
@@ -2374,60 +2367,6 @@ export class DesktopApiClient {
     return this.managedResourcesClient.deletePromptTemplate(
       templateId,
       signal,
-      expectedRevision,
-    );
-  }
-
-  async listManagedExternalAcpAgents(signal?: AbortSignal): Promise<ManagedExternalAcpAgent[]> {
-    const tenantId = requireValue(this.config.tenantId, 'tenant id');
-    const payload = await this.request<unknown>(
-      `/api/v1/acp/tenants/${encodeURIComponent(tenantId)}/external-agents`,
-      { signal },
-    );
-    return readArray<ManagedExternalAcpAgent>(payload, [
-      'agents',
-      'items',
-      'externalAgents',
-      'data',
-    ]);
-  }
-
-  async setManagedAgentEnabled(
-    definitionId: string,
-    enabled: boolean,
-    expectedRevision?: number,
-  ): Promise<ManagedAgentDefinition> {
-    return this.managedResourcesClient.setManagedAgentEnabled(
-      definitionId,
-      enabled,
-      expectedRevision,
-    );
-  }
-
-  async createManagedAgentDefinition(
-    body: ManagedAgentDefinitionMutation,
-  ): Promise<ManagedAgentDefinition> {
-    return this.managedResourcesClient.createManagedAgentDefinition(body);
-  }
-
-  async updateManagedAgentDefinition(
-    definitionId: string,
-    body: ManagedAgentDefinitionMutation,
-    expectedRevision?: number,
-  ): Promise<ManagedAgentDefinition> {
-    return this.managedResourcesClient.updateManagedAgentDefinition(
-      definitionId,
-      body,
-      expectedRevision,
-    );
-  }
-
-  async deleteManagedAgentDefinition(
-    definitionId: string,
-    expectedRevision?: number,
-  ): Promise<{ deleted: boolean; id: string }> {
-    return this.managedResourcesClient.deleteManagedAgentDefinition(
-      definitionId,
       expectedRevision,
     );
   }

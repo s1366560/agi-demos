@@ -70,6 +70,7 @@ _EXPECTED_TARGET_MODULES = {
             "builtin://memstack/desktop/project-schema-authority",
             "builtin://memstack/desktop/project-team-authority",
             "builtin://memstack/desktop/project-blackboard-authority",
+            "builtin://memstack/desktop/project-channels-authority",
             "builtin://memstack/desktop/project-overview-authority",
             "builtin://memstack/desktop/project-search-authority",
             "builtin://memstack/desktop/runtime-clusters-authority",
@@ -89,6 +90,7 @@ _EXPECTED_TARGET_MODULES = {
             "builtin://memstack/desktop/session-timeline-authority",
             "builtin://memstack/desktop/tenant-agent-bindings-authority",
             "builtin://memstack/desktop/tenant-agent-dashboard-authority",
+            "builtin://memstack/desktop/tenant-agent-definitions-authority",
             "builtin://memstack/desktop/tenant-analytics-authority",
             "builtin://memstack/desktop/tenant-catalog-authority",
             "builtin://memstack/desktop/tenant-events-authority",
@@ -107,8 +109,10 @@ _EXPECTED_TARGET_MODULES = {
             "builtin://memstack/desktop/tenant-trust-authority",
             "builtin://memstack/desktop/tenant-projects-authority",
             "builtin://memstack/desktop/tenant-tasks-authority",
+            "builtin://memstack/desktop/tenant-templates-authority",
             "builtin://memstack/desktop/terminal-lifecycle-authority",
             "builtin://memstack/desktop/unified-runtimes-authority",
+            "builtin://memstack/desktop/user-profile-authority",
             "builtin://memstack/desktop/workspace-catalog-authority",
             "builtin://memstack/desktop/workspace-lifecycle-authority",
             "builtin://memstack/desktop/workspace-roster-authority",
@@ -258,7 +262,7 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 411
+    assert len(entries) == 415
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",
