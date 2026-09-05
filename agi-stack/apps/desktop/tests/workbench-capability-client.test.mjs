@@ -1,3 +1,4 @@
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -42,6 +43,8 @@ const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js
 function createDesktopWorkbenchCapabilityClient(automationApi, config, options) {
   return createDesktopWorkbenchCapabilityClientRaw(automationApi, config, {
     ...options,
+    tenantProvidersOperationsV2:
+      options?.tenantProvidersOperationsV2 ?? tenantProvidersOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2:
       options?.tenantSkillDefinitionsOperationsV2 ?? tenantSkillDefinitionsOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2:
@@ -1825,6 +1828,9 @@ test('management routes become observed only after their typed clients read curr
         },
         config,
         {
+          tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture({
+            listLlmProviders: async () => [{ id: 'provider-1' }, { id: 'provider-2' }],
+          }),
           tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture({
             loadTenantSkillDefinitions: async () => [{ id: 'skill-1' }, { id: 'skill-2' }],
           }),
@@ -1885,6 +1891,9 @@ test('management route observation failures stay unavailable and never promote r
         projectId: 'project-1',
       },
       {
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture({
+          listLlmProviders: async () => { throw new Error('authority unavailable'); },
+        }),
         tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture({
           loadTenantSkillDefinitions: async () => { throw new Error('authority unavailable'); },
         }),

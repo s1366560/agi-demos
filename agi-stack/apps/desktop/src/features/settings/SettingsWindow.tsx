@@ -1,3 +1,4 @@
+import { createDesktopTenantProvidersClientV2, type DesktopTenantProvidersOperationsV2 } from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
 import { createDesktopTenantSkillDefinitionsClientV2, type DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { createDesktopTenantSkillPackagesClientV2, type DesktopTenantSkillPackagesOperationsV2 } from '../../plugins/desktopTenantSkillPackagesAuthorityModuleV2';
 import { createDesktopTenantSkillEvolutionClientV2, type DesktopTenantSkillEvolutionOperationsV2 } from '../../plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
@@ -104,6 +105,7 @@ type SettingsWindowProps = {
   pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  tenantProvidersOperationsV2: DesktopTenantProvidersOperationsV2;
   tenantSkillDefinitionsOperationsV2: DesktopTenantSkillDefinitionsOperationsV2;
   tenantSkillPackagesOperationsV2: DesktopTenantSkillPackagesOperationsV2;
   tenantSkillEvolutionOperationsV2: DesktopTenantSkillEvolutionOperationsV2;
@@ -132,6 +134,7 @@ export function SettingsWindow({
   pluginMarketplaceOperationsV2,
   tenantTemplatesOperationsV2,
   tenantEvolutionOperationsV2,
+  tenantProvidersOperationsV2,
   tenantSkillDefinitionsOperationsV2,
   tenantSkillPackagesOperationsV2,
   tenantSkillEvolutionOperationsV2,
@@ -168,6 +171,10 @@ export function SettingsWindow({
   const resourceContextKeyRef = useRef(resourceContextKey);
   activeSectionRef.current = section;
   resourceContextKeyRef.current = resourceContextKey;
+  const tenantProvidersClientV2 = useMemo(
+    () => createDesktopTenantProvidersClientV2(tenantProvidersOperationsV2, config),
+    [config, tenantProvidersOperationsV2],
+  );
   const tenantSkillDefinitionsClientV2 = useMemo(
     () => createDesktopTenantSkillDefinitionsClientV2(tenantSkillDefinitionsOperationsV2, config),
     [config, tenantSkillDefinitionsOperationsV2],
@@ -741,6 +748,7 @@ export function SettingsWindow({
               ) : null}
               {section === 'models' ? (
                 <ModelProviderWorkspace
+                  client={tenantProvidersClientV2}
                   key={`${config.mode}|${config.apiBaseUrl}|${config.tenantId}|${config.projectId}|${config.workspaceId}`}
                   config={config}
                   canManage={canManageProviders}

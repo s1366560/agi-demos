@@ -1,3 +1,4 @@
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -216,6 +217,7 @@ test('Snapshot v4 closes unversioned Workspaces and Blackboard observations', as
         config,
         {
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+          tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
           tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
           tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
           projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
@@ -368,6 +370,7 @@ test('authority failures and missing Blackboard workspace stay scoped and unavai
       config,
       {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
         tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),

@@ -143,6 +143,14 @@ import {
   createDesktopTenantSubAgentDefinitionsClientV2,
   createDesktopTenantSubAgentDefinitionsOperationsV2,
 } from './plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
+import {
+  createDesktopTenantProvidersClientV2,
+  createDesktopTenantProvidersOperationsV2,
+} from './plugins/desktopTenantProvidersAuthorityModuleV2';
+import {
+  createDesktopWorkspaceAgentPolicyClientV2,
+  createDesktopWorkspaceAgentPolicyOperationsV2,
+} from './plugins/desktopWorkspaceAgentPolicyAuthorityModuleV2';
 import { createDesktopTenantSkillDefinitionsClientV2, createDesktopTenantSkillDefinitionsOperationsV2 } from './plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { createDesktopTenantSkillPackagesOperationsV2 } from './plugins/desktopTenantSkillPackagesAuthorityModuleV2';
 import { createDesktopTenantSkillEvolutionOperationsV2 } from './plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
@@ -1111,6 +1119,18 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantProvidersOperationsV2 = useMemo(
+    () => createDesktopTenantProvidersOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopWorkspaceAgentPolicyOperationsV2 = useMemo(
+    () => createDesktopWorkspaceAgentPolicyOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
   const desktopTenantSkillDefinitionsOperationsV2 = useMemo(
     () => createDesktopTenantSkillDefinitionsOperationsV2(
       () => desktopPluginMarketplaceGenerationActionsRefV2.current,
@@ -1554,6 +1574,10 @@ export function App() {
       ),
     [config, desktopTenantAgentDefinitionsOperationsV2],
   );
+  const desktopTenantProvidersClientV2 = useMemo(
+    () => createDesktopTenantProvidersClientV2(desktopTenantProvidersOperationsV2, config),
+    [config, desktopTenantProvidersOperationsV2],
+  );
   const desktopTenantSkillDefinitionsClientV2 = useMemo(
     () => createDesktopTenantSkillDefinitionsClientV2(
       desktopTenantSkillDefinitionsOperationsV2, config,
@@ -1605,6 +1629,7 @@ export function App() {
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
       tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
       tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
+      tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
       tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
       tenantAgentDefinitionsOperationsV2:
         desktopTenantAgentDefinitionsOperationsV2,
@@ -1680,6 +1705,7 @@ export function App() {
       desktopTenantTemplatesOperationsV2,
       desktopTenantAgentDefinitionsOperationsV2,
       desktopTenantSkillDefinitionsOperationsV2,
+      desktopTenantProvidersOperationsV2,
       desktopUserProfileOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
       desktopTenantOverviewOperationsV2,
@@ -1744,6 +1770,7 @@ export function App() {
         tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
+        tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         tenantAgentDefinitionsOperationsV2:
           desktopTenantAgentDefinitionsOperationsV2,
@@ -1794,6 +1821,7 @@ export function App() {
       desktopInstanceTemplatesOperationsV2,
       desktopTenantEvolutionOperationsV2,
       desktopTenantSkillDefinitionsOperationsV2,
+      desktopTenantProvidersOperationsV2,
       desktopTenantTemplatesOperationsV2,
       desktopTenantAgentDefinitionsOperationsV2,
       desktopUserProfileOperationsV2,
@@ -1995,6 +2023,7 @@ export function App() {
       connection === 'ready' &&
       (config.mode === 'cloud' || (localRuntimeMode && localRuntimeAuthorityReady)),
     runtimeProjectionRefreshRevision,
+    desktopTenantProvidersClientV2,
     runtimeModelRole,
   );
   const newThreadWorkspaces = dataset.workspacesByProject[config.projectId] ?? [];
@@ -2038,10 +2067,24 @@ export function App() {
       newThreadRuntimeConfig,
     ],
   );
+  const newThreadWorkspaceAgentPolicyClientV2 = useMemo(
+    () => createDesktopWorkspaceAgentPolicyClientV2(
+      desktopWorkspaceAgentPolicyOperationsV2, newThreadRuntimeConfig,
+    ),
+    [desktopWorkspaceAgentPolicyOperationsV2, newThreadRuntimeConfig],
+  );
+  const newThreadTenantProvidersClientV2 = useMemo(
+    () => createDesktopTenantProvidersClientV2(
+      desktopTenantProvidersOperationsV2, newThreadRuntimeConfig,
+    ),
+    [desktopTenantProvidersOperationsV2, newThreadRuntimeConfig],
+  );
   const workspaceAgentPolicy = useWorkspaceAgentPolicy(
     newThreadRuntimeConfig,
     identityAuthenticated && showRuntimeConfig && connection === 'ready',
     desktopWorkspaceRosterOperationsV2,
+    newThreadWorkspaceAgentPolicyClientV2,
+    newThreadTenantProvidersClientV2,
   );
   const canManageWorkspacePolicy = useMemo(() => {
     if (auth.user?.roles.some((role) => role === 'admin' || role === 'owner')) return true;
@@ -7745,6 +7788,7 @@ export function App() {
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
+        tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
         tenantSkillPackagesOperationsV2: desktopTenantSkillPackagesOperationsV2,
         tenantSkillEvolutionOperationsV2: desktopTenantSkillEvolutionOperationsV2,
         tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,

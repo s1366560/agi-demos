@@ -1,10 +1,10 @@
+import { createTenantProvidersHttpClientV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const {
   filterProviders,
   providerConnectionStatus,
@@ -1141,9 +1141,11 @@ test('routing policy client normalizes targets and sends optimistic revisions', 
   };
 
   try {
-    const local = new DesktopApiClient({
+    const local = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
+      tenantId: 'tenant-a',
+      localApiToken: 'launch-capability',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'local-user-session',
     });
@@ -1188,7 +1190,7 @@ test('routing policy client normalizes targets and sends optimistic revisions', 
 });
 
 test('Desktop client exposes workspace routing without a second runtime-selection mutation', () => {
-  const local = new DesktopApiClient({
+  const local = createTenantProvidersHttpClientV2Fixture({
     ...DEFAULT_CONFIG,
     mode: 'local',
     apiBaseUrl: 'http://127.0.0.1:8088',
@@ -1248,14 +1250,14 @@ test('provider adapters use PUT, Rust revision guards, and canonical health chec
   };
 
   try {
-    const local = new DesktopApiClient({
+    const local = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'local-user-session',
       localApiToken: 'launch-capability',
     });
-    const cloud = new DesktopApiClient({
+    const cloud = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.example.test',
@@ -1342,14 +1344,14 @@ test('provider create adapters send auth method and omit mismatched credentials'
   };
 
   try {
-    const local = new DesktopApiClient({
+    const local = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'local-user-session',
       localApiToken: 'launch-capability',
     });
-    const cloud = new DesktopApiClient({
+    const cloud = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.example.test',
@@ -1419,7 +1421,7 @@ test('environment provider requests send only variable references in local and c
     }
     return new Response(
       JSON.stringify({
-        id: `provider-${calls.length}`,
+        id: init?.method === 'PUT' ? 'environment-provider' : `provider-${calls.length}`,
         name: 'Environment provider',
         provider_type: 'openai',
         auth_method: 'environment',
@@ -1431,14 +1433,14 @@ test('environment provider requests send only variable references in local and c
 
   try {
     const clients = [
-      new DesktopApiClient({
+      createTenantProvidersHttpClientV2Fixture({
         ...DEFAULT_CONFIG,
         mode: 'local',
         apiBaseUrl: 'http://127.0.0.1:8088',
         apiKey: 'local-user-session',
         localApiToken: 'launch-capability',
       }),
-      new DesktopApiClient({
+      createTenantProvidersHttpClientV2Fixture({
         ...DEFAULT_CONFIG,
         mode: 'cloud',
         apiBaseUrl: 'https://api.example.test',
@@ -1513,14 +1515,14 @@ test('OAuth provider mutations fail closed before making a request', async () =>
 
   try {
     const clients = [
-      new DesktopApiClient({
+      createTenantProvidersHttpClientV2Fixture({
         ...DEFAULT_CONFIG,
         mode: 'local',
         apiBaseUrl: 'http://127.0.0.1:8088',
         apiKey: 'local-user-session',
         localApiToken: 'launch-capability',
       }),
-      new DesktopApiClient({
+      createTenantProvidersHttpClientV2Fixture({
         ...DEFAULT_CONFIG,
         mode: 'cloud',
         apiBaseUrl: 'https://api.example.test',
@@ -1548,7 +1550,7 @@ test('OAuth provider mutations fail closed before making a request', async () =>
           },
           'provider-create-oauth-retry-1',
         ),
-        /OAuth provider authentication is not available/,
+        /tenant_provider_auth_method_unavailable/,
       );
       await assert.rejects(
         client.updateLlmProvider('oauth-provider', {
@@ -1561,7 +1563,7 @@ test('OAuth provider mutations fail closed before making a request', async () =>
           active: true,
           expectedRevision: 2,
         }),
-        /OAuth provider authentication is not available/,
+        /tenant_provider_auth_method_unavailable/,
       );
       await assert.rejects(
         client.testLlmProviderDraft({
@@ -1571,7 +1573,7 @@ test('OAuth provider mutations fail closed before making a request', async () =>
           baseUrl: 'https://api.anthropic.com',
           active: true,
         }),
-        /OAuth provider authentication is not available/,
+        /tenant_provider_auth_method_unavailable/,
       );
     }
     assert.equal(requestCount, 0);
@@ -1645,7 +1647,7 @@ test('provider responses normalize compatibility fields explicitly', async () =>
     );
 
   try {
-    const local = new DesktopApiClient({
+    const local = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
@@ -1889,14 +1891,14 @@ test('provider discovery and usage use the same local and cloud contracts', asyn
   };
 
   try {
-    const local = new DesktopApiClient({
+    const local = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'local-user-session',
       localApiToken: 'launch-capability',
     });
-    const cloud = new DesktopApiClient({
+    const cloud = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.example.test',
@@ -2066,9 +2068,10 @@ test('provider usage preserves an authoritative unavailable state instead of inv
     );
 
   try {
-    const local = new DesktopApiClient({
+    const local = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
+      tenantId: 'tenant-a',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'local-user-session',
       localApiToken: 'launch-capability',
@@ -2117,7 +2120,7 @@ test('provider catalogs preserve static fallback provenance and reject empty uns
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.example.test',
@@ -2219,14 +2222,14 @@ test('draft validation requires explicit probe evidence and can return a discove
   };
 
   try {
-    const local = new DesktopApiClient({
+    const local = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
       apiKey: 'local-user-session',
       localApiToken: 'launch-capability',
     });
-    const cloud = new DesktopApiClient({
+    const cloud = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.example.test',
@@ -2306,14 +2309,14 @@ test('provider validation rejects responses without explicit probe evidence', as
 
   try {
     const clients = [
-      new DesktopApiClient({
+      createTenantProvidersHttpClientV2Fixture({
         ...DEFAULT_CONFIG,
         mode: 'local',
         apiBaseUrl: 'http://127.0.0.1:8088',
         apiKey: 'local-user-session',
         localApiToken: 'launch-capability',
       }),
-      new DesktopApiClient({
+      createTenantProvidersHttpClientV2Fixture({
         ...DEFAULT_CONFIG,
         mode: 'cloud',
         apiBaseUrl: 'https://api.example.test',
@@ -2343,14 +2346,14 @@ test('provider deletion uses an expected revision and a replay-safe idempotency 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), init });
-    return new Response(JSON.stringify({ deleted: true, id: 'provider-local', replayed: false }), {
+    return new Response(JSON.stringify({ deleted: true, id: 'provider / local', replayed: false }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     });
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantProvidersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
@@ -2406,7 +2409,8 @@ test('routing policy cleanup removes only the deleted provider routes', () => {
 });
 
 test('provider workspace exposes a guarded local delete lifecycle', () => {
-  assert.match(apiClientSource, /async deleteLlmProvider\(/);
+  assert.doesNotMatch(apiClientSource, /async deleteLlmProvider\(/);
+  assert.match(settingsWindowSource, /createDesktopTenantProvidersClientV2/u);
   assert.match(modelProviderWorkspaceSource, /deleteConfirmProviderId/);
   assert.match(modelProviderWorkspaceSource, /routingPolicyWithoutProvider\(routingPolicy, currentProvider\.id\)/);
   assert.match(modelProviderWorkspaceSource, /deleteLlmProvider\(\s*currentProvider\.id,\s*attempt\.expectedRevision,\s*attempt\.idempotencyKey/s);

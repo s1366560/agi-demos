@@ -1,6 +1,7 @@
+import type { DesktopTenantProvidersClientV2 } from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { DesktopApiClient, DesktopApiError } from '../../api/client';
+import { DesktopApiError } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type {
   DesktopRuntimeConfig,
@@ -37,10 +38,10 @@ export function useWorkspaceRuntimeProvider(
   config: DesktopRuntimeConfig,
   enabled: boolean,
   refreshRevision: number,
+  client: DesktopTenantProvidersClientV2,
   role: LlmRoutingRole = 'default',
 ): WorkspaceRuntimeProviderSelection {
   const { t } = useI18n();
-  const client = useMemo(() => new DesktopApiClient(config), [config]);
   const scopeKey = [
     config.mode,
     config.apiBaseUrl,

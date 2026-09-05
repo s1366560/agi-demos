@@ -6,6 +6,88 @@
   "trust": "builtin",
   "modules": [
     {
+      "module_ref": "builtin://memstack/desktop/workspace-agent-policy-authority",
+      "entrypoint": "applyDesktopWorkspaceAgentPolicyAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopWorkspaceAgentPolicyAuthorityModuleV2.ts",
+        "digest": "sha256:3553a2d249a38f5339b019a9c9baf6be5ee2f544a8b22e777088a8b66ca15513"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.workspace-agent-policy-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:9004d1f33091635bf89f49ab946badf9340d70fd1210113955e5cf1b453eb5f4"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-providers-authority",
+      "entrypoint": "applyDesktopTenantProvidersAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantProvidersAuthorityModuleV2.ts",
+        "digest": "sha256:bbf7c65d150480c455a954c7399a3752f926c0bcb62408f8ce545579efcee2e6"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-providers-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:eecff02497693fb05cddad1b41c03e51f743e0e2337e2083621963da1efd0371"
+    },
+    {
       "module_ref": "builtin://memstack/web/renderer-host",
       "entrypoint": "applyWebRendererHostV2",
       "artifact": {

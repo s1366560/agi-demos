@@ -1,3 +1,4 @@
+import { createTenantProvidersHttpOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -163,7 +164,8 @@ test('each route owns a typed authority adapter and validates its runtime scope'
   const cases = [
     [
       createProviderRouteClient(config(), {
-        listLlmProviders: async () => {
+        listLlmProviders: async (input) => {
+          assert.deepEqual(input.scope, { authority: scope.authority, tenantId: scope.tenantId });
           calls.push('providers');
           return [{ id: 'provider-1' }];
         },
@@ -256,14 +258,14 @@ test('local provider management observes the sidecar without invoking cloud_requ
   };
 
   try {
-    const localConfig = { ...config('local'), apiKey: '' };
+    const localConfig = { ...config('local'), apiKey: 'provider-route-trusted-session' };
     const scope = {
       authority: 'local',
       tenantId: localConfig.tenantId,
       projectId: localConfig.projectId,
     };
 
-    assert.deepEqual(await createProviderRouteClient(localConfig).observe(scope), {
+    assert.deepEqual(await createProviderRouteClient(localConfig, createTenantProvidersHttpOperationsV2Fixture()).observe(scope), {
       scope,
       itemCount: 0,
     });
@@ -358,4 +360,24 @@ test('skills route forwards the scoped V2 observation and rejects without a fall
   assert.deepEqual(calls[0], { config: runtime, scope, signal: controller.signal });
   await assert.rejects(client.observe({ ...scope, tenantId: 'another-tenant' }), /management_route_runtime_scope_mismatch/u);
   assert.equal(calls.length, 1);
+});
+
+
+test('provider route forwards V2 tenant scope and signal without retrying a rejected authority', async () => {
+  const runtime = config();
+  const scope = { authority: runtime.mode, tenantId: runtime.tenantId, projectId: runtime.projectId };
+  const signal = new AbortController().signal;
+  const inputs = [];
+  const rejected = new Error('missing_service_provider');
+  const client = createProviderRouteClient(runtime, {
+    async listLlmProviders(input) { inputs.push(input); throw rejected; },
+    async listLlmProviderTypes(input) { inputs.push(input); return []; },
+  });
+  await assert.rejects(client.observe(scope, { signal }), (error) => error === rejected);
+  assert.equal(inputs.length, 2);
+  for (const input of inputs) assert.deepEqual(input, {
+    config: runtime, args: [], scope: { authority: scope.authority, tenantId: scope.tenantId }, signal,
+  });
+  await assert.rejects(client.observe({ ...scope, tenantId: 'another-tenant' }), /management_route_runtime_scope_mismatch/u);
+  assert.equal(inputs.length, 2);
 });

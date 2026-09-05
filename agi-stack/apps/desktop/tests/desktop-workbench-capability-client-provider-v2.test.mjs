@@ -1,3 +1,4 @@
+import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -114,6 +115,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
+    tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
@@ -181,6 +183,7 @@ test('each publication returns one frozen generation-pinned capability client bi
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
+    tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
@@ -260,6 +263,7 @@ test('failed capability client publication keeps the last-good binding', () => {
     ...projectWorkspaceOperationsV2Fixture(),
     tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
     tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
+    tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),
@@ -336,6 +340,7 @@ test('failed capability client publication keeps the last-good binding', () => {
         ...projectWorkspaceOperationsV2Fixture(),
         tenantAgentBindingsOperationsV2: tenantAgentBindingsOperationsV2(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2(),
+        tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
         tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2(),

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { DesktopApiClient, DesktopApiError } from '../../api/client';
+import type { DesktopWorkspaceAgentPolicyClientV2 } from '../../plugins/desktopWorkspaceAgentPolicyAuthorityModuleV2';
+import type { DesktopTenantProvidersClientV2 } from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
 import type { DesktopWorkspaceRosterOperationsV2 } from '../../plugins/desktopWorkspaceRosterAuthorityModuleV2';
 import type {
   DesktopRuntimeConfig,
@@ -32,8 +33,9 @@ export function useWorkspaceAgentPolicy(
   config: DesktopRuntimeConfig,
   enabled: boolean,
   workspaceRosterOperationsV2: DesktopWorkspaceRosterOperationsV2,
+  policyClient: DesktopWorkspaceAgentPolicyClientV2,
+  providerClient: Pick<DesktopTenantProvidersClientV2, 'listLlmProviders'>,
 ): WorkspaceAgentPolicyAuthority {
-  const client = useMemo(() => new DesktopApiClient(config), [config]);
   const scopeKey = [
     config.mode,
     config.apiBaseUrl,
@@ -75,12 +77,13 @@ export function useWorkspaceAgentPolicy(
       compatibilityMode: false,
       error: null,
     });
-    const policyPromise: Promise<{
-      policy: WorkspaceAgentPolicy | null;
-      compatibilityMode: boolean;
-    }> = config.workspaceId
-      ? loadAgentPolicy(client, config.projectId, config.workspaceId, controller.signal)
-      : Promise.resolve({ policy: null, compatibilityMode: false });
+    const policyPromise = config.workspaceId
+      ? policyClient.getWorkspaceAgentPolicy(
+          config.projectId,
+          config.workspaceId,
+          controller.signal,
+        )
+      : Promise.resolve<WorkspaceAgentPolicy | null>(null);
     const membersPromise = config.workspaceId
       ? workspaceRosterOperationsV2.listWorkspaceMembers({
           config,
@@ -89,18 +92,18 @@ export function useWorkspaceAgentPolicy(
       : Promise.resolve<WorkspaceMemberSummary[]>([]);
     void Promise.all([
       policyPromise,
-      client.listLlmProviders(controller.signal),
+      providerClient.listLlmProviders(controller.signal),
       membersPromise,
     ])
-      .then(([policyResult, providers, members]) => {
+      .then(([policy, providers, members]) => {
         if (controller.signal.aborted) return;
         setState({
           scopeKey,
-          policy: policyResult.policy,
+          policy,
           providers,
           members,
           loading: false,
-          compatibilityMode: policyResult.compatibilityMode,
+          compatibilityMode: false,
           error: null,
         });
       })
@@ -117,12 +120,18 @@ export function useWorkspaceAgentPolicy(
         });
       });
     return () => controller.abort();
-  }, [client, config, enabled, refreshRevision, scopeKey, workspaceRosterOperationsV2]);
+  }, [
+    policyClient,
+    providerClient,
+    config,
+    enabled,
+    refreshRevision,
+    scopeKey,
+    workspaceRosterOperationsV2,
+  ]);
 
   const current =
-    state.scopeKey === scopeKey
-      ? state
-      : { ...state, policy: null, providers: [], members: [] };
+    state.scopeKey === scopeKey ? state : { ...state, policy: null, providers: [], members: [] };
   const refresh = useCallback(() => setRefreshRevision((value) => value + 1), []);
   const acceptPolicy = useCallback(
     (policy: WorkspaceAgentPolicy) => {
@@ -145,35 +154,4 @@ export function useWorkspaceAgentPolicy(
     refresh,
     acceptPolicy,
   };
-}
-
-async function loadAgentPolicy(
-  client: DesktopApiClient,
-  projectId: string,
-  workspaceId: string,
-  signal: AbortSignal,
-): Promise<{ policy: WorkspaceAgentPolicy; compatibilityMode: boolean }> {
-  try {
-    return {
-      policy: await client.getWorkspaceAgentPolicy(projectId, workspaceId, signal),
-      compatibilityMode: false,
-    };
-  } catch (caught) {
-    if (
-      !(caught instanceof DesktopApiError) ||
-      (caught.status !== 404 && caught.status !== 405 && caught.status !== 501)
-    ) {
-      throw caught;
-    }
-    const legacy = await client.getLlmProviderRoutingPolicy(projectId, workspaceId, signal);
-    return {
-      policy: {
-        ...legacy,
-        reasoning_effort: 'medium',
-        permission_mode: 'ask',
-        capability_version: 'legacy-routing-policy-v1',
-      },
-      compatibilityMode: true,
-    };
-  }
 }

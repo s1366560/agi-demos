@@ -1,3 +1,4 @@
+import type { ProviderRouteAuthority } from '../settings-routes/providerRouteClient';
 import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
@@ -233,12 +234,13 @@ type ManagementRouteCapabilityClientOverrides = Readonly<
   Partial<
     Omit<
       ManagementRouteCapabilityClients,
-      'tenant-tenant-agent-definitions' | 'tenant-tenant-skills'
+      'tenant-tenant-agent-definitions' | 'tenant-tenant-skills' | 'tenant-tenant-providers'
     >
   >
 >;
 
 export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
+  tenantProvidersOperationsV2: ProviderRouteAuthority;
   tenantAgentBindingsOperationsV2: Pick<
     DesktopTenantAgentBindingsOperationsV2,
     'listTenantAgentBindings'
@@ -473,6 +475,11 @@ export function createDesktopWorkbenchCapabilityClient(
   ) {
     throw new Error('desktop_tenant_agent_definitions_authority_required');
   }
+  const tenantProvidersOperationsV2 = options?.tenantProvidersOperationsV2;
+  if (typeof tenantProvidersOperationsV2?.listLlmProviders !== 'function' ||
+      typeof tenantProvidersOperationsV2?.listLlmProviderTypes !== 'function') {
+    throw new Error('desktop_tenant_providers_authority_required');
+  }
   const tenantSkillDefinitionsOperationsV2 = options?.tenantSkillDefinitionsOperationsV2;
   if (typeof tenantSkillDefinitionsOperationsV2?.loadTenantSkillDefinitions !== 'function') {
     throw new Error('desktop_tenant_skill_definitions_authority_required');
@@ -608,6 +615,7 @@ export function createDesktopWorkbenchCapabilityClient(
       UNAVAILABLE_PLUGIN_MARKETPLACE_OPERATIONS_V2,
     tenantAgentDefinitionsOperationsV2,
     tenantSkillDefinitionsOperationsV2,
+    tenantProvidersOperationsV2,
     options.managementRouteClients,
   );
   const injectedAgentWorkspaceClient = options.agentWorkspaceClient ?? null;
@@ -1704,11 +1712,12 @@ function createManagementRouteClients(
     DesktopTenantSkillDefinitionsOperationsV2,
     'loadTenantSkillDefinitions'
   >,
+  tenantProvidersOperationsV2: ProviderRouteAuthority,
   overrides: ManagementRouteCapabilityClientOverrides = {},
 ): ManagementRouteCapabilityClients {
   return Object.freeze({
     'tenant-tenant-providers':
-      overrides['tenant-tenant-providers'] ?? createProviderRouteClient(config),
+      createProviderRouteClient(config, tenantProvidersOperationsV2),
     'tenant-tenant-agent-definitions':
       createDesktopTenantAgentDefinitionsRouteClientV2(
         tenantAgentDefinitionsOperationsV2,

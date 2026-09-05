@@ -1,3 +1,4 @@
+import { createDesktopTenantProvidersQaOperationsV2 } from './desktopTenantProvidersAuthorityQaV2';
 import { createDesktopTenantSkillDefinitionsQaOperationsV2 } from './desktopTenantSkillDefinitionsAuthorityQaV2';
 import { createDesktopTenantSkillPackagesQaOperationsV2 } from './desktopTenantSkillPackagesAuthorityQaV2';
 import { createDesktopTenantSkillEvolutionQaOperationsV2 } from './desktopTenantSkillEvolutionAuthorityQaV2';
@@ -46,6 +47,7 @@ const QA_TENANT_ID = 'tenant-northstar';
 const QA_PROJECT_ID = 'project-desktop-client';
 const QA_WORKSPACE_ID = 'workspace-desktop-client';
 const NOW = '2026-07-14T09:40:00.000Z';
+const tenantProvidersOperationsV2 = createDesktopTenantProvidersQaOperationsV2();
 const tenantSkillDefinitionsOperationsV2 = createDesktopTenantSkillDefinitionsQaOperationsV2();
 const tenantSkillPackagesOperationsV2 = createDesktopTenantSkillPackagesQaOperationsV2();
 const tenantSkillEvolutionOperationsV2 = createDesktopTenantSkillEvolutionQaOperationsV2();
@@ -1844,6 +1846,7 @@ function ProviderSettingsQa() {
       pluginMarketplaceOperationsV2={qaPluginMarketplaceOperationsV2}
       tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
       tenantEvolutionOperationsV2={tenantEvolutionOperationsV2}
+          tenantProvidersOperationsV2={tenantProvidersOperationsV2}
           tenantSkillDefinitionsOperationsV2={tenantSkillDefinitionsOperationsV2}
           tenantSkillPackagesOperationsV2={tenantSkillPackagesOperationsV2}
           tenantSkillEvolutionOperationsV2={tenantSkillEvolutionOperationsV2}

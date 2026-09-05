@@ -77,6 +77,8 @@ import { desktopTenantPromptTemplatesAuthorityDefinitionV2 } from './desktopTena
 import { desktopTenantSkillDefinitionsAuthorityDefinitionV2 } from './desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { desktopTenantSkillPackagesAuthorityDefinitionV2 } from './desktopTenantSkillPackagesAuthorityModuleV2';
 import { desktopTenantSkillEvolutionAuthorityDefinitionV2 } from './desktopTenantSkillEvolutionAuthorityModuleV2';
+import { desktopTenantProvidersAuthorityDefinitionV2 } from './desktopTenantProvidersAuthorityModuleV2';
+import { desktopWorkspaceAgentPolicyAuthorityDefinitionV2 } from './desktopWorkspaceAgentPolicyAuthorityModuleV2';
 import { desktopTenantSubAgentDefinitionsAuthorityDefinitionV2 } from './desktopTenantSubAgentDefinitionsAuthorityModuleV2';
 import { desktopTenantGenesAuthorityDefinitionV2 } from './desktopTenantGenesAuthorityModuleV2';
 import { desktopTenantOrganizationSettingsAuthorityDefinitionV2 } from './desktopTenantOrganizationSettingsAuthorityModuleV2';
@@ -169,6 +171,8 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopTenantSkillDefinitionsAuthorityDefinitionV2,
     desktopTenantSkillPackagesAuthorityDefinitionV2,
     desktopTenantSkillEvolutionAuthorityDefinitionV2,
+    desktopTenantProvidersAuthorityDefinitionV2,
+    desktopWorkspaceAgentPolicyAuthorityDefinitionV2,
     desktopTenantSubAgentDefinitionsAuthorityDefinitionV2,
     desktopTenantGenesAuthorityDefinitionV2,
     desktopTenantOrganizationSettingsAuthorityDefinitionV2,
