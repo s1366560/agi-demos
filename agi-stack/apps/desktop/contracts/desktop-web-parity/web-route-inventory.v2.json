@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "9a1be4d9f27bfe19bf05669509eb30a84dfdbf77",
+  "source_revision": "76bc98682faeacf8d1f14bd16a7a78b0ee2d2fa3",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 712,
+    "audited_sources": 715,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1940,
-    "production_dependency_ownership": 711,
-    "production_dependency_sources": 711,
+    "production_dependency_edges": 1949,
+    "production_dependency_ownership": 714,
+    "production_dependency_sources": 714,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 5
@@ -211,7 +211,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:359a613994ba350198e5bc0e4dad0c98ef4dc5817b6996288e90d47ac9c47c3d"
+      "sha256": "sha256:d1c8a2987662029435074fdb4b99f768d2364e6404559dacee916fe4b52544db"
     },
     {
       "source_entry": "web/src/components/agent/SlashCommandDropdown.tsx",
@@ -855,14 +855,21 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:be25f9dcfa8e85589df2d82c93f40e5577eb9d8038ab746a1d3772c22abff25b"
+      "sha256": "sha256:7bfd891fe25187800bf1f5253119a0b46690b170aec061ad0e9c576752a93efa"
     },
     {
       "source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:4bcd6d5f62a6679edc9d3b71834f8ac9600bf7e315dafc2ba5eaed5a52288930"
+      "sha256": "sha256:1dae06f0167a5e26ac17c709642ac2158cfd1e05df7d86e5ac8ffa25693aa460"
+    },
+    {
+      "source_entry": "web/src/components/agent/sandbox/terminalScopeV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:f017450da14227feb01ec3720cc0c0af477dbe76df0761a906cb820c6b81e0db"
     },
     {
       "source_entry": "web/src/components/agent/styles.ts",
@@ -3988,6 +3995,13 @@
       "sha256": "sha256:e3b274c81b80ffd8ea44092ee6e7a9d700100e530ee09c2dda84a732fab6500c"
     },
     {
+      "source_entry": "web/src/services/terminalRetainedSessionV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:8c50007775a6f685d0fe62bc6a25a95c6f8034b354b7c904fd16dd39aa5fc9c7"
+    },
+    {
       "source_entry": "web/src/services/traceService.ts",
       "roles": [
         "production_dependency"
@@ -4328,7 +4342,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:28f5e2de950e189ad3f250637842e30ee9d0f10de590d6a3b3a5076d98ee7b79"
+      "sha256": "sha256:313877cf34dfec5810a6067b2c02b5df314f9594f714400551dfb8edd4980006"
+    },
+    {
+      "source_entry": "web/src/stores/sandboxTerminalRequestV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:9b232af702e46921ec258e66f62cb603c91bc9d2749a5e75cb5b56a4fead8f02"
     },
     {
       "source_entry": "web/src/stores/skill.ts",
@@ -10480,7 +10501,17 @@
     {
       "from_source_entry": "web/src/components/agent/SandboxSection.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/agent/sandbox/terminalScopeV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/SandboxSection.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/ui/lazyAntd.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/SandboxSection.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/SandboxSection.tsx",
@@ -11300,7 +11331,17 @@
     {
       "from_source_entry": "web/src/components/agent/sandbox/SandboxTerminal.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/components/agent/sandbox/terminalScopeV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/sandbox/SandboxTerminal.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/components/common/Spinner.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/agent/sandbox/SandboxTerminal.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx",
@@ -11310,12 +11351,12 @@
     {
       "from_source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/urlUtils.ts"
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx",
       "relationship": "static_import",
-      "to_source_entry": "web/src/utils/tokenResolver.ts"
+      "to_source_entry": "web/src/services/terminalRetainedSessionV2.ts"
     },
     {
       "from_source_entry": "web/src/components/agent/tasks/TaskLanePanel.tsx",
@@ -17918,6 +17959,21 @@
       "to_source_entry": "web/src/services/client/urlUtils.ts"
     },
     {
+      "from_source_entry": "web/src/services/terminalRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/terminalRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/terminalRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/utils/tokenResolver.ts"
+    },
+    {
       "from_source_entry": "web/src/services/traceService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
@@ -18735,7 +18791,17 @@
     {
       "from_source_entry": "web/src/stores/sandbox.ts",
       "relationship": "static_import",
+      "to_source_entry": "web/src/stores/sandboxTerminalRequestV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/stores/sandbox.ts",
+      "relationship": "static_import",
       "to_source_entry": "web/src/utils/logger.ts"
+    },
+    {
+      "from_source_entry": "web/src/stores/sandboxTerminalRequestV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/stores/skill.ts",
@@ -20322,6 +20388,15 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/agent/sandbox/terminalScopeV2.ts"
     },
     {
       "classification": "shared",
@@ -25429,6 +25504,15 @@
       "classification": "shared",
       "owner_source_entries": [
         "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/terminalRetainedSessionV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
         "web/src/pages/tenant/AgentDashboard.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
@@ -25967,6 +26051,17 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/stores/sandbox.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/project/NewMemory.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx",
+        "web/src/pages/tenant/SkillDetail.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/stores/sandboxTerminalRequestV2.ts"
     },
     {
       "classification": "shared",
@@ -27309,6 +27404,7 @@
     "web/src/components/agent/sandbox/SandboxStatusIndicator.tsx",
     "web/src/components/agent/sandbox/SandboxTerminal.tsx",
     "web/src/components/agent/sandbox/TerminalImpl.tsx",
+    "web/src/components/agent/sandbox/terminalScopeV2.ts",
     "web/src/components/agent/styles.ts",
     "web/src/components/agent/tasks/TaskLanePanel.tsx",
     "web/src/components/agent/tasks/taskProgressDerivation.ts",
@@ -27755,6 +27851,7 @@
     "web/src/services/taskStream.ts",
     "web/src/services/templateService.ts",
     "web/src/services/tenantService.ts",
+    "web/src/services/terminalRetainedSessionV2.ts",
     "web/src/services/traceService.ts",
     "web/src/services/trustService.ts",
     "web/src/services/unifiedEventConnectionV2.ts",
@@ -27804,6 +27901,7 @@
     "web/src/stores/project.ts",
     "web/src/stores/provider.ts",
     "web/src/stores/sandbox.ts",
+    "web/src/stores/sandboxTerminalRequestV2.ts",
     "web/src/stores/skill.ts",
     "web/src/stores/smtp.ts",
     "web/src/stores/subagent.ts",
