@@ -36,6 +36,11 @@ const qaApi: ComposerCatalogClient = {
   listManagedSkills: async () => [],
   listMarketplacePlugins: async () => [],
   listManagedSubAgents: async () => [],
+  listPromptTemplates: async () => [],
+  createPromptTemplate: async () => {
+    throw new Error('qa_prompt_templates_unavailable');
+  },
+  deletePromptTemplate: async () => {},
 };
 
 const conversations: AgentConversation[] = [

@@ -4,6 +4,10 @@ import {
   createDesktopTenantAgentDefinitionsClientV2,
   type DesktopTenantAgentDefinitionsOperationsV2,
 } from '../../plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
+import {
+  createDesktopTenantPromptTemplatesClientV2,
+  type DesktopTenantPromptTemplatesOperationsV2,
+} from '../../plugins/desktopTenantPromptTemplatesAuthorityModuleV2';
 import type { DesktopWorkspaceRosterOperationsV2 } from '../../plugins/desktopWorkspaceRosterAuthorityModuleV2';
 import type { DesktopRuntimeConfig, ManagedAgentDefinition } from '../../types';
 
@@ -17,6 +21,15 @@ type DesktopNewThreadComposerStaticCatalogMethod =
 export type DesktopNewThreadComposerCatalogClient = Readonly<
   Pick<DesktopApiClient, DesktopNewThreadComposerStaticCatalogMethod> & {
     listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]>;
+    listPromptTemplates: ReturnType<
+      typeof createDesktopTenantPromptTemplatesClientV2
+    >['listPromptTemplates'];
+    createPromptTemplate: ReturnType<
+      typeof createDesktopTenantPromptTemplatesClientV2
+    >['createPromptTemplate'];
+    deletePromptTemplate: ReturnType<
+      typeof createDesktopTenantPromptTemplatesClientV2
+    >['deletePromptTemplate'];
   }
 >;
 
@@ -44,6 +57,7 @@ export type DesktopNewThreadComposerCatalogClientProviderInputV2 = Readonly<{
     'listWorkspaceAgents'
   >;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
+  tenantPromptTemplatesOperationsV2: DesktopTenantPromptTemplatesOperationsV2;
 }>;
 
 export type DesktopNewThreadComposerCatalogClientBindingV2 = Readonly<{
@@ -88,12 +102,22 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
     input.tenantAgentDefinitionsOperationsV2,
     config,
   );
+  const promptTemplates = createDesktopTenantPromptTemplatesClientV2(
+    input.tenantPromptTemplatesOperationsV2,
+    config,
+  );
   const client: DesktopNewThreadComposerCatalogClient = Object.freeze({
     listWorkspaceAgents: (signal?: AbortSignal) =>
       workspaceId
         ? input.workspaceRosterOperationsV2.listWorkspaceAgents({ config, signal })
         : Promise.resolve([]),
     listManagedAgents: (signal) => agentDefinitions.listManagedAgents(signal),
+    listPromptTemplates: (tenantId, signal) =>
+      promptTemplates.listPromptTemplates(tenantId, signal),
+    createPromptTemplate: (tenantId, value, signal) =>
+      promptTemplates.createPromptTemplate(tenantId, value, signal),
+    deletePromptTemplate: (templateId, signal, expectedRevision) =>
+      promptTemplates.deletePromptTemplate(templateId, signal, expectedRevision),
     listManagedSkills: (
       ...args: Parameters<DesktopApiClient['listManagedSkills']>
     ) => authority.listManagedSkills(...args),

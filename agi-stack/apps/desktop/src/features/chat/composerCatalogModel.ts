@@ -17,16 +17,16 @@ export type ComposerCatalogClient = {
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
   listMarketplacePlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
   listManagedSubAgents?: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
-  listPromptTemplates?: (
+  listPromptTemplates: (
     tenantId: string,
     signal?: AbortSignal,
   ) => Promise<PromptTemplateRecord[]>;
-  createPromptTemplate?: (
+  createPromptTemplate: (
     tenantId: string,
     input: PromptTemplateCreateInput,
     signal?: AbortSignal,
   ) => Promise<PromptTemplateRecord>;
-  deletePromptTemplate?: (
+  deletePromptTemplate: (
     templateId: string,
     signal?: AbortSignal,
     expectedRevision?: number,
@@ -86,9 +86,9 @@ export function unboundComposerCatalogClient(
   api: ComposerCatalogClient,
 ): ComposerCatalogClient {
   const listManagedSubAgents = api.listManagedSubAgents?.bind(api);
-  const listPromptTemplates = api.listPromptTemplates?.bind(api);
-  const createPromptTemplate = api.createPromptTemplate?.bind(api);
-  const deletePromptTemplate = api.deletePromptTemplate?.bind(api);
+  const listPromptTemplates = api.listPromptTemplates.bind(api);
+  const createPromptTemplate = api.createPromptTemplate.bind(api);
+  const deletePromptTemplate = api.deletePromptTemplate.bind(api);
   const listConversations = api.listConversations?.bind(api);
   const getConversationMessages = api.getConversationMessages?.bind(api);
   const uploadSandboxFile = api.uploadSandboxFile?.bind(api);
@@ -98,9 +98,9 @@ export function unboundComposerCatalogClient(
     listManagedSkills: (signal) => api.listManagedSkills(signal),
     listMarketplacePlugins: (signal) => api.listMarketplacePlugins(signal),
     ...(listManagedSubAgents ? { listManagedSubAgents } : {}),
-    ...(listPromptTemplates ? { listPromptTemplates } : {}),
-    ...(createPromptTemplate ? { createPromptTemplate } : {}),
-    ...(deletePromptTemplate ? { deletePromptTemplate } : {}),
+    listPromptTemplates,
+    createPromptTemplate,
+    deletePromptTemplate,
     ...(listConversations ? { listConversations } : {}),
     ...(getConversationMessages ? { getConversationMessages } : {}),
     ...(uploadSandboxFile ? { uploadSandboxFile } : {}),

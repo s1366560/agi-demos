@@ -81,6 +81,11 @@ const qaApi: ComposerCatalogClient = {
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
   listMarketplacePlugins: async () => [],
+  listPromptTemplates: async () => [],
+  createPromptTemplate: async () => {
+    throw new Error('qa_prompt_templates_unavailable');
+  },
+  deletePromptTemplate: async () => {},
   uploadSandboxFile: async (file) => {
     await new Promise((resolve) => window.setTimeout(resolve, 180));
     return {

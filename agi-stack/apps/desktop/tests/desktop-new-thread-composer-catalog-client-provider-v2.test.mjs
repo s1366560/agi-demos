@@ -46,6 +46,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
     config: firstConfig,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
+    tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   firstConfig.apiBaseUrl = 'http://127.0.0.1:49999';
@@ -54,6 +55,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
     config: runtimeConfig('http://127.0.0.1:42002', 'workspace-2'),
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
+    tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const originalFetch = globalThis.fetch;
@@ -89,6 +91,7 @@ test('unbound publications hide workspace agents while retaining project catalog
     config: runtimeConfig('http://127.0.0.1:42003', ''),
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
+    tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const originalFetch = globalThis.fetch;
@@ -172,6 +175,7 @@ test('failed composer catalog publication keeps the last-good binding', () => {
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
+    tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
   });
   const poisonedConfig = {
@@ -187,6 +191,7 @@ test('failed composer catalog publication keeps the last-good binding', () => {
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
+        tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
         workspaceRosterOperationsV2: workspaceRosterOperationsV2(),
       }),
     /candidate_new_thread_composer_catalog_config_invalid/u
@@ -209,6 +214,10 @@ test('App consumes the published V2 catalog client without constructing a new-th
   assert.match(
     providerSource,
     /createDesktopTenantAgentDefinitionsClientV2\(\s*input\.tenantAgentDefinitionsOperationsV2/u
+  );
+  assert.match(
+    providerSource,
+    /createDesktopTenantPromptTemplatesClientV2\(\s*input\.tenantPromptTemplatesOperationsV2/u
   );
   assert.match(providerSource, /input\.workspaceRosterOperationsV2\.listWorkspaceAgents/u);
   for (const method of [
@@ -238,6 +247,16 @@ function pluginMarketplaceOperationsV2() {
 function tenantAgentDefinitionsOperationsV2() {
   return {
     loadTenantAgentDefinitions: async () => [],
+  };
+}
+
+function tenantPromptTemplatesOperationsV2() {
+  return {
+    listTenantPromptTemplates: async () => [],
+    createTenantPromptTemplate: async () => {
+      throw new Error('prompt_template_create_not_used');
+    },
+    deleteTenantPromptTemplate: async () => {},
   };
 }
 

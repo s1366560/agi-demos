@@ -18,9 +18,6 @@ import type {
   ManagedSkillZipImportInput,
   ManagedSubAgent,
   ManagedSubAgentMutation,
-  PromptTemplateCreateInput,
-  PromptTemplateRecord,
-  PromptTemplateVariable,
 } from '../types';
 
 type ManagedResourcesRequestOptions = {
@@ -279,73 +276,6 @@ export class ManagedResourcesClient {
     return this.mutateManagedSkillEvolutionJob(jobId, 'reject');
   }
 
-  async listPromptTemplates(
-    tenantId: string,
-    signal?: AbortSignal,
-  ): Promise<PromptTemplateRecord[]> {
-    const requiredTenantId = requireValue(tenantId, 'tenant id');
-    const params = new URLSearchParams({
-      tenant_id: requiredTenantId,
-      limit: '100',
-      offset: '0',
-    });
-    const payload = await this.request<unknown>(
-      `/api/v1/agent/templates?${params.toString()}`,
-      { signal },
-    );
-    return this.requirePromptTemplateCatalog(payload, requiredTenantId);
-  }
-
-  async createPromptTemplate(
-    tenantId: string,
-    input: PromptTemplateCreateInput,
-    signal?: AbortSignal,
-  ): Promise<PromptTemplateRecord> {
-    const requiredTenantId = requireValue(tenantId, 'tenant id');
-    const request = {
-      title: requireValue(input.title, 'template title'),
-      content: requireValue(input.content, 'template content'),
-      category: requireValue(input.category, 'template category'),
-    };
-    const params = new URLSearchParams({ tenant_id: requiredTenantId });
-    const payload = await this.request<unknown>(
-      `/api/v1/agent/templates?${params.toString()}`,
-      {
-        method: 'POST',
-        body: this.mutationBody(request, 0, crypto.randomUUID()),
-        signal,
-      },
-    );
-    const template = normalizePromptTemplate(payload, requiredTenantId);
-    if (
-      !template ||
-      template.is_system ||
-      template.project_id !== null ||
-      template.title !== request.title ||
-      template.content !== request.content ||
-      template.category !== request.category ||
-      template.variables.length !== 0
-    ) {
-      throw this.createError('Invalid prompt template response', 502, payload);
-    }
-    return template;
-  }
-
-  async deletePromptTemplate(
-    templateId: string,
-    signal?: AbortSignal,
-    expectedRevision?: number,
-  ): Promise<void> {
-    await this.request<unknown>(
-      `/api/v1/agent/templates/${encodeURIComponent(requireValue(templateId, 'template id'))}`,
-      {
-        method: 'DELETE',
-        body: this.mutationBody(null, expectedRevision),
-        signal,
-      },
-    );
-  }
-
   async listManagedSubAgents(signal?: AbortSignal): Promise<ManagedSubAgent[]> {
     const params = new URLSearchParams({ limit: '100', include_filesystem: 'true' });
     if (this.config.tenantId) params.set('tenant_id', this.config.tenantId);
@@ -472,28 +402,6 @@ export class ManagedResourcesClient {
     };
   }
 
-  private requirePromptTemplateCatalog(
-    payload: unknown,
-    tenantId: string,
-  ): PromptTemplateRecord[] {
-    if (!Array.isArray(payload) || payload.length > 100) {
-      throw this.createError('Invalid prompt template catalog response', 502, payload);
-    }
-    const seenIds = new Set<string>();
-    const templates = payload.map((value) => normalizePromptTemplate(value, tenantId));
-    if (
-      templates.some((template) => template === null) ||
-      templates.some((template) => {
-        if (template === null || seenIds.has(template.id)) return true;
-        seenIds.add(template.id);
-        return false;
-      })
-    ) {
-      throw this.createError('Invalid prompt template catalog response', 502, payload);
-    }
-    return templates as PromptTemplateRecord[];
-  }
-
   private async request<T>(
     path: string,
     options: ManagedResourcesRequestOptions = {},
@@ -533,64 +441,6 @@ export class ManagedResourcesClient {
     }
     return payload as T;
   }
-}
-
-function normalizePromptTemplate(
-  value: unknown,
-  tenantId: string,
-): PromptTemplateRecord | null {
-  if (
-    !isRecord(value) ||
-    !isNonEmptyString(value.id) ||
-    value.tenant_id !== tenantId ||
-    !(value.project_id === null || typeof value.project_id === 'string') ||
-    !isNonEmptyString(value.created_by) ||
-    !isNonEmptyString(value.title) ||
-    typeof value.content !== 'string' ||
-    !isNonEmptyString(value.category) ||
-    !Array.isArray(value.variables) ||
-    typeof value.is_system !== 'boolean' ||
-    !isUnsignedSafeInteger(value.usage_count) ||
-    !isNonEmptyString(value.created_at) ||
-    !isNonEmptyString(value.updated_at)
-  ) {
-    return null;
-  }
-  const variables = value.variables.map(normalizePromptTemplateVariable);
-  if (variables.some((variable) => variable === null)) return null;
-  return {
-    id: value.id,
-    tenant_id: value.tenant_id,
-    project_id: value.project_id,
-    created_by: value.created_by,
-    title: value.title,
-    content: value.content,
-    category: value.category,
-    variables: variables as PromptTemplateVariable[],
-    is_system: value.is_system,
-    usage_count: value.usage_count,
-    created_at: value.created_at,
-    updated_at: value.updated_at,
-    ...(isUnsignedSafeInteger(value.revision) ? { revision: value.revision } : {}),
-  };
-}
-
-function normalizePromptTemplateVariable(value: unknown): PromptTemplateVariable | null {
-  if (
-    !isRecord(value) ||
-    !isNonEmptyString(value.name) ||
-    typeof value.description !== 'string' ||
-    typeof value.default_value !== 'string' ||
-    typeof value.required !== 'boolean'
-  ) {
-    return null;
-  }
-  return {
-    name: value.name,
-    description: value.description,
-    default_value: value.default_value,
-    required: value.required,
-  };
 }
 
 function readArray<T>(

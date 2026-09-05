@@ -72,9 +72,6 @@ import type {
   ManagedSubAgentMutation,
   PaginatedConversationsResponse,
   PlanSnapshot,
-  PromptTemplateCreateInput,
-  PromptTemplateRecord,
-  PromptTemplateVariable,
   ProjectMyWorkResponse,
   ProjectSummary,
   ProjectSandbox,
@@ -2341,33 +2338,6 @@ export class DesktopApiClient {
           version: requireValue(version, 'plugin version'),
         },
       },
-    );
-  }
-
-  async listPromptTemplates(
-    tenantId: string,
-    signal?: AbortSignal,
-  ): Promise<PromptTemplateRecord[]> {
-    return this.managedResourcesClient.listPromptTemplates(tenantId, signal);
-  }
-
-  async createPromptTemplate(
-    tenantId: string,
-    input: PromptTemplateCreateInput,
-    signal?: AbortSignal,
-  ): Promise<PromptTemplateRecord> {
-    return this.managedResourcesClient.createPromptTemplate(tenantId, input, signal);
-  }
-
-  async deletePromptTemplate(
-    templateId: string,
-    signal?: AbortSignal,
-    expectedRevision?: number,
-  ): Promise<void> {
-    return this.managedResourcesClient.deletePromptTemplate(
-      templateId,
-      signal,
-      expectedRevision,
     );
   }
 

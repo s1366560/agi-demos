@@ -8,10 +8,10 @@ import {
   TrashIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiError } from '../../api/client';
 import { useI18n } from '../../i18n';
 import type { PromptTemplateRecord } from '../../types';
 import type { ComposerCatalogClient } from './composerCatalogModel';
+import { promptTemplateHttpStatus } from './promptTemplateHttpStatus';
 import {
   BUILTIN_PROMPT_TEMPLATES,
   filterPromptTemplates,
@@ -148,11 +148,6 @@ export function PromptTemplateLibrary({
 
   useEffect(() => {
     if (!open || !scopeReady) return;
-    if (!api.listPromptTemplates) {
-      setCatalogStatus('error');
-      setCatalogErrorKey('chat.templates.unavailable');
-      return;
-    }
     const controller = new AbortController();
     listRequestRef.current?.abort();
     listRequestRef.current = controller;
@@ -193,7 +188,7 @@ export function PromptTemplateLibrary({
         listRequestRef.current = null;
         setCatalogStatus('error');
         setCatalogErrorKey(
-          promptTemplateErrorKey(error instanceof DesktopApiError ? error.status : undefined),
+          promptTemplateErrorKey(promptTemplateHttpStatus(error)),
         );
       });
     return () => {
@@ -287,7 +282,7 @@ export function PromptTemplateLibrary({
   }, [insertTemplate, variableFields, variableSelection, variableValues]);
 
   const confirmDelete = useCallback(async () => {
-    if (!deleteSelection || !api.deletePromptTemplate || deleteBusy) return;
+    if (!deleteSelection || deleteBusy) return;
     if (deleteSelection.selectionScopeKey !== currentScopeKeyRef.current) {
       setDeleteSelection(null);
       return;
@@ -336,7 +331,7 @@ export function PromptTemplateLibrary({
       deleteRequestRef.current = null;
       setDeleteBusy(false);
       setCatalogErrorKey(
-        promptTemplateErrorKey(error instanceof DesktopApiError ? error.status : undefined),
+        promptTemplateErrorKey(promptTemplateHttpStatus(error)),
       );
       setDeleteSelection(null);
     }

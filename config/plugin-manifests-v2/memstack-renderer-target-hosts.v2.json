@@ -773,6 +773,35 @@
       "contract_digest": "sha256:0e9f613d261173faa97573d74cda2f75bbf13870c58e2c6b4c1c0c8f1bf86843"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-prompt-templates-authority",
+      "entrypoint": "applyDesktopTenantPromptTemplatesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:10e5e2fc3f6bd6c8da5f57a09c1ac9d5c1faa2bb243656da0c2488c83b7b945d",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantPromptTemplatesAuthorityModuleV2.ts"
+      },
+      "targets": ["desktop-renderer"],
+      "contract": {
+        "services": {
+          "provides": [{
+            "service": "service:desktop-renderer.tenant-prompt-templates-authority",
+            "version": "1.0.0"
+          }],
+          "requires": []
+        },
+        "events": { "emits": [], "handles": [] },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": { "const": "desktop-api-fetch", "type": "string" }
+          }
+        }
+      },
+      "contract_digest": "sha256:11874933f8ad9c05649d3c6378a0ac2749c8984b3728597dce87d0fc2f5b2726"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/tenant-organization-settings-authority",
       "entrypoint": "applyDesktopTenantOrganizationSettingsAuthorityV2",
       "artifact": {

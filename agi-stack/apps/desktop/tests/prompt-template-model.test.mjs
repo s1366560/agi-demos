@@ -4,6 +4,9 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
+const { DesktopApiError } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
+const { NativeRouteClientError } = require('/tmp/agistack-desktop-test-dist/src/features/settings-routes/nativeRouteHttpClient.js');
+const { promptTemplateHttpStatus } = require('/tmp/agistack-desktop-test-dist/src/features/chat/promptTemplateHttpStatus.js');
 const {
   filterPromptTemplates,
   promptTemplatePreview,
@@ -195,6 +198,31 @@ test('template failures map protocol status to localized actionable states', () 
   assert.equal(promptTemplateErrorKey(undefined), 'chat.templates.loadFailed');
 });
 
+test('template HTTP errors preserve actionable messages across both client implementations', () => {
+  const expected = new Map([
+    [401, 'chat.templates.authenticationRequired'],
+    [403, 'chat.templates.permissionDenied'],
+    [409, 'chat.templates.conflict'],
+    [422, 'chat.templates.validationFailed'],
+  ]);
+  for (const [status, key] of expected) {
+    for (const error of [
+      new NativeRouteClientError('template_request_failed', status),
+      new DesktopApiError('Template request failed', status, null),
+    ]) {
+      assert.equal(promptTemplateErrorKey(promptTemplateHttpStatus(error)), key);
+      assert.equal(promptTemplateSaveErrorKey(promptTemplateHttpStatus(error)), key);
+    }
+  }
+  for (const error of [null, undefined, { status: 401 }, Object.assign(new Error('other'), { status: 403 })]) {
+    assert.equal(promptTemplateHttpStatus(error), undefined);
+    assert.equal(promptTemplateErrorKey(promptTemplateHttpStatus(error)), 'chat.templates.loadFailed');
+    assert.equal(promptTemplateSaveErrorKey(promptTemplateHttpStatus(error)), 'chat.templates.saveFailed');
+  }
+  assert.equal(templateLibrarySource.match(/promptTemplateErrorKey\(promptTemplateHttpStatus\(error\)\)/gu)?.length, 2);
+  assert.match(saveDialogSource, /promptTemplateSaveErrorKey\(promptTemplateHttpStatus\(error\)\)/u);
+});
+
 test('save-template drafts require a trimmed title and exact non-empty assistant content', () => {
   assert.deepEqual(
     validatePromptTemplateDraft({
@@ -258,9 +286,12 @@ test('Desktop template library preserves Web behavior and renderer security boun
     templateLibrarySource,
     /\[variable\.name\]: event\.currentTarget\.value/,
   );
-  assert.match(catalogSource, /listPromptTemplates\?/);
-  assert.match(catalogSource, /createPromptTemplate\?/);
-  assert.match(catalogSource, /deletePromptTemplate\?/);
+  assert.match(catalogSource, /listPromptTemplates:/);
+  assert.match(catalogSource, /createPromptTemplate:/);
+  assert.match(catalogSource, /deletePromptTemplate:/);
+  assert.doesNotMatch(catalogSource, /(?:list|create|delete)PromptTemplate\?/);
+  assert.doesNotMatch(templateLibrarySource, /!api\.(?:list|delete)PromptTemplate/);
+  assert.doesNotMatch(saveDialogSource, /!api\.createPromptTemplate/);
   assert.match(chatStyles, /\.prompt-template-library/);
   assert.equal(i18nSource.match(/'chat\.templates\.title':/g)?.length, 2);
   assert.equal(i18nSource.match(/'chat\.templates\.useTemplate':/g)?.length, 2);

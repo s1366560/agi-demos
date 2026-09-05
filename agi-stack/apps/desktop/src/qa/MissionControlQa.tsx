@@ -51,6 +51,11 @@ const api: ComposerCatalogClient = {
   listManagedAgents: async () => [],
   listManagedSkills: async () => [],
   listMarketplacePlugins: async () => [],
+  listPromptTemplates: async () => [],
+  createPromptTemplate: async () => {
+    throw new Error('qa_prompt_templates_unavailable');
+  },
+  deletePromptTemplate: async () => {},
 };
 
 const workspaces: WorkspaceSummary[] = [

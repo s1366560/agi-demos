@@ -135,6 +135,10 @@ import {
   createDesktopTenantAgentDefinitionsClientV2,
   createDesktopTenantAgentDefinitionsOperationsV2,
 } from './plugins/desktopTenantAgentDefinitionsAuthorityModuleV2';
+import {
+  createDesktopTenantPromptTemplatesClientV2,
+  createDesktopTenantPromptTemplatesOperationsV2,
+} from './plugins/desktopTenantPromptTemplatesAuthorityModuleV2';
 import { createDesktopTenantGenesOperationsV2 } from './plugins/desktopTenantGenesAuthorityModuleV2';
 import { createDesktopTenantOrganizationSettingsOperationsV2 } from './plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAuthorityModuleV2';
@@ -1100,6 +1104,13 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantPromptTemplatesOperationsV2 = useMemo(
+    () =>
+      createDesktopTenantPromptTemplatesOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopUserProfileOperationsV2 = useMemo(
     () =>
       createDesktopUserProfileOperationsV2(
@@ -1512,6 +1523,14 @@ export function App() {
       ),
     [config, desktopTenantAgentDefinitionsOperationsV2],
   );
+  const desktopTenantPromptTemplatesClientV2 = useMemo(
+    () =>
+      createDesktopTenantPromptTemplatesClientV2(
+        desktopTenantPromptTemplatesOperationsV2,
+        config,
+      ),
+    [config, desktopTenantPromptTemplatesOperationsV2],
+  );
   const desktopRendererRouteRefsV2 = useMemo(
     () => ({
       authRef,
@@ -1762,11 +1781,13 @@ export function App() {
       listManagedSubAgents: (signal?: AbortSignal) =>
         remainingComposerCatalogAuthority.listManagedSubAgents(signal),
       listPromptTemplates: (tenantId: string, signal?: AbortSignal) =>
-        remainingComposerCatalogAuthority.listPromptTemplates(tenantId, signal),
-      createPromptTemplate: (...args: Parameters<DesktopApiClient['createPromptTemplate']>) =>
-        remainingComposerCatalogAuthority.createPromptTemplate(...args),
-      deletePromptTemplate: (...args: Parameters<DesktopApiClient['deletePromptTemplate']>) =>
-        remainingComposerCatalogAuthority.deletePromptTemplate(...args),
+        desktopTenantPromptTemplatesClientV2.listPromptTemplates(tenantId, signal),
+      createPromptTemplate: (
+        ...args: Parameters<typeof desktopTenantPromptTemplatesClientV2.createPromptTemplate>
+      ) => desktopTenantPromptTemplatesClientV2.createPromptTemplate(...args),
+      deletePromptTemplate: (
+        ...args: Parameters<typeof desktopTenantPromptTemplatesClientV2.deletePromptTemplate>
+      ) => desktopTenantPromptTemplatesClientV2.deletePromptTemplate(...args),
       listConversations: (...args: Parameters<DesktopApiClient['listConversations']>) =>
         remainingComposerCatalogAuthority.listConversations(...args),
       getConversationMessages: (
@@ -1778,7 +1799,12 @@ export function App() {
     return config.workspaceId.trim()
       ? composedComposerCatalogAuthority
       : unboundComposerCatalogClient(composedComposerCatalogAuthority);
-  }, [api, config.workspaceId, desktopTenantAgentDefinitionsClientV2]);
+  }, [
+    api,
+    config.workspaceId,
+    desktopTenantAgentDefinitionsClientV2,
+    desktopTenantPromptTemplatesClientV2,
+  ]);
   const socket = useAgentSocket(
     config,
     showRuntimeConfig && connection === 'ready',
@@ -1946,11 +1972,14 @@ export function App() {
         workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
         tenantAgentDefinitionsOperationsV2:
           desktopTenantAgentDefinitionsOperationsV2,
+        tenantPromptTemplatesOperationsV2:
+          desktopTenantPromptTemplatesOperationsV2,
       }),
     [
       desktopNewThreadComposerCatalogClientProviderV2,
       desktopPluginMarketplaceOperationsV2,
       desktopTenantAgentDefinitionsOperationsV2,
+      desktopTenantPromptTemplatesOperationsV2,
       desktopWorkspaceRosterOperationsV2,
       newThreadRuntimeConfig,
     ],
