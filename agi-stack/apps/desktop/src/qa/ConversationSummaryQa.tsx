@@ -1,3 +1,4 @@
+import { unavailableVoiceSessionOperationsQa } from './voiceSessionOperationsQa';
 import '@radix-ui/themes/styles.css';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ChatBubbleIcon, CubeIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons';
@@ -217,6 +218,7 @@ function ConversationSummaryQa() {
           </header>
           <div className="session-steering-qa-content compose-ahead-qa-content">
             <ChatPanel
+              voiceSessionOperations={unavailableVoiceSessionOperationsQa}
               imagePreviewClient={null}
               api={qaApi}
               conversations={conversations}

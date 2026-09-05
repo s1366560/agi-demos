@@ -1,3 +1,4 @@
+import { createVoiceSessionOperationsQa } from './voiceSessionOperationsQa';
 import '@radix-ui/themes/styles.css';
 import React, { useMemo, useState, useSyncExternalStore } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -280,6 +281,7 @@ function VoiceTranscriptionQa() {
   const [conversationIndex, setConversationIndex] = useState(0);
   const [sentMessages, setSentMessages] = useState<string[]>([]);
   const runtime = useMemo(() => new QaVoiceRuntime(), []);
+  const voiceSessionOperations = useMemo(() => createVoiceSessionOperationsQa({ transcription: runtime }), [runtime]);
   useSyncExternalStore(runtime.subscribe, runtime.getSnapshot, runtime.getSnapshot);
   const conversation = conversations[conversationIndex];
 
@@ -427,7 +429,7 @@ function VoiceTranscriptionQa() {
               runInputAuthorityRunId={null}
               references={[]}
               voiceTranscriptionConfig={cloudConfig}
-              voiceTranscriptionRuntime={runtime}
+              voiceSessionOperations={voiceSessionOperations}
               onRunInputDeliveryChange={() => undefined}
               onPromoteRunInput={() => undefined}
               onRemoveReference={() => undefined}

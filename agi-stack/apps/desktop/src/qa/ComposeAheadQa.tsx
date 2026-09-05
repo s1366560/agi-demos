@@ -1,3 +1,4 @@
+import { unavailableVoiceSessionOperationsQa } from './voiceSessionOperationsQa';
 import '@radix-ui/themes/styles.css';
 import React, { useCallback, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -246,6 +247,7 @@ function ComposeAheadQa() {
           </header>
           <div className="session-steering-qa-content compose-ahead-qa-content">
             <ChatPanel
+              voiceSessionOperations={unavailableVoiceSessionOperationsQa}
               imagePreviewClient={null}
               composeAheadFallbackAllowed
               api={qaApi}

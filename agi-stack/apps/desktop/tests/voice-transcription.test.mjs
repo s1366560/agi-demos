@@ -248,7 +248,9 @@ test('production composer exposes scoped, localized voice dictation without auto
   assert.match(chatSource, /aria-pressed=\{voiceActive\}/);
   assert.match(chatSource, /voice\.stop\(\);[\s\S]*onSend\(/);
   assert.match(appSource, /voiceTranscriptionConfig:\s*config/);
-  assert.match(hookSource, /\[controller, scopeKey\]/);
+  assert.match(hookSource, /useVoiceSessionLeaseV2/);
+  assert.match(hookSource, /operations\.acquireTranscription/);
+  assert.doesNotMatch(hookSource, /createVoiceTranscriptionRuntime|new WebSocket/);
   assert.match(styles, /\.composer-voice-button\.is-listening/);
   assert.match(styles, /prefers-reduced-motion:\s*reduce/);
   assert.match(i18n, /'composer\.voice\.start': 'Voice input'/);

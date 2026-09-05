@@ -132,7 +132,8 @@ function bootstrap() {
   profile.entries = profile.entries.filter(
     (entry) => entry.module_ref !== 'builtin://memstack/desktop/workbench-snapshot-authority' &&
       entry.module_ref !== 'builtin://memstack/desktop/conversation-messaging-authority' &&
-      entry.module_ref !== 'builtin://memstack/desktop/structured-image-preview-authority',
+      entry.module_ref !== 'builtin://memstack/desktop/structured-image-preview-authority' &&
+      entry.module_ref !== 'builtin://memstack/desktop/voice-session-authority',
   );
   return profile;
 }

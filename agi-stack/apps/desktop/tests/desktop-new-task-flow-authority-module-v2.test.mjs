@@ -246,6 +246,7 @@ function loadBootstrap() {
       'builtin://memstack/desktop/workbench-snapshot-authority',
       'builtin://memstack/desktop/conversation-messaging-authority',
       'builtin://memstack/desktop/structured-image-preview-authority',
+      'builtin://memstack/desktop/voice-session-authority',
     ].includes(entry.module_ref),
   );
   return profile;

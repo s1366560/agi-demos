@@ -1,3 +1,4 @@
+import { createDesktopVoiceSessionOperationsV2 } from './plugins/desktopVoiceSessionAuthorityModuleV2';
 import { createDesktopConversationMessagingOperationsV2 } from './plugins/desktopConversationMessagingAuthorityModuleV2';
 import {
   useCallback,
@@ -1804,6 +1805,10 @@ export function App() {
     identityAuthenticated,
     desktopRendererCompositionV2,
   );
+  const desktopVoiceSessionOperationsV2 = useMemo(() => {
+    const actions = desktopRendererGenerationV2.actions;
+    return createDesktopVoiceSessionOperationsV2(() => actions);
+  }, [desktopRendererGenerationV2.actions, auth.user?.user_id]);
   const desktopConversationMessagingOperationsV2 = useMemo(() => {
     const actions = desktopRendererGenerationV2.actions;
     return createDesktopConversationMessagingOperationsV2(() => actions);
@@ -6959,6 +6964,7 @@ export function App() {
         projectId: config.projectId,
       },
       voiceTranscriptionConfig: config,
+      voiceSessionOperations: desktopVoiceSessionOperationsV2,
       composerVariant: selectedConversation ? 'session' : 'workspace',
       composerResetKey: selectedConversation?.id ?? config.workspaceId,
       activityPresence: sessionActivityState,

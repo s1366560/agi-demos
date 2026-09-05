@@ -1,3 +1,4 @@
+import type { DesktopVoiceSessionOperationsV2 } from '../../plugins/desktopVoiceSessionAuthorityModuleV2';
 import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import {
   memo,
@@ -183,7 +184,6 @@ import {
   resolveVoiceCallConnection,
   type VoiceCallConnection,
 } from './voiceCallModel';
-import type { VoiceCallRuntime } from './voiceCallRuntime';
 import {
   applyVoiceTranscriptMessage,
   initialVoiceTranscriptDraft,
@@ -192,7 +192,6 @@ import {
   voiceTranscriptionFailureKey,
   type VoiceTranscriptionConnection,
 } from './voiceTranscriptionModel';
-import type { VoiceTranscriptionRuntime } from './voiceTranscriptionRuntime';
 import type {
   AgentTaskSignal,
   AgentTaskSignalStatus,
@@ -256,8 +255,7 @@ type ChatPanelProps = {
     projectId: string;
   };
   voiceTranscriptionConfig?: DesktopRuntimeConfig;
-  voiceTranscriptionRuntime?: VoiceTranscriptionRuntime;
-  voiceCallRuntime?: VoiceCallRuntime;
+  voiceSessionOperations: DesktopVoiceSessionOperationsV2;
   activityPresence: SessionActivityPresence;
   activityStructuredEvidence: SessionActivityStructuredEvidence | null;
   composerVariant?: ChatComposerVariant;
@@ -409,8 +407,7 @@ export const ChatPanel = memo(function ChatPanel({
   scopeLabel,
   turnCollapseRuntime = DEFAULT_TURN_COLLAPSE_RUNTIME,
   voiceTranscriptionConfig,
-  voiceTranscriptionRuntime,
-  voiceCallRuntime,
+  voiceSessionOperations,
   activityPresence,
   activityStructuredEvidence,
   composerVariant = 'workspace',
@@ -1940,8 +1937,7 @@ export const ChatPanel = memo(function ChatPanel({
             stopResponseAvailable={Boolean(onStopResponse)}
             stopResponseStatus={stopRequest.status}
             voiceTranscriptionConfig={voiceTranscriptionConfig}
-            voiceTranscriptionRuntime={voiceTranscriptionRuntime}
-            voiceCallRuntime={voiceCallRuntime}
+            voiceSessionOperations={voiceSessionOperations}
           />
           {messageDeleteRequest ? (
             <MessageDeleteDialog
@@ -2063,8 +2059,7 @@ type ChatComposerProps = {
   stopResponseAvailable: boolean;
   stopResponseStatus: AgentStopRequestState['status'];
   voiceTranscriptionConfig?: DesktopRuntimeConfig;
-  voiceTranscriptionRuntime?: VoiceTranscriptionRuntime;
-  voiceCallRuntime?: VoiceCallRuntime;
+  voiceSessionOperations: DesktopVoiceSessionOperationsV2;
 };
 
 function ChatComposer({
@@ -2119,8 +2114,7 @@ function ChatComposer({
   stopResponseAvailable,
   stopResponseStatus,
   voiceTranscriptionConfig,
-  voiceTranscriptionRuntime,
-  voiceCallRuntime,
+  voiceSessionOperations,
 }: ChatComposerProps) {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -2196,13 +2190,15 @@ function ChatComposer({
   );
   const voice = useVoiceTranscription({
     connection: voiceConnection,
-    runtime: voiceTranscriptionRuntime,
+    config: voiceTranscriptionConfig ?? null,
+    operations: voiceSessionOperations,
     onInterim: (text) => applyVoiceMessage({ kind: 'interim', text }),
     onFinal: (text) => applyVoiceMessage({ kind: 'final', text }),
   });
   const voiceCall = useVoiceCall({
     connection: voiceCallConnection,
-    runtime: voiceCallRuntime,
+    config: voiceTranscriptionConfig ?? null,
+    operations: voiceSessionOperations,
   });
   const voiceActive =
     voice.state === 'connecting' || voice.state === 'listening';

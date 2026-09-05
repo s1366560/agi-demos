@@ -3057,6 +3057,47 @@
         }
       },
       "contract_digest": "sha256:d25fa154819dd855733ffe4942ebb32898ccc023c56b06b8ac817000ab633ad1"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/voice-session-authority",
+      "entrypoint": "applyDesktopVoiceSessionAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopVoiceSessionAuthorityModuleV2.ts",
+        "digest": "sha256:4bd426f1f20f559bad33793048a51717c2fb7ffe359d00b3da24593fc91f46c3"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.voice-session-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "retained-voice-session",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:fb49dd480ae1ebabbbac02578672f1b597d43c9aea62d4b19a64763e1ee3e1a3"
     }
   ],
   "permissions": [],

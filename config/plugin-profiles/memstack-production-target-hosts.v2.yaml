@@ -973,6 +973,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-voice-session-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/voice-session-authority
+      enabled: true
+      config:
+        strategy: retained-voice-session
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-structured-image-preview-authority
       parent_entry_id: builtin-desktop-renderer-host
       plugin_ref: memstack-renderer-target-hosts

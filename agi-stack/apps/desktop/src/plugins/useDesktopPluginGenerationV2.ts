@@ -1,3 +1,4 @@
+import { desktopVoiceSessionAuthorityDefinitionV2 } from './desktopVoiceSessionAuthorityModuleV2';
 import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 
 import {
@@ -123,6 +124,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     ),
     desktopArtifactContentAuthorityDefinitionV2,
     desktopStructuredImagePreviewAuthorityDefinitionV2,
+    desktopVoiceSessionAuthorityDefinitionV2,
     desktopAutomationAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,

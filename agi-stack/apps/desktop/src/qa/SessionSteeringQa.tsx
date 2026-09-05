@@ -1,3 +1,4 @@
+import { unavailableVoiceSessionOperationsQa } from './voiceSessionOperationsQa';
 import '@radix-ui/themes/styles.css';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -3096,6 +3097,7 @@ function SessionSteeringQa() {
           </header>
           <div className="session-steering-qa-content">
             <ChatPanel
+              voiceSessionOperations={unavailableVoiceSessionOperationsQa}
               imagePreviewClient={null}
               api={qaApi}
               conversations={qaConversations}
