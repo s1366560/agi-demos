@@ -130,10 +130,10 @@ function bindFixtureEntries(
   );
 }
 
-function collectDeclaredProductionSourcePaths() {
+function collectDeclaredProductionSourcePaths(sourceContractRoot = contractRoot) {
   const paths = new Set();
   for (const fragmentName of fragmentRegistry.fragments) {
-    const fragment = readJson(join(contractRoot, fragmentName));
+    const fragment = readJson(join(sourceContractRoot, fragmentName));
     for (const capability of fragment.capabilities) {
       for (const field of [
         "cloud_entries",
@@ -166,7 +166,7 @@ function createGeneratorFixture(t) {
     "agi-stack/apps/desktop/contracts/desktop-web-parity",
   );
   cpSync(contractRoot, fixtureContractRoot, { recursive: true });
-  for (const sourcePath of declaredProductionSourcePaths) {
+  for (const sourcePath of collectDeclaredProductionSourcePaths(fixtureContractRoot)) {
     const target = join(fixtureRoot, sourcePath);
     mkdirSync(dirname(target), { recursive: true });
     copyFileSync(join(repositoryRoot, sourcePath), target);
@@ -347,7 +347,7 @@ test("changing any declared Desktop production source invalidates manifest check
     );
   }
 
-  for (const sourcePath of declaredProductionSourcePaths) {
+  for (const sourcePath of collectDeclaredProductionSourcePaths(fixture.fixtureContractRoot)) {
     const absolutePath = join(fixture.fixtureRoot, sourcePath);
     const original = readFileSync(absolutePath);
     appendFileSync(absolutePath, "\nproduction-entry-integrity-mutation\n");

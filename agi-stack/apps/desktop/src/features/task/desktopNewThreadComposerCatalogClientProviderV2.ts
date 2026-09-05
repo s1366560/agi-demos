@@ -1,5 +1,10 @@
 import { createDesktopTenantSkillDefinitionsClientV2, type DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
-import { DesktopApiClient } from '../../api/client';
+import type { DesktopApiClient } from '../../api/client';
+import {
+  createDesktopProjectSandboxUploadClientV2,
+  type DesktopProjectSandboxUploadOperationsV2,
+  type DesktopProjectSandboxUploadClientV2,
+} from '../../plugins/desktopProjectSandboxUploadAuthorityModuleV2';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import {
   createDesktopTenantAgentDefinitionsClientV2,
@@ -18,11 +23,11 @@ import type { DesktopRuntimeConfig, ManagedAgentDefinition } from '../../types';
 
 type DesktopNewThreadComposerStaticCatalogMethod =
   | 'listMarketplacePlugins'
-  | 'listWorkspaceAgents'
-  | 'uploadSandboxFile';
+  | 'listWorkspaceAgents';
 
 export type DesktopNewThreadComposerCatalogClient = Readonly<
   Pick<DesktopApiClient, DesktopNewThreadComposerStaticCatalogMethod> & {
+    uploadSandboxFile: DesktopProjectSandboxUploadClientV2['uploadSandboxFile'];
     listManagedSkills: ReturnType<typeof createDesktopTenantSkillDefinitionsClientV2>['listManagedSkills'];
     listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]>;
     listManagedSubAgents: ReturnType<
@@ -55,6 +60,7 @@ export class DesktopNewThreadComposerCatalogClientProviderErrorV2 extends Error 
 
 export type DesktopNewThreadComposerCatalogClientProviderInputV2 = Readonly<{
   config: DesktopRuntimeConfig;
+  projectSandboxUploadOperationsV2: DesktopProjectSandboxUploadOperationsV2;
   pluginMarketplaceOperationsV2: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
     'listMarketplacePlugins'
@@ -106,7 +112,9 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
 ): DesktopNewThreadComposerCatalogClientBindingV2 {
   const config = Object.freeze({ ...input.config });
   const workspaceId = config.workspaceId.trim();
-  const authority = new DesktopApiClient(config);
+  const sandboxUpload = createDesktopProjectSandboxUploadClientV2(
+    input.projectSandboxUploadOperationsV2, config,
+  );
   const agentDefinitions = createDesktopTenantAgentDefinitionsClientV2(
     input.tenantAgentDefinitionsOperationsV2,
     config,
@@ -139,9 +147,7 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
       ...args: Parameters<DesktopApiClient['listMarketplacePlugins']>
     ) => input.pluginMarketplaceOperationsV2.listMarketplacePlugins(config, ...args),
     listManagedSubAgents: (signal) => subAgentDefinitions.listManagedSubAgents(signal),
-    uploadSandboxFile: (
-      ...args: Parameters<DesktopApiClient['uploadSandboxFile']>
-    ) => authority.uploadSandboxFile(...args),
+    uploadSandboxFile: (file, signal) => sandboxUpload.uploadSandboxFile(file, signal),
   });
   return Object.freeze({ client });
 }

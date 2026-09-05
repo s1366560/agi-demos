@@ -76,6 +76,7 @@ const authorityModules = [
   'desktopProjectMcpServersAuthorityModuleV2',
   'desktopProjectMcpAppsAuthorityModuleV2',
   'desktopBrowserIntegrationAuthorityModuleV2',
+  'desktopProjectSandboxUploadAuthorityModuleV2',
   'desktopWorkspaceAgentPolicyAuthorityModuleV2',
   'desktopTenantSkillPackagesAuthorityModuleV2',
   'desktopTenantSkillEvolutionAuthorityModuleV2',

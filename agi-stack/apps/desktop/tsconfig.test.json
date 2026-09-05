@@ -129,6 +129,7 @@
     "src/features/chat/timelineTurnCollapseModel.ts",
     "src/features/chat/composerFileDropModel.ts",
     "src/features/chat/composerCatalogModel.ts",
+    "src/features/chat/desktopChatComposerCatalogClientV2.ts",
     "src/features/chat/promptTemplateModel.ts",
     "src/utils/format.ts",
     "src/appShellTypes.ts",

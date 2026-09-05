@@ -77,6 +77,7 @@ import { desktopTenantPromptTemplatesAuthorityDefinitionV2 } from './desktopTena
 import { desktopTenantSkillDefinitionsAuthorityDefinitionV2 } from './desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { desktopTenantSkillPackagesAuthorityDefinitionV2 } from './desktopTenantSkillPackagesAuthorityModuleV2';
 import { desktopTenantSkillEvolutionAuthorityDefinitionV2 } from './desktopTenantSkillEvolutionAuthorityModuleV2';
+import { desktopProjectSandboxUploadAuthorityDefinitionV2 } from './desktopProjectSandboxUploadAuthorityModuleV2';
 import { desktopBrowserIntegrationAuthorityDefinitionV2 } from './desktopBrowserIntegrationAuthorityModuleV2';
 import { desktopProjectMcpAppsAuthorityDefinitionV2 } from './desktopProjectMcpAppsAuthorityModuleV2';
 import { desktopProjectMcpServersAuthorityDefinitionV2 } from './desktopProjectMcpServersAuthorityModuleV2';
@@ -174,6 +175,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopTenantSkillDefinitionsAuthorityDefinitionV2,
     desktopTenantSkillPackagesAuthorityDefinitionV2,
     desktopTenantSkillEvolutionAuthorityDefinitionV2,
+    desktopProjectSandboxUploadAuthorityDefinitionV2,
     desktopBrowserIntegrationAuthorityDefinitionV2,
     desktopProjectMcpAppsAuthorityDefinitionV2,
     desktopProjectMcpServersAuthorityDefinitionV2,

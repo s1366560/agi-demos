@@ -182,7 +182,28 @@
       "cloud_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/features/session/SessionWorkspace.tsx",
-        "agi-stack/apps/desktop/src/hooks/useAgentSocket.ts"
+        "agi-stack/apps/desktop/src/hooks/useAgentSocket.ts",
+        "agi-stack/apps/desktop/src/features/chat/desktopChatComposerCatalogClientV2.ts",
+        "agi-stack/apps/desktop/src/features/task/desktopNewThreadComposerCatalogClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/ChatPanel.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ComposerPlusMenu.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ConversationComparison.tsx",
+        "agi-stack/apps/desktop/src/features/chat/composerCatalogModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/useComposerFileUpload.ts",
+        "agi-stack/apps/desktop/src/features/chat/composerFileDropModel.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadResponseContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts",
+        "agi-stack/apps/desktop/electron/main/cloudRequestPolicy.ts",
+        "sandbox-mcp-server/src/tools/import_tools.py",
+        "agi-stack/apps/desktop/electron/main/cloudSandboxImportBudget.ts"
       ],
       "local_status": "partial",
       "local_policy": "native_equivalent",
@@ -191,9 +212,26 @@
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
         "agi-stack/apps/desktop/src/hooks/useAgentSocket.ts",
-        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs",
+        "agi-stack/apps/desktop/src/features/chat/desktopChatComposerCatalogClientV2.ts",
+        "agi-stack/apps/desktop/src/features/task/desktopNewThreadComposerCatalogClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/features/chat/ChatPanel.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ComposerPlusMenu.tsx",
+        "agi-stack/apps/desktop/src/features/chat/ConversationComparison.tsx",
+        "agi-stack/apps/desktop/src/features/chat/composerCatalogModel.ts",
+        "agi-stack/apps/desktop/src/features/chat/useComposerFileUpload.ts",
+        "agi-stack/apps/desktop/src/features/chat/composerFileDropModel.ts",
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadResponseContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceRosterAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopPluginMarketplaceAuthorityModulesV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopWorkspaceConversationCatalogAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts"
       ],
-      "judgment_rationale": "Current-HEAD implements canonical Queue/Steer run inputs, atomic HITL denial feedback, encrypted secure-env responses, roster and SubAgent control, Activity read receipts, My Work summaries, and scoped Changes. Web, Cloud Desktop, and Local Desktop remain partial until one clean current-HEAD aggregate supplies every required renderer, backend or sidecar, and native Electron evidence channel without the recorded usage, direct-open, or Queue/Steer observation gaps."
+      "judgment_rationale": "Current-HEAD implements canonical Queue/Steer run inputs, atomic HITL denial feedback, encrypted secure-env responses, roster and SubAgent control, Activity read receipts, My Work summaries, and scoped Changes. Web, Cloud Desktop, and Local Desktop remain partial until one clean current-HEAD aggregate supplies every required renderer, backend or sidecar, and native Electron evidence channel without the recorded usage, direct-open, or Queue/Steer observation gaps. Chat and new-thread composers now share required V2 catalog composition and the Project Sandbox Upload authority. The former direct chat roster, marketplace, conversation-list and comparison-history calls use existing WorkspaceRoster, PluginMarketplace, WorkspaceConversationCatalog and NewTaskFlow operations while preserving legacy project/workspace/unbound filters and abort signals. Upload acquires a project lease with frozen tenant/project scope, validates Cloud project ownership before reading file bytes, and sends import_file with fixed /workspace/input destination and overwrite true through the existing project-authorized native broker path. Actual buffer size and successful authoritative return path/size must match the captured file metadata. Local upload is a loaded capability that explicitly rejects with local_sandbox_upload_unavailable; no sidecar execute authority is invented. Composer batch cancellation prevents late reads/uploads from dispatching subsequent files or attaching results after context replacement. Source wiring and software checks do not supply the clean aggregate renderer/backend/sidecar/native evidence required above, and do not promote actions, runtime status or native acceptance. The native Cloud request broker applies a narrowly scoped body-size exception for canonical import_file payloads up to 16 MiB of decoded bytes, with exact fields, canonical base64, fixed input destination and overwrite setting; the exception retains normal endpoint authorization, trusted-session loading and observed project-scope enforcement and is not native upload execution evidence."
     }
   ],
   "source_ownership": {

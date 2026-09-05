@@ -113,7 +113,10 @@ export function NewThreadComposer({
     uploadingAttachments,
     fileUploadErrors,
     uploadFiles,
-  } = useComposerFileUpload({ api, onAdd: addContextItem });
+  } = useComposerFileUpload({
+    api, onAdd: addContextItem,
+    contextKey: JSON.stringify([workspace?.tenant_id ?? '', workspace?.project_id ?? '', workspaceId]),
+  });
 
   const defaultModelValue = workspaceId
     ? (modelOptions.find((option) => option.selected)?.value ?? modelOptions[0]?.value ?? '')

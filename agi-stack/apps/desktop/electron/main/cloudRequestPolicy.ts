@@ -1,3 +1,4 @@
+import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
 
 export type VaultBoundCloudRequestInput = Readonly<{
@@ -481,11 +482,11 @@ function parseRequest(input: unknown): VaultBoundCloudRequestInput {
   if (method === 'GET' && body !== undefined) {
     throw new Error('cloud request body is not allowed');
   }
-  if (
-    body !== undefined &&
-    new TextEncoder().encode(JSON.stringify(body)).byteLength > MAX_REQUEST_BYTES
-  ) {
-    throw new Error('cloud request body is too large');
+  if (body !== undefined) {
+    const bodyBytes = new TextEncoder().encode(JSON.stringify(body)).byteLength;
+    if (bodyBytes > MAX_REQUEST_BYTES && !allowsCloudSandboxImportBudget(record, body, bodyBytes)) {
+      throw new Error('cloud request body is too large');
+    }
   }
   const form = parseForm(record.form, method);
   if (body !== undefined && form !== null) {

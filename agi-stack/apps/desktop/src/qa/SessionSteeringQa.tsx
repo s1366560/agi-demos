@@ -87,8 +87,10 @@ const qaApi: ComposerCatalogClient = {
     throw new Error('qa_prompt_templates_unavailable');
   },
   deletePromptTemplate: async () => {},
-  uploadSandboxFile: async (file) => {
+  uploadSandboxFile: async (file, signal) => {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     await new Promise((resolve) => window.setTimeout(resolve, 180));
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     return {
       filename: file.name,
       sandbox_path: `/workspace/input/${file.name}`,

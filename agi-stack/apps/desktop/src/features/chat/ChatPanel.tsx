@@ -2245,7 +2245,13 @@ function ChatComposer({
     fileUploadErrors,
     uploadFiles,
     rejectFileDrop,
-  } = useComposerFileUpload({ api, onAdd: addContextItem });
+  } = useComposerFileUpload({
+    api, onAdd: addContextItem,
+    contextKey: JSON.stringify([
+      composeAheadScope, selectedConversationId ?? '', activeConversationId,
+      promptTemplateConversation?.tenant_id ?? '', promptTemplateConversation?.project_id ?? '',
+    ]),
+  });
   const composeAheadSnapshot = composeAheadContextSnapshot(contextItems);
   const composeAheadQueueEligibility = composeAheadEligibility({
     content: input,

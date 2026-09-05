@@ -147,6 +147,9 @@ import {
   createDesktopProjectMcpAppsOperationsV2,
   createDesktopProjectMcpAppsClientV2,
 } from './plugins/desktopProjectMcpAppsAuthorityModuleV2';
+import {
+  createDesktopProjectSandboxUploadOperationsV2,
+} from './plugins/desktopProjectSandboxUploadAuthorityModuleV2';
 import { createDesktopBrowserIntegrationOperationsV2 } from './plugins/desktopBrowserIntegrationAuthorityModuleV2';
 import { createDesktopProjectMcpServersOperationsV2 } from './plugins/desktopProjectMcpServersAuthorityModuleV2';
 import {
@@ -254,6 +257,7 @@ import {
   selectArtifactCanvasTab,
   type LiveArtifactCanvasState,
 } from './features/chat/artifactCanvasEventModel';
+import { createDesktopChatComposerCatalogClientV2 } from './features/chat/desktopChatComposerCatalogClientV2';
 import { unboundComposerCatalogClient } from './features/chat/composerCatalogModel';
 import {
   applyConversationTitleUpdate,
@@ -1125,6 +1129,12 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectSandboxUploadOperationsV2 = useMemo(
+    () => createDesktopProjectSandboxUploadOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
   const desktopBrowserIntegrationOperationsV2 = useMemo(
     () => createDesktopBrowserIntegrationOperationsV2(
       () => desktopPluginMarketplaceGenerationActionsRefV2.current,
@@ -1876,44 +1886,30 @@ export function App() {
     showRuntimeConfig && connection === 'ready' && Boolean(config.projectId.trim()),
   );
   const chatComposerApi = useMemo(() => {
-    const remainingComposerCatalogAuthority = api;
-    const composedComposerCatalogAuthority = {
-      listWorkspaceAgents: (signal?: AbortSignal) =>
-        remainingComposerCatalogAuthority.listWorkspaceAgents(signal),
-      listManagedAgents: (signal?: AbortSignal) =>
-        desktopTenantAgentDefinitionsClientV2.listManagedAgents(signal),
-      listManagedSkills: (signal?: AbortSignal) =>
-        desktopTenantSkillDefinitionsClientV2.listManagedSkills(signal),
-      listMarketplacePlugins: (signal?: AbortSignal) =>
-        remainingComposerCatalogAuthority.listMarketplacePlugins(signal),
-      listManagedSubAgents: (signal?: AbortSignal) =>
-        desktopTenantSubAgentDefinitionsClientV2.listManagedSubAgents(signal),
-      listPromptTemplates: (tenantId: string, signal?: AbortSignal) =>
-        desktopTenantPromptTemplatesClientV2.listPromptTemplates(tenantId, signal),
-      createPromptTemplate: (
-        ...args: Parameters<typeof desktopTenantPromptTemplatesClientV2.createPromptTemplate>
-      ) => desktopTenantPromptTemplatesClientV2.createPromptTemplate(...args),
-      deletePromptTemplate: (
-        ...args: Parameters<typeof desktopTenantPromptTemplatesClientV2.deletePromptTemplate>
-      ) => desktopTenantPromptTemplatesClientV2.deletePromptTemplate(...args),
-      listConversations: (...args: Parameters<DesktopApiClient['listConversations']>) =>
-        remainingComposerCatalogAuthority.listConversations(...args),
-      getConversationMessages: (
-        ...args: Parameters<DesktopApiClient['getConversationMessages']>
-      ) => remainingComposerCatalogAuthority.getConversationMessages(...args),
-      uploadSandboxFile: (...args: Parameters<DesktopApiClient['uploadSandboxFile']>) =>
-        remainingComposerCatalogAuthority.uploadSandboxFile(...args),
-    };
-    return config.workspaceId.trim()
-      ? composedComposerCatalogAuthority
-      : unboundComposerCatalogClient(composedComposerCatalogAuthority);
+    const client = createDesktopChatComposerCatalogClientV2({
+      config,
+      projectSandboxUploadOperationsV2: desktopProjectSandboxUploadOperationsV2,
+      pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
+      workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
+      tenantAgentDefinitionsOperationsV2: desktopTenantAgentDefinitionsOperationsV2,
+      tenantPromptTemplatesOperationsV2: desktopTenantPromptTemplatesOperationsV2,
+      tenantSubAgentDefinitionsOperationsV2: desktopTenantSubAgentDefinitionsOperationsV2,
+      tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
+      workspaceConversationCatalogOperationsV2: desktopWorkspaceConversationCatalogOperationsV2,
+      newTaskFlowOperationsV2: desktopNewTaskFlowClientV2,
+    });
+    return config.workspaceId.trim() ? client : unboundComposerCatalogClient(client);
   }, [
-    api,
-    config.workspaceId,
-    desktopTenantAgentDefinitionsClientV2,
-    desktopTenantPromptTemplatesClientV2,
-    desktopTenantSubAgentDefinitionsClientV2,
-    desktopTenantSkillDefinitionsClientV2,
+    config,
+    desktopProjectSandboxUploadOperationsV2,
+    desktopPluginMarketplaceOperationsV2,
+    desktopWorkspaceRosterOperationsV2,
+    desktopTenantAgentDefinitionsOperationsV2,
+    desktopTenantPromptTemplatesOperationsV2,
+    desktopTenantSubAgentDefinitionsOperationsV2,
+    desktopTenantSkillDefinitionsOperationsV2,
+    desktopWorkspaceConversationCatalogOperationsV2,
+    desktopNewTaskFlowClientV2,
   ]);
   const socket = useAgentSocket(
     config,
@@ -2079,6 +2075,7 @@ export function App() {
     () =>
       desktopNewThreadComposerCatalogClientProviderV2.publish({
         config: newThreadRuntimeConfig,
+        projectSandboxUploadOperationsV2: desktopProjectSandboxUploadOperationsV2,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         workspaceRosterOperationsV2: desktopWorkspaceRosterOperationsV2,
         tenantAgentDefinitionsOperationsV2:
@@ -2090,6 +2087,7 @@ export function App() {
         tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
       }),
     [
+      desktopProjectSandboxUploadOperationsV2,
       desktopNewThreadComposerCatalogClientProviderV2,
       desktopPluginMarketplaceOperationsV2,
       desktopTenantAgentDefinitionsOperationsV2,

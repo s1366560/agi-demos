@@ -9,7 +9,11 @@ test('SubAgent management and both composer paths require V2 authority injection
   const settings = source('features/settings/SettingsWindow.tsx');
   const provider = source('features/task/desktopNewThreadComposerCatalogClientProviderV2.ts');
   assert.match(app, /createDesktopTenantSubAgentDefinitionsOperationsV2\(/u);
-  assert.match(app, /desktopTenantSubAgentDefinitionsClientV2\.listManagedSubAgents\(signal\)/u);
+  assert.match(app, /createDesktopChatComposerCatalogClientV2\(/u);
+  assert.match(app, /tenantSubAgentDefinitionsOperationsV2:\s*desktopTenantSubAgentDefinitionsOperationsV2/u);
+  const chat = source('features/chat/desktopChatComposerCatalogClientV2.ts');
+  assert.match(chat, /createDesktopNewThreadComposerCatalogClientProviderV2\(\)/u);
+  assert.match(provider, /subAgentDefinitions\.listManagedSubAgents\(signal\)/u);
   assert.match(settings, /tenantSubAgentDefinitionsClientV2\.listManagedSubAgents\(signal\)/u);
   assert.match(settings, /tenantSubAgentDefinitionsClientV2\.setManagedSubAgentEnabled\(/u);
   assert.match(provider, /createDesktopTenantSubAgentDefinitionsClientV2\(/u);

@@ -1,3 +1,4 @@
+import { createProjectSandboxUploadHttpOperationsV2Fixture } from './projectSandboxUploadOperationsV2Fixture.mjs';
 import { createTenantSkillDefinitionsHttpOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -46,6 +47,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
   const first = provider.publish({
     config: firstConfig,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    projectSandboxUploadOperationsV2: createProjectSandboxUploadHttpOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
@@ -57,6 +59,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
   const second = provider.publish({
     config: runtimeConfig('http://127.0.0.1:42002', 'workspace-2'),
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    projectSandboxUploadOperationsV2: createProjectSandboxUploadHttpOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
@@ -94,8 +97,9 @@ test('unbound publications hide workspace agents while retaining project catalog
   const provider = createDesktopNewThreadComposerCatalogClientProviderV2();
   const subAgentCalls = [];
   const publication = provider.publish({
-    config: runtimeConfig('http://127.0.0.1:42003', ''),
+    config: { ...runtimeConfig('https://api.memstack.test', ''), mode: 'cloud', localApiToken: '' },
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    projectSandboxUploadOperationsV2: createProjectSandboxUploadHttpOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
@@ -112,6 +116,7 @@ test('unbound publications hide workspace agents while retaining project catalog
   globalThis.fetch = async (input) => {
     const url = String(input);
     calls.push(url);
+    if (new URL(url).pathname === '/api/v1/projects/project-1') return json({id:'project-1',tenant_id:'tenant-1'});
     if (url.endsWith('/api/v1/projects/project-1/sandbox/execute')) {
       return json({
         success: true,
@@ -190,6 +195,7 @@ test('failed composer catalog publication keeps the last-good binding', () => {
   const lastGood = provider.publish({
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    projectSandboxUploadOperationsV2: createProjectSandboxUploadHttpOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
@@ -208,7 +214,8 @@ test('failed composer catalog publication keeps the last-good binding', () => {
       provider.publish({
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
-        tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
+        projectSandboxUploadOperationsV2: createProjectSandboxUploadHttpOperationsV2Fixture(),
+    tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
         tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
@@ -226,6 +233,7 @@ test('SubAgent catalog operations keep the published tenant and abort signal', a
   const publication = provider.publish({
     config,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    projectSandboxUploadOperationsV2: createProjectSandboxUploadHttpOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
@@ -250,7 +258,8 @@ test('App consumes the published V2 catalog client without constructing a new-th
   assert.match(appSource, /api:\s*desktopNewThreadComposerCatalogClientV2\.client/u);
   assert.doesNotMatch(appSource, /const newThreadApi =/u);
   assert.doesNotMatch(appSource, /new DesktopApiClient\(newThreadRuntimeConfig\)/u);
-  assert.match(providerSource, /new DesktopApiClient\(config\)/u);
+  assert.doesNotMatch(providerSource, /new DesktopApiClient\(config\)/u);
+  assert.match(providerSource, /createDesktopProjectSandboxUploadClientV2/u);
   assert.match(
     providerSource,
     /input\.pluginMarketplaceOperationsV2\.listMarketplacePlugins\(config/u

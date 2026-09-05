@@ -6,6 +6,47 @@
   "trust": "builtin",
   "modules": [
     {
+      "module_ref": "builtin://memstack/desktop/project-sandbox-upload-authority",
+      "entrypoint": "applyDesktopProjectSandboxUploadAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSandboxUploadAuthorityModuleV2.ts",
+        "digest": "sha256:42210937d04d09f991db739302bc0a1b27f86b4a8e35b5e93d0aff6c7247ac14"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-sandbox-upload-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:7dc134aa8a654fff524c61ee3f2569e918d3ab2b1d12046f01435ed8e1af02de"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/browser-integration-authority",
       "entrypoint": "applyDesktopBrowserIntegrationAuthorityV2",
       "artifact": {

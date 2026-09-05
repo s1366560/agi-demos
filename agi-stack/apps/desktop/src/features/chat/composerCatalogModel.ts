@@ -17,10 +17,7 @@ export type ComposerCatalogClient = {
   listManagedSkills: (signal?: AbortSignal) => Promise<ManagedSkill[]>;
   listMarketplacePlugins: (signal?: AbortSignal) => Promise<ManagedPlugin[]>;
   listManagedSubAgents: (signal?: AbortSignal) => Promise<ManagedSubAgent[]>;
-  listPromptTemplates: (
-    tenantId: string,
-    signal?: AbortSignal,
-  ) => Promise<PromptTemplateRecord[]>;
+  listPromptTemplates: (tenantId: string, signal?: AbortSignal) => Promise<PromptTemplateRecord[]>;
   createPromptTemplate: (
     tenantId: string,
     input: PromptTemplateCreateInput,
@@ -57,6 +54,7 @@ export type ComposerCatalogClient = {
   ) => Promise<ConversationMessagesResponse>;
   uploadSandboxFile?: (
     file: Pick<File, 'name' | 'type' | 'size' | 'arrayBuffer'>,
+    signal?: AbortSignal,
   ) => Promise<AgentInputFileMetadata>;
 };
 
@@ -82,9 +80,7 @@ export async function loadComposerCatalog(
   return { workspaceAgents, agents, skills, plugins, subagents };
 }
 
-export function unboundComposerCatalogClient(
-  api: ComposerCatalogClient,
-): ComposerCatalogClient {
+export function unboundComposerCatalogClient(api: ComposerCatalogClient): ComposerCatalogClient {
   const listManagedSubAgents = api.listManagedSubAgents.bind(api);
   const listPromptTemplates = api.listPromptTemplates.bind(api);
   const createPromptTemplate = api.createPromptTemplate.bind(api);
