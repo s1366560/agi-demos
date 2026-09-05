@@ -236,6 +236,29 @@ test('six operations hold exact tenant or project leases and freeze inputs', asy
   assert.equal(Object.isFrozen(serviceCapture.scope), true);
 });
 
+test('cloud workspace_context_unavailable config can bind without acquiring an empty tenant lease', async () => {
+  // hydrateCloudSession clears all scope fields after the supported context-unavailable 404.
+  const unavailableContextConfig = {
+    ...config('cloud'), tenantId: '', projectId: '', workspaceId: '',
+  };
+  let acquisitions = 0;
+  const operations = moduleV2.createDesktopTenantAgentDefinitionsOperationsV2(() => ({
+    async acquireServiceOperationLease() {
+      acquisitions += 1;
+      return { status: 'rejected', reasonCode: 'missing_service_provider' };
+    },
+  }));
+  const client = moduleV2.createDesktopTenantAgentDefinitionsClientV2(
+    operations, unavailableContextConfig,
+  );
+  assert.equal(acquisitions, 0);
+  await assert.rejects(
+    () => client.listManagedAgents(),
+    (error) => error.code === 'desktop_tenant_agent_definitions_operation_input_invalid',
+  );
+  assert.equal(acquisitions, 0);
+});
+
 test('input, service, authority and response drift fail closed', async () => {
   let acquisitions = 0;
   const rejected = moduleV2.createDesktopTenantAgentDefinitionsOperationsV2(() => ({

@@ -239,7 +239,6 @@ export function freezeDesktopTenantAgentDefinitionsConfigV2(
       throw invalidInput();
     }
   }
-  identifier(config.tenantId);
   return Object.freeze({ ...config });
 }
 

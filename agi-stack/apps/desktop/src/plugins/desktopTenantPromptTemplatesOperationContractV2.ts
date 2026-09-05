@@ -111,7 +111,6 @@ export function freezeDesktopTenantPromptTemplatesConfigV2(
       throw invalidInput();
     }
   }
-  cleanRequired(config.tenantId);
   return Object.freeze({ ...config });
 }
 
