@@ -202,8 +202,8 @@ test('desktop Markdown image rendering is conversation-scoped and fetches into r
   assert.match(componentSource, /new AbortController\(\)/);
   assert.match(componentSource, /URL\.createObjectURL/);
   assert.match(componentSource, /URL\.revokeObjectURL/);
-  assert.match(componentSource, /credentials:\s*'omit'/);
-  assert.match(componentSource, /referrerPolicy:\s*'no-referrer'/);
+  assert.match(componentSource, /activeClient\.loadImage\(/);
+  assert.doesNotMatch(componentSource, /\bfetch\(/);
   assert.match(componentSource, /blob\.type\.toLowerCase\(\)\.startsWith\('image\/'\)/);
   assert.match(componentSource, /loading="lazy"/);
   assert.match(stylesSource, /\.markdown-artifact-image/);

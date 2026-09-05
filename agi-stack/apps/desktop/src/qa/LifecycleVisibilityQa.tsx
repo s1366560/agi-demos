@@ -120,6 +120,7 @@ function LifecycleVisibilityQa() {
         <div className="message-scroll">
           <div className="message-stack" data-testid="lifecycle-visible-timeline">
             <AgentTimeline
+              imagePreviewClient={null}
               state={state}
               expandedItems={expandedItems}
               onToggleItem={(item) =>

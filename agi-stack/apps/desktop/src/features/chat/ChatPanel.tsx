@@ -1,3 +1,4 @@
+import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import {
   memo,
   useCallback,
@@ -238,6 +239,7 @@ export type ChatSteerRequest = {
 const COMPOSE_AHEAD_STEER_ACK_TIMEOUT_MS = 10_000;
 
 type ChatPanelProps = {
+  imagePreviewClient: StructuredImagePreviewClientV2 | null;
   api: ComposerCatalogClient;
   conversations: readonly AgentConversation[];
   selectedConversationId?: string | null;
@@ -395,6 +397,7 @@ function equalStringArrays(
 }
 
 export const ChatPanel = memo(function ChatPanel({
+  imagePreviewClient,
   api,
   conversations,
   selectedConversationId,
@@ -1685,6 +1688,7 @@ export const ChatPanel = memo(function ChatPanel({
                     </section>
                   ) : null}
                   <AgentTimeline
+                    imagePreviewClient={imagePreviewClient}
                     state={visibleTimelineState ?? timelineState}
                     expandedItems={expandedTimelineItems}
                     onToggleItem={toggleTimelineItem}
@@ -1727,6 +1731,7 @@ export const ChatPanel = memo(function ChatPanel({
                   );
                   return (
                     <WorkspaceTranscriptMessage
+                      imagePreviewClient={imagePreviewClient}
                       message={message}
                       key={message.id}
                       onReply={

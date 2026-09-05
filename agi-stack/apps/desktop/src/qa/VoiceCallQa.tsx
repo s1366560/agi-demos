@@ -490,6 +490,7 @@ function VoiceCallQa() {
           </header>
           <div className="session-steering-qa-content compose-ahead-qa-content">
             <ChatPanel
+              imagePreviewClient={null}
               api={qaApi}
               conversations={conversations}
               selectedConversationId={conversation.id}

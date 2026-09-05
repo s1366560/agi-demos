@@ -1,4 +1,6 @@
-import { isValidElement, memo, useEffect, useRef, useState } from 'react';
+import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
+import { workspaceImagePreviewClient } from './structuredImagePreviewOwnerModel';
+import { isValidElement, memo, useMemo, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityLogIcon,
@@ -57,6 +59,7 @@ export function SessionEmptyState() {
 // re-render — e.g. every rAF-batched socket flush during streaming — used to
 // reconcile the entire transcript; now unchanged rows bail out immediately.
 export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessage({
+  imagePreviewClient,
   message,
   onReply,
   onEdit,
@@ -67,6 +70,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
   onSaveTemplate,
   retryDisabled = false,
 }: {
+  imagePreviewClient: StructuredImagePreviewClientV2 | null;
   message: WorkspaceMessage;
   onReply?: () => void;
   onEdit?: () => void;
@@ -79,6 +83,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
 }) {
   const { t } = useI18n();
   const kind = messageKind(message);
+  const carriers = useMemo(() => [message], [message]);
   return (
     <NarrativeMessageFrame
       kind={kind}
@@ -103,7 +108,7 @@ export const WorkspaceTranscriptMessage = memo(function WorkspaceTranscriptMessa
       onSaveTemplate={onSaveTemplate}
       retryDisabled={retryDisabled}
     >
-      <MarkdownArtifactImageProvider carriers={[message]}>
+      <MarkdownArtifactImageProvider client={workspaceImagePreviewClient(imagePreviewClient, message)} carriers={carriers}>
         <MarkdownContent content={message.content} className="transcript-content" />
       </MarkdownArtifactImageProvider>
       {kind === 'user' ? <MessageForcedSkillBadge message={message} /> : null}

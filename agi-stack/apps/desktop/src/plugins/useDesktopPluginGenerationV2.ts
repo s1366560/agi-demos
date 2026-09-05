@@ -15,6 +15,7 @@ import {
 
 import type { DesktopRuntimeConfig } from '../types';
 
+import { desktopStructuredImagePreviewAuthorityDefinitionV2 } from './desktopStructuredImagePreviewAuthorityModuleV2';
 import { desktopArtifactContentAuthorityDefinitionV2 } from './desktopArtifactContentAuthorityModuleV2';
 import { desktopAutomationAuthorityDefinitionV2 } from './desktopAutomationAuthorityModuleV2';
 import { desktopConversationLifecycleAuthorityDefinitionV2 } from './desktopConversationLifecycleAuthorityModuleV2';
@@ -121,6 +122,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
       validateDesktopRendererContributionsV2,
     ),
     desktopArtifactContentAuthorityDefinitionV2,
+    desktopStructuredImagePreviewAuthorityDefinitionV2,
     desktopAutomationAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,

@@ -3096,6 +3096,7 @@ function SessionSteeringQa() {
           </header>
           <div className="session-steering-qa-content">
             <ChatPanel
+              imagePreviewClient={null}
               api={qaApi}
               conversations={qaConversations}
               selectedConversationId={

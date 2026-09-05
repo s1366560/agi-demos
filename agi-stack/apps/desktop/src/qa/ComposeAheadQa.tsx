@@ -246,6 +246,7 @@ function ComposeAheadQa() {
           </header>
           <div className="session-steering-qa-content compose-ahead-qa-content">
             <ChatPanel
+              imagePreviewClient={null}
               composeAheadFallbackAllowed
               api={qaApi}
               conversations={[conversation]}

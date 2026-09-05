@@ -1,3 +1,5 @@
+import type { StructuredImagePreviewClientV2 } from '../../plugins/desktopStructuredImagePreviewAuthorityModuleV2';
+import { conversationImagePreviewClient } from './structuredImagePreviewOwnerModel';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Button, Text } from '@radix-ui/themes';
 import {
@@ -164,6 +166,7 @@ type AnnotatedTimelineNode =
   | (TimelineGroupNode & TimelineGroupAnnotation);
 
 export function AgentTimeline({
+  imagePreviewClient,
   state,
   expandedItems,
   onToggleItem,
@@ -189,6 +192,7 @@ export function AgentTimeline({
   subAgentControlAuthority,
   onSubAgentControl,
 }: {
+  imagePreviewClient: StructuredImagePreviewClientV2 | null;
   state: ConversationTimelineState;
   expandedItems: Record<string, boolean>;
   onToggleItem: (item: AgentTimelineItem) => void;
@@ -750,7 +754,10 @@ export function AgentTimeline({
     </div>
   );
   return (
-    <MarkdownArtifactImageProvider carriers={state.items}>
+    <MarkdownArtifactImageProvider
+      client={conversationImagePreviewClient(imagePreviewClient, state.conversationId)}
+      carriers={state.items}
+    >
       {timeline}
     </MarkdownArtifactImageProvider>
   );

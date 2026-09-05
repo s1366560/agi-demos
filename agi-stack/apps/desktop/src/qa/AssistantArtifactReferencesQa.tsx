@@ -131,9 +131,10 @@ function AssistantArtifactReferencesQa() {
           <div className="message-scroll">
             <div className="message-stack">
               {view === 'workspace' ? (
-                <WorkspaceTranscriptMessage message={workspaceMessage} />
+                <WorkspaceTranscriptMessage imagePreviewClient={null} message={workspaceMessage} />
               ) : (
                 <AgentTimeline
+                  imagePreviewClient={null}
                   state={state}
                   expandedItems={{}}
                   onToggleItem={() => undefined}

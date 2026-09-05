@@ -3016,6 +3016,47 @@
         }
       },
       "contract_digest": "sha256:a594f75a28df175e68c9ff19bc1f9f42a2645a4cd1e1d64d950b29e415125117"
+    },
+    {
+      "module_ref": "builtin://memstack/desktop/structured-image-preview-authority",
+      "entrypoint": "applyDesktopStructuredImagePreviewAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopStructuredImagePreviewAuthorityModuleV2.ts",
+        "digest": "sha256:7c9418995931ba5d3b2b7f0a6f82e41dc6e42d2f641eeed5c8a333d6ef0384be"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.structured-image-preview-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "structured-preview-url",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:d25fa154819dd855733ffe4942ebb32898ccc023c56b06b8ac817000ab633ad1"
     }
   ],
   "permissions": [],

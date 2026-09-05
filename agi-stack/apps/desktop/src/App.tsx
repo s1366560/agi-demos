@@ -78,6 +78,7 @@ import {
 import {
   createDesktopArtifactContentClientV2,
 } from './plugins/desktopArtifactContentAuthorityModuleV2';
+import { createDesktopStructuredImagePreviewClientV2 } from './plugins/desktopStructuredImagePreviewAuthorityModuleV2';
 import { createDesktopAutomationOperationsV2 } from './plugins/desktopAutomationAuthorityModuleV2';
 import { createDesktopConversationLifecycleOperationsV2 } from './plugins/desktopConversationLifecycleAuthorityModuleV2';
 import { createDesktopConversationConfigOperationsV2 } from './plugins/desktopConversationConfigAuthorityModuleV2';
@@ -4974,6 +4975,56 @@ export function App() {
     [config.projectId, dataset.workspacesByProject],
   );
   const selectedConversation = scopedConversation;
+  const imagePreviewConversationId = selectedConversation?.id;
+  const imagePreviewConversationTenantId = selectedConversation?.tenant_id;
+  const imagePreviewConversationProjectId = selectedConversation?.project_id;
+  const imagePreviewWorkspaceId = selectedWorkspace?.id;
+  const imagePreviewWorkspaceTenantId = selectedWorkspace?.tenant_id;
+  const imagePreviewWorkspaceProjectId = selectedWorkspace?.project_id;
+  const desktopStructuredImagePreviewClientV2 = useMemo(() => {
+    if (imagePreviewConversationId !== undefined) {
+      if (
+        imagePreviewConversationTenantId !== config.tenantId ||
+        imagePreviewConversationProjectId !== config.projectId
+      ) return null;
+      return createDesktopStructuredImagePreviewClientV2(
+        () => desktopRendererGenerationV2.actions,
+        config,
+        {
+          kind: 'conversation',
+          tenantId: config.tenantId,
+          projectId: config.projectId,
+          id: imagePreviewConversationId,
+        },
+      );
+    }
+    if (
+      imagePreviewWorkspaceId === undefined ||
+      imagePreviewWorkspaceId !== config.workspaceId ||
+      (imagePreviewWorkspaceTenantId !== undefined && imagePreviewWorkspaceTenantId !== config.tenantId) ||
+      (imagePreviewWorkspaceProjectId !== undefined && imagePreviewWorkspaceProjectId !== config.projectId)
+    ) return null;
+    return createDesktopStructuredImagePreviewClientV2(
+      () => desktopRendererGenerationV2.actions,
+      config,
+      {
+        kind: 'workspace',
+        tenantId: config.tenantId,
+        projectId: config.projectId,
+        id: imagePreviewWorkspaceId,
+      },
+    );
+  }, [
+    config,
+    desktopRendererGenerationV2.actions,
+    imagePreviewConversationId,
+    imagePreviewConversationTenantId,
+    imagePreviewConversationProjectId,
+    imagePreviewWorkspaceId,
+    imagePreviewWorkspaceTenantId,
+    imagePreviewWorkspaceProjectId,
+    auth.user?.user_id,
+  ]);
   const activityInbox = useActivityInbox({
     items: dataset.myWork,
     scopeKey: `${config.tenantId}:${config.projectId}`,
@@ -6889,6 +6940,7 @@ export function App() {
   const createChatWorkbenchViewV2 = (): DesktopWorkbenchViewV2 => ({
     kind: 'chat',
     chatPanel: {
+      imagePreviewClient: desktopStructuredImagePreviewClientV2,
       api: chatComposerApi,
       conversations: dataset.conversationsByWorkspace[config.workspaceId] ?? [],
       selectedConversationId: selectedConversation?.id ?? null,
