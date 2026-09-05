@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { afterEach, test } from 'node:test';
 
@@ -20,10 +20,6 @@ const bootstrapPath = new URL(
   import.meta.url,
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
-const managedClientSource = readFileSync(
-  new URL('../src/api/managedResourcesClient.ts', import.meta.url),
-  'utf8',
-);
 const apiClientSource = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8');
 const generationSource = readFileSync(
   new URL('../src/plugins/useDesktopPluginGenerationV2.ts', import.meta.url),
@@ -146,7 +142,8 @@ test('production composer paths require V2 operations with no static client auth
   assert.match(appSource, /createDesktopTenantPromptTemplatesClientV2\(/u);
   assert.match(appSource, /tenantPromptTemplatesOperationsV2:\s*desktopTenantPromptTemplatesOperationsV2/u);
   assert.match(generationSource, /desktopTenantPromptTemplatesAuthorityDefinitionV2/u);
-  for (const source of [managedClientSource, apiClientSource]) {
+  assert.equal(existsSync(new URL('../src/api/managedResourcesClient.ts', import.meta.url)), false);
+  for (const source of [apiClientSource]) {
     assert.doesNotMatch(source, /async (?:list|create|delete)PromptTemplate\(/u);
   }
   assert.doesNotMatch(appSource, /remainingComposerCatalogAuthority\.(?:list|create|delete)PromptTemplate/u);

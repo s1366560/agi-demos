@@ -1,10 +1,10 @@
+import { createTenantSkillHttpClientV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 const {
   createDesktopTenantEvolutionOperationsV2,
@@ -94,7 +94,7 @@ test('managed skill package APIs preserve JSON, multipart, version, and rollback
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',
@@ -244,7 +244,7 @@ test('managed skill inspection APIs preserve export, version detail, and evoluti
       tenantId: 'tenant-1',
       projectId: 'project-1',
     };
-    const client = new DesktopApiClient(config);
+    const client = createTenantSkillHttpClientV2Fixture(config);
     const exported = await client.exportManagedSkillPackage(skill.id);
     const version = await client.getManagedSkillVersion(skill.id, 2);
     const evolution = await client.getManagedSkillEvolution(skill.id);

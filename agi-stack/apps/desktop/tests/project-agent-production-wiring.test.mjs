@@ -1,3 +1,4 @@
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -155,6 +156,7 @@ async function loadSnapshot(config) {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture({
           scopeRevision: 23,
         }),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture({

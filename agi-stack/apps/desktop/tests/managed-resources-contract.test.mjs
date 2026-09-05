@@ -1,13 +1,10 @@
+import { createTenantSkillDefinitionsHttpClientV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import { createTenantSubAgentDefinitionsHttpClientV2Fixture } from './tenantSubAgentDefinitionsOperationsV2Fixture.mjs';
 
 const require = createRequire(import.meta.url);
-const {
-  ManagedResourcesClient,
-  ManagedResourcesClientError,
-} = require('/tmp/agistack-desktop-test-dist/src/api/managedResourcesClient.js');
 const { DesktopApiError } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 
@@ -35,14 +32,14 @@ test('managed resource lists reject malformed successful collection payloads', a
       tenantId: 'tenant-1',
       projectId: 'project-1',
     };
-    const client = new ManagedResourcesClient(config);
+    const client = createTenantSkillDefinitionsHttpClientV2Fixture(config);
     const subagents = createTenantSubAgentDefinitionsHttpClientV2Fixture(config);
     await assert.rejects(
       () => client.listManagedSkills(),
       (error) =>
-        error instanceof ManagedResourcesClientError &&
+        error instanceof DesktopApiError &&
         error.status === 502 &&
-        error.payload?.code === 'managed_resource_list_contract_invalid',
+        error.reasonCode === 'tenant_skill_definitions_collection_contract_invalid',
     );
     await assert.rejects(
       () => subagents.listManagedSubAgents(),

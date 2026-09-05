@@ -1,3 +1,6 @@
+import { createDesktopTenantSkillDefinitionsClientV2, type DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
+import { createDesktopTenantSkillPackagesClientV2, type DesktopTenantSkillPackagesOperationsV2 } from '../../plugins/desktopTenantSkillPackagesAuthorityModuleV2';
+import { createDesktopTenantSkillEvolutionClientV2, type DesktopTenantSkillEvolutionOperationsV2 } from '../../plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Theme } from '@radix-ui/themes';
@@ -7,7 +10,6 @@ import {
   MagnifyingGlassIcon,
 } from '@radix-ui/react-icons';
 
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import { useI18n } from '../../i18n';
 import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import type {
@@ -102,6 +104,9 @@ type SettingsWindowProps = {
   pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  tenantSkillDefinitionsOperationsV2: DesktopTenantSkillDefinitionsOperationsV2;
+  tenantSkillPackagesOperationsV2: DesktopTenantSkillPackagesOperationsV2;
+  tenantSkillEvolutionOperationsV2: DesktopTenantSkillEvolutionOperationsV2;
   projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
   tenantSubAgentDefinitionsOperationsV2: DesktopTenantSubAgentDefinitionsOperationsV2;
@@ -127,6 +132,9 @@ export function SettingsWindow({
   pluginMarketplaceOperationsV2,
   tenantTemplatesOperationsV2,
   tenantEvolutionOperationsV2,
+  tenantSkillDefinitionsOperationsV2,
+  tenantSkillPackagesOperationsV2,
+  tenantSkillEvolutionOperationsV2,
   projectChannelsOperationsV2,
   tenantAgentDefinitionsOperationsV2,
   tenantSubAgentDefinitionsOperationsV2,
@@ -160,6 +168,18 @@ export function SettingsWindow({
   const resourceContextKeyRef = useRef(resourceContextKey);
   activeSectionRef.current = section;
   resourceContextKeyRef.current = resourceContextKey;
+  const tenantSkillDefinitionsClientV2 = useMemo(
+    () => createDesktopTenantSkillDefinitionsClientV2(tenantSkillDefinitionsOperationsV2, config),
+    [config, tenantSkillDefinitionsOperationsV2],
+  );
+  const tenantSkillPackagesClientV2 = useMemo(
+    () => createDesktopTenantSkillPackagesClientV2(tenantSkillPackagesOperationsV2, config),
+    [config, tenantSkillPackagesOperationsV2],
+  );
+  const tenantSkillEvolutionClientV2 = useMemo(
+    () => createDesktopTenantSkillEvolutionClientV2(tenantSkillEvolutionOperationsV2, config),
+    [config, tenantSkillEvolutionOperationsV2],
+  );
   const tenantSubAgentDefinitionsClientV2 = useMemo(
     () => createDesktopTenantSubAgentDefinitionsClientV2(
       tenantSubAgentDefinitionsOperationsV2, config,
@@ -247,10 +267,9 @@ export function SettingsWindow({
       setResourceLoading(true);
       setResourceError(null);
       try {
-        const managedResources = new ManagedResourcesClient(config);
         const items =
           resourceSection === 'skills'
-            ? await managedResources.listManagedSkills(signal)
+            ? await tenantSkillDefinitionsClientV2.listManagedSkills(signal)
             : resourceSection === 'plugins'
               ? await pluginMarketplaceOperationsV2.listMarketplacePlugins(config, signal)
               : resourceSection === 'agents'
@@ -280,7 +299,7 @@ export function SettingsWindow({
         if (requestId === resourceRequestId.current) setResourceLoading(false);
       }
     },
-    [config, pluginMarketplaceOperationsV2, resourceContextKey, tenantAgentDefinitionsClientV2, tenantSubAgentDefinitionsClientV2]
+    [config, pluginMarketplaceOperationsV2, resourceContextKey, tenantAgentDefinitionsClientV2, tenantSubAgentDefinitionsClientV2, tenantSkillDefinitionsClientV2]
   );
   const reloadPluginResources = useCallback(() => loadResources('plugins'), [loadResources]);
   const reloadSkillResources = useCallback(() => loadResources('skills'), [loadResources]);
@@ -320,7 +339,7 @@ export function SettingsWindow({
   });
   const skillManagement = useSkillManagement({
     active: open,
-    config,
+    client: tenantSkillDefinitionsClientV2,
     contextKey: resourceContextKey,
     canCreate: canCreateSkills,
     onReload: reloadSkillResources,
@@ -330,6 +349,8 @@ export function SettingsWindow({
   const skillPackageManagement = useSkillPackageManagement({
     active: open,
     config,
+    packagesClient: tenantSkillPackagesClientV2,
+    evolutionClient: tenantSkillEvolutionClientV2,
     tenantEvolutionOperationsV2,
     contextKey: resourceContextKey,
     canImport: canCreateSkills,
@@ -514,10 +535,9 @@ export function SettingsWindow({
     setActionBusyId(item.id);
     setResourceActionError(null);
     try {
-      const managedResources = new ManagedResourcesClient(config);
       if (action.kind === 'set_skill_status') {
         const skill = item as ManagedSkill;
-        await managedResources.setManagedSkillStatus(
+        await tenantSkillDefinitionsClientV2.setManagedSkillStatus(
           skill.id,
           action.nextActive ? 'active' : 'disabled',
           skill.revision,

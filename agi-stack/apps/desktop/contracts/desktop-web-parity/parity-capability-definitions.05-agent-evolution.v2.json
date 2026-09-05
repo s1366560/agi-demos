@@ -275,7 +275,12 @@
         "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
         "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx",
         "agi-stack/apps/desktop/src/features/settings/useSkillPackageManagement.ts",
-        "agi-stack/apps/desktop/src/api/managedResourcesClient.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEvolutionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEvolutionOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantEvolutionHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionHttpProjectionV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
       "judgment_rationale": "Web and Cloud Desktop now both bind the tenant Evolution overview, configuration, run, apply and reject contracts; tenant reads require membership and tenant mutations require administration. Desktop has a real canonical loader, typed client/controller/presentation model, App binding and native page, while the per-skill dialog remains an adjacent native entry. The observed P2 Snapshot projection does not yet carry a valid authority revision, so Cloud must stay capability_authority_revision_unavailable despite the completed renderer path. Local calls the same sidecar route family and remains observed unavailable under local_skill_evolution_authority_unavailable until a real revision-bound evolution authority exists."

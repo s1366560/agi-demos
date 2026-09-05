@@ -1,3 +1,4 @@
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
@@ -116,6 +117,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
         config,
         {
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+          tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
           tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
           projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
           projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -233,6 +235,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
     cloudConfig,
     {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
       tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -355,6 +358,7 @@ test('Workbench default production journey authority supports tenant-level scope
       config,
       {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -477,6 +481,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
     cloudConfig,
     {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
       tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),

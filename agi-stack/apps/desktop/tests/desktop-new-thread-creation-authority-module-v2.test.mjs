@@ -104,6 +104,15 @@ const { desktopTenantAgentDefinitionsAuthorityDefinitionV2 } = require(
 const { desktopTenantPromptTemplatesAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantPromptTemplatesAuthorityModuleV2.js',
 );
+const { desktopTenantSkillDefinitionsAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantSkillDefinitionsAuthorityModuleV2.js',
+);
+const { desktopTenantSkillPackagesAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantSkillPackagesAuthorityModuleV2.js',
+);
+const { desktopTenantSkillEvolutionAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopTenantSkillEvolutionAuthorityModuleV2.js',
+);
 const { desktopTenantSubAgentDefinitionsAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2.js',
 );
@@ -287,6 +296,9 @@ function rendererDefinitions() {
     desktopTenantAgentDefinitionsAuthorityDefinitionV2,
     desktopTenantPromptTemplatesAuthorityDefinitionV2,
     desktopTenantSubAgentDefinitionsAuthorityDefinitionV2,
+    desktopTenantSkillDefinitionsAuthorityDefinitionV2,
+    desktopTenantSkillPackagesAuthorityDefinitionV2,
+    desktopTenantSkillEvolutionAuthorityDefinitionV2,
   desktopTenantOrganizationSettingsAuthorityDefinitionV2,
     desktopTenantTrustAuthorityDefinitionV2,
     desktopSessionArtifactActionAuthorityDefinitionV2,

@@ -188,7 +188,8 @@ test('each route owns a typed authority adapter and validates its runtime scope'
     ],
     [
       createSkillsRouteClient(config(), {
-        listManagedSkills: async () => {
+        loadTenantSkillDefinitions: async ({ scope: operationScope }) => {
+          assert.deepEqual(operationScope, scope);
           calls.push('skills');
           return [];
         },
@@ -337,4 +338,24 @@ test('registry and App bind all five routes without Web escape or DesktopApiClie
     `${appSource}\n${registrySource}`,
     /settings-routes[\s\S]{0,500}(?:WebView|<webview|<iframe|openExternal|window\.open)/iu,
   );
+});
+
+
+test('skills route forwards the scoped V2 observation and rejects without a fallback', async () => {
+  const runtime = config();
+  const scope = { authority: runtime.mode, tenantId: runtime.tenantId, projectId: runtime.projectId };
+  const controller = new AbortController();
+  const calls = [];
+  const failure = new Error('missing_service_provider');
+  const client = createSkillsRouteClient(runtime, {
+    async loadTenantSkillDefinitions(input) {
+      calls.push(input);
+      throw failure;
+    },
+  });
+  await assert.rejects(client.observe(scope, { signal: controller.signal }), (error) => error === failure);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], { config: runtime, scope, signal: controller.signal });
+  await assert.rejects(client.observe({ ...scope, tenantId: 'another-tenant' }), /management_route_runtime_scope_mismatch/u);
+  assert.equal(calls.length, 1);
 });

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
+import type { DesktopTenantSkillDefinitionsClientV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import type {
-  DesktopRuntimeConfig,
   ManagedSkill,
   ManagedSkillCreateMutation,
   ManagedSkillMutation,
@@ -17,7 +16,7 @@ export type SkillDialogState = {
 
 export function useSkillManagement({
   active,
-  config,
+  client,
   contextKey,
   canCreate,
   onReload,
@@ -25,7 +24,7 @@ export function useSkillManagement({
   onDeleted,
 }: {
   active: boolean;
-  config: DesktopRuntimeConfig;
+  client: DesktopTenantSkillDefinitionsClientV2;
   contextKey: string;
   canCreate: boolean;
   onReload: () => Promise<void>;
@@ -57,7 +56,7 @@ export function useSkillManagement({
       setDialog({ key, skill, loading: Boolean(skill), contentReady: !skill });
       if (!skill) return;
       try {
-        const content = await new ManagedResourcesClient(config).getManagedSkillContent(skill.id);
+        const content = await client.getManagedSkillContent(skill.id);
         if (contextKeyRef.current !== requestContextKey) return;
         setDialog((current) =>
           current?.key === key
@@ -75,7 +74,7 @@ export function useSkillManagement({
         setError(errorMessage(caught));
       }
     },
-    [canCreate, config, contextKey]
+    [canCreate, client, contextKey]
   );
 
   const save = useCallback(
@@ -85,7 +84,6 @@ export function useSkillManagement({
       setBusy(true);
       setError(null);
       try {
-        const client = new ManagedResourcesClient(config);
         let saved: ManagedSkill;
         if (dialog.skill) {
           const { full_content: fullContent, ...metadata } = input;
@@ -113,7 +111,7 @@ export function useSkillManagement({
         if (contextKeyRef.current === requestContextKey) setBusy(false);
       }
     },
-    [config, contextKey, dialog, onReload, onSaved]
+    [client, contextKey, dialog, onReload, onSaved]
   );
 
   const remove = useCallback(async () => {
@@ -122,7 +120,7 @@ export function useSkillManagement({
     setBusy(true);
     setError(null);
     try {
-      await new ManagedResourcesClient(config).deleteManagedSkill(
+      await client.deleteManagedSkill(
         dialog.skill.id,
         dialog.skill.revision,
       );
@@ -135,7 +133,7 @@ export function useSkillManagement({
     } finally {
       if (contextKeyRef.current === requestContextKey) setBusy(false);
     }
-  }, [config, contextKey, dialog, onDeleted, onReload]);
+  }, [client, contextKey, dialog, onDeleted, onReload]);
 
   return { dialog, busy, error, close, open, save, remove };
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { test } from 'node:test';
 
 const source = (path) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
@@ -22,7 +22,8 @@ test('SubAgent management and both composer paths require V2 authority injection
 });
 
 test('SubAgent static client methods and optional catalog fallback are retired', () => {
-  for (const path of ['api/client.ts', 'api/managedResourcesClient.ts']) {
+  assert.equal(existsSync(new URL('../src/api/managedResourcesClient.ts', import.meta.url)), false);
+  for (const path of ['api/client.ts']) {
     assert.doesNotMatch(source(path), /async (?:listManagedSubAgents|setManagedSubAgentEnabled|importManagedFilesystemSubAgent|createManagedSubAgent|updateManagedSubAgent|deleteManagedSubAgent)\(/u);
   }
   const composer = source('features/chat/composerCatalogModel.ts');

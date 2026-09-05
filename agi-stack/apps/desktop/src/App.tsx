@@ -143,6 +143,9 @@ import {
   createDesktopTenantSubAgentDefinitionsClientV2,
   createDesktopTenantSubAgentDefinitionsOperationsV2,
 } from './plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
+import { createDesktopTenantSkillDefinitionsClientV2, createDesktopTenantSkillDefinitionsOperationsV2 } from './plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
+import { createDesktopTenantSkillPackagesOperationsV2 } from './plugins/desktopTenantSkillPackagesAuthorityModuleV2';
+import { createDesktopTenantSkillEvolutionOperationsV2 } from './plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
 import { createDesktopTenantGenesOperationsV2 } from './plugins/desktopTenantGenesAuthorityModuleV2';
 import { createDesktopTenantOrganizationSettingsOperationsV2 } from './plugins/desktopTenantOrganizationSettingsAuthorityModuleV2';
 import { createDesktopTenantAcpOperationsV2 } from './plugins/desktopTenantAcpAuthorityModuleV2';
@@ -1108,6 +1111,24 @@ export function App() {
       ),
     [],
   );
+  const desktopTenantSkillDefinitionsOperationsV2 = useMemo(
+    () => createDesktopTenantSkillDefinitionsOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopTenantSkillPackagesOperationsV2 = useMemo(
+    () => createDesktopTenantSkillPackagesOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
+  const desktopTenantSkillEvolutionOperationsV2 = useMemo(
+    () => createDesktopTenantSkillEvolutionOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
   const desktopTenantSubAgentDefinitionsOperationsV2 = useMemo(
     () => createDesktopTenantSubAgentDefinitionsOperationsV2(
       () => desktopPluginMarketplaceGenerationActionsRefV2.current,
@@ -1533,6 +1554,12 @@ export function App() {
       ),
     [config, desktopTenantAgentDefinitionsOperationsV2],
   );
+  const desktopTenantSkillDefinitionsClientV2 = useMemo(
+    () => createDesktopTenantSkillDefinitionsClientV2(
+      desktopTenantSkillDefinitionsOperationsV2, config,
+    ),
+    [config, desktopTenantSkillDefinitionsOperationsV2],
+  );
   const desktopTenantSubAgentDefinitionsClientV2 = useMemo(
     () => createDesktopTenantSubAgentDefinitionsClientV2(
       desktopTenantSubAgentDefinitionsOperationsV2, config,
@@ -1577,6 +1604,7 @@ export function App() {
       tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
       tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
       tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
+      tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
       tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
       tenantAgentDefinitionsOperationsV2:
         desktopTenantAgentDefinitionsOperationsV2,
@@ -1651,6 +1679,7 @@ export function App() {
       desktopTenantGenesOperationsV2,
       desktopTenantTemplatesOperationsV2,
       desktopTenantAgentDefinitionsOperationsV2,
+      desktopTenantSkillDefinitionsOperationsV2,
       desktopUserProfileOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
       desktopTenantOverviewOperationsV2,
@@ -1714,6 +1743,7 @@ export function App() {
         tenantEventsOperationsV2: desktopTenantEventsOperationsV2,
         tenantPatternsOperationsV2: desktopTenantPatternsOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
+        tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         tenantAgentDefinitionsOperationsV2:
           desktopTenantAgentDefinitionsOperationsV2,
@@ -1763,6 +1793,7 @@ export function App() {
       desktopDeadLetterQueueOperationsV2,
       desktopInstanceTemplatesOperationsV2,
       desktopTenantEvolutionOperationsV2,
+      desktopTenantSkillDefinitionsOperationsV2,
       desktopTenantTemplatesOperationsV2,
       desktopTenantAgentDefinitionsOperationsV2,
       desktopUserProfileOperationsV2,
@@ -1791,7 +1822,7 @@ export function App() {
       listManagedAgents: (signal?: AbortSignal) =>
         desktopTenantAgentDefinitionsClientV2.listManagedAgents(signal),
       listManagedSkills: (signal?: AbortSignal) =>
-        remainingComposerCatalogAuthority.listManagedSkills(signal),
+        desktopTenantSkillDefinitionsClientV2.listManagedSkills(signal),
       listMarketplacePlugins: (signal?: AbortSignal) =>
         remainingComposerCatalogAuthority.listMarketplacePlugins(signal),
       listManagedSubAgents: (signal?: AbortSignal) =>
@@ -1821,6 +1852,7 @@ export function App() {
     desktopTenantAgentDefinitionsClientV2,
     desktopTenantPromptTemplatesClientV2,
     desktopTenantSubAgentDefinitionsClientV2,
+    desktopTenantSkillDefinitionsClientV2,
   ]);
   const socket = useAgentSocket(
     config,
@@ -1993,6 +2025,7 @@ export function App() {
           desktopTenantPromptTemplatesOperationsV2,
         tenantSubAgentDefinitionsOperationsV2:
           desktopTenantSubAgentDefinitionsOperationsV2,
+        tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
       }),
     [
       desktopNewThreadComposerCatalogClientProviderV2,
@@ -2000,6 +2033,7 @@ export function App() {
       desktopTenantAgentDefinitionsOperationsV2,
       desktopTenantPromptTemplatesOperationsV2,
       desktopTenantSubAgentDefinitionsOperationsV2,
+      desktopTenantSkillDefinitionsOperationsV2,
       desktopWorkspaceRosterOperationsV2,
       newThreadRuntimeConfig,
     ],
@@ -7711,6 +7745,9 @@ export function App() {
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
+        tenantSkillPackagesOperationsV2: desktopTenantSkillPackagesOperationsV2,
+        tenantSkillEvolutionOperationsV2: desktopTenantSkillEvolutionOperationsV2,
+        tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
         projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
         tenantAgentDefinitionsOperationsV2:
           desktopTenantAgentDefinitionsOperationsV2,

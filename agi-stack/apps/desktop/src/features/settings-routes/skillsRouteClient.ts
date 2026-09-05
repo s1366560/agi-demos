@@ -1,4 +1,4 @@
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
+import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import type { DesktopRuntimeConfig } from '../../types';
 import {
   managementRouteObservation,
@@ -7,13 +7,13 @@ import {
 } from './managementRouteTypes';
 
 export type SkillsRouteAuthority = Pick<
-  ManagedResourcesClient,
-  'listManagedSkills'
+  DesktopTenantSkillDefinitionsOperationsV2,
+  'loadTenantSkillDefinitions'
 >;
 
 export function createSkillsRouteClient(
   config: DesktopRuntimeConfig,
-  authority: SkillsRouteAuthority = new ManagedResourcesClient(config),
+  authority: SkillsRouteAuthority,
 ): ManagementRouteClient {
   const runtimeConfig = Object.freeze({ ...config });
   const client: ManagementRouteClient = {
@@ -22,7 +22,11 @@ export function createSkillsRouteClient(
         runtimeConfig,
         scope,
       );
-      const skills = await authority.listManagedSkills(options?.signal);
+      const skills = await authority.loadTenantSkillDefinitions({
+        config: runtimeConfig,
+        scope: currentScope,
+        signal: options?.signal,
+      });
       return managementRouteObservation(currentScope, skills.length);
     },
   };

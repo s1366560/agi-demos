@@ -1,3 +1,4 @@
+import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import type { DesktopRuntimeConfig } from '../../types';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import type { DesktopProjectBlackboardOperationsV2 } from '../../plugins/desktopProjectBlackboardAuthorityModuleV2';
@@ -190,6 +191,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
     'loadTenantAgentDashboard'
   >;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
+  tenantSkillDefinitionsOperationsV2: Pick<DesktopTenantSkillDefinitionsOperationsV2, 'loadTenantSkillDefinitions'>;
   tenantOverviewOperationsV2: Pick<
     DesktopTenantOverviewOperationsV2,
     'loadTenantOverview'
@@ -288,6 +290,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
       tenantAgentDashboardOperationsV2: input.tenantAgentDashboardOperationsV2,
       tenantAgentDefinitionsOperationsV2:
         input.tenantAgentDefinitionsOperationsV2,
+      tenantSkillDefinitionsOperationsV2: input.tenantSkillDefinitionsOperationsV2,
       tenantAnalyticsOperationsV2: input.tenantAnalyticsOperationsV2,
       tenantOverviewOperationsV2: input.tenantOverviewOperationsV2,
       tenantProjectsOperationsV2: input.tenantProjectsOperationsV2,

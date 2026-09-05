@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
@@ -52,14 +52,11 @@ function hookHarness({ mode = 'cloud', review = Promise.resolve(), detail } = {}
     tenantEvolutionOperationsV2,
     setEvolutionError: (error) => { state.error = error; },
     setEvolutionDialog: (update) => { state.dialog = update(state.dialog); },
-    ManagedResourcesClient: class {
-      constructor(boundConfig) { assert.equal(boundConfig, config); }
-      applyManagedSkillEvolutionJob(id) { state.legacy.push(['apply', id]); return review; }
-      rejectManagedSkillEvolutionJob(id) { state.legacy.push(['reject', id]); return review; }
+    evolutionClient: {
       getManagedSkillEvolution(id) {
         state.detailReads.push(id);
         return detail ?? Promise.resolve({ skill_id: id, jobs: [] });
-      }
+      },
     },
     onReload: async () => { state.reloads += 1; },
     onSelected: (id) => { state.selected.push(id); },
@@ -146,7 +143,8 @@ test('late detail completion does not select a skill after changing context', as
 test('both static skill job mutation APIs are retired from client classes', () => {
   const retired = new Set(['applyManagedSkillEvolutionJob', 'rejectManagedSkillEvolutionJob',
     'mutateManagedSkillEvolutionJob']);
-  for (const path of ['api/client.ts', 'api/managedResourcesClient.ts']) {
+  assert.equal(existsSync(new URL('../src/api/managedResourcesClient.ts', import.meta.url)), false);
+  for (const path of ['api/client.ts']) {
     const source = readSource(path);
     const method = find(source, (node) => ts.isMethodDeclaration(node)
       && retired.has(node.name.getText(source)));

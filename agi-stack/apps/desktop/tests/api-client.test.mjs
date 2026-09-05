@@ -1,3 +1,4 @@
+import { createTenantSkillHttpClientV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
@@ -4210,6 +4211,7 @@ test('managed skill APIs preserve tenant and project collection scope and status
               items: [
                 {
                   id: 'skill/1',
+                  tenant_id: 'tenant 1',
                   name: 'Repository review',
                   description: 'Review repository changes',
                   status: 'active',
@@ -4220,6 +4222,7 @@ test('managed skill APIs preserve tenant and project collection scope and status
             }
           : {
               id: 'skill/1',
+              tenant_id: 'tenant 1',
               name: 'Repository review',
               description: 'Review repository changes',
               status: 'disabled',
@@ -4232,10 +4235,11 @@ test('managed skill APIs preserve tenant and project collection scope and status
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      apiKey: 'skill-trusted-session',
       tenantId: 'tenant 1',
       projectId: 'project/1',
     });
@@ -4273,7 +4277,7 @@ test('managed skill author APIs preserve tenant scope and SKILL.md content contr
   globalThis.fetch = async (input, init) => {
     calls.push({ input, init });
     const method = init?.method ?? 'GET';
-    if (method === 'DELETE') return new Response(null, { status: 204 });
+    if (method === 'DELETE') return Response.json({ deleted: true, id: 'skill/1' });
     if (String(input).includes('/content') && method === 'GET') {
       return new Response(
         JSON.stringify({
@@ -4289,6 +4293,7 @@ test('managed skill author APIs preserve tenant scope and SKILL.md content contr
     return new Response(
       JSON.stringify({
         id: 'skill/1',
+        tenant_id: 'tenant 1',
         name: 'repository-review',
         description: 'Review repository changes',
         status: 'active',
@@ -4300,10 +4305,11 @@ test('managed skill author APIs preserve tenant scope and SKILL.md content contr
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      apiKey: 'skill-trusted-session',
       tenantId: 'tenant 1',
     });
     const createInput = {
@@ -4415,6 +4421,7 @@ test('local managed skill import binds frontmatter identity to scope and revisio
           items: [
             {
               id: 'repository-review',
+              tenant_id: 'tenant 1',
               revision: 4,
               name: 'repository-review',
               description: 'Review repository changes.',
@@ -4435,6 +4442,7 @@ test('local managed skill import binds frontmatter identity to scope and revisio
         version_label: null,
         skill: {
           id: 'repository-review',
+          tenant_id: 'tenant 1',
           revision: 5,
           name: 'repository-review',
           description: 'Review repository changes safely.',
@@ -4449,10 +4457,11 @@ test('local managed skill import binds frontmatter identity to scope and revisio
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      apiKey: 'skill-trusted-session',
       tenantId: 'tenant 1',
       projectId: 'project/1',
     });
@@ -4495,6 +4504,7 @@ test('local managed skill import refuses implicit overwrite before mutation', as
         items: [
           {
             id: 'repository-review',
+            tenant_id: 'tenant 1',
             revision: 0,
             name: 'repository-review',
             description: 'Existing package.',
@@ -4510,10 +4520,11 @@ test('local managed skill import refuses implicit overwrite before mutation', as
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       apiBaseUrl: 'http://127.0.0.1:8088',
       localApiToken: 'local-session-token',
+      apiKey: 'skill-trusted-session',
       tenantId: 'tenant 1',
       projectId: 'project/1',
     });
@@ -4568,6 +4579,7 @@ test('cloud managed skill import preserves the existing request contract', async
         version_label: null,
         skill: {
           id: 'cloud-skill-id',
+          tenant_id: 'tenant 1',
           name: 'cloud-review',
           description: 'Cloud authority fixture.',
           status: 'active',
@@ -4580,7 +4592,7 @@ test('cloud managed skill import preserves the existing request contract', async
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createTenantSkillHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',

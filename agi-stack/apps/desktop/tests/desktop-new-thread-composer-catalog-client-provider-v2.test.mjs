@@ -1,3 +1,4 @@
+import { createTenantSkillDefinitionsHttpOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -45,6 +46,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
   const first = provider.publish({
     config: firstConfig,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
@@ -55,6 +57,7 @@ test('bound publications pin one frozen composer catalog client to each workspac
   const second = provider.publish({
     config: runtimeConfig('http://127.0.0.1:42002', 'workspace-2'),
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
@@ -93,6 +96,7 @@ test('unbound publications hide workspace agents while retaining project catalog
   const publication = provider.publish({
     config: runtimeConfig('http://127.0.0.1:42003', ''),
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     tenantSubAgentDefinitionsOperationsV2: {
@@ -186,6 +190,7 @@ test('failed composer catalog publication keeps the last-good binding', () => {
   const lastGood = provider.publish({
     config: DEFAULT_CONFIG,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
@@ -203,6 +208,7 @@ test('failed composer catalog publication keeps the last-good binding', () => {
       provider.publish({
         config: poisonedConfig,
         pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+        tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
         tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     tenantSubAgentDefinitionsOperationsV2: { loadTenantSubAgentDefinitions: async () => [] },
@@ -220,6 +226,7 @@ test('SubAgent catalog operations keep the published tenant and abort signal', a
   const publication = provider.publish({
     config,
     pluginMarketplaceOperationsV2: pluginMarketplaceOperationsV2(),
+    tenantSkillDefinitionsOperationsV2: createTenantSkillDefinitionsHttpOperationsV2Fixture(),
     tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2(),
     tenantPromptTemplatesOperationsV2: tenantPromptTemplatesOperationsV2(),
     tenantSubAgentDefinitionsOperationsV2: {
@@ -309,6 +316,7 @@ function runtimeConfig(apiBaseUrl, workspaceId) {
     ...DEFAULT_CONFIG,
     apiBaseUrl,
     localApiToken: 'local-session-token',
+    apiKey: 'catalog-trusted-session',
     tenantId: 'tenant-1',
     projectId: 'project-1',
     workspaceId,

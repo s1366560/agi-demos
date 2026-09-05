@@ -1,3 +1,4 @@
+import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { type Dispatch, type RefObject, type SetStateAction, useEffect } from 'react';
 
 import type { DesktopHashLocationPort } from './desktopHashRouteHost';
@@ -324,6 +325,7 @@ export type AppRouteRegistryRefs = {
   tenantAgentBindingsOperationsV2: DesktopTenantAgentBindingsOperationsV2;
   tenantAgentDashboardOperationsV2: DesktopTenantAgentDashboardOperationsV2;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
+  tenantSkillDefinitionsOperationsV2: DesktopTenantSkillDefinitionsOperationsV2;
   tenantCatalogOperationsV2: DesktopTenantCatalogOperationsV2;
   tenantCreationOperationsV2: DesktopTenantCreationOperationsV2;
   tenantOverviewOperationsV2: DesktopTenantOverviewOperationsV2;
@@ -470,6 +472,7 @@ export type AppTenantAgentBuildingRouteRegistryRefs = Pick<
   | 'tenantAgentBindingsOperationsV2'
   | 'tenantAgentDashboardOperationsV2'
   | 'tenantAgentDefinitionsOperationsV2'
+  | 'tenantSkillDefinitionsOperationsV2'
   | 'tenantPatternsOperationsV2'
   | 'tenantEvolutionOperationsV2'
 > &
@@ -1243,6 +1246,7 @@ export function createAppTenantAgentBuildingRouteRegistry(
     tenantAgentBindingsOperationsV2,
     tenantAgentDashboardOperationsV2,
     tenantAgentDefinitionsOperationsV2,
+    tenantSkillDefinitionsOperationsV2,
   } = refs;
   const settingsRouteContent = createSettingsRouteContentFactory(refs);
   return createDesktopProductionRouteRegistry({
@@ -1278,6 +1282,7 @@ export function createAppTenantAgentBuildingRouteRegistry(
             configRef.current,
             context,
             settingsRouteContent('skills'),
+            tenantSkillDefinitionsOperationsV2,
           ),
       }),
       [TENANT_EVOLUTION_ROUTE_ID]: createEvolutionRouteModuleLoader({

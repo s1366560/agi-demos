@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { ManagedResourcesClient } from '../../api/managedResourcesClient';
+import type { DesktopTenantSkillPackagesClientV2 } from '../../plugins/desktopTenantSkillPackagesAuthorityModuleV2';
+import type { DesktopTenantSkillEvolutionClientV2 } from '../../plugins/desktopTenantSkillEvolutionAuthorityModuleV2';
 import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import type {
   DesktopRuntimeConfig,
@@ -42,6 +43,8 @@ export type SkillEvolutionDialogState = {
 export function useSkillPackageManagement({
   active,
   config,
+  packagesClient,
+  evolutionClient,
   tenantEvolutionOperationsV2,
   contextKey,
   canImport,
@@ -50,6 +53,8 @@ export function useSkillPackageManagement({
 }: {
   active: boolean;
   config: DesktopRuntimeConfig;
+  packagesClient: DesktopTenantSkillPackagesClientV2;
+  evolutionClient: DesktopTenantSkillEvolutionClientV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
   contextKey: string;
   canImport: boolean;
@@ -97,11 +102,10 @@ export function useSkillPackageManagement({
       setImportBusy(true);
       setImportError(null);
       try {
-        const client = new ManagedResourcesClient(config);
         const { archive, package: packageInput } = submission;
         const result = archive
-          ? await client.importManagedSkillZip(archive, zipImportInput(packageInput))
-          : await client.importManagedSkillPackage(packageInput);
+          ? await packagesClient.importManagedSkillZip(archive, zipImportInput(packageInput))
+          : await packagesClient.importManagedSkillPackage(packageInput);
         if (contextKeyRef.current !== requestContextKey) return;
         setImportKey(null);
         await onReload();
@@ -112,13 +116,13 @@ export function useSkillPackageManagement({
         if (contextKeyRef.current === requestContextKey) setImportBusy(false);
       }
     },
-    [canImport, config, contextKey, importKey, onReload, onSelected]
+    [canImport, contextKey, importKey, onReload, onSelected, packagesClient]
   );
 
   const loadVersions = useCallback(
     async (skill: ManagedSkill, key: string, requestContextKey: string) => {
       try {
-        const result = await new ManagedResourcesClient(config).listManagedSkillVersions(skill.id);
+        const result = await packagesClient.listManagedSkillVersions(skill.id);
         if (contextKeyRef.current !== requestContextKey) return;
         setVersionsDialog((current) =>
           current?.key === key
@@ -133,7 +137,7 @@ export function useSkillPackageManagement({
         setVersionsError(errorMessage(error));
       }
     },
-    [config]
+    [packagesClient]
   );
 
   const openVersions = useCallback(
@@ -171,15 +175,14 @@ export function useSkillPackageManagement({
         current?.key === key ? { ...current, rollbackVersion: versionNumber } : current
       );
       try {
-        const client = new ManagedResourcesClient(config);
-        const updated = await client.rollbackManagedSkill(
+        const updated = await packagesClient.rollbackManagedSkill(
           versionsDialog.skill.id,
           versionNumber,
           versionsDialog.skill.revision,
         );
         if (contextKeyRef.current !== requestContextKey) return;
         const [versionResult] = await Promise.all([
-          client.listManagedSkillVersions(updated.id),
+          packagesClient.listManagedSkillVersions(updated.id),
           onReload(),
         ]);
         if (contextKeyRef.current !== requestContextKey) return;
@@ -202,7 +205,7 @@ export function useSkillPackageManagement({
         );
       }
     },
-    [config, contextKey, onReload, onSelected, versionsDialog]
+    [contextKey, onReload, onSelected, versionsDialog, packagesClient]
   );
 
   const previewVersion = useCallback(
@@ -215,7 +218,7 @@ export function useSkillPackageManagement({
         current?.key === key ? { ...current, preview: null, previewLoading: true } : current
       );
       try {
-        const preview = await new ManagedResourcesClient(config).getManagedSkillVersion(
+        const preview = await packagesClient.getManagedSkillVersion(
           versionsDialog.skill.id,
           versionNumber
         );
@@ -231,7 +234,7 @@ export function useSkillPackageManagement({
         );
       }
     },
-    [config, contextKey, versionsDialog]
+    [contextKey, versionsDialog, packagesClient]
   );
 
   const closeVersionPreview = useCallback(() => {
@@ -246,7 +249,7 @@ export function useSkillPackageManagement({
       setPackageActionError(null);
       try {
         const exportId = skill.source === 'filesystem' ? skill.name : skill.id;
-        const exported = await new ManagedResourcesClient(config).exportManagedSkillPackage(exportId);
+        const exported = await packagesClient.exportManagedSkillPackage(exportId);
         if (contextKeyRef.current !== requestContextKey) return;
         const result = await downloadSkillPackage(skill.name, exported);
         if (result.status === 'cancelled') return;
@@ -258,13 +261,13 @@ export function useSkillPackageManagement({
         if (contextKeyRef.current === requestContextKey) setExportBusyId(null);
       }
     },
-    [config, contextKey, exportBusyId]
+    [contextKey, exportBusyId, packagesClient]
   );
 
   const loadEvolution = useCallback(
     async (skill: ManagedSkill, key: string, requestContextKey: string) => {
       try {
-        const detail = await new ManagedResourcesClient(config).getManagedSkillEvolution(skill.id);
+        const detail = await evolutionClient.getManagedSkillEvolution(skill.id);
         if (contextKeyRef.current !== requestContextKey) return;
         setEvolutionDialog((current) =>
           current?.key === key ? { ...current, detail, loading: false } : current
@@ -277,7 +280,7 @@ export function useSkillPackageManagement({
         );
       }
     },
-    [config]
+    [evolutionClient]
   );
 
   const openEvolution = useCallback(
@@ -313,9 +316,8 @@ export function useSkillPackageManagement({
       current?.key === key ? { ...current, running: true } : current
     );
     try {
-      const client = new ManagedResourcesClient(config);
-      await client.runManagedSkillEvolution(evolutionDialog.skill.id);
-      const detail = await client.getManagedSkillEvolution(evolutionDialog.skill.id);
+      await evolutionClient.runManagedSkillEvolution(evolutionDialog.skill.id);
+      const detail = await evolutionClient.getManagedSkillEvolution(evolutionDialog.skill.id);
       if (contextKeyRef.current !== requestContextKey) return;
       setEvolutionDialog((current) =>
         current?.key === key ? { ...current, detail, running: false } : current
@@ -327,7 +329,7 @@ export function useSkillPackageManagement({
         current?.key === key ? { ...current, running: false } : current
       );
     }
-  }, [config, contextKey, evolutionDialog]);
+  }, [contextKey, evolutionDialog, evolutionClient]);
 
   const processEvolutionJob = useCallback(
     async (jobId: string, action: 'apply' | 'reject') => {
@@ -339,7 +341,6 @@ export function useSkillPackageManagement({
         current?.key === key ? { ...current, processingJobId: jobId } : current
       );
       try {
-        const client = new ManagedResourcesClient(config);
         await tenantEvolutionOperationsV2.reviewTenantEvolutionJob({
           config,
           scope: { authority: config.mode, tenantId: config.tenantId },
@@ -349,7 +350,7 @@ export function useSkillPackageManagement({
         if (contextKeyRef.current !== requestContextKey) return;
         const reload = action === 'apply' ? onReload() : Promise.resolve();
         const [detail] = await Promise.all([
-          client.getManagedSkillEvolution(evolutionDialog.skill.id),
+          evolutionClient.getManagedSkillEvolution(evolutionDialog.skill.id),
           reload,
         ]);
         if (contextKeyRef.current !== requestContextKey) return;
@@ -365,7 +366,7 @@ export function useSkillPackageManagement({
         );
       }
     },
-    [config, contextKey, evolutionDialog, onReload, onSelected, tenantEvolutionOperationsV2]
+    [config, contextKey, evolutionDialog, onReload, onSelected, tenantEvolutionOperationsV2, evolutionClient]
   );
 
   return {

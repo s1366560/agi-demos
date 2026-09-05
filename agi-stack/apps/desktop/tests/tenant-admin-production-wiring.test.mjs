@@ -1,3 +1,4 @@
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -117,6 +118,7 @@ test('Cloud Snapshot v4 fail-closes unversioned tenant admin authorities', async
   try {
     const client = createDesktopWorkbenchCapabilityClient(unavailableAutomation, cloudConfig, {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
       tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),
@@ -252,6 +254,7 @@ test('Local Snapshot keeps all four Cloud-only routes declared not-applicable', 
       { ...cloudConfig, mode: 'local', localApiToken: 'private-launch' },
       {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),

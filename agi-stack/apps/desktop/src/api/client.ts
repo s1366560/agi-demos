@@ -55,18 +55,6 @@ import type {
   ManagedPlugin,
   MarketplacePluginCatalogEntry,
   MarketplacePluginUninstallResponse,
-  ManagedSkill,
-  ManagedSkillContent,
-  ManagedSkillCreateMutation,
-  ManagedSkillEvolutionDetail,
-  ManagedSkillEvolutionRun,
-  ManagedSkillImportInput,
-  ManagedSkillLifecycle,
-  ManagedSkillMutation,
-  ManagedSkillPackage,
-  ManagedSkillVersionDetail,
-  ManagedSkillVersionList,
-  ManagedSkillZipImportInput,
   PaginatedConversationsResponse,
   PlanSnapshot,
   ProjectMyWorkResponse,
@@ -99,7 +87,6 @@ import {
   normalizeDesktopSearchResponse,
 } from './searchContract';
 import { desktopApiFetch, desktopVaultBoundCloudRequestBroker } from './cloudRequestBroker';
-import { ManagedResourcesClient } from './managedResourcesClient';
 import type { DesktopSearchRequest, DesktopSearchResponse } from './searchContract';
 
 type RequestOptions = {
@@ -366,18 +353,9 @@ export function isTaskSessionIdempotencyConflictError(error: unknown): boolean {
 
 export class DesktopApiClient {
   private readonly config: DesktopRuntimeConfig;
-  private readonly managedResourcesClient: ManagedResourcesClient;
 
   constructor(config: DesktopRuntimeConfig) {
     this.config = config;
-    this.managedResourcesClient = new ManagedResourcesClient(
-      config,
-      (message, status, payload) => new DesktopApiError(message, status, payload),
-    );
-  }
-
-  managedResources(): ManagedResourcesClient {
-    return this.managedResourcesClient;
   }
 
   async login(username: string, password: string): Promise<LoginOutcome> {
@@ -2029,109 +2007,6 @@ export class DesktopApiClient {
       },
     );
     return normalizeProviderValidationOutcome(payload);
-  }
-
-  async listManagedSkills(signal?: AbortSignal): Promise<ManagedSkill[]> {
-    return this.managedResourcesClient.listManagedSkills(signal);
-  }
-
-  async setManagedSkillStatus(
-    skillId: string,
-    status: 'active' | 'disabled' | 'deprecated',
-    expectedRevision?: number,
-  ): Promise<ManagedSkill> {
-    return this.managedResourcesClient.setManagedSkillStatus(
-      skillId,
-      status,
-      expectedRevision,
-    );
-  }
-
-  async createManagedSkill(input: ManagedSkillCreateMutation): Promise<ManagedSkill> {
-    return this.managedResourcesClient.createManagedSkill(input);
-  }
-
-  async getManagedSkillContent(skillId: string): Promise<ManagedSkillContent> {
-    return this.managedResourcesClient.getManagedSkillContent(skillId);
-  }
-
-  async updateManagedSkill(
-    skillId: string,
-    input: Omit<ManagedSkillMutation, 'full_content'>,
-    expectedRevision?: number,
-  ): Promise<ManagedSkill> {
-    return this.managedResourcesClient.updateManagedSkill(
-      skillId,
-      input,
-      expectedRevision,
-    );
-  }
-
-  async updateManagedSkillContent(
-    skillId: string,
-    fullContent: string,
-    expectedRevision?: number,
-  ): Promise<ManagedSkill> {
-    return this.managedResourcesClient.updateManagedSkillContent(
-      skillId,
-      fullContent,
-      expectedRevision,
-    );
-  }
-
-  async deleteManagedSkill(skillId: string, expectedRevision?: number): Promise<void> {
-    return this.managedResourcesClient.deleteManagedSkill(skillId, expectedRevision);
-  }
-
-  async importManagedSkillPackage(
-    input: ManagedSkillImportInput,
-  ): Promise<ManagedSkillLifecycle> {
-    return this.managedResourcesClient.importManagedSkillPackage(input);
-  }
-
-  async importManagedSkillZip(
-    archive: File,
-    input: ManagedSkillZipImportInput = {},
-  ): Promise<ManagedSkillLifecycle> {
-    return this.managedResourcesClient.importManagedSkillZip(archive, input);
-  }
-
-  async listManagedSkillVersions(
-    skillId: string,
-    signal?: AbortSignal,
-  ): Promise<ManagedSkillVersionList> {
-    return this.managedResourcesClient.listManagedSkillVersions(skillId, signal);
-  }
-
-  async rollbackManagedSkill(
-    skillId: string,
-    versionNumber: number,
-    expectedRevision?: number,
-  ): Promise<ManagedSkill> {
-    return this.managedResourcesClient.rollbackManagedSkill(
-      skillId,
-      versionNumber,
-      expectedRevision,
-    );
-  }
-
-  async exportManagedSkillPackage(skillId: string): Promise<ManagedSkillPackage> {
-    return this.managedResourcesClient.exportManagedSkillPackage(skillId);
-  }
-
-  async getManagedSkillVersion(
-    skillId: string,
-    versionNumber: number,
-  ): Promise<ManagedSkillVersionDetail> {
-    return this.managedResourcesClient.getManagedSkillVersion(skillId, versionNumber);
-  }
-
-  async getManagedSkillEvolution(skillId: string): Promise<ManagedSkillEvolutionDetail> {
-    return this.managedResourcesClient.getManagedSkillEvolution(skillId);
-  }
-
-  async runManagedSkillEvolution(skillId: string): Promise<ManagedSkillEvolutionRun> {
-    return this.managedResourcesClient.runManagedSkillEvolution(skillId);
   }
 
   async listMCPApps(projectId: string): Promise<DesktopMCPAppSummary[]> {

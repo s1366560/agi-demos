@@ -1244,7 +1244,7 @@ export type ManagedSkillVersionList = {
 };
 
 export type ManagedSkillVersionDetail = ManagedSkillVersion & {
-  skill_md_content: string;
+  skill_md_content: string | null;
   resource_files: Record<string, unknown> | null;
 };
 

@@ -1,3 +1,4 @@
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
@@ -433,6 +434,7 @@ test('workbench capability client emits scoped v3 authority metadata', async () 
       },
       {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
         projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),

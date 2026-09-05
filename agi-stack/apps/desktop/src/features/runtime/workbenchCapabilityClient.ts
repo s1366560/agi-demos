@@ -1,3 +1,4 @@
+import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
 
 import {
@@ -230,7 +231,10 @@ type ManagementRouteCapabilityClients = Readonly<
 >;
 type ManagementRouteCapabilityClientOverrides = Readonly<
   Partial<
-    Omit<ManagementRouteCapabilityClients, 'tenant-tenant-agent-definitions'>
+    Omit<
+      ManagementRouteCapabilityClients,
+      'tenant-tenant-agent-definitions' | 'tenant-tenant-skills'
+    >
   >
 >;
 
@@ -347,6 +351,10 @@ export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantSettingsOperationsV2: DesktopTenantSettingsOperationsV2;
   tenantWebhooksOperationsV2: DesktopTenantWebhooksOperationsV2;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
+  tenantSkillDefinitionsOperationsV2: Pick<
+    DesktopTenantSkillDefinitionsOperationsV2,
+    'loadTenantSkillDefinitions'
+  >;
   managementRouteClients?: ManagementRouteCapabilityClientOverrides;
   pluginMarketplaceOperationsV2?: Pick<
     DesktopPluginMarketplaceCatalogOperationsV2,
@@ -464,6 +472,10 @@ export function createDesktopWorkbenchCapabilityClient(
     'function'
   ) {
     throw new Error('desktop_tenant_agent_definitions_authority_required');
+  }
+  const tenantSkillDefinitionsOperationsV2 = options?.tenantSkillDefinitionsOperationsV2;
+  if (typeof tenantSkillDefinitionsOperationsV2?.loadTenantSkillDefinitions !== 'function') {
+    throw new Error('desktop_tenant_skill_definitions_authority_required');
   }
   const tenantProjectsOperationsV2 = options?.tenantProjectsOperationsV2;
   if (typeof tenantProjectsOperationsV2?.listTenantProjects !== 'function') {
@@ -595,6 +607,7 @@ export function createDesktopWorkbenchCapabilityClient(
     options.pluginMarketplaceOperationsV2 ??
       UNAVAILABLE_PLUGIN_MARKETPLACE_OPERATIONS_V2,
     tenantAgentDefinitionsOperationsV2,
+    tenantSkillDefinitionsOperationsV2,
     options.managementRouteClients,
   );
   const injectedAgentWorkspaceClient = options.agentWorkspaceClient ?? null;
@@ -1687,6 +1700,10 @@ function createManagementRouteClients(
     'projectMarketplacePlugins'
   >,
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2,
+  tenantSkillDefinitionsOperationsV2: Pick<
+    DesktopTenantSkillDefinitionsOperationsV2,
+    'loadTenantSkillDefinitions'
+  >,
   overrides: ManagementRouteCapabilityClientOverrides = {},
 ): ManagementRouteCapabilityClients {
   return Object.freeze({
@@ -1698,7 +1715,7 @@ function createManagementRouteClients(
         config,
       ),
     'tenant-tenant-skills':
-      overrides['tenant-tenant-skills'] ?? createSkillsRouteClient(config),
+      createSkillsRouteClient(config, tenantSkillDefinitionsOperationsV2),
     'tenant-tenant-plugins':
       overrides['tenant-tenant-plugins'] ??
       createPluginsRouteClient(config, pluginMarketplaceOperationsV2),

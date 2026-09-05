@@ -556,7 +556,16 @@
         "agi-stack/apps/desktop/src/features/settings/ManagedResourceViews.tsx",
         "agi-stack/apps/desktop/src/features/settings/SkillEvolutionDialog.tsx",
         "agi-stack/apps/desktop/src/features/settings/useSkillPackageManagement.ts",
-        "agi-stack/apps/desktop/src/api/managedResourcesClient.ts"
+        "agi-stack/apps/desktop/src/features/settings/useSkillManagement.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillDefinitionsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillDefinitionsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillDefinitionsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillPackagesAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillPackagesOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillPackagesHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionHttpProjectionV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",

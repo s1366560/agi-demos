@@ -1,3 +1,4 @@
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -177,6 +178,7 @@ test('runtime snapshot declares tenant workspaces and canonical Agent Workspace 
         tenantProjectsOperationsV2: tenantProjectsOperationsV2Fixture(),
         tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
+        tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),
       },

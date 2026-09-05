@@ -1,3 +1,4 @@
+import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -474,6 +475,7 @@ function createClient(config) {
     config,
     {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
+      tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
       tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
       projectAgentPatternsOperationsV2: projectAgentPatternsOperationsV2Fixture(),

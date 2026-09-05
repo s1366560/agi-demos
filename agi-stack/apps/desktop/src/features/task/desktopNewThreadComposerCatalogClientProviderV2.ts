@@ -1,3 +1,4 @@
+import { createDesktopTenantSkillDefinitionsClientV2, type DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { DesktopApiClient } from '../../api/client';
 import type { DesktopPluginMarketplaceCatalogOperationsV2 } from '../../plugins/desktopPluginMarketplaceAuthorityModulesV2';
 import {
@@ -16,13 +17,13 @@ import {
 import type { DesktopRuntimeConfig, ManagedAgentDefinition } from '../../types';
 
 type DesktopNewThreadComposerStaticCatalogMethod =
-  | 'listManagedSkills'
   | 'listMarketplacePlugins'
   | 'listWorkspaceAgents'
   | 'uploadSandboxFile';
 
 export type DesktopNewThreadComposerCatalogClient = Readonly<
   Pick<DesktopApiClient, DesktopNewThreadComposerStaticCatalogMethod> & {
+    listManagedSkills: ReturnType<typeof createDesktopTenantSkillDefinitionsClientV2>['listManagedSkills'];
     listManagedAgents(signal?: AbortSignal): Promise<ManagedAgentDefinition[]>;
     listManagedSubAgents: ReturnType<
       typeof createDesktopTenantSubAgentDefinitionsClientV2
@@ -65,6 +66,7 @@ export type DesktopNewThreadComposerCatalogClientProviderInputV2 = Readonly<{
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
   tenantPromptTemplatesOperationsV2: DesktopTenantPromptTemplatesOperationsV2;
   tenantSubAgentDefinitionsOperationsV2: DesktopTenantSubAgentDefinitionsOperationsV2;
+  tenantSkillDefinitionsOperationsV2: DesktopTenantSkillDefinitionsOperationsV2;
 }>;
 
 export type DesktopNewThreadComposerCatalogClientBindingV2 = Readonly<{
@@ -109,6 +111,9 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
     input.tenantAgentDefinitionsOperationsV2,
     config,
   );
+  const skillDefinitions = createDesktopTenantSkillDefinitionsClientV2(
+    input.tenantSkillDefinitionsOperationsV2, config,
+  );
   const subAgentDefinitions = createDesktopTenantSubAgentDefinitionsClientV2(
     input.tenantSubAgentDefinitionsOperationsV2,
     config,
@@ -129,9 +134,7 @@ function createDesktopNewThreadComposerCatalogClientBindingV2(
       promptTemplates.createPromptTemplate(tenantId, value, signal),
     deletePromptTemplate: (templateId, signal, expectedRevision) =>
       promptTemplates.deletePromptTemplate(templateId, signal, expectedRevision),
-    listManagedSkills: (
-      ...args: Parameters<DesktopApiClient['listManagedSkills']>
-    ) => authority.listManagedSkills(...args),
+    listManagedSkills: (signal) => skillDefinitions.listManagedSkills(signal),
     listMarketplacePlugins: (
       ...args: Parameters<DesktopApiClient['listMarketplacePlugins']>
     ) => input.pluginMarketplaceOperationsV2.listMarketplacePlugins(config, ...args),

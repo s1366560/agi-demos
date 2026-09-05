@@ -802,6 +802,132 @@
       "contract_digest": "sha256:11874933f8ad9c05649d3c6378a0ac2749c8984b3728597dce87d0fc2f5b2726"
     },
     {
+      "module_ref": "builtin://memstack/desktop/tenant-skill-definitions-authority",
+      "entrypoint": "applyDesktopTenantSkillDefinitionsAuthorityV2",
+      "artifact": {
+        "digest": "sha256:f4b042413cdad4fb13197d16827312c0a42444d3b8dbc916f47cca6d2f5c6361",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSkillDefinitionsAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-skill-definitions-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:6523d540c705e2a92563c3f70c3289be4be93a7167ea14c0d0445f0b9e2840eb"
+    },
+
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-skill-packages-authority",
+      "entrypoint": "applyDesktopTenantSkillPackagesAuthorityV2",
+      "artifact": {
+        "digest": "sha256:4e72cddcf6e93b51531a66419e454c017a11fb7ad08bd810e83e3b05fe022876",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSkillPackagesAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-skill-packages-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:029e7b0030cb6d47926371b81875753004749aad81e260c57970ca09eac9299c"
+    },
+
+    {
+      "module_ref": "builtin://memstack/desktop/tenant-skill-evolution-authority",
+      "entrypoint": "applyDesktopTenantSkillEvolutionAuthorityV2",
+      "artifact": {
+        "digest": "sha256:9060684e485963034bb509375dc2968270a3ec92c6a827eb44ea585ea01d0138",
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopTenantSkillEvolutionAuthorityModuleV2.ts"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.tenant-skill-evolution-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:46db6aa026a53eafd25b0d0e69e519e1f1f621cb6242e4b27484437dfde3fa87"
+    },
+
+    {
       "module_ref": "builtin://memstack/desktop/tenant-subagent-definitions-authority",
       "entrypoint": "applyDesktopTenantSubAgentDefinitionsAuthorityV2",
       "artifact": {

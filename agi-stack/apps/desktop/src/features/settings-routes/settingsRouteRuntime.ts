@@ -20,7 +20,7 @@ import {
   type PluginsRouteAuthority,
 } from './pluginsRouteClient';
 import { createProviderRouteClient } from './providerRouteClient';
-import { createSkillsRouteClient } from './skillsRouteClient';
+import { createSkillsRouteClient, type SkillsRouteAuthority } from './skillsRouteClient';
 
 type ManagementRouteRuntimeDependencies = Readonly<{
   createClient?: (config: DesktopRuntimeConfig) => ManagementRouteClient;
@@ -61,14 +61,14 @@ export function createSkillsRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  operations: SkillsRouteAuthority,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-skills',
     config,
     context,
     Content,
-    dependencies.createClient ?? createSkillsRouteClient,
+    (runtimeConfig) => createSkillsRouteClient(runtimeConfig, operations),
   );
 }
 
