@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "e425570095dacada46a132bbe26dcdfd5eba4399",
+  "source_revision": "529b6e1ea61915723b4473602fbc42288144d77f",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 706,
+    "audited_sources": 709,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1898,
-    "production_dependency_ownership": 705,
-    "production_dependency_sources": 705,
+    "production_dependency_edges": 1913,
+    "production_dependency_ownership": 708,
+    "production_dependency_sources": 708,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 5
@@ -337,14 +337,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:61501e0d873bd2785b1d25eebaa40b2b4ce7b99a1edabae1b061921e825a53a5"
+      "sha256": "sha256:ce34f2b5b6c598582a14449a46a3c409f22771e766c1f9879f2efbfe87d81409"
     },
     {
       "source_entry": "web/src/components/agent/canvas/CanvasPanel.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:0fff00e7396f1d2630ed365cfb1b1569f9d3f6b6a0a5a532cdbcd81c463c28e8"
+      "sha256": "sha256:7371571eb4003e474ad28fc3af38e384c7e77c3e3f9301f12e9752162dd257bf"
     },
     {
       "source_entry": "web/src/components/agent/canvas/MemStackA2UIViewer.tsx",
@@ -743,7 +743,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:e0d744d90889605a204595f69193d269f830c2ceb21b5c48d13f937d4b2198d1"
+      "sha256": "sha256:d4d48e04e0662aeb0a7ee97b1642190ba27aa5d996ffee6c4b6020e134032dea"
     },
     {
       "source_entry": "web/src/components/agent/multiAgent/MultiAgentPanel.tsx",
@@ -1198,7 +1198,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:f59b57954c59a0d5775ee501160722dcbfd01c0a2c37832ea4b5f04f4ac62730"
+      "sha256": "sha256:a968232e2e3c257f5a59d477eee4aee0a6b1d45bd419d243a9410c7bec5eaca0"
     },
     {
       "source_entry": "web/src/components/blackboard/tabs/SharedFileBrowser.tsx",
@@ -3152,7 +3152,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:ebb6a190cfe6c14692532d86583911723089f4cf11e25eb740842e64dea0af8a"
+      "sha256": "sha256:03043e29e1557aacd121ee222e56239f9be3ad77488a9af261afb59641c53a2e"
     },
     {
       "source_entry": "web/src/pages/tenant/geneVisibility.ts",
@@ -3337,11 +3337,18 @@
       "sha256": "sha256:b70ea05592b6221bf36cfec6182dbec7755525b8c20ebe385990e09949f0a215"
     },
     {
+      "source_entry": "web/src/plugins/webOperationAdmissionV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:2e1ead84263ae371288f8bb954723e0fe12d706e840d21ea82bed949f3c370d2"
+    },
+    {
       "source_entry": "web/src/plugins/webPluginGenerationV2.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d53e4a15fe74056f1b1c7d9b66c3b365c38eb58a57fc73c4ad489892755ac079"
+      "sha256": "sha256:092cc493171373af3e2c66874989db510cf7407a0b13f5c9caba86c3f9ec8b95"
     },
     {
       "source_entry": "web/src/plugins/webRendererAppCompositionV2.ts",
@@ -3558,21 +3565,21 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:fb62be3b9e0a24885b5a6f41678daf555a6ef3cb071d5decd683ebc2c763085d"
+      "sha256": "sha256:9796c71e29b5ba49603f5c08ac3cac560bd1f00ea69306ab95f6b42c481dfb60"
     },
     {
       "source_entry": "web/src/services/artifactService.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:ea05cc59a531b292ed6cb6b38134053708a2eab7006cf3e4aa21eab16e72f97c"
+      "sha256": "sha256:5e8a7e0dd3f788bf6e90fd55ce0041b29ba7768c99f9184955daf4b53acd2cb3"
     },
     {
       "source_entry": "web/src/services/attachmentService.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:785f229fca258de33a1e6fe776acdb8817783bdef38b67b28bc00147961b0216"
+      "sha256": "sha256:40d9c29607b945f50cde69732d36574345fd279bbeb268f48382a225dc5bc7c9"
     },
     {
       "source_entry": "web/src/services/auditService.ts",
@@ -3614,7 +3621,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:3731cdc66a1112fea688470f1422135223b764253b482ee7afcb2d3117994230"
+      "sha256": "sha256:6e8abc32097ec3a6716c9a40aa144a41fb5275adb815c03676ef4f390b971853"
+    },
+    {
+      "source_entry": "web/src/services/client/kernelHttpClient.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:3b13e01c612b710ecea662e463ea0b3110fdaf3fb6923fe7c4a7870ed8690a18"
     },
     {
       "source_entry": "web/src/services/client/queryClient.ts",
@@ -3628,7 +3642,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:a679be2082c8b83dd62809ca7b11930fbdd60b606479b0bd5c2910cf60f6b73e"
+      "sha256": "sha256:a6556e5ee5d550aeb5899697e250653607429b707005bc38f46aea5309da1bd5"
+    },
+    {
+      "source_entry": "web/src/services/client/webFetchV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:5fdb638313da58cd17acbe6974e07777400468bc72a9f42b5109a149da5e27a8"
     },
     {
       "source_entry": "web/src/services/client/wsWatchdog.ts",
@@ -3670,7 +3691,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:86543aee4520203f1b77af292561ed1630518d676d0ee90683c38bd6be59aa4e"
+      "sha256": "sha256:7c8a305597593f7636452e38525e8b7884cdd0d010d8dc95022b35d246c64a64"
     },
     {
       "source_entry": "web/src/services/dlqService.ts",
@@ -3768,14 +3789,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:4a978a85f7a72607c913a00a3f607a953d2ef74de9cea128a48c256792d28d04"
+      "sha256": "sha256:7e524e102e8f5fe5e463c0acf65ff74097bac6094f0aa010053eabdce012ffce"
     },
     {
       "source_entry": "web/src/services/oauthLoginService.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:f1bf825ab9daaf1f7481ca3b965caddc5128f3f7668ff9c18b2eae4f645bbea4"
+      "sha256": "sha256:79c824ddb22418955355d826b3020cf96bcb8d14a7fc744df1bb90fce2d572e1"
     },
     {
       "source_entry": "web/src/services/participantsService.ts",
@@ -3803,7 +3824,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:5e1d65e88aaf3df6e9055997ccd27b4cde728634d9a9b7e44e4b19d196f12fe9"
+      "sha256": "sha256:1c3ff3782f8fae2fc45651ed93d5a83ec41e4cd5f1a9b1391b9821c4538f6feb"
     },
     {
       "source_entry": "web/src/services/pluginMarketplaceService.ts",
@@ -3845,14 +3866,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:01d65ef33824eda2eb2afce08351a30c1bbe8090f5a0b3bd31bd1f3a289348f6"
+      "sha256": "sha256:dad181897a2133835e80e885c886b489ea96ac5687f0bd60185f72363ad9198b"
     },
     {
       "source_entry": "web/src/services/projectStatsService.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:819c564e922a31fba4fdf88858b739667ebb56b3ba098673ca91fe1e1b9b6c4a"
+      "sha256": "sha256:0b933b06642430d277fa23b28c4106831f7bd626487e699c94ea87692bc468bc"
     },
     {
       "source_entry": "web/src/services/projectWorkService.ts",
@@ -3929,7 +3950,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:85bd7fe5c6383beb90b124e125926f50bc238efb7ab3f02a2d1cf79aed9d26fd"
+      "sha256": "sha256:e2bf5998c6a7f5574620d2ab711780eb43ac86106d39aec9cccc51ec50820902"
     },
     {
       "source_entry": "web/src/services/systemService.ts",
@@ -3943,21 +3964,21 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:01370162407e8d6ee1a10314e12b6a83fe47a45dec6ef343944360102aca4016"
+      "sha256": "sha256:765c4b4d6726a980156ad96bbe35d888f5def96aba5489e0e4dab5c34515d59d"
     },
     {
       "source_entry": "web/src/services/templateService.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:7f9ff0f08d505d1b4fed2ca761b7720bbaf3329290d9ec15b7c36b50ebd79b24"
+      "sha256": "sha256:185594794a5f0aa510b6e0b58120e7118d8bf00251fcdedce8c9715a2db9c233"
     },
     {
       "source_entry": "web/src/services/tenantService.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:7625d4999a6c7ef4db0513510a1fd2466680a68dbda0875215704942f0a3842a"
+      "sha256": "sha256:e3b274c81b80ffd8ea44092ee6e7a9d700100e530ee09c2dda84a732fab6500c"
     },
     {
       "source_entry": "web/src/services/traceService.ts",
@@ -3992,7 +4013,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:05cb01c670c29460e8f5f315eb81826c7e1307dc685ec6d73fb9fceafdf2f504"
+      "sha256": "sha256:ff344fe3c91117f1a71c495bf44f9a4922b53053eaa80497d62a5e4892e457c7"
     },
     {
       "source_entry": "web/src/stores/agent/a2uiEnvelopeContract.ts",
@@ -4160,7 +4181,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:91ffc900b2ef2cb7744e679f06a73a4ae9abe908dee6f5c86d9a1b5134f25a43"
+      "sha256": "sha256:8416a4b8e0945a4a186c5a0203de3dadd45efe9411091c00871d7300b2e467e6"
     },
     {
       "source_entry": "web/src/stores/backgroundStore.ts",
@@ -16633,6 +16654,11 @@
     {
       "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
       "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
+      "relationship": "static_import",
       "to_source_entry": "web/src/routes/v2/webRendererArtifactCatalogV2.ts"
     },
     {
@@ -16643,7 +16669,22 @@
     {
       "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/httpClient.ts"
+      "to_source_entry": "web/src/services/client/kernelHttpClient.ts"
+    },
+    {
+      "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/stores/auth.ts"
+    },
+    {
+      "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/stores/project.ts"
+    },
+    {
+      "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/stores/tenant.ts"
     },
     {
       "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
@@ -17406,6 +17447,11 @@
       "to_source_entry": "web/src/services/client/httpClient.ts"
     },
     {
+      "from_source_entry": "web/src/services/api.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/kernelHttpClient.ts"
+    },
+    {
       "from_source_entry": "web/src/services/artifactService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
@@ -17414,6 +17460,11 @@
       "from_source_entry": "web/src/services/artifactService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/artifactService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/webFetchV2.ts"
     },
     {
       "from_source_entry": "web/src/services/attachmentService.ts",
@@ -17423,12 +17474,22 @@
     {
       "from_source_entry": "web/src/services/attachmentService.ts",
       "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/attachmentService.ts",
+      "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
     },
     {
       "from_source_entry": "web/src/services/attachmentService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/attachmentService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/webFetchV2.ts"
     },
     {
       "from_source_entry": "web/src/services/attachmentService.ts",
@@ -17458,17 +17519,37 @@
     {
       "from_source_entry": "web/src/services/client/httpClient.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/i18n/config.ts"
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/services/client/httpClient.ts",
+      "relationship": "re_export",
+      "to_source_entry": "web/src/services/client/kernelHttpClient.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/client/httpClient.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/kernelHttpClient.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/client/kernelHttpClient.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/i18n/config.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/client/kernelHttpClient.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/ApiError.ts"
     },
     {
-      "from_source_entry": "web/src/services/client/httpClient.ts",
+      "from_source_entry": "web/src/services/client/kernelHttpClient.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/tokenResolver.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/client/urlUtils.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/services/client/urlUtils.ts",
@@ -17483,7 +17564,17 @@
     {
       "from_source_entry": "web/src/services/client/urlUtils.ts",
       "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/webFetchV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/client/urlUtils.ts",
+      "relationship": "static_import",
       "to_source_entry": "web/src/utils/tokenResolver.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/client/webFetchV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/services/clusterService.ts",
@@ -17508,7 +17599,7 @@
     {
       "from_source_entry": "web/src/services/deviceAuthService.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/httpClient.ts"
+      "to_source_entry": "web/src/services/client/kernelHttpClient.ts"
     },
     {
       "from_source_entry": "web/src/services/dlqService.ts",
@@ -17583,7 +17674,7 @@
     {
       "from_source_entry": "web/src/services/oauthLoginService.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/httpClient.ts"
+      "to_source_entry": "web/src/services/client/kernelHttpClient.ts"
     },
     {
       "from_source_entry": "web/src/services/participantsService.ts",
@@ -17649,6 +17740,11 @@
       "from_source_entry": "web/src/services/projectService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/projectStatsService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/services/projectStatsService.ts",
@@ -18348,7 +18444,7 @@
     {
       "from_source_entry": "web/src/stores/auth.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/httpClient.ts"
+      "to_source_entry": "web/src/services/client/kernelHttpClient.ts"
     },
     {
       "from_source_entry": "web/src/stores/auth.ts",
@@ -23805,6 +23901,104 @@
     {
       "classification": "shared",
       "owner_source_entries": [
+        "web/src/components/common/OrgSetupGuard.tsx",
+        "web/src/components/mcp/McpServerListV2.tsx",
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/DeviceApprove.tsx",
+        "web/src/pages/ForceChangePassword.tsx",
+        "web/src/pages/InviteAccept.tsx",
+        "web/src/pages/Login.tsx",
+        "web/src/pages/OAuthCallback.tsx",
+        "web/src/pages/UserProfile.tsx",
+        "web/src/pages/admin/DeadLetterQueue.tsx",
+        "web/src/pages/admin/PoolDashboard.tsx",
+        "web/src/pages/project/Blackboard.tsx",
+        "web/src/pages/project/CommunitiesList.tsx",
+        "web/src/pages/project/CronJobs.tsx",
+        "web/src/pages/project/EnhancedSearch.tsx",
+        "web/src/pages/project/EntitiesList.tsx",
+        "web/src/pages/project/Maintenance.tsx",
+        "web/src/pages/project/MemoryDetail.tsx",
+        "web/src/pages/project/MemoryGraph.tsx",
+        "web/src/pages/project/MemoryList.tsx",
+        "web/src/pages/project/NewMemory.tsx",
+        "web/src/pages/project/PlaybookLibrary.tsx",
+        "web/src/pages/project/ProjectAgentDashboard.tsx",
+        "web/src/pages/project/ProjectAgentLogs.tsx",
+        "web/src/pages/project/ProjectAgentPatterns.tsx",
+        "web/src/pages/project/ProjectOverview.tsx",
+        "web/src/pages/project/Settings.tsx",
+        "web/src/pages/project/Support.tsx",
+        "web/src/pages/project/Team.tsx",
+        "web/src/pages/project/WorkspaceBlackboardRedirect.tsx",
+        "web/src/pages/project/schema/EdgeMapList.tsx",
+        "web/src/pages/project/schema/EdgeTypeList.tsx",
+        "web/src/pages/project/schema/EntityTypeList.tsx",
+        "web/src/pages/project/schema/SchemaOverview.tsx",
+        "web/src/pages/tenant/AcpDashboard.tsx",
+        "web/src/pages/tenant/AgentBindings.tsx",
+        "web/src/pages/tenant/AgentDashboard.tsx",
+        "web/src/pages/tenant/AgentDefinitionDetail.tsx",
+        "web/src/pages/tenant/AgentDefinitions.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx",
+        "web/src/pages/tenant/Analytics.tsx",
+        "web/src/pages/tenant/AuditLogs.tsx",
+        "web/src/pages/tenant/BackendStores.tsx",
+        "web/src/pages/tenant/Billing.tsx",
+        "web/src/pages/tenant/ClusterDetail.tsx",
+        "web/src/pages/tenant/ClusterList.tsx",
+        "web/src/pages/tenant/CreateInstance.tsx",
+        "web/src/pages/tenant/DecisionRecords.tsx",
+        "web/src/pages/tenant/DeployProgress.tsx",
+        "web/src/pages/tenant/EditProject.tsx",
+        "web/src/pages/tenant/Events.tsx",
+        "web/src/pages/tenant/EvolutionLog.tsx",
+        "web/src/pages/tenant/GeneDetail.tsx",
+        "web/src/pages/tenant/GeneMarket.tsx",
+        "web/src/pages/tenant/GenomeDetail.tsx",
+        "web/src/pages/tenant/InstanceChannels.tsx",
+        "web/src/pages/tenant/InstanceFiles.tsx",
+        "web/src/pages/tenant/InstanceGenes.tsx",
+        "web/src/pages/tenant/InstanceLayout.tsx",
+        "web/src/pages/tenant/InstanceList.tsx",
+        "web/src/pages/tenant/InstanceMembers.tsx",
+        "web/src/pages/tenant/InstanceOverview.tsx",
+        "web/src/pages/tenant/InstanceSettings.tsx",
+        "web/src/pages/tenant/InstanceTemplateList.tsx",
+        "web/src/pages/tenant/NewProject.tsx",
+        "web/src/pages/tenant/NewTenant.tsx",
+        "web/src/pages/tenant/PluginDetail.tsx",
+        "web/src/pages/tenant/PluginHub.tsx",
+        "web/src/pages/tenant/ProjectList.tsx",
+        "web/src/pages/tenant/ProviderList.tsx",
+        "web/src/pages/tenant/SkillDetail.tsx",
+        "web/src/pages/tenant/SkillEvolution.tsx",
+        "web/src/pages/tenant/SkillList.tsx",
+        "web/src/pages/tenant/TaskDashboard.tsx",
+        "web/src/pages/tenant/TemplateDetail.tsx",
+        "web/src/pages/tenant/TemplateMarketplace.tsx",
+        "web/src/pages/tenant/TenantOverview.tsx",
+        "web/src/pages/tenant/TenantSettings.tsx",
+        "web/src/pages/tenant/TrustPolicies.tsx",
+        "web/src/pages/tenant/UnifiedRuntimes.tsx",
+        "web/src/pages/tenant/UserList.tsx",
+        "web/src/pages/tenant/Webhooks.tsx",
+        "web/src/pages/tenant/WorkflowPatterns.tsx",
+        "web/src/pages/tenant/WorkspaceCreate.tsx",
+        "web/src/pages/tenant/WorkspaceList.tsx",
+        "web/src/pages/tenant/org-settings/OrgClusters.tsx",
+        "web/src/pages/tenant/org-settings/OrgGenes.tsx",
+        "web/src/pages/tenant/org-settings/OrgInfo.tsx",
+        "web/src/pages/tenant/org-settings/OrgRegistry.tsx",
+        "web/src/pages/tenant/org-settings/OrgSettingsLayout.tsx",
+        "web/src/pages/tenant/org-settings/OrgSmtp.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
         "web/index.html"
       ],
       "reason_code": "production_entry_shared_runtime",
@@ -24425,6 +24619,102 @@
     {
       "classification": "shared",
       "owner_source_entries": [
+        "web/src/components/common/OrgSetupGuard.tsx",
+        "web/src/components/mcp/McpServerListV2.tsx",
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/DeviceApprove.tsx",
+        "web/src/pages/ForceChangePassword.tsx",
+        "web/src/pages/InviteAccept.tsx",
+        "web/src/pages/Login.tsx",
+        "web/src/pages/OAuthCallback.tsx",
+        "web/src/pages/UserProfile.tsx",
+        "web/src/pages/admin/DeadLetterQueue.tsx",
+        "web/src/pages/admin/PoolDashboard.tsx",
+        "web/src/pages/project/Blackboard.tsx",
+        "web/src/pages/project/CommunitiesList.tsx",
+        "web/src/pages/project/CronJobs.tsx",
+        "web/src/pages/project/EnhancedSearch.tsx",
+        "web/src/pages/project/EntitiesList.tsx",
+        "web/src/pages/project/Maintenance.tsx",
+        "web/src/pages/project/MemoryDetail.tsx",
+        "web/src/pages/project/MemoryGraph.tsx",
+        "web/src/pages/project/MemoryList.tsx",
+        "web/src/pages/project/NewMemory.tsx",
+        "web/src/pages/project/ProjectAgentDashboard.tsx",
+        "web/src/pages/project/ProjectAgentLogs.tsx",
+        "web/src/pages/project/ProjectAgentPatterns.tsx",
+        "web/src/pages/project/ProjectOverview.tsx",
+        "web/src/pages/project/Settings.tsx",
+        "web/src/pages/project/Support.tsx",
+        "web/src/pages/project/Team.tsx",
+        "web/src/pages/project/WorkspaceBlackboardRedirect.tsx",
+        "web/src/pages/project/schema/EdgeMapList.tsx",
+        "web/src/pages/project/schema/EdgeTypeList.tsx",
+        "web/src/pages/project/schema/EntityTypeList.tsx",
+        "web/src/pages/project/schema/SchemaOverview.tsx",
+        "web/src/pages/tenant/AcpDashboard.tsx",
+        "web/src/pages/tenant/AgentBindings.tsx",
+        "web/src/pages/tenant/AgentDashboard.tsx",
+        "web/src/pages/tenant/AgentDefinitionDetail.tsx",
+        "web/src/pages/tenant/AgentDefinitions.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx",
+        "web/src/pages/tenant/Analytics.tsx",
+        "web/src/pages/tenant/AuditLogs.tsx",
+        "web/src/pages/tenant/BackendStores.tsx",
+        "web/src/pages/tenant/Billing.tsx",
+        "web/src/pages/tenant/ClusterDetail.tsx",
+        "web/src/pages/tenant/ClusterList.tsx",
+        "web/src/pages/tenant/CreateInstance.tsx",
+        "web/src/pages/tenant/DecisionRecords.tsx",
+        "web/src/pages/tenant/DeployProgress.tsx",
+        "web/src/pages/tenant/EditProject.tsx",
+        "web/src/pages/tenant/Events.tsx",
+        "web/src/pages/tenant/EvolutionLog.tsx",
+        "web/src/pages/tenant/GeneDetail.tsx",
+        "web/src/pages/tenant/GeneMarket.tsx",
+        "web/src/pages/tenant/GenomeDetail.tsx",
+        "web/src/pages/tenant/InstanceChannels.tsx",
+        "web/src/pages/tenant/InstanceFiles.tsx",
+        "web/src/pages/tenant/InstanceGenes.tsx",
+        "web/src/pages/tenant/InstanceLayout.tsx",
+        "web/src/pages/tenant/InstanceList.tsx",
+        "web/src/pages/tenant/InstanceMembers.tsx",
+        "web/src/pages/tenant/InstanceOverview.tsx",
+        "web/src/pages/tenant/InstanceSettings.tsx",
+        "web/src/pages/tenant/InstanceTemplateList.tsx",
+        "web/src/pages/tenant/NewProject.tsx",
+        "web/src/pages/tenant/NewTenant.tsx",
+        "web/src/pages/tenant/PluginDetail.tsx",
+        "web/src/pages/tenant/PluginHub.tsx",
+        "web/src/pages/tenant/ProjectList.tsx",
+        "web/src/pages/tenant/ProviderList.tsx",
+        "web/src/pages/tenant/SkillDetail.tsx",
+        "web/src/pages/tenant/SkillEvolution.tsx",
+        "web/src/pages/tenant/SkillList.tsx",
+        "web/src/pages/tenant/TaskDashboard.tsx",
+        "web/src/pages/tenant/TemplateDetail.tsx",
+        "web/src/pages/tenant/TenantOverview.tsx",
+        "web/src/pages/tenant/TenantSettings.tsx",
+        "web/src/pages/tenant/TrustPolicies.tsx",
+        "web/src/pages/tenant/UnifiedRuntimes.tsx",
+        "web/src/pages/tenant/UserList.tsx",
+        "web/src/pages/tenant/Webhooks.tsx",
+        "web/src/pages/tenant/WorkflowPatterns.tsx",
+        "web/src/pages/tenant/WorkspaceCreate.tsx",
+        "web/src/pages/tenant/WorkspaceList.tsx",
+        "web/src/pages/tenant/org-settings/OrgClusters.tsx",
+        "web/src/pages/tenant/org-settings/OrgGenes.tsx",
+        "web/src/pages/tenant/org-settings/OrgInfo.tsx",
+        "web/src/pages/tenant/org-settings/OrgRegistry.tsx",
+        "web/src/pages/tenant/org-settings/OrgSettingsLayout.tsx",
+        "web/src/pages/tenant/org-settings/OrgSmtp.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/client/kernelHttpClient.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
         "web/index.html"
       ],
       "reason_code": "production_entry_shared_runtime",
@@ -24455,6 +24745,32 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/project/Blackboard.tsx",
+        "web/src/pages/project/CommunitiesList.tsx",
+        "web/src/pages/project/MemoryDetail.tsx",
+        "web/src/pages/project/NewMemory.tsx",
+        "web/src/pages/project/PlaybookLibrary.tsx",
+        "web/src/pages/project/Settings.tsx",
+        "web/src/pages/project/Team.tsx",
+        "web/src/pages/tenant/AgentDefinitionDetail.tsx",
+        "web/src/pages/tenant/AgentDefinitions.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx",
+        "web/src/pages/tenant/CreateInstance.tsx",
+        "web/src/pages/tenant/DeployProgress.tsx",
+        "web/src/pages/tenant/SkillDetail.tsx",
+        "web/src/pages/tenant/TemplateMarketplace.tsx",
+        "web/src/pages/tenant/UnifiedRuntimes.tsx",
+        "web/src/pages/tenant/UserList.tsx",
+        "web/src/pages/tenant/WorkspaceCreate.tsx",
+        "web/src/pages/tenant/WorkspaceList.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/client/webFetchV2.ts"
     },
     {
       "classification": "shared",
@@ -27161,6 +27477,7 @@
     "web/src/plugins/WebAuthenticatedShellSurfaceV2.tsx",
     "web/src/plugins/WebPluginGenerationHostV2.tsx",
     "web/src/plugins/WebRendererAuthenticatedShellV2.tsx",
+    "web/src/plugins/webOperationAdmissionV2.ts",
     "web/src/plugins/webPluginGenerationV2.ts",
     "web/src/plugins/webRendererAppCompositionV2.ts",
     "web/src/plugins/webRendererCompositionPortV2.ts",
@@ -27201,8 +27518,10 @@
     "web/src/services/channelService.ts",
     "web/src/services/client/ApiError.ts",
     "web/src/services/client/httpClient.ts",
+    "web/src/services/client/kernelHttpClient.ts",
     "web/src/services/client/queryClient.ts",
     "web/src/services/client/urlUtils.ts",
+    "web/src/services/client/webFetchV2.ts",
     "web/src/services/client/wsWatchdog.ts",
     "web/src/services/clusterService.ts",
     "web/src/services/commandService.ts",

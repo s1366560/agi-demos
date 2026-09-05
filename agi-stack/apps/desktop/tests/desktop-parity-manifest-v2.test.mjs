@@ -280,6 +280,11 @@ test("reviewed Web production dependencies bind reachable paths and audited SHA-
           "web/src/pages/project/CommunitiesList.tsx",
         source_entry: "web/src/components/tasks/TaskList.tsx",
       },
+      {
+        routed_source_entry:
+          "web/src/pages/project/CommunitiesList.tsx",
+        source_entry: "web/src/services/taskStream.ts",
+      },
     ],
   );
 
