@@ -164,8 +164,13 @@ async function requestProviderJsonV2(
   const payload: unknown = contentType.includes('application/json')
     ? await response.json().catch(() => null)
     : await response.text().catch(() => '');
-  if (!response.ok)
-    throw new DesktopApiError('tenant_provider_http_failed', response.status, payload);
+  if (!response.ok) {
+    const message =
+      typeof payload === 'object' && payload !== null && 'detail' in payload
+        ? String(payload.detail)
+        : `HTTP ${response.status}`;
+    throw new DesktopApiError(message, response.status, payload);
+  }
   if (!contentType.includes('application/json'))
     throw providerErrorV2('tenant_provider_response_not_json', 502);
   return payload;

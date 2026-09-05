@@ -398,3 +398,34 @@ test('providers V2 preserves vault-bound cloud broker idempotency and never fall
   assert.equal(requests[0].path, '/api/v1/llm-providers/');
   assert.equal(f.events.at(-1)[0], 'release');
 });
+
+test('providers V2 preserves server error details, HTTP fallback and conflict payloads', async () => {
+  for (const mode of ['cloud', 'local']) {
+    const payload = { detail: 'Provider revision changed', current_revision: 3 };
+    globalThis.fetch = async () => new Response(JSON.stringify(payload), {
+      status: 409, headers: { 'Content-Type': 'application/json' },
+    });
+    const f = fixture(config(mode));
+    await assert.rejects(f.client.checkLlmProvider('provider-1', 2), (error) => {
+      assert.ok(error instanceof DesktopApiError);
+      assert.equal(error.status, 409);
+      assert.equal(error.message, payload.detail);
+      assert.deepEqual(error.payload, payload);
+      return true;
+    });
+    assert.equal(f.events.at(-1)[0], 'release');
+    globalThis.fetch = async () => new Response('Unavailable', { status: 503 });
+    await assert.rejects(f.client.listLlmProviders(), (error) =>
+      error instanceof DesktopApiError && error.message === 'HTTP 503');
+  }
+  const payload = { detail: 'Provider revision changed in vault session' };
+  globalThis.fetch = async () => { throw new Error('unexpected direct fetch'); };
+  globalThis.window = { __MEMSTACK_DESKTOP__: { core: {
+    async invoke(command) {
+      assert.equal(command, 'cloud_request');
+      return { status: 409, body: payload };
+    },
+  } } };
+  await assert.rejects(fixture({ ...config(), apiKey: '' }).client.listLlmProviders(),
+    (error) => error instanceof DesktopApiError && error.message === payload.detail);
+});
