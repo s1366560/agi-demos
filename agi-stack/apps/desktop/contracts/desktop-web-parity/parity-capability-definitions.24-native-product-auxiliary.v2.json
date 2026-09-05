@@ -619,7 +619,17 @@
         "retry"
       ],
       "expected_observable_result": "Cloud Desktop natively presents project playbooks and reflection verdicts from Cloud authority with the same project scope, refresh behavior, and structured states as Web. Local Desktop keeps the route discoverable and returns a stable not-applicable result without opening Cloud transport.",
-      "judgment_rationale": "At 8f8393582, Project Playbooks removes the static createCloudProjectPlaybooksEventSource production factory. Route construction now requires createDesktopProjectPlaybooksEventSourceV2 backed by generated-catalog root Provider service:desktop-renderer.project-playbooks-events-authority@1.0.0. Every Cloud subscription acquires one immutable project-scoped generation lease and retains it until unsubscribe; the socket projection continues to use the projected Cloud session and authenticated Electron socket broker, while the retained pure parser filters reflection_complete events and triggers refresh. This is an authority and lifecycle cutover inside the renderer, not a product-capability expansion: the read APIs, permissions, actions, and existing Cloud availability remain unchanged. Local remains cloud-only not applicable with no transport and no fabricated authority."
+      "judgment_rationale": "At 8f8393582, Project Playbooks removes the static createCloudProjectPlaybooksEventSource production factory. Route construction now requires createDesktopProjectPlaybooksEventSourceV2 backed by generated-catalog root Provider service:desktop-renderer.project-playbooks-events-authority@1.0.0. Every Cloud subscription acquires one immutable project-scoped generation lease and retains it until unsubscribe; the socket projection continues to use the projected Cloud session and authenticated Electron socket broker, while the retained pure parser filters reflection_complete events and triggers refresh. This is an authority and lifecycle cutover inside the renderer, not a product-capability expansion: the read APIs, permissions, actions, and existing Cloud availability remain unchanged. Local remains cloud-only not applicable with no transport and no fabricated authority.",
+      "reviewed_production_dependencies": [
+        {
+          "routed_source_entry": "web/src/pages/project/PlaybookLibrary.tsx",
+          "source_entry": "web/src/services/unifiedEventService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/project/PlaybookLibrary.tsx",
+          "source_entry": "web/src/services/unifiedEventConnectionV2.ts"
+        }
+      ]
     },
     {
       "id": "not-found",

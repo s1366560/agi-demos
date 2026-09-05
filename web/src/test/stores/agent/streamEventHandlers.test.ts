@@ -114,6 +114,32 @@ describe('streamEventHandlers', () => {
     };
   });
 
+  it('discards late delta and thought timers after operation retirement', () => {
+    const abort = new AbortController();
+    const operation = {
+      signal: abort.signal,
+      check: () => {
+        if (abort.signal.aborted) throw new Error('retired');
+      },
+    };
+    const handlers = createStreamEventHandlers(conversationId, undefined, {
+      ...mockDeps,
+      operation: operation as any,
+    });
+    handlers.onThoughtStart?.({ type: 'thought_start', data: {} } as any);
+    handlers.onThoughtDelta?.({ type: 'thought_delta', data: { delta: 'pending' } } as any);
+    handlers.onTextDelta?.({ type: 'text_delta', data: { delta: 'pending' } } as any);
+    expect(Object.keys(handlers)).toContain('onThoughtStart');
+    const spread = { ...handlers };
+    abort.abort();
+    mockUpdateConversationState.mockClear();
+    spread.onThoughtStart?.({ type: 'thought_start', data: {} } as any);
+    vi.runAllTimers();
+    handlers.onThoughtStart?.({ type: 'thought_start', data: {} } as any);
+    expect(mockUpdateConversationState).not.toHaveBeenCalled();
+    expect(mockDeps.clearDeltaBuffers).toHaveBeenCalledWith(conversationId);
+  });
+
   afterEach(() => {
     vi.clearAllTimers();
     vi.restoreAllMocks();

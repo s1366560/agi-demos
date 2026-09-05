@@ -1,3 +1,7 @@
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '../../../plugins/webOperationAdmissionV2';
 /**
  * SandboxStatusIndicator - Sandbox lifecycle status indicator for status bar
  *
@@ -9,7 +13,16 @@
  * @module components/agent/sandbox/SandboxStatusIndicator
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FC,
+} from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -409,6 +422,11 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
 }) => {
   const { t } = useTranslation();
   const statusConfig = getStatusConfig(t);
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
   const [sandbox, setSandbox] = useState<ProjectSandbox | null>(null);
   const [stats, setStats] = useState<SandboxStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -722,9 +740,14 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
 
   // Subscribe to sandbox events via shared sandboxSSEService (single WS subscriber).
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId || !availability.available) return;
 
     const toState = (event: BaseSandboxSSEEvent) => {
+      if (
+        getWebOperationAvailabilityV2().owner !== availability.owner ||
+        !getWebOperationAvailabilityV2().available
+      )
+        return;
       const state = event.data as SandboxStateData;
       handleSandboxStateChange(state);
     };
@@ -741,7 +764,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
     return () => {
       unsubscribe();
     };
-  }, [projectId, handleSandboxStateChange]);
+  }, [projectId, handleSandboxStateChange, availability]);
 
   // Auto-refresh stats while popover is open (stable interval, no recreation on sandbox change)
   useEffect(() => {

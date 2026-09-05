@@ -1,4 +1,8 @@
-import { useEffect } from 'react';
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '@/plugins/webOperationAdmissionV2';
+import { useEffect, useSyncExternalStore } from 'react';
 
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -22,17 +26,23 @@ export function useBlackboardSSE(
   workspaceId: string | null,
   scope?: { tenantId?: string | undefined; projectId?: string | undefined }
 ): void {
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
   const token = useAuthStore((state) => state.token);
   const tenantId = scope?.tenantId;
   const projectId = scope?.projectId;
 
   useEffect(() => {
-    if (!workspaceId || !token) {
+    if (!workspaceId || !token || !availability.available) {
       return;
     }
 
     const store = useWorkspaceStore.getState();
     const unsubscribe = unifiedEventService.subscribeWorkspace(workspaceId, (event) => {
+      if (getWebOperationAvailabilityV2() !== availability) return;
       const type = event.type;
       const data = event.data as Record<string, unknown>;
 
@@ -88,5 +98,5 @@ export function useBlackboardSSE(
     return () => {
       unsubscribe();
     };
-  }, [workspaceId, token, tenantId, projectId]);
+  }, [workspaceId, token, tenantId, projectId, availability]);
 }

@@ -7,6 +7,9 @@ import {
 import profile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
 import {
   WebOperationAdmissionV2,
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+  installWebOperationAdmissionV2,
   type WebOperationContextV2,
 } from '../../plugins/webOperationAdmissionV2';
 function gate() {
@@ -72,6 +75,36 @@ describe('Web operation admission with production Loader', () => {
     await admission.close();
     await runtime.close();
   });
+  it('keeps the current owner and its operation alive when a candidate is rejected', async () => {
+    const { runtime, admission } = await fixture();
+    const snapshot = admission.getSnapshot();
+    const generation = runtime.getSnapshot();
+    const started = gate(),
+      finish = gate();
+    let operation!: WebOperationContextV2;
+    const task = admission.run(async (context) => {
+      operation = context;
+      started.resolve();
+      await finish.promise;
+      return 'last-good';
+    });
+    await started.promise;
+    const { digest: _digest, ...candidate } = structuredClone(profile);
+    candidate.generation += 1;
+    const host = candidate.entries.find((entry) => entry.entry_id === 'builtin-web-renderer-host')!;
+    host.config = { ...host.config, strategy: 'invalid-candidate-strategy' };
+    await expect(
+      runtime.replaceBaseline({ ...candidate, digest: await digestV2(candidate) })
+    ).rejects.toThrow();
+    expect(runtime.getSnapshot()).toBe(generation);
+    expect(admission.getSnapshot()).toBe(snapshot);
+    expect(operation.signal.aborted).toBe(false);
+    finish.resolve();
+    await expect(task).resolves.toBe('last-good');
+    await admission.close();
+    await runtime.close();
+  });
+
   it('joins admitted children before releasing a completed parent', async () => {
     const { runtime, admission } = await fixture();
     const generation = runtime.getSnapshot()!;
@@ -139,6 +172,87 @@ describe('Web operation admission with production Loader', () => {
     await admission.close();
     await runtime.close();
   });
+  it('publishes stable availability only after old operations are synchronously revoked', async () => {
+    const { runtime, admission } = await fixture();
+    const initial = admission.getSnapshot();
+    expect(initial.available).toBe(true);
+    admission.setEnabled(true);
+    expect(admission.getSnapshot()).toBe(initial);
+    const started = gate(),
+      finish = gate();
+    let context!: WebOperationContextV2;
+    const task = admission.run(async (operation) => {
+      context = operation;
+      started.resolve();
+      await finish.promise;
+    });
+    const rejected = expect(task).rejects.toMatchObject({ name: 'AbortError' });
+    await started.promise;
+    let notifications = 0;
+    const unsubscribe = admission.subscribe(() => {
+      notifications++;
+      expect(context.signal.aborted).toBe(true);
+    });
+    admission.invalidate();
+    expect(notifications).toBe(1);
+    expect(admission.getSnapshot().owner).not.toBe(initial.owner);
+    expect(admission.getSnapshot().available).toBe(true);
+    admission.setEnabled(false);
+    expect(admission.getSnapshot().available).toBe(false);
+    const disabled = admission.getSnapshot();
+    admission.setEnabled(false);
+    expect(admission.getSnapshot()).toBe(disabled);
+    finish.resolve();
+    await rejected;
+    unsubscribe();
+    await admission.close();
+    await runtime.close();
+  });
+
+  it('notifies mounted consumers across root replacement without old detach hiding the new root', async () => {
+    const first = await fixture();
+    const second = await fixture();
+    const snapshots: object[] = [];
+    const unsubscribe = subscribeWebOperationAvailabilityV2(() => {
+      snapshots.push(getWebOperationAvailabilityV2());
+    });
+    const detachFirst = installWebOperationAdmissionV2(first.admission);
+    expect(getWebOperationAvailabilityV2()).toBe(first.admission.getSnapshot());
+    detachFirst();
+    expect(getWebOperationAvailabilityV2().available).toBe(false);
+    const detachSecond = installWebOperationAdmissionV2(second.admission);
+    try {
+      detachFirst();
+      expect(getWebOperationAvailabilityV2()).toBe(second.admission.getSnapshot());
+      first.admission.invalidate();
+      expect(snapshots).toHaveLength(3);
+      second.admission.invalidate();
+      expect(snapshots).toHaveLength(4);
+      expect(snapshots.at(-1)).toBe(second.admission.getSnapshot());
+    } finally {
+      detachSecond();
+      unsubscribe();
+      await first.admission.close();
+      await second.admission.close();
+      await first.runtime.close();
+      await second.runtime.close();
+    }
+  });
+
+  it('publishes availability when a production generation arrives and when it closes', async () => {
+    const runtime = new RendererPluginRuntimeV2('web', webRendererDefinitionsV2);
+    const admission = new WebOperationAdmissionV2(runtime);
+    admission.setEnabled(true);
+    expect(admission.getSnapshot().available).toBe(false);
+    await runtime.bootstrap(profile);
+    expect(admission.getSnapshot().available).toBe(true);
+    const owner = admission.getSnapshot().owner;
+    await runtime.close();
+    expect(admission.getSnapshot().available).toBe(false);
+    expect(admission.getSnapshot().owner).not.toBe(owner);
+    await admission.close();
+  });
+
   it('rejects forged and released parents', async () => {
     const { runtime, admission } = await fixture();
     let retained!: WebOperationContextV2;
@@ -184,6 +298,47 @@ describe('Web operation admission with production Loader', () => {
     await admission.close();
     await runtime.close();
   });
+  it('reports lease cleanup failure after cancellation to both the operation and root close', async () => {
+    const { runtime, admission: original } = await fixture();
+    await original.close();
+    const started = gate(),
+      finish = gate();
+    const cleanupFailure = new Error('release failure');
+    const admission = new WebOperationAdmissionV2({
+      subscribe: runtime.subscribe,
+      getSnapshot: runtime.getSnapshot,
+      acquire: () => {
+        const lease = runtime.acquire();
+        const release = lease.release.bind(lease);
+        lease.release = async () => {
+          await release();
+          throw cleanupFailure;
+        };
+        return lease;
+      },
+    });
+    admission.setEnabled(true);
+    const task = admission.run(async () => {
+      started.resolve();
+      await finish.promise;
+    });
+    const rejected = expect(task).rejects.toMatchObject({
+      name: 'AggregateError',
+      errors: [expect.objectContaining({ name: 'AbortError' }), cleanupFailure],
+    });
+    await started.promise;
+    const closing = admission.close();
+    const closeRejected = expect(closing).rejects.toMatchObject({
+      name: 'AggregateError',
+      errors: [cleanupFailure],
+    });
+    finish.resolve();
+    await rejected;
+    await closeRejected;
+    expect(runtime.getSnapshot()!.leaseCount).toBe(0);
+    await runtime.close();
+  });
+
   it('preserves primary failure over lease cleanup failure', async () => {
     const { runtime, admission: original } = await fixture();
     await original.close();

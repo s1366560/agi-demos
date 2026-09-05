@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../../plugins/webOperationAdmissionV2';
 /**
  * Message loading actions extracted from agentV3.ts.
  *
@@ -70,9 +71,13 @@ const compareTimelineEvents = (a: TimelineEvent, b: TimelineEvent): number => {
 const RECENT_MESSAGE_LOAD_SKIP_MS = 30_000;
 const activeMessageLoadRequests = new Map<string, Promise<boolean>>();
 const completedMessageLoadRequests = new Map<string, number>();
+const ownerIds = new WeakMap<object, number>();
+let nextOwnerId = 0;
 
 function messageLoadRequestKey(conversationId: string, projectId: string): string {
-  return `${projectId}:${conversationId}`;
+  const owner = getWebOperationAvailabilityV2().owner;
+  if (!ownerIds.has(owner)) ownerIds.set(owner, ++nextOwnerId);
+  return `${String(ownerIds.get(owner))}:${projectId}:${conversationId}`;
 }
 
 export function createMessageLoadActions(deps: MessageLoadActionDeps) {
@@ -82,10 +87,13 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
     conversationId: string,
     projectId: string
   ): Promise<boolean> => {
+    const owner = getWebOperationAvailabilityV2().owner;
     const scopeGeneration = get().conversationScopeGeneration;
     const isStillActive = () => {
       const state = get();
       return (
+        getWebOperationAvailabilityV2().available &&
+        getWebOperationAvailabilityV2().owner === owner &&
         state.activeConversationId === conversationId &&
         state.conversationScopeGeneration === scopeGeneration
       );
@@ -173,6 +181,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           // Fetch plan mode status from API
           (async () => {
             const { planService } = await import('../../services/planService');
+            if (!isStillActive()) return null;
             return planService.getMode(conversationId);
           })().catch((_err: unknown) => {
             logger.debug(`[AgentV3] getMode failed:`, _err);
@@ -380,14 +389,9 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
       // Always subscribe active conversation to WebSocket so externally-triggered
       // executions (e.g. channel ingress) can stream into the workspace in real time.
       if (get().activeConversationId === conversationId) {
-        if (!agentService.isConnected()) {
-          logger.debug(`[AgentV3] Connecting WebSocket...`);
-          await agentService.connect();
-          if (!isStillActive()) {
-            logger.debug('Conversation changed during WebSocket connect, skipping subscribe');
-            return false;
-          }
-        }
+        const operation = await agentService.connectSession();
+        if (!isStillActive()) return false;
+        agentService.assertSession(operation);
 
         // Bind timeline buffer deps for this conversation
         bindTimelineBufferDeps(conversationId, {
@@ -396,6 +400,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
         });
 
         const streamHandlerDeps: StreamHandlerDeps = {
+          operation,
           get,
           set: set as StreamHandlerDeps['set'],
           getDeltaBuffer,
@@ -432,12 +437,12 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
             subscribeOpts.from_counter = recoveredExecStatus.last_event_counter;
           }
         }
-        agentService.subscribe(conversationId, streamHandler, subscribeOpts);
+        agentService.subscribe(conversationId, streamHandler, subscribeOpts, operation);
         logger.debug(`[AgentV3] Subscribed to conversation ${conversationId}`);
       }
       return true;
     } catch (error) {
-      if (get().activeConversationId !== conversationId) return false;
+      if (!isStillActive()) return false;
       console.error('Failed to load messages', error);
       useTimelineStore.getState().setAgentIsLoadingHistory(false);
       return false;

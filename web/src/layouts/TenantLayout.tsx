@@ -37,6 +37,7 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { agentService } from '@/services/agentService';
 import { unifiedEventService } from '@/services/unifiedEventService';
+import { logger } from '@/utils/logger';
 
 import { useCommandPaletteOpen } from '@/hooks/useCommandPaletteOpen';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
@@ -77,7 +78,7 @@ function isBareTenantEntryPath(pathname: string): boolean {
   return pathname === '/tenant' || pathname === '/tenant/';
 }
 
-function resetTenantScopedRuntimeState(): void {
+function resetTenantScopedRuntimeState(): Promise<void> {
   useAgentV3Store.setState((state) => ({
     conversations: [],
     activeConversationId: null,
@@ -105,8 +106,13 @@ function resetTenantScopedRuntimeState(): void {
   const sandboxStore = useSandboxStore.getState();
   sandboxStore.unsubscribeSSE();
   sandboxStore.reset();
-  agentService.disconnect();
-  unifiedEventService.disconnect();
+  return Promise.allSettled([
+    agentService.disconnect(),
+    unifiedEventService.disconnect(),
+  ]).then((results) => {
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  });
 }
 
 /**
@@ -312,7 +318,9 @@ export const TenantLayout: React.FC = memo(() => {
     ) {
       projectSyncRequestRef.current += 1;
       clearProjects();
-      resetTenantScopedRuntimeState();
+      void resetTenantScopedRuntimeState().catch((error: unknown) => {
+        logger.error('Failed to drain retired tenant event connections', error);
+      });
     }
   }, [tenantProjectScope, clearProjects]);
 

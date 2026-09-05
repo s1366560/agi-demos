@@ -10,6 +10,9 @@
  * @packageDocumentation
  */
 
+import { getWebOperationAvailabilityV2 } from '../plugins/webOperationAdmissionV2';
+import type { WebOperationContextV2 } from '../plugins/webOperationAdmissionV2';
+
 import { logger } from '../utils/logger';
 
 import { parseLifecycleStateData, parseSandboxStateData } from './agent/messageParsers';
@@ -105,6 +108,30 @@ function getAgentErrorMessage(data: unknown): string {
   return 'Agent stream error';
 }
 
+function bindStreamHandlerV2(
+  handler: AgentStreamHandler,
+  operation: WebOperationContextV2
+): AgentStreamHandler {
+  const bound: AgentStreamHandler = {};
+  for (const key of Reflect.ownKeys(handler)) {
+    const callback: unknown = Reflect.get(handler, key);
+    const value =
+      typeof callback === 'function'
+        ? (...args: unknown[]) => {
+            operation.check();
+            return Reflect.apply(callback, handler, args);
+          }
+        : callback;
+    Object.defineProperty(bound, key, {
+      value,
+      enumerable: Object.getOwnPropertyDescriptor(handler, key)?.enumerable ?? true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return bound;
+}
+
 class AgentServiceImpl implements AgentService {
   private sessionId: string = generateSessionId();
   private wsConnection: WebSocketConnection;
@@ -113,6 +140,7 @@ class AgentServiceImpl implements AgentService {
   private handlers: Map<string, AgentStreamHandler> = new Map();
 
   // Pending subscriptions (to restore after reconnect)
+  private subscriptionTokens = new Map<string, symbol>();
   private subscriptions: Set<string> = new Set();
   private subscriptionOptions: Map<string, SubscribeOptions> = new Map();
 
@@ -161,6 +189,60 @@ class AgentServiceImpl implements AgentService {
         this.resubscribe();
       },
     });
+    this.wsConnection.onRetired(() => {
+      this.cancelIdleDisconnect();
+      const error = new DOMException('Agent session retired', 'AbortError');
+      for (const pending of [
+        ...this.pendingSendAcks.values(),
+        ...this.pendingControlAcks.values(),
+      ]) {
+        clearTimeout(pending.timeout);
+        pending.reject(error);
+      }
+      this.pendingSendAcks.clear();
+      this.pendingControlAcks.clear();
+      this.handlers.clear();
+      this.subscriptions.clear();
+      this.subscriptionTokens.clear();
+      this.subscriptionOptions.clear();
+      this.statusSubscriber = null;
+      this.lifecycleStateSubscriber = null;
+      this.sandboxStateSubscriber = null;
+      this.performanceMetrics.clear();
+    });
+  }
+
+  getOperationContext(): WebOperationContextV2 | undefined {
+    return this.wsConnection.getOperationContext();
+  }
+
+  onRetired(listener: (context: WebOperationContextV2) => void): () => void {
+    return this.wsConnection.onRetired(listener);
+  }
+
+  assertSession(context: WebOperationContextV2): void {
+    context.check();
+    if (this.getOperationContext() !== context) {
+      throw new DOMException('Agent session replaced', 'AbortError');
+    }
+  }
+
+  async connectSession(): Promise<WebOperationContextV2> {
+    const owner = getWebOperationAvailabilityV2().owner;
+    await this.connect();
+    const context = this.getOperationContext();
+    if (!context || context.owner !== owner) {
+      throw new DOMException('Agent session replaced during connection', 'AbortError');
+    }
+    this.assertSession(context);
+    return context;
+  }
+
+  private requireSession(): WebOperationContextV2 {
+    const context = this.getOperationContext();
+    if (!context) throw new DOMException('Agent session unavailable', 'AbortError');
+    this.assertSession(context);
+    return context;
   }
 
   getSessionId(): string {
@@ -172,9 +254,9 @@ class AgentServiceImpl implements AgentService {
     return this.wsConnection.connect();
   }
 
-  disconnect(): void {
+  disconnect(): Promise<void> {
     this.cancelIdleDisconnect();
-    this.wsConnection.disconnect();
+    return this.wsConnection.disconnect();
   }
 
   getStatus(): WebSocketStatus {
@@ -234,6 +316,7 @@ class AgentServiceImpl implements AgentService {
   }
 
   private waitForControlAck(idempotencyKey: string): Promise<ControlCommandAck> {
+    this.rejectControlAck(idempotencyKey, new Error('Superseded control command'));
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingControlAcks.delete(idempotencyKey);
@@ -672,6 +755,7 @@ class AgentServiceImpl implements AgentService {
     options: KillSubAgentOptions
   ): Promise<ControlCommandAck> {
     const idempotencyKey = options.idempotencyKey ?? generateProtocolId('subagent-kill');
+    const context = this.requireSession();
     const ack = this.waitForControlAck(idempotencyKey);
     const sent = this.send({
       type: 'kill_run',
@@ -685,7 +769,10 @@ class AgentServiceImpl implements AgentService {
       logger.warn('[AgentWS] Failed to send kill_run signal - WebSocket not connected');
       this.rejectControlAck(idempotencyKey, new Error('WebSocket not connected'));
     }
-    return ack;
+    return ack.then((value) => {
+      this.assertSession(context);
+      return value;
+    });
   }
 
   steerSubAgent(
@@ -695,6 +782,7 @@ class AgentServiceImpl implements AgentService {
     options: SubAgentControlOptions
   ): Promise<ControlCommandAck> {
     const idempotencyKey = options.idempotencyKey ?? generateProtocolId('subagent-steer');
+    const context = this.requireSession();
     const ack = this.waitForControlAck(idempotencyKey);
     const sent = this.send({
       type: 'steer',
@@ -708,10 +796,17 @@ class AgentServiceImpl implements AgentService {
       logger.warn('[AgentWS] Failed to send steer signal - WebSocket not connected');
       this.rejectControlAck(idempotencyKey, new Error('WebSocket not connected'));
     }
-    return ack;
+    return ack.then((value) => {
+      this.assertSession(context);
+      return value;
+    });
   }
 
-  async chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void> {
+  async chat(
+    request: ChatRequest,
+    handler: AgentStreamHandler,
+    expected?: WebOperationContextV2
+  ): Promise<void> {
     this.cancelIdleDisconnect();
     const {
       conversation_id,
@@ -726,11 +821,11 @@ class AgentServiceImpl implements AgentService {
       mentions,
     } = request;
 
-    if (!this.isConnected()) {
-      await this.connect();
-    }
+    const context = expected ?? (await this.connectSession());
+    this.assertSession(context);
 
-    this.handlers.set(conversation_id, handler);
+    this.subscriptionTokens.set(conversation_id, Symbol());
+    this.handlers.set(conversation_id, bindStreamHandlerV2(handler, context));
     this.subscriptions.add(conversation_id);
 
     const sendAck = this.waitForSendAck(conversation_id);
@@ -760,13 +855,23 @@ class AgentServiceImpl implements AgentService {
       throw new Error('WebSocket not connected');
     }
     await sendAck;
+    this.assertSession(context);
   }
 
-  subscribe(conversationId: string, handler: AgentStreamHandler, options?: SubscribeOptions): void {
+  subscribe(
+    conversationId: string,
+    handler: AgentStreamHandler,
+    options?: SubscribeOptions,
+    expected?: WebOperationContextV2
+  ): () => void {
+    const context = expected ?? this.requireSession();
+    this.assertSession(context);
     this.cancelIdleDisconnect();
     const alreadySubscribed = this.subscriptions.has(conversationId);
     const previousOptions = this.subscriptionOptions.get(conversationId);
-    this.handlers.set(conversationId, handler);
+    const ticket = Symbol();
+    this.subscriptionTokens.set(conversationId, ticket);
+    this.handlers.set(conversationId, bindStreamHandlerV2(handler, context));
     this.subscriptions.add(conversationId);
     if (options) {
       this.subscriptionOptions.set(conversationId, options);
@@ -792,10 +897,14 @@ class AgentServiceImpl implements AgentService {
           : {}),
       });
     }
+    return () => {
+      if (this.subscriptionTokens.get(conversationId) === ticket) this.unsubscribe(conversationId);
+    };
   }
 
   unsubscribe(conversationId: string): void {
     this.handlers.delete(conversationId);
+    this.subscriptionTokens.delete(conversationId);
     this.subscriptions.delete(conversationId);
     this.subscriptionOptions.delete(conversationId);
 
@@ -867,8 +976,10 @@ class AgentServiceImpl implements AgentService {
   subscribeLifecycleState(
     projectId: string,
     tenantId: string,
-    callback: (state: LifecycleStateData) => void
-  ): void {
+    callback: (state: LifecycleStateData) => void,
+    expected?: WebOperationContextV2
+  ): () => void {
+    this.assertSession(expected ?? this.requireSession());
     this.cancelIdleDisconnect();
     const previousSubscriber = this.lifecycleStateSubscriber;
     const isSameSubscription =
@@ -891,6 +1002,11 @@ class AgentServiceImpl implements AgentService {
         tenant_id: tenantId,
       });
     }
+    const subscriber = this.lifecycleStateSubscriber;
+    return () => {
+      if (this.lifecycleStateSubscriber === subscriber)
+        this.unsubscribeLifecycleState({ projectId, tenantId });
+    };
   }
 
   unsubscribeLifecycleState(expected?: ProjectTenantSubscriptionKey): void {
@@ -916,8 +1032,10 @@ class AgentServiceImpl implements AgentService {
   subscribeSandboxState(
     projectId: string,
     tenantId: string,
-    callback: (state: SandboxStateData) => void
-  ): void {
+    callback: (state: SandboxStateData) => void,
+    expected?: WebOperationContextV2
+  ): () => void {
+    this.assertSession(expected ?? this.requireSession());
     this.cancelIdleDisconnect();
     const previousSubscriber = this.sandboxStateSubscriber;
     const isSameSubscription =
@@ -940,6 +1058,11 @@ class AgentServiceImpl implements AgentService {
         tenant_id: tenantId,
       });
     }
+    const subscriber = this.sandboxStateSubscriber;
+    return () => {
+      if (this.sandboxStateSubscriber === subscriber)
+        this.unsubscribeSandboxState({ projectId, tenantId });
+    };
   }
 
   unsubscribeSandboxState(expected?: ProjectTenantSubscriptionKey): void {
@@ -984,10 +1107,11 @@ class AgentServiceImpl implements AgentService {
       return;
     }
 
+    const context = this.getOperationContext();
     this.idleDisconnectTimeout = setTimeout(() => {
       this.idleDisconnectTimeout = null;
-      if (!this.hasRealtimeConsumers()) {
-        this.disconnect();
+      if (context === this.getOperationContext() && !this.hasRealtimeConsumers()) {
+        void this.disconnect().catch(() => logger.warn('[AgentWS] Idle cleanup failed'));
       }
     }, IDLE_DISCONNECT_DELAY_MS);
   }
@@ -998,7 +1122,7 @@ export const agentService = new AgentServiceImpl();
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    agentService.disconnect();
+    void agentService.disconnect().catch(() => logger.warn('[AgentWS] HMR cleanup failed'));
   });
 }
 

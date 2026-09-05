@@ -1,3 +1,4 @@
+import { getWebOperationAvailabilityV2 } from '../plugins/webOperationAdmissionV2';
 /**
  * Sandbox Store - State management for sandbox terminal and tool execution
  *
@@ -120,7 +121,7 @@ export interface SandboxState {
   ) => Promise<{ success: boolean; content: string; isError: boolean }>;
 
   // SSE subscription actions
-  subscribeSSE: (projectId: string) => void;
+  subscribeSSE: (projectId: string) => () => void;
   unsubscribeSSE: () => void;
 
   // Desktop and Terminal control actions (project-scoped)
@@ -485,34 +486,46 @@ export const useSandboxStore = create<SandboxState>()(
 
       // SSE subscription methods
       subscribeSSE: (projectId) => {
+        const availability = getWebOperationAvailabilityV2();
+        if (!availability.available) return () => {};
         // Unsubscribe from previous subscription if exists
-        const { activeProjectId, sseUnsubscribe } = get();
-        if (activeProjectId === projectId && sseUnsubscribe) {
-          return;
-        }
+        const { sseUnsubscribe } = get();
         if (sseUnsubscribe) {
           sseUnsubscribe();
         }
 
         // Subscribe to new project events
+        const handleEvent: Parameters<typeof sandboxSSEService.subscribe>[1]['onStatusUpdate'] = (
+          event
+        ) => {
+          if (
+            getWebOperationAvailabilityV2().owner === availability.owner &&
+            getWebOperationAvailabilityV2().available
+          )
+            get().handleSSEEvent(event);
+        };
         const unsubscribe = sandboxSSEService.subscribe(projectId, {
-          onSandboxCreated: get().handleSSEEvent,
-          onSandboxTerminated: get().handleSSEEvent,
-          onDesktopStarted: get().handleSSEEvent,
-          onDesktopStopped: get().handleSSEEvent,
-          onTerminalStarted: get().handleSSEEvent,
-          onTerminalStopped: get().handleSSEEvent,
-          onHttpServiceStarted: get().handleSSEEvent,
-          onHttpServiceUpdated: get().handleSSEEvent,
-          onHttpServiceStopped: get().handleSSEEvent,
-          onHttpServiceError: get().handleSSEEvent,
-          onStatusUpdate: get().handleSSEEvent,
+          onSandboxCreated: handleEvent,
+          onSandboxTerminated: handleEvent,
+          onDesktopStarted: handleEvent,
+          onDesktopStopped: handleEvent,
+          onTerminalStarted: handleEvent,
+          onTerminalStopped: handleEvent,
+          onHttpServiceStarted: handleEvent,
+          onHttpServiceUpdated: handleEvent,
+          onHttpServiceStopped: handleEvent,
+          onHttpServiceError: handleEvent,
+          onStatusUpdate: handleEvent,
           onError: (error) => {
             logger.error('[SandboxSSE] Error:', error);
           },
         });
 
         set({ sseUnsubscribe: unsubscribe, activeProjectId: projectId });
+        return () => {
+          unsubscribe();
+          if (get().sseUnsubscribe === unsubscribe) set({ sseUnsubscribe: null });
+        };
       },
 
       unsubscribeSSE: () => {

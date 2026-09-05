@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { TenantLayout } from '../../layouts/TenantLayout';
+import { logger } from '../../utils/logger';
 import { screen, render, waitFor, act, fireEvent } from '../utils';
 
 let mockTenantState: any = {
@@ -169,7 +170,12 @@ vi.mock('../../stores/tenant', () => ({
 
 vi.mock('@/stores/agent/conversationsStore', () => ({
   useConversationsStore: Object.assign(
-    (selector?: (state: { conversations: unknown[]; reset: typeof mockConversationReset }) => unknown) =>
+    (
+      selector?: (state: {
+        conversations: unknown[];
+        reset: typeof mockConversationReset;
+      }) => unknown
+    ) =>
       selector
         ? selector({ conversations: [], reset: mockConversationReset })
         : { conversations: [], reset: mockConversationReset },
@@ -177,7 +183,7 @@ vi.mock('@/stores/agent/conversationsStore', () => ({
       getState: () => ({
         reset: mockConversationReset,
       }),
-    },
+    }
   ),
 }));
 
@@ -708,6 +714,47 @@ describe('TenantLayout', () => {
     });
     expect(mockProjectState.setCurrentProject).not.toHaveBeenCalledWith(null);
     expect(mockProjectState.currentProject).toEqual(currentProject);
+  });
+
+  it('observes retired connection failures only after both cleanups settle', async () => {
+    const failure = new Error('agent cleanup failed');
+    let rejectAgent!: (error: Error) => void;
+    let closeUnified!: () => void;
+    mockAgentDisconnect.mockReturnValueOnce(
+      new Promise<void>((_, reject) => {
+        rejectAgent = reject;
+      })
+    );
+    mockUnifiedDisconnect.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        closeUnified = resolve;
+      })
+    );
+    const report = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    try {
+      render(<TenantLayout />);
+      await waitFor(() => expect(screen.getByText('MemStack')).toBeInTheDocument());
+      await act(async () => {
+        mockTenantState.currentTenant = { id: 't2', name: 'Second Tenant' };
+        setMockRouteParams({ tenantId: 't2' });
+      });
+      expect(mockAgentDisconnect).toHaveBeenCalledTimes(1);
+      expect(mockUnifiedDisconnect).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        rejectAgent(failure);
+      });
+      expect(report).not.toHaveBeenCalled();
+      await act(async () => {
+        closeUnified();
+      });
+      expect(report).toHaveBeenCalledWith(
+        'Failed to drain retired tenant event connections',
+        failure
+      );
+    } finally {
+      closeUnified();
+      report.mockRestore();
+    }
   });
 
   it('clears project state when tenant scope changes', async () => {

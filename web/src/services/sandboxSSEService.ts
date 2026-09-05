@@ -80,6 +80,14 @@ class SandboxSSEService {
   private handlers: Set<SandboxEventHandler> = new Set();
   private unsubscribeFn: (() => void) | null = null;
   private connectionToken = 0;
+  private handlerTokens = new Map<SandboxEventHandler, symbol>();
+  constructor() {
+    agentService.onRetired(() => {
+      this.disconnect();
+      this.handlers.clear();
+      this.handlerTokens.clear();
+    });
+  }
 
   /**
    * Subscribe to sandbox events for a project.
@@ -95,7 +103,9 @@ class SandboxSSEService {
     }
 
     this.projectId = projectId;
+    const ticket = Symbol();
     this.handlers.add(handler);
+    this.handlerTokens.set(handler, ticket);
 
     // Start WebSocket connection if not already connected or connecting.
     if (!this.unsubscribeFn && this.status !== 'connecting') {
@@ -104,6 +114,8 @@ class SandboxSSEService {
 
     // Return unsubscribe function
     return () => {
+      if (this.handlerTokens.get(handler) !== ticket) return;
+      this.handlerTokens.delete(handler);
       this.handlers.delete(handler);
       if (this.handlers.size === 0) {
         this.disconnect();
@@ -125,16 +137,19 @@ class SandboxSSEService {
     const connectionToken = (this.connectionToken += 1);
 
     // Ensure agentService WebSocket is connected with timeout
-    const connectPromise = agentService.isConnected() ? Promise.resolve() : agentService.connect();
+    const connectPromise = agentService.connectSession();
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
         reject(new Error('WebSocket connection timeout'));
-      }, 15000)
-    );
+      }, 15000);
+    });
 
     Promise.race([connectPromise, timeoutPromise])
-      .then(() => {
+      .finally(() => clearTimeout(timer))
+      .then((operation) => {
+        agentService.assertSession(operation);
         // Guard: project may have changed during async connect
         if (
           this.projectId !== projectId ||
@@ -145,14 +160,14 @@ class SandboxSSEService {
         }
 
         // Subscribe to sandbox events via agentService WebSocket
-        agentService.subscribeSandboxState(projectId, '', (state: SandboxStateData) => {
-          this.handleSandboxState(state);
-        });
-
-        // Track that we have an active subscription so we can clean up
-        this.unsubscribeFn = () => {
-          agentService.unsubscribeSandboxState({ projectId, tenantId: '' });
-        };
+        this.unsubscribeFn = agentService.subscribeSandboxState(
+          projectId,
+          '',
+          (state: SandboxStateData) => {
+            this.handleSandboxState(state);
+          },
+          operation
+        );
 
         this.status = 'connected';
         logger.debug(`[SandboxWS] Connected to project ${projectId} via agentService`);

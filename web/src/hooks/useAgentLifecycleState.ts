@@ -1,3 +1,7 @@
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '../plugins/webOperationAdmissionV2';
 /**
  * React hook for subscribing to Agent lifecycle state changes via WebSocket.
  *
@@ -23,19 +27,18 @@
  * ```
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { useAuthStore } from '@/stores/auth';
 
 import { agentService } from '../services/agentService';
-import { logger } from '../utils/logger';
 
 import type { LifecycleStateData, LifecycleStatus } from '../types/agent';
 
 // Global lock to prevent duplicate subscriptions in React StrictMode
-const globalSubscriptionLock = new Set<string>();
+const globalSubscriptionLock = new WeakMap<object, Map<string, symbol>>();
 
 export interface UseAgentLifecycleStateOptions {
   projectId: string;
@@ -58,82 +61,72 @@ export function useAgentLifecycleState({
   tenantId,
   enabled = true,
 }: UseAgentLifecycleStateOptions): UseAgentLifecycleStateResult {
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
   const { t } = useTranslation();
   const [lifecycleState, setLifecycleState] = useState<LifecycleStateData | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const token = useAuthStore((state) => state.token);
 
+  const [stateScope, setStateScope] = useState({ availability, projectId, tenantId });
+  if (
+    stateScope.availability !== availability ||
+    stateScope.projectId !== projectId ||
+    stateScope.tenantId !== tenantId
+  ) {
+    setStateScope({ availability, projectId, tenantId });
+    setLifecycleState(null);
+    setIsConnected(false);
+    setError(null);
+  }
+
   const lockKey = `lifecycle-state-${tenantId}:${projectId}`;
 
   useEffect(() => {
-    if (!enabled || !projectId || !token) {
-      return;
-    }
-
-    let isCancelled = false;
-    let ownsSubscription = false;
-
-    if (globalSubscriptionLock.has(lockKey)) {
-      logger.debug('[useAgentLifecycleState] Already subscribed globally, skipping');
-      return () => {
-        isCancelled = true;
-      };
-    }
-
-    const connectAndSubscribe = async () => {
+    if (!enabled || !projectId || !token || !availability.available) return;
+    const locks = globalSubscriptionLock.get(availability.owner) ?? new Map<string, symbol>();
+    globalSubscriptionLock.set(availability.owner, locks);
+    const ticket = Symbol();
+    if (locks.has(lockKey)) return;
+    locks.set(lockKey, ticket);
+    let cancelled = false;
+    let release: (() => void) | undefined;
+    const current = () =>
+      !cancelled &&
+      getWebOperationAvailabilityV2().owner === availability.owner &&
+      getWebOperationAvailabilityV2().available;
+    void (async () => {
       try {
-        if (!agentService.isConnected()) {
-          await agentService.connect();
-        }
-
-        if (isCancelled) {
-          return;
-        }
-
+        const operation = await agentService.connectSession();
+        if (!current()) return;
+        agentService.assertSession(operation);
         setIsConnected(agentService.isConnected());
-
-        if (!globalSubscriptionLock.has(lockKey)) {
-          globalSubscriptionLock.add(lockKey);
-          ownsSubscription = true;
-          agentService.subscribeLifecycleState(projectId, tenantId, (state) => {
-            if (!isCancelled) {
-              setLifecycleState(state);
-            }
-          });
-          logger.info('[useAgentLifecycleState] Subscribed to lifecycle state updates');
-        }
-      } catch (err) {
-        if (isCancelled) {
-          return;
-        }
-        logger.error('[useAgentLifecycleState] Failed to connect:', err);
-        setError('Failed to connect');
-        if (ownsSubscription) {
-          globalSubscriptionLock.delete(lockKey);
-          ownsSubscription = false;
-        }
+        release = agentService.subscribeLifecycleState(
+          projectId,
+          tenantId,
+          (state) => {
+            if (current()) setLifecycleState(state);
+          },
+          operation
+        );
+      } catch {
+        if (current()) setError('Failed to connect');
       }
-    };
-
-    void connectAndSubscribe();
-
-    // Listen to agentService connection status changes
+    })();
     const unsubscribeStatusListener = agentService.onStatusChange((status) => {
-      setIsConnected(status === 'connected');
+      if (current()) setIsConnected(status === 'connected');
     });
-
-    // Cleanup on unmount or when dependencies change
     return () => {
-      isCancelled = true;
+      cancelled = true;
       unsubscribeStatusListener();
-      if (ownsSubscription) {
-        agentService.unsubscribeLifecycleState({ projectId, tenantId });
-        globalSubscriptionLock.delete(lockKey);
-        ownsSubscription = false;
-      }
+      release?.();
+      if (locks.get(lockKey) === ticket) locks.delete(lockKey);
     };
-  }, [enabled, projectId, tenantId, lockKey, token]);
+  }, [enabled, projectId, tenantId, lockKey, token, availability]);
 
   // Compute detailed status based on lifecycle state
   const status = useMemo<LifecycleStatus>(() => {

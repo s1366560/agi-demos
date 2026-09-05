@@ -12,6 +12,10 @@ export interface WebOperationContextV2 {
   check(): void;
   runChild<T>(work: (operation: WebOperationContextV2) => Promise<T>): Promise<T>;
 }
+export interface WebOperationAvailabilityV2 {
+  readonly owner: object;
+  readonly available: boolean;
+}
 export interface WebOperationOptionsV2 {
   readonly signal?: AbortSignal;
   readonly parent?: WebOperationContextV2;
@@ -21,6 +25,8 @@ interface OperationState {
   readonly controller: AbortController;
   readonly children: Set<Promise<unknown>>;
   active: boolean;
+  cleanupFailed?: boolean;
+  cleanupFailure?: unknown;
 }
 const operationStates = new WeakMap<WebOperationContextV2, OperationState>();
 const cancelled = () => new DOMException('Web operation cancelled', 'AbortError');
@@ -34,6 +40,24 @@ export class WebOperationAdmissionV2 {
   private closing: Promise<void> | undefined;
   private readonly pending = new Map<OperationState, Promise<unknown>>();
   private readonly unsubscribe: () => void;
+  private readonly listeners = new Set<() => void>();
+  private availability: WebOperationAvailabilityV2 = Object.freeze({
+    owner: this.owner,
+    available: false,
+  });
+
+  readonly getSnapshot = (): WebOperationAvailabilityV2 => this.availability;
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  private publishAvailability(): void {
+    const available = this.enabled && !this.closed && this.generation !== undefined;
+    if (this.availability.owner === this.owner && this.availability.available === available) return;
+    this.availability = Object.freeze({ owner: this.owner, available });
+    for (const listener of [...this.listeners]) listener();
+  }
 
   constructor(
     private readonly runtime: Pick<RendererPluginRuntimeV2, 'acquire' | 'getSnapshot' | 'subscribe'>
@@ -44,21 +68,30 @@ export class WebOperationAdmissionV2 {
 
   setEnabled(enabled: boolean): void {
     if (this.closed && enabled) throw new Error('web_operation_admission_closed');
+    if (this.enabled === enabled) return;
     this.enabled = enabled;
     if (!enabled) this.invalidate();
+    else this.publishAvailability();
   }
 
   invalidate(): void {
     this.owner = Object.freeze({});
     for (const state of this.pending.keys()) state.controller.abort();
+    this.publishAvailability();
   }
 
   close(): Promise<void> {
     if (this.closing) return this.closing;
-    this.setEnabled(false);
     this.closed = true;
+    this.setEnabled(false);
     this.unsubscribe();
-    this.closing = Promise.allSettled([...this.pending.values()]).then(() => undefined);
+    const states = [...this.pending.keys()];
+    this.closing = Promise.allSettled([...this.pending.values()]).then(() => {
+      const failures = states
+        .filter((state) => state.cleanupFailed)
+        .map((state) => state.cleanupFailure);
+      if (failures.length > 0) throw new AggregateError(failures, 'Web operation cleanup failed');
+    });
     return this.closing;
   }
 
@@ -70,6 +103,7 @@ export class WebOperationAdmissionV2 {
     for (const state of this.pending.keys()) {
       if (state.lease.generation !== current) state.controller.abort();
     }
+    this.publishAvailability();
   }
 
   run<T>(
@@ -136,9 +170,15 @@ export class WebOperationAdmissionV2 {
             failure = cancelled();
           }
         } catch (error) {
-          if (!failed) {
+          state.cleanupFailed = true;
+          state.cleanupFailure = error;
+          if (failed && failure instanceof DOMException && failure.name === 'AbortError') {
+            failure = new AggregateError([failure, error], 'Web operation cleanup failed');
+          } else if (!failed) {
             failed = true;
-            failure = controller.signal.aborted ? cancelled() : error;
+            failure = controller.signal.aborted
+              ? new AggregateError([cancelled(), error], 'Web operation cleanup failed')
+              : error;
           }
         } finally {
           for (const source of sources) source.removeEventListener('abort', abort);
@@ -160,11 +200,32 @@ export class WebOperationAdmissionV2 {
 }
 
 let installed: WebOperationAdmissionV2 | undefined;
+const availabilityListeners = new Set<() => void>();
+const unavailable: WebOperationAvailabilityV2 = Object.freeze({
+  owner: Object.freeze({}),
+  available: false,
+});
+export function getWebOperationAvailabilityV2(): WebOperationAvailabilityV2 {
+  return installed?.getSnapshot() ?? unavailable;
+}
+export function subscribeWebOperationAvailabilityV2(listener: () => void): () => void {
+  availabilityListeners.add(listener);
+  return () => availabilityListeners.delete(listener);
+}
+function notifyAvailability(): void {
+  for (const listener of [...availabilityListeners]) listener();
+}
 export function installWebOperationAdmissionV2(admission: WebOperationAdmissionV2): () => void {
   if (installed) throw new Error('web_operation_admission_already_installed');
   installed = admission;
+  const unsubscribe = admission.subscribe(notifyAvailability);
+  notifyAvailability();
   return () => {
-    if (installed === admission) installed = undefined;
+    unsubscribe();
+    if (installed === admission) {
+      installed = undefined;
+      notifyAvailability();
+    }
   };
 }
 export function runWebOperationV2<T>(

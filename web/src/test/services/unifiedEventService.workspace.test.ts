@@ -1,16 +1,30 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
+import { installHttpAdmissionFixtureV2 } from './webHttpAdmissionFixtureV2';
+import { getWebOperationAvailabilityV2 } from '@/plugins/webOperationAdmissionV2';
 import { unifiedEventService } from '@/services/unifiedEventService';
 
 describe('unifiedEventService workspace routing', () => {
+  let uninstall: () => Promise<void>;
+  beforeEach(() => {
+    uninstall = installHttpAdmissionFixtureV2();
+    (unifiedEventService as unknown as { owner: object }).owner =
+      getWebOperationAvailabilityV2().owner;
+  });
+  afterEach(async () => {
+    await unifiedEventService.disconnect();
+    await uninstall();
+  });
   it('subscribeWorkspace delegates to workspace topic subscription', () => {
     const unsubscribeStub = vi.fn();
-    const subscribeSpy = vi.spyOn(
-      unifiedEventService as unknown as {
-        subscribe: (topic: string, handler: () => void) => () => void;
-      },
-      'subscribe'
-    ).mockReturnValue(unsubscribeStub);
+    const subscribeSpy = vi
+      .spyOn(
+        unifiedEventService as unknown as {
+          subscribe: (topic: string, handler: () => void) => () => void;
+        },
+        'subscribe'
+      )
+      .mockReturnValue(unsubscribeStub);
 
     const noop = () => {};
     const unsubscribe = unifiedEventService.subscribeWorkspace('ws-123', noop);

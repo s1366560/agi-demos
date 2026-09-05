@@ -1,3 +1,5 @@
+import type { WebOperationContextV2 } from '../../plugins/webOperationAdmissionV2';
+import { clearTimelineBuffer } from './deltaBuffers';
 /**
  * Stream event handler factory for SSE events in agent conversations.
  *
@@ -116,6 +118,7 @@ export type { DeltaBufferState } from './deltaBuffers';
  * Dependencies injected from the store into the handler factory
  */
 export interface StreamHandlerDeps {
+  operation?: WebOperationContextV2;
   get: () => {
     activeConversationId: string | null;
     getConversationState: (conversationId: string) => ConversationState;
@@ -281,6 +284,17 @@ export function createStreamEventHandlers(
     flushTimelineBufferSync,
   } = deps;
 
+  const operation = deps.operation;
+  const active = () => {
+    if (!operation) return true;
+    try {
+      operation.check();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // Type-safe wrapper for set to handle both object and updater forms
   const setState = set as (updater: Parameters<typeof set>[0]) => void;
   // Shared timeline event type for requestId access
@@ -297,6 +311,15 @@ export function createStreamEventHandlers(
       thoughtIdleResetTimer = null;
     }
   };
+  operation?.signal.addEventListener(
+    'abort',
+    () => {
+      clearThoughtIdleResetTimer();
+      clearDeltaBuffers(handlerConversationId);
+      clearTimelineBuffer(handlerConversationId);
+    },
+    { once: true }
+  );
   const consumePendingThoughtDelta = (): string => {
     const buffer = getDeltaBuffer(handlerConversationId);
     if (buffer.thoughtDeltaFlushTimer) {
@@ -310,6 +333,7 @@ export function createStreamEventHandlers(
   const armThoughtIdleResetTimer = () => {
     clearThoughtIdleResetTimer();
     thoughtIdleResetTimer = setTimeout(() => {
+      if (!active()) return;
       thoughtIdleResetTimer = null;
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
@@ -355,7 +379,7 @@ export function createStreamEventHandlers(
     } as AgentEvent<ThoughtEventData>);
   };
 
-  return {
+  const handlers: AgentStreamHandler = {
     onCanonicalEvent: (event) => {
       const stateUpdates: Partial<ConversationState> =
         event.type === 'cancelled'
@@ -422,6 +446,7 @@ export function createStreamEventHandlers(
 
       if (!buffer.thoughtDeltaFlushTimer) {
         buffer.thoughtDeltaFlushTimer = setTimeout(() => {
+          if (!active()) return;
           const bufferedContent = buffer.thoughtDeltaBuffer;
           buffer.thoughtDeltaBuffer = '';
           buffer.thoughtDeltaFlushTimer = null;
@@ -764,6 +789,7 @@ export function createStreamEventHandlers(
 
       if (!buffer.actDeltaFlushTimer) {
         buffer.actDeltaFlushTimer = setTimeout(() => {
+          if (!active()) return;
           const bufferedData = buffer.actDeltaBuffer;
           buffer.actDeltaBuffer = null;
           buffer.actDeltaFlushTimer = null;
@@ -923,6 +949,7 @@ export function createStreamEventHandlers(
 
       if (!buffer.textDeltaFlushTimer) {
         buffer.textDeltaFlushTimer = setTimeout(() => {
+          if (!active()) return;
           const bufferedContent = buffer.textDeltaBuffer;
           buffer.textDeltaBuffer = '';
           buffer.textDeltaFlushTimer = null;
@@ -2435,8 +2462,10 @@ export function createStreamEventHandlers(
             tasks?: unknown[];
           }
           const res = await httpClient.get<TaskResponse>(
-            `/agent/plan/tasks/${handlerConversationId}`
+            `/agent/plan/tasks/${handlerConversationId}`,
+            operation ? { operation, signal: operation.signal } : undefined
           );
+          if (!active()) return;
           if (Array.isArray(res.tasks) && res.tasks.length > 0) {
             const { updateConversationState } = get();
             updateConversationState(handlerConversationId, {
@@ -2524,4 +2553,14 @@ export function createStreamEventHandlers(
       tabSync.broadcastStreamingStateChanged(handlerConversationId, false, 'idle');
     },
   };
+  return new Proxy(handlers, {
+    get(_target, key) {
+      const handler = Reflect.get(handlers, key);
+      if (typeof handler !== 'function') return handler;
+      return (...args: unknown[]) => {
+        if (!active()) return;
+        return Reflect.apply(handler, handlers, args);
+      };
+    },
+  });
 }

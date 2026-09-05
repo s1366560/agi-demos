@@ -8,6 +8,18 @@ import { Blackboard } from '@/pages/project/Blackboard';
 import type { Workspace } from '@/types/workspace';
 import type { ReactNode } from 'react';
 
+const operationAvailability = vi.hoisted(() => ({
+  snapshot: { owner: {}, available: true },
+  listeners: new Set<() => void>(),
+}));
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => operationAvailability.snapshot,
+  subscribeWebOperationAvailabilityV2: (listener: () => void) => {
+    operationAvailability.listeners.add(listener);
+    return () => operationAvailability.listeners.delete(listener);
+  },
+}));
+
 const {
   mockLoadWorkspaceSurface,
   mockClearSelectedHex,

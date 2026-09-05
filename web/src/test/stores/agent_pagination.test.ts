@@ -1,3 +1,13 @@
+const ownerFixture = vi.hoisted(() => {
+  const owner = {};
+  return {
+    availability: { owner, available: true },
+    operation: { owner, signal: new AbortController().signal, check: () => {} },
+  };
+});
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => ownerFixture.availability,
+}));
 /**
  * Unit tests for Agent store pagination functionality (agentV3).
  *
@@ -23,6 +33,8 @@ import type { TimelineEvent } from '../../types/agent';
 const mockGetConversationMessages = vi.fn();
 vi.mock('../../services/agentService', () => ({
   agentService: {
+    connectSession: vi.fn(async () => ownerFixture.operation),
+    assertSession: vi.fn(),
     getConversationMessages: (...args: unknown[]) => mockGetConversationMessages(...args),
     chat: vi.fn(),
     createConversation: vi.fn(),

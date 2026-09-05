@@ -43,6 +43,74 @@
         {
           "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
           "source_entry": "web/src/services/projectStatsService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/agentService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/agent/wsConnection.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/sandboxSSEService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/unifiedEventService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/unifiedEventConnectionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/AgentChatContent.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useBlackboardSSE.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useConversationListAutoRefresh.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/hitlActions.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/messageSendActions.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/streamEventHandlers.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/sandbox.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useAgentLifecycleState.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/messageLoadActions.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/SandboxStatusIndicator.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/conversationLifecycleActions.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/agent/conversationsStore.ts"
         }
       ],
       "api_method": "WS",

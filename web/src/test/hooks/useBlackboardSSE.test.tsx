@@ -1,5 +1,17 @@
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const operationAvailability = vi.hoisted(() => ({
+  snapshot: { owner: {}, available: true },
+  listeners: new Set<() => void>(),
+}));
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => operationAvailability.snapshot,
+  subscribeWebOperationAvailabilityV2: (listener: () => void) => {
+    operationAvailability.listeners.add(listener);
+    return () => operationAvailability.listeners.delete(listener);
+  },
+}));
 
 const handlers = {
   handlePresenceEvent: vi.fn(),
@@ -165,4 +177,30 @@ describe('useBlackboardSSE', () => {
     callback?.({ type: 'workspace_subscribed', data: { workspace_id: 'ws-2' } });
     expect(handlers.loadWorkspaceSurface).not.toHaveBeenCalled();
   });
+});
+
+it('re-registers the same workspace under the next owner and ignores the retired callback', () => {
+  subscribeWorkspace.mockReset();
+  handlers.handleChatEvent.mockClear();
+  const unsubscribe = vi.fn();
+  subscribeWorkspace.mockReturnValue(unsubscribe);
+  operationAvailability.snapshot = { owner: {}, available: true };
+  const { unmount } = render(<HookHarness workspaceId="ws-owner" />);
+  const oldCallback = subscribeWorkspace.mock.calls[0]![1] as (event: unknown) => void;
+  act(() => {
+    operationAvailability.snapshot = { owner: {}, available: true };
+    operationAvailability.listeners.forEach((listener) => listener());
+  });
+  expect(unsubscribe).toHaveBeenCalledOnce();
+  expect(subscribeWorkspace).toHaveBeenCalledTimes(2);
+  oldCallback({ type: 'workspace_message_created', data: { id: 'stale' } });
+  expect(handlers.handleChatEvent).not.toHaveBeenCalled();
+  act(() => {
+    operationAvailability.snapshot = { owner: {}, available: false };
+    operationAvailability.listeners.forEach((listener) => listener());
+  });
+  expect(unsubscribe).toHaveBeenCalledTimes(2);
+  expect(subscribeWorkspace).toHaveBeenCalledTimes(2);
+  unmount();
+  operationAvailability.snapshot = { owner: {}, available: true };
 });

@@ -20,9 +20,17 @@ vi.mock('../../services/agentService', () => ({
   agentService: {
     isConnected: vi.fn(),
     connect: vi.fn(),
+    onRetired: vi.fn(() => () => {}),
+    assertSession: vi.fn(),
+    connectSession: vi.fn(async () => {
+      if (!agentService.isConnected()) await agentService.connect();
+      return { check: () => {} };
+    }),
     subscribeSandboxState: vi.fn(
       (_projectId: string, _tenantId: string, callback: (state: SandboxStateData) => void) => {
         sandboxStateCallback = callback;
+        return () =>
+          agentService.unsubscribeSandboxState({ projectId: _projectId, tenantId: _tenantId });
       }
     ),
     unsubscribeSandboxState: vi.fn(),
@@ -56,7 +64,8 @@ describe('sandboxSSEService', () => {
       expect(agentService.subscribeSandboxState).toHaveBeenCalledWith(
         'proj-1',
         '',
-        expect.any(Function)
+        expect.any(Function),
+        expect.objectContaining({ check: expect.any(Function) })
       );
       expect(sandboxSSEService.getStatus()).toBe('connected');
     });

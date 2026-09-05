@@ -1,3 +1,8 @@
+const availability = vi.hoisted(() => ({ owner: {}, available: true }));
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => availability,
+  subscribeWebOperationAvailabilityV2: () => () => {},
+}));
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 

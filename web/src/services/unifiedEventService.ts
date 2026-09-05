@@ -18,12 +18,8 @@
  */
 
 import { logger } from '../utils/logger';
-import { getAuthToken } from '../utils/tokenResolver';
-
-import { createWebSocketAuthProtocols, createWebSocketUrl } from './client/urlUtils';
-import { attachWatchdog } from './client/wsWatchdog';
-
-import type { Watchdog } from './client/wsWatchdog';
+import { getWebOperationAvailabilityV2 } from '@/plugins/webOperationAdmissionV2';
+import { UnifiedEventConnectionV2 } from './unifiedEventConnectionV2';
 
 // =============================================================================
 // Types
@@ -104,21 +100,13 @@ function generateSessionId(): string {
  * Supports topic-based subscriptions with automatic routing.
  */
 class UnifiedEventServiceImpl {
-  private ws: WebSocket | null = null;
+  private connection: UnifiedEventConnectionV2 | null = null;
+  private owner: object | null = null;
+  private readonly retained = new Set<Promise<void>>();
+  private retiring: Promise<void> | null = null;
   private status: WebSocketStatus = 'disconnected';
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-  private isManualClose = false;
-
-  // Unique session ID for this browser tab
   private sessionId: string = generateSessionId();
-
-  // Heartbeat to keep connection alive
-  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-  private readonly HEARTBEAT_INTERVAL_MS = 30000;
-  private watchdog: Watchdog | null = null;
+  private subscriptionMessages = new Map<string, Record<string, unknown>>();
 
   // Topic subscriptions: topic -> Set of handlers
   private subscriptions: Map<string, Set<EventHandler>> = new Map();
@@ -127,7 +115,6 @@ class UnifiedEventServiceImpl {
   private statusListeners: Set<(status: WebSocketStatus) => void> = new Set();
 
   // Connection lock to prevent parallel connection attempts
-  private connectingPromise: Promise<void> | null = null;
 
   // Pending subscribe/unsubscribe messages (sent after connection)
   private pendingMessages: Array<Record<string, unknown>> = [];
@@ -152,141 +139,85 @@ class UnifiedEventServiceImpl {
    * Check if connected
    */
   isConnected(): boolean {
-    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+    return this.connection?.isConnected() ?? false;
   }
 
-  /**
-   * Connect to the WebSocket server
-   */
+  private synchronizeOwner(): boolean {
+    const availability = getWebOperationAvailabilityV2();
+    if (!availability.available) {
+      void this.disconnect().catch((error) => logger.error('[UnifiedWS] Retirement failed', error));
+      return false;
+    }
+    if (this.owner !== availability.owner) {
+      void this.disconnect().catch((error) => logger.error('[UnifiedWS] Retirement failed', error));
+      this.owner = availability.owner;
+    }
+    return true;
+  }
+
   connect(): Promise<void> {
     this.cancelIdleDisconnect();
-    if (this.connectingPromise) {
-      logger.debug('[UnifiedWS] Connection already in progress, returning existing promise');
-      return this.connectingPromise;
-    }
-
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      logger.debug('[UnifiedWS] Already connected');
-      return Promise.resolve();
-    }
-
-    this.isManualClose = false;
-    this.setStatus('connecting');
-    this.connectingPromise = this.doConnect();
-    return this.connectingPromise;
-  }
-
-  private doConnect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const token = getAuthToken();
-      if (!token) {
-        this.setStatus('error');
-        this.connectingPromise = null;
-        reject(new Error('No authentication token'));
-        return;
-      }
-
-      const wsUrl = createWebSocketUrl('/agent/ws', {
-        session_id: this.sessionId,
-      });
-
-      try {
-        this.ws = new WebSocket(wsUrl, createWebSocketAuthProtocols(token));
-        this.watchdog?.stop();
-        this.watchdog = attachWatchdog(this.ws, {
-          staleAfterMs: this.HEARTBEAT_INTERVAL_MS * 3,
-          label: 'UnifiedWS',
-        });
-
-        this.ws.onopen = () => {
-          logger.debug(`[UnifiedWS] Connected (session: ${this.sessionId.substring(0, 8)}...)`);
-          this.setStatus('connected');
-          this.reconnectAttempts = 0;
-          this.reconnectDelay = 1000;
-          this.connectingPromise = null;
-
-          // Start heartbeat
-          this.startHeartbeat();
-
-          // Send pending messages
+    if (!this.synchronizeOwner())
+      return Promise.reject(new Error('web_operation_generation_unavailable'));
+    if (this.connection)
+      return this.connection.isConnected() ? Promise.resolve() : this.connection.ready;
+    const connection = new UnifiedEventConnectionV2({
+      owner: this.owner!,
+      beforeOpen: Promise.all([...this.retained]),
+      sessionId: this.sessionId,
+      status: (status) => {
+        if (this.connection === connection) this.setStatus(status);
+      },
+      opened: () => {
+        if (this.connection === connection) {
           this.flushPendingMessages();
-
-          // Resubscribe to topics
           this.resubscribeAll();
-
-          resolve();
-        };
-
-        this.ws.onmessage = (event) => {
-          this.watchdog?.notifyMessage();
-          try {
-            if (typeof event.data !== 'string') {
-              throw new Error('Expected text WebSocket message');
-            }
-            const message = JSON.parse(event.data) as ServerMessage;
-            this.handleMessage(message);
-          } catch (err) {
-            logger.error('[UnifiedWS] Failed to parse message:', err);
-          }
-        };
-
-        this.ws.onclose = (event) => {
-          logger.debug('[UnifiedWS] Disconnected', event.code, event.reason);
-          const closedBeforeOpen = this.connectingPromise !== null;
-          this.setStatus('disconnected');
-          this.stopHeartbeat();
-          this.stopWatchdog();
-          this.ws = null;
-          this.connectingPromise = null;
-
-          if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.scheduleReconnect();
-          }
-
-          if (closedBeforeOpen) {
-            reject(new Error(`WebSocket closed before connection opened: ${String(event.code)}`));
-          }
-        };
-
-        this.ws.onerror = (error) => {
-          logger.error('[UnifiedWS] Error:', error);
-          this.setStatus('error');
-          this.stopHeartbeat();
-          this.stopWatchdog();
-          this.connectingPromise = null;
-          reject(error instanceof Error ? error : new Error('WebSocket error'));
-        };
-      } catch (err) {
-        logger.error('[UnifiedWS] Connection error:', err);
-        this.setStatus('error');
-        this.connectingPromise = null;
-        this.scheduleReconnect();
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
+        }
+      },
+      message: (event) => {
+        if (this.connection !== connection) return;
+        try {
+          if (typeof event.data !== 'string') throw new Error('Expected text WebSocket message');
+          this.handleMessage(JSON.parse(event.data) as ServerMessage);
+        } catch (error) {
+          logger.error('[UnifiedWS] Failed to parse message:', error);
+        }
+      },
+      retired: () => {
+        if (this.connection === connection) this.clearOwnerState();
+      },
     });
+    this.connection = connection;
+    this.retiring = null;
+    const drained = connection.done.catch((error) => {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
+    });
+    this.retained.add(drained);
+    void drained
+      .finally(() => this.retained.delete(drained))
+      .catch((error) => logger.error('[UnifiedWS] Connection failed', error));
+    return connection.ready;
   }
 
-  /**
-   * Disconnect from the WebSocket server
-   */
-  disconnect(): void {
-    this.isManualClose = true;
+  private clearOwnerState(): void {
+    this.connection = null;
+    this.owner = null;
     this.cancelIdleDisconnect();
     this.cancelAllPendingTopicUnsubscribes();
-    this.stopHeartbeat();
-    this.stopWatchdog();
-
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
-    }
-
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-
+    this.subscriptions = new Map();
+    this.subscriptionMessages.clear();
+    this.pendingMessages = [];
     this.setStatus('disconnected');
+  }
+
+  disconnect(): Promise<void> {
+    if (!this.connection && this.retiring) return this.retiring;
+    const connection = this.connection;
+    this.clearOwnerState();
+    if (connection)
+      void connection.stop().catch((error) => logger.error('[UnifiedWS] Close failed', error));
+    this.retiring = Promise.all([...this.retained]).then(() => undefined);
+    return this.retiring;
   }
 
   /**
@@ -310,6 +241,7 @@ class UnifiedEventServiceImpl {
    * @returns Unsubscribe function
    */
   subscribe(topic: string, handler: EventHandler): () => void {
+    if (!this.synchronizeOwner()) return () => undefined;
     this.cancelIdleDisconnect();
     const hadPendingUnsubscribe = this.cancelPendingTopicUnsubscribe(topic);
     const hadTopic = this.subscriptions.has(topic);
@@ -334,7 +266,7 @@ class UnifiedEventServiceImpl {
 
     // Return unsubscribe function
     return () => {
-      this.unsubscribe(topic, handler);
+      if (this.subscriptions.get(topic) === topicHandlers) this.unsubscribe(topic, handler);
     };
   }
 
@@ -379,42 +311,7 @@ class UnifiedEventServiceImpl {
    * Subscribe to sandbox events for a project
    */
   subscribeSandbox(projectId: string, handler: EventHandler): () => void {
-    this.cancelIdleDisconnect();
-    const topic = `sandbox:${projectId}`;
-
-    this.ensureConnected();
-
-    // Send specific sandbox subscription message
-    this.sendOrQueue({
-      type: 'subscribe_sandbox',
-      project_id: projectId,
-    });
-
-    // Track locally
-    if (!this.subscriptions.has(topic)) {
-      this.subscriptions.set(topic, new Set());
-    }
-    const topicHandlers = this.subscriptions.get(topic);
-    if (topicHandlers) {
-      topicHandlers.add(handler);
-    }
-
-    logger.debug(`[UnifiedWS] Subscribed to sandbox:${projectId}`);
-
-    return () => {
-      const handlers = this.subscriptions.get(topic);
-      if (handlers) {
-        handlers.delete(handler);
-        if (handlers.size === 0) {
-          this.subscriptions.delete(topic);
-          this.sendOrQueue({
-            type: 'unsubscribe_sandbox',
-            project_id: projectId,
-          });
-          this.scheduleIdleDisconnectIfUnused();
-        }
-      }
-    };
+    return this.subscribe(`sandbox:${projectId}`, handler);
   }
 
   /**
@@ -428,77 +325,18 @@ class UnifiedEventServiceImpl {
    * Subscribe to project-scoped domain events.
    */
   subscribeProject(projectId: string, handler: EventHandler, fromSequence?: string): () => void {
-    this.cancelIdleDisconnect();
-    const topic = `project:${projectId}`;
-
-    this.ensureConnected();
-
-    this.sendOrQueue({
-      type: 'subscribe_project_events',
-      project_id: projectId,
-      ...(fromSequence ? { from_sequence: fromSequence } : {}),
-    });
-
-    if (!this.subscriptions.has(topic)) {
-      this.subscriptions.set(topic, new Set());
-    }
-    const topicHandlers = this.subscriptions.get(topic);
-    if (topicHandlers) {
-      topicHandlers.add(handler);
-    }
-
-    return () => {
-      const handlers = this.subscriptions.get(topic);
-      if (handlers) {
-        handlers.delete(handler);
-        if (handlers.size === 0) {
-          this.subscriptions.delete(topic);
-          this.sendOrQueue({
-            type: 'unsubscribe_project_events',
-            project_id: projectId,
-          });
-          this.scheduleIdleDisconnectIfUnused();
-        }
-      }
-    };
+    if (!this.synchronizeOwner()) return () => undefined;
+    if (fromSequence)
+      this.subscriptionMessages.set(`project:${projectId}`, {
+        type: 'subscribe_project_events',
+        project_id: projectId,
+        from_sequence: fromSequence,
+      });
+    return this.subscribe(`project:${projectId}`, handler);
   }
 
-  /**
-   * Subscribe to lifecycle state events for a project
-   */
   subscribeLifecycle(projectId: string, handler: EventHandler): () => void {
-    this.cancelIdleDisconnect();
-    const topic = `lifecycle:${projectId}`;
-
-    this.ensureConnected();
-
-    this.sendOrQueue({
-      type: 'subscribe_lifecycle_state',
-      project_id: projectId,
-    });
-
-    if (!this.subscriptions.has(topic)) {
-      this.subscriptions.set(topic, new Set());
-    }
-    const topicHandlers = this.subscriptions.get(topic);
-    if (topicHandlers) {
-      topicHandlers.add(handler);
-    }
-
-    return () => {
-      const handlers = this.subscriptions.get(topic);
-      if (handlers) {
-        handlers.delete(handler);
-        if (handlers.size === 0) {
-          this.subscriptions.delete(topic);
-          this.sendOrQueue({
-            type: 'unsubscribe_lifecycle_state',
-            project_id: projectId,
-          });
-          this.scheduleIdleDisconnectIfUnused();
-        }
-      }
-    };
+    return this.subscribe(`lifecycle:${projectId}`, handler);
   }
 
   // ===========================================================================
@@ -509,20 +347,12 @@ class UnifiedEventServiceImpl {
    * Send a message through WebSocket
    */
   send(message: Record<string, unknown>): boolean {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
-      return true;
-    }
-    return false;
+    return this.connection?.send(message) ?? false;
   }
 
-  /**
-   * Send a message or queue it if not connected
-   */
   sendOrQueue(message: Record<string, unknown>): void {
-    if (!this.send(message)) {
-      this.pendingMessages.push(message);
-    }
+    if (!this.synchronizeOwner()) return;
+    if (!this.send(message)) this.pendingMessages.push(message);
   }
 
   // ===========================================================================
@@ -530,6 +360,7 @@ class UnifiedEventServiceImpl {
   // ===========================================================================
 
   private handleMessage(message: ServerMessage): void {
+    const owner = this.owner;
     const { type, routing_key, conversation_id, project_id, data } = message;
 
     // Subscribe-then-resync: the bridge subscribes to Redis streams with "$"
@@ -542,10 +373,14 @@ class UnifiedEventServiceImpl {
       message.action === 'subscribe_workspace' &&
       typeof message.workspace_id === 'string'
     ) {
-      this.dispatchToTopic(`workspace:${message.workspace_id}`, {
-        type: 'workspace_subscribed',
-        data: { workspace_id: message.workspace_id },
-      });
+      this.dispatchToTopic(
+        `workspace:${message.workspace_id}`,
+        {
+          type: 'workspace_subscribed',
+          data: { workspace_id: message.workspace_id },
+        },
+        owner
+      );
     }
 
     // Handle internal messages
@@ -584,14 +419,14 @@ class UnifiedEventServiceImpl {
         timestamp: message.timestamp,
       };
 
-      this.dispatchToTopic(topic, event);
+      this.dispatchToTopic(topic, event, owner);
       if (routing_key?.startsWith('workspace:')) {
         const workspaceTopic = routing_key.split(':').slice(0, 2).join(':');
-        this.dispatchToTopic(workspaceTopic, event);
+        if (workspaceTopic !== topic) this.dispatchToTopic(workspaceTopic, event, owner);
       }
       if (routing_key?.startsWith('project:')) {
         const projectTopic = routing_key.split(':').slice(0, 2).join(':');
-        this.dispatchToTopic(projectTopic, event);
+        if (projectTopic !== topic) this.dispatchToTopic(projectTopic, event, owner);
       }
     }
 
@@ -601,6 +436,12 @@ class UnifiedEventServiceImpl {
       const event: UnifiedEvent = { type, routing_key, data };
       wildcardHandlers.forEach((handler) => {
         try {
+          if (
+            this.owner !== owner ||
+            !getWebOperationAvailabilityV2().available ||
+            getWebOperationAvailabilityV2().owner !== owner
+          )
+            return;
           handler(event);
         } catch (err) {
           logger.error('[UnifiedWS] Wildcard handler error:', err);
@@ -609,13 +450,19 @@ class UnifiedEventServiceImpl {
     }
   }
 
-  private dispatchToTopic(topic: string, event: UnifiedEvent): void {
+  private dispatchToTopic(topic: string, event: UnifiedEvent, owner: object | null): void {
     const handlers = this.subscriptions.get(topic);
     if (!handlers || handlers.size === 0) {
       return;
     }
     handlers.forEach((handler) => {
       try {
+        if (
+          this.owner !== owner ||
+          !getWebOperationAvailabilityV2().available ||
+          getWebOperationAvailabilityV2().owner !== owner
+        )
+          return;
         handler(event);
       } catch (err) {
         logger.error(`[UnifiedWS] Handler error for ${topic}:`, err);
@@ -624,6 +471,11 @@ class UnifiedEventServiceImpl {
   }
 
   private sendSubscribeMessage(topicType: string, topic: string): void {
+    const replay = this.subscriptionMessages.get(topic);
+    if (replay) {
+      this.send(replay);
+      return;
+    }
     const parts = topic.split(':');
     let sent = false;
     switch (topicType) {
@@ -713,7 +565,7 @@ class UnifiedEventServiceImpl {
   }
 
   private ensureConnected(): void {
-    if (this.isConnected() || this.connectingPromise) {
+    if (this.connection) {
       return;
     }
     void this.connect().catch((err: unknown) => {
@@ -740,47 +592,6 @@ class UnifiedEventServiceImpl {
         logger.error('[UnifiedWS] Status listener error:', err);
       }
     });
-  }
-
-  private scheduleReconnect(): void {
-    if (this.reconnectTimeout) {
-      return;
-    }
-
-    this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-
-    logger.debug(
-      `[UnifiedWS] Reconnecting in ${String(delay)}ms (attempt ${String(this.reconnectAttempts)}/${String(this.maxReconnectAttempts)})`
-    );
-
-    this.reconnectTimeout = setTimeout(() => {
-      this.reconnectTimeout = null;
-      this.connect().catch((err: unknown) => {
-        logger.error('[UnifiedWS] Reconnect failed:', err);
-      });
-    }, delay);
-  }
-
-  private startHeartbeat(): void {
-    this.stopHeartbeat();
-    this.heartbeatInterval = setInterval(() => {
-      if (this.isConnected()) {
-        this.send({ type: 'heartbeat' });
-      }
-    }, this.HEARTBEAT_INTERVAL_MS);
-  }
-
-  private stopHeartbeat(): void {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
-  }
-
-  private stopWatchdog(): void {
-    this.watchdog?.stop();
-    this.watchdog = null;
   }
 
   private cancelIdleDisconnect(): void {
@@ -813,7 +624,9 @@ class UnifiedEventServiceImpl {
       return;
     }
 
+    const owner = this.owner;
     const timeout = setTimeout(() => {
+      if (this.owner !== owner) return;
       this.pendingTopicUnsubscribes.delete(topic);
       const handlers = this.subscriptions.get(topic);
       if (handlers && handlers.size > 0) {
@@ -821,6 +634,7 @@ class UnifiedEventServiceImpl {
       }
 
       this.subscriptions.delete(topic);
+      this.subscriptionMessages.delete(topic);
       const topicType = topic.split(':')[0] ?? '';
       this.sendUnsubscribeMessage(topicType, topic);
       this.scheduleIdleDisconnectIfUnused();
@@ -839,10 +653,14 @@ class UnifiedEventServiceImpl {
       return;
     }
 
+    const owner = this.owner;
     this.idleDisconnectTimeout = setTimeout(() => {
+      if (this.owner !== owner) return;
       this.idleDisconnectTimeout = null;
       if (this.subscriptions.size === 0 && this.pendingMessages.length === 0) {
-        this.disconnect();
+        void this.disconnect().catch((error) =>
+          logger.error('[UnifiedWS] Idle retirement failed', error)
+        );
       }
     }, IDLE_DISCONNECT_DELAY_MS);
   }
@@ -894,7 +712,9 @@ export const unifiedEventService = new UnifiedEventServiceImpl();
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    unifiedEventService.disconnect();
+    void unifiedEventService
+      .disconnect()
+      .catch((error) => logger.error('[UnifiedWS] HMR retirement failed', error));
   });
 }
 

@@ -1,3 +1,13 @@
+const ownerFixture = vi.hoisted(() => {
+  const owner = {};
+  return {
+    availability: { owner, available: true },
+    operation: { owner, signal: new AbortController().signal, check: () => {} },
+  };
+});
+vi.mock('@/plugins/webOperationAdmissionV2', () => ({
+  getWebOperationAvailabilityV2: () => ownerFixture.availability,
+}));
 /**
  * Tests for agentV3 store SSE streaming with timeline integration
  *
@@ -31,6 +41,8 @@ import type {
 // Mock the services
 vi.mock('../../services/agentService', () => ({
   agentService: {
+    connectSession: vi.fn(async () => ownerFixture.operation),
+    assertSession: vi.fn(),
     getConversations: vi.fn(() => Promise.resolve([])),
     getConversationMessages: vi.fn(() =>
       Promise.resolve({
@@ -127,7 +139,8 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
 
       expect(agentService.chat).toHaveBeenCalledWith(
         expect.objectContaining({ preferred_language: 'en-US' }),
-        expect.any(Object)
+        expect.any(Object),
+        ownerFixture.operation
       );
 
       // Verify timeline has user message (read from bridged sub-store)
@@ -163,7 +176,8 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
       });
       expect(agentService.chat).toHaveBeenCalledWith(
         expect.objectContaining({ agent_id: 'opencode-agent' }),
-        expect.any(Object)
+        expect.any(Object),
+        ownerFixture.operation
       );
     });
 
@@ -200,7 +214,9 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
           currentConversation: existingConversation as any,
         });
       });
-      vi.mocked(agentService.updateConversationConfig).mockResolvedValue(updatedConversation as any);
+      vi.mocked(agentService.updateConversationConfig).mockResolvedValue(
+        updatedConversation as any
+      );
       vi.mocked(agentService.chat).mockResolvedValue();
 
       await act(async () => {
@@ -217,7 +233,8 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
           conversation_id: 'conv-existing',
           agent_id: 'opencode-agent',
         }),
-        expect.any(Object)
+        expect.any(Object),
+        ownerFixture.operation
       );
       expect(useConversationsStore.getState().currentConversation?.agent_config).toEqual({
         selected_agent_id: 'opencode-agent',

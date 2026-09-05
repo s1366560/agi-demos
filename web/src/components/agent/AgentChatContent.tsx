@@ -1,3 +1,7 @@
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '../../plugins/webOperationAdmissionV2';
 /**
  * AgentChatContent - Agent Chat content with multi-mode layout
  *
@@ -15,7 +19,16 @@
  */
 
 import * as React from 'react';
-import { Suspense, lazy, useEffect, useCallback, useMemo, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -229,6 +242,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     }, [navigationQuery]);
     const storeWorkspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id ?? null);
     // Local override: set by collab panel workspace picker (no URL change)
+    const operationAvailability = useSyncExternalStore(
+      subscribeWebOperationAvailabilityV2,
+      getWebOperationAvailabilityV2,
+      getWebOperationAvailabilityV2
+    );
+    const lastSubscriptionOwner = useRef<object | null>(null);
     const [collabWorkspaceOverride, setCollabWorkspaceOverride] = useState<string | null>(null);
     const effectiveWorkspaceId =
       collabWorkspaceOverride || queryWorkspaceId || navQueryWorkspaceId || storeWorkspaceId;
@@ -328,23 +347,16 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       [navigate, basePath, navigationSuffix]
     );
 
-    const {
-      activeSandboxId,
-      setProjectId,
-      setConnectionStatus,
-      subscribeSSE,
-      unsubscribeSSE,
-      setSandboxId,
-    } = useSandboxStore(
-      useShallow((state) => ({
-        activeSandboxId: state.activeSandboxId,
-        setProjectId: state.setProjectId,
-        setConnectionStatus: state.setConnectionStatus,
-        subscribeSSE: state.subscribeSSE,
-        unsubscribeSSE: state.unsubscribeSSE,
-        setSandboxId: state.setSandboxId,
-      }))
-    );
+    const { activeSandboxId, setProjectId, setConnectionStatus, subscribeSSE, setSandboxId } =
+      useSandboxStore(
+        useShallow((state) => ({
+          activeSandboxId: state.activeSandboxId,
+          setProjectId: state.setProjectId,
+          setConnectionStatus: state.setConnectionStatus,
+          subscribeSSE: state.subscribeSSE,
+          setSandboxId: state.setSandboxId,
+        }))
+      );
     const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
     const [activeAgentId, setActiveAgentId] = useState<string | undefined>(
@@ -372,12 +384,17 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         setSandboxId(null);
         setConnectionStatus('idle');
         setProjectId(projectId);
-        subscribeSSE(projectId);
+        if (operationAvailability.available) return subscribeSSE(projectId);
       }
-      return () => {
-        unsubscribeSSE();
-      };
-    }, [projectId, setProjectId, setConnectionStatus, subscribeSSE, unsubscribeSSE, setSandboxId]);
+      return undefined;
+    }, [
+      projectId,
+      setProjectId,
+      setConnectionStatus,
+      subscribeSSE,
+      setSandboxId,
+      operationAvailability,
+    ]);
 
     // Route tenant is authoritative; currentProject/currentTenant can lag during transitions.
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -574,8 +591,11 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       };
     }, [conversationId, projectId]);
 
-    // Handle URL changes
+    // Handle URL and operation-owner changes without replaying a user mutation.
     useEffect(() => {
+      if (!operationAvailability.available) return;
+      const ownerChanged = lastSubscriptionOwner.current !== operationAvailability.owner;
+      lastSubscriptionOwner.current = operationAvailability.owner;
       if (projectId && conversationId) {
         setActiveConversation(conversationId);
         // Read fresh state directly from the store to avoid stale closure values.
@@ -586,15 +606,22 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         const alreadyStreaming =
           freshState.activeConversationId === conversationId &&
           useStreamingStore.getState().agentIsStreaming;
-        if (!alreadyStreaming) {
-          void loadMessages(conversationId, projectId);
+        if (!alreadyStreaming || ownerChanged) {
+          void loadMessages(conversationId, projectId, { force: ownerChanged });
         }
         // Load any pending HITL requests to restore dialog state after refresh
         void loadPendingHITL(conversationId);
       } else if (projectId && !conversationId) {
         setActiveConversation(null);
       }
-    }, [conversationId, projectId, setActiveConversation, loadMessages, loadPendingHITL]);
+    }, [
+      conversationId,
+      projectId,
+      setActiveConversation,
+      loadMessages,
+      loadPendingHITL,
+      operationAvailability,
+    ]);
 
     // Auto-focus input when conversation finishes loading
     useEffect(() => {
