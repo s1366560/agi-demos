@@ -9,6 +9,7 @@ import {
 
 import { ManagedResourcesClient } from '../../api/managedResourcesClient';
 import { useI18n } from '../../i18n';
+import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import type {
   AuthState,
   ConnectionState,
@@ -100,6 +101,7 @@ type SettingsWindowProps = {
   rendererRouteRegistry?: DesktopRouteRegistry<DesktopRouteModule>;
   pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
+  tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
   projectChannelsOperationsV2: DesktopProjectChannelsOperationsV2;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
   tenantSubAgentDefinitionsOperationsV2: DesktopTenantSubAgentDefinitionsOperationsV2;
@@ -124,6 +126,7 @@ export function SettingsWindow({
   rendererRouteRegistry,
   pluginMarketplaceOperationsV2,
   tenantTemplatesOperationsV2,
+  tenantEvolutionOperationsV2,
   projectChannelsOperationsV2,
   tenantAgentDefinitionsOperationsV2,
   tenantSubAgentDefinitionsOperationsV2,
@@ -327,6 +330,7 @@ export function SettingsWindow({
   const skillPackageManagement = useSkillPackageManagement({
     active: open,
     config,
+    tenantEvolutionOperationsV2,
     contextKey: resourceContextKey,
     canImport: canCreateSkills,
     onReload: reloadSkillResources,

@@ -7710,6 +7710,7 @@ export function App() {
           desktopTenantSubAgentDefinitionsOperationsV2,
         pluginMarketplaceOperationsV2: desktopPluginMarketplaceOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
+        tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         projectChannelsOperationsV2: desktopProjectChannelsOperationsV2,
         tenantAgentDefinitionsOperationsV2:
           desktopTenantAgentDefinitionsOperationsV2,

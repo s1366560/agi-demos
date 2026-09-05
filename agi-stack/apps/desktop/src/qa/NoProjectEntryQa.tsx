@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import { createDesktopNewTaskFlowQaOperationsV2 } from './desktopNewTaskFlowAuthorityQaV2';
 import { createDesktopTenantTemplatesQaOperationsV2 } from './desktopTenantTemplatesAuthorityQaV2';
+import { createDesktopTenantEvolutionQaOperationsV2 } from './desktopTenantEvolutionAuthorityQaV2';
 import { createDesktopTenantAgentDefinitionsQaOperationsV2 } from './desktopTenantAgentDefinitionsAuthorityQaV2';
 import { createDesktopTenantSubAgentDefinitionsQaOperationsV2 } from './desktopTenantSubAgentDefinitionsAuthorityQaV2';
 import { createDesktopProjectChannelsQaOperationsV2 } from './desktopProjectChannelsAuthorityQaV2';
@@ -34,6 +35,7 @@ declare global {
 const QA_API_ORIGIN = 'https://no-project.qa.memstack.invalid';
 const NOW = '2026-07-18T08:00:00.000Z';
 const tenantTemplatesOperationsV2 = createDesktopTenantTemplatesQaOperationsV2();
+const tenantEvolutionOperationsV2 = createDesktopTenantEvolutionQaOperationsV2();
 const projectChannelsOperationsV2 = createDesktopProjectChannelsQaOperationsV2();
 const tenantAgentDefinitionsOperationsV2 =
   createDesktopTenantAgentDefinitionsQaOperationsV2();
@@ -331,6 +333,7 @@ function NoProjectEntryQa() {
           agentDefinitionEvent={null}
           pluginMarketplaceOperationsV2={noProjectPluginMarketplaceOperationsV2}
           tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
+          tenantEvolutionOperationsV2={tenantEvolutionOperationsV2}
           projectChannelsOperationsV2={projectChannelsOperationsV2}
           tenantAgentDefinitionsOperationsV2={tenantAgentDefinitionsOperationsV2}
           tenantSubAgentDefinitionsOperationsV2={tenantSubAgentDefinitionsOperationsV2}

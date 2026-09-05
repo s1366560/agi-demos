@@ -59,7 +59,6 @@ import type {
   ManagedSkillContent,
   ManagedSkillCreateMutation,
   ManagedSkillEvolutionDetail,
-  ManagedSkillEvolutionJob,
   ManagedSkillEvolutionRun,
   ManagedSkillImportInput,
   ManagedSkillLifecycle,
@@ -2133,14 +2132,6 @@ export class DesktopApiClient {
 
   async runManagedSkillEvolution(skillId: string): Promise<ManagedSkillEvolutionRun> {
     return this.managedResourcesClient.runManagedSkillEvolution(skillId);
-  }
-
-  async applyManagedSkillEvolutionJob(jobId: string): Promise<ManagedSkillEvolutionJob> {
-    return this.managedResourcesClient.applyManagedSkillEvolutionJob(jobId);
-  }
-
-  async rejectManagedSkillEvolutionJob(jobId: string): Promise<ManagedSkillEvolutionJob> {
-    return this.managedResourcesClient.rejectManagedSkillEvolutionJob(jobId);
   }
 
   async listMCPApps(projectId: string): Promise<DesktopMCPAppSummary[]> {

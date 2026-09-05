@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ManagedResourcesClient } from '../../api/managedResourcesClient';
+import type { DesktopTenantEvolutionOperationsV2 } from '../../plugins/desktopTenantEvolutionAuthorityModuleV2';
 import type {
   DesktopRuntimeConfig,
   ManagedSkill,
@@ -41,6 +42,7 @@ export type SkillEvolutionDialogState = {
 export function useSkillPackageManagement({
   active,
   config,
+  tenantEvolutionOperationsV2,
   contextKey,
   canImport,
   onReload,
@@ -48,6 +50,7 @@ export function useSkillPackageManagement({
 }: {
   active: boolean;
   config: DesktopRuntimeConfig;
+  tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
   contextKey: string;
   canImport: boolean;
   onReload: () => Promise<void>;
@@ -337,8 +340,13 @@ export function useSkillPackageManagement({
       );
       try {
         const client = new ManagedResourcesClient(config);
-        if (action === 'apply') await client.applyManagedSkillEvolutionJob(jobId);
-        else await client.rejectManagedSkillEvolutionJob(jobId);
+        await tenantEvolutionOperationsV2.reviewTenantEvolutionJob({
+          config,
+          scope: { authority: config.mode, tenantId: config.tenantId },
+          jobId,
+          action,
+        });
+        if (contextKeyRef.current !== requestContextKey) return;
         const reload = action === 'apply' ? onReload() : Promise.resolve();
         const [detail] = await Promise.all([
           client.getManagedSkillEvolution(evolutionDialog.skill.id),
@@ -357,7 +365,7 @@ export function useSkillPackageManagement({
         );
       }
     },
-    [config, contextKey, evolutionDialog, onReload, onSelected]
+    [config, contextKey, evolutionDialog, onReload, onSelected, tenantEvolutionOperationsV2]
   );
 
   return {
