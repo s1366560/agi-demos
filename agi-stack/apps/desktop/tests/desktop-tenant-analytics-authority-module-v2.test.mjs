@@ -74,6 +74,7 @@ const authorityModules = [
   'desktopBrowserIntegrationAuthorityModuleV2',
   'desktopProjectSandboxUploadAuthorityModuleV2',
   'desktopProjectSandboxSurfaceAuthorityModuleV2',
+  'desktopProjectActivityReadStateAuthorityModuleV2',
   'desktopWorkspaceAgentPolicyAuthorityModuleV2',
   'desktopTenantSkillPackagesAuthorityModuleV2',
   'desktopTenantSkillEvolutionAuthorityModuleV2',

@@ -184,7 +184,7 @@ test("Activity authority receipts bind entry revisions and ISO read timestamps",
   });
 });
 
-test("Activity hook source delegates authority to the Cloud client, not a local read-state store", () => {
+test("Activity hook requires the injected lease client for read state", () => {
   const source = require("node:fs").readFileSync(
     new URL("../src/features/activity/useActivityInbox.ts", import.meta.url),
     "utf8",
@@ -193,18 +193,21 @@ test("Activity hook source delegates authority to the Cloud client, not a local 
   assert.doesNotMatch(source, /createLocalStorageReadStateStore/);
   assert.match(source, /flushPendingActivityReadState/);
   assert.match(source, /putActivityReadState/);
-  assert.match(source, /authorityAdapter\?\.reasonCode/);
+  assert.match(source, /activityClientV2: DesktopActivityAuthorityClient/);
+  assert.match(source, /authorityScope: ActivityAuthorityScope \| null/);
+  assert.doesNotMatch(source, /authorityAdapter|resolveActivityAuthorityBinding/);
 });
 
-test("Desktop production App injects the scoped authority adapter into Activity", () => {
+test("Desktop production App injects the scoped Activity V2 client", () => {
   const source = require("node:fs").readFileSync(
     new URL("../src/App.tsx", import.meta.url),
     "utf8",
   );
 
   assert.match(source, /desktopAgentAuthorityProviderV2\.publish/);
-  assert.match(source, /authorityAdapter: activityAuthorityAdapter/);
-  assert.match(source, /authorityScope: activityAuthorityScope/);
+  assert.match(source, /createDesktopProjectActivityReadStateClientV2\(/);
+  assert.match(source, /activityClientV2: desktopProjectActivityReadStateClientV2/);
+  assert.match(source, /authorityScope: activityAuthorityAdapter\.authority === 'local'[\s\S]*?activityAuthorityAdapter\.activityScope[\s\S]*?activityAuthorityScope \?\? null/);
   assert.match(source, /principalId: auth\.user\?\.user_id/);
 });
 

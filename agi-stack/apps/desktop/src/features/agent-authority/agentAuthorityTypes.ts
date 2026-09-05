@@ -137,6 +137,10 @@ export interface ActivityReadRetryStore {
     entries: readonly ActivityReadEntry[],
   ): void;
   clear(scope: ActivityAuthorityScope): void;
+  acknowledge(
+    scope: ActivityAuthorityScope,
+    submittedEntries: readonly ActivityReadEntry[],
+  ): void;
 }
 
 export interface DesktopActivityAuthorityClient {

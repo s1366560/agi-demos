@@ -148,6 +148,10 @@ import {
   createDesktopProjectMcpAppsClientV2,
 } from './plugins/desktopProjectMcpAppsAuthorityModuleV2';
 import {
+  createDesktopProjectActivityReadStateOperationsV2,
+  createDesktopProjectActivityReadStateClientV2,
+} from './plugins/desktopProjectActivityReadStateAuthorityModuleV2';
+import {
   createDesktopProjectSandboxSurfaceOperationsV2,
   createDesktopProjectSandboxSurfaceClientV2,
 } from './plugins/desktopProjectSandboxSurfaceAuthorityModuleV2';
@@ -1133,6 +1137,12 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectActivityReadStateOperationsV2 = useMemo(
+    () => createDesktopProjectActivityReadStateOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
   const desktopProjectSandboxSurfaceOperationsV2 = useMemo(
     () => createDesktopProjectSandboxSurfaceOperationsV2(
       () => desktopPluginMarketplaceGenerationActionsRefV2.current,
@@ -1611,6 +1621,12 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
+  const desktopProjectActivityReadStateClientV2 = useMemo(
+    () => createDesktopProjectActivityReadStateClientV2(
+      desktopProjectActivityReadStateOperationsV2, config,
+    ),
+    [config, desktopProjectActivityReadStateOperationsV2],
+  );
   const desktopProjectSandboxSurfaceClientV2 = useMemo(
     () => createDesktopProjectSandboxSurfaceClientV2(desktopProjectSandboxSurfaceOperationsV2, config),
     [config, desktopProjectSandboxSurfaceOperationsV2],
@@ -5039,8 +5055,10 @@ export function App() {
   const activityInbox = useActivityInbox({
     items: dataset.myWork,
     scopeKey: `${config.tenantId}:${config.projectId}`,
-    authorityAdapter: activityAuthorityAdapter,
-    authorityScope: activityAuthorityScope,
+    activityClientV2: desktopProjectActivityReadStateClientV2,
+    authorityScope: activityAuthorityAdapter.authority === 'local'
+      ? activityAuthorityAdapter.activityScope
+      : activityAuthorityScope ?? null,
   });
   // OS 通知点击后经由 ref 跳转,避免 hook 依赖后文才定义的 openMyWorkSession。
   const openMyWorkSessionRef = useRef<(item: ProjectWorkItem) => void>(() => {});

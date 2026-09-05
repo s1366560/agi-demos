@@ -229,7 +229,9 @@ export async function executeVaultBoundCloudRequest(
   if (endpoint.kind === 'workspace-context') {
     return Object.freeze({ status: contextResponse.status, body: contextBody });
   }
-  const response = await authorizedFetch(session, dependencies, request);
+  const response = await authorizedFetch(
+    session, activityDeliveryDependencies(request, dependencies), request,
+  );
   if (request.response?.kind === 'binary' && response.ok) {
     return Object.freeze({
       status: response.status,
@@ -255,6 +257,29 @@ export async function executeVaultBoundCloudRequest(
     status: response.status,
     body: await boundedJson(response, true, session.credential),
   });
+}
+
+function activityDeliveryDependencies(
+  request: VaultBoundCloudRequestInput,
+  dependencies: VaultBoundCloudRequestDependencies,
+): VaultBoundCloudRequestDependencies {
+  const segments = new URL(request.path, 'https://desktop.invalid').pathname.split('/');
+  if (request.method !== 'PUT' || segments.length !== 7 ||
+    segments[1] !== 'api' || segments[2] !== 'v1' || segments[3] !== 'projects' ||
+    segments[5] !== 'activity' || segments[6] !== 'read-state') return dependencies;
+  return {
+    ...dependencies,
+    async fetch(url, init) {
+      try {
+        return await dependencies.fetch(url, init);
+      } catch {
+        dependencies.signal?.throwIfAborted();
+        return new Response(JSON.stringify({
+          reason_code: 'activity_read_state_transport_unavailable',
+        }), { status: 503, headers: { 'content-type': 'application/json' } });
+      }
+    },
+  };
 }
 
 export async function projectVaultBoundCloudSession(

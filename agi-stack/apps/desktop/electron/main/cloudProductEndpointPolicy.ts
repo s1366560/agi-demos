@@ -1968,6 +1968,12 @@ function authorizeProjectCohort(
   if (segments[3] !== 'projects' || segments.length < 6) return null;
   const projectId = requiredIdentifier(segments[4]);
   const resource = segments[5];
+  if (resource === 'activity') {
+    return segments.length === 7 && segments[6] === 'read-state' && noQuery(target) &&
+      authorizeActivityReadStateRequest(request)
+      ? endpoint('project', null, projectId, null)
+      : null;
+  }
   if (resource === 'my-work') {
     return segments.length === 6 && request.method === 'GET' && noQuery(target)
       ? endpoint('project', null, projectId, null)
@@ -1984,6 +1990,30 @@ function authorizeProjectCohort(
       : null;
   }
   return null;
+}
+
+function authorizeActivityReadStateRequest(request: EndpointRequest): boolean {
+  if (request.response || request.form || request.mutation) return false;
+  if (request.method === 'GET') return request.body === undefined;
+  if (request.method !== 'PUT' || !exactBodyKeys(
+    request.body,
+    new Set(['expected_authority_revision', 'entries']),
+  )) return false;
+  const { expected_authority_revision: revision, entries } = request.body;
+  if (!validSearchInteger(revision, 0, Number.MAX_SAFE_INTEGER) ||
+    !Array.isArray(entries) || entries.length > 500) return false;
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry) ||
+      !exactBodyKeys(entry, new Set(['entry_id', 'entry_revision', 'read_at'])) ||
+      !validSearchText(entry.entry_id, 255) || ids.has(entry.entry_id) ||
+      !validSearchInteger(entry.entry_revision, 0, Number.MAX_SAFE_INTEGER) ||
+      typeof entry.read_at !== 'string' || !Number.isFinite(Date.parse(entry.read_at))) {
+      return false;
+    }
+    ids.add(entry.entry_id);
+  }
+  return true;
 }
 
 function authorizeCronEndpoint(

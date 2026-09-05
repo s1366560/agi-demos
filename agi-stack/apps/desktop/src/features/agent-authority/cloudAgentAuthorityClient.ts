@@ -128,6 +128,7 @@ function createCloudAgentAuthorityClient(
     },
     async flushPendingActivityReadState(scope, requestOptions) {
       const currentScope = requireRuntimeScope(runtimeConfig, scope);
+      requestOptions?.signal?.throwIfAborted();
       const pending = retryStore.load(currentScope);
       const statePayload = await requestJson(
         runtimeConfig,
@@ -202,7 +203,8 @@ async function putActivityReadState(
       },
     );
     const state = parseActivityReadState(payload, scope);
-    retryStore.clear(scope);
+    options?.signal?.throwIfAborted();
+    retryStore.acknowledge(scope, request.entries);
     return { kind: 'synced', state };
   } catch (error) {
     if (!isOfflineTransportError(error, options?.signal)) throw error;

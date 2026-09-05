@@ -6,6 +6,47 @@
   "trust": "builtin",
   "modules": [
     {
+      "module_ref": "builtin://memstack/desktop/project-activity-read-state-authority",
+      "entrypoint": "applyDesktopProjectActivityReadStateAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectActivityReadStateAuthorityModuleV2.ts",
+        "digest": "sha256:e0e912b364949590c5ec38ddb4e4d98ac4fd1a31a194ad765bbc4a8d6c4f15e6"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-activity-read-state-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:c54e3617c8dc4e011e3c1b092cacdc94de9209769ee217c98a41b58e3b2c6fb5"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-sandbox-surface-authority",
       "entrypoint": "applyDesktopProjectSandboxSurfaceAuthorityV2",
       "artifact": {
