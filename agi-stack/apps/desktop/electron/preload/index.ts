@@ -55,6 +55,8 @@ const allowedCommands = new Set([
   'cloud_socket_open',
   'cloud_socket_send',
   'cloud_socket_close',
+  'sandbox_desktop_grant_open',
+  'sandbox_desktop_grant_close',
   'cloud_auth_password',
   'cloud_auth_force_password_change',
   'cloud_auth_device_begin',

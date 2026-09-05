@@ -25,6 +25,11 @@ import {
   selectExactDisplaySource,
   type DesktopDisplayCapture,
 } from './displayCapturePolicy';
+import { SandboxDesktopGrantRegistry } from './sandboxDesktopGrantRegistry';
+import {
+  installSandboxDesktopGrantElectron,
+  blankSandboxDesktopGrantFrame,
+} from './sandboxDesktopGrantElectron';
 import { IabBackend } from './iab/backend';
 import { IabViewPool, installIabSessionPermissionPolicy } from './iab/viewPool';
 import {
@@ -34,6 +39,7 @@ import {
   CloudRequestExecutionRegistry,
   executeVaultBoundCloudRequest,
   projectVaultBoundCloudSession,
+  authorizeVaultBoundSandboxDesktopGrant,
 } from './cloudRequestPolicy';
 import {
   DesktopCloudSocketBroker,
@@ -129,6 +135,11 @@ const webControlPlaneConfiguration = resolveWebControlPlaneConfiguration({
 type DesktopCommandArgs = Record<string, unknown> | undefined;
 
 let mainWindow: BrowserWindow | null = null;
+let sandboxDesktopGrants: SandboxDesktopGrantRegistry | null = null;
+const resolveSandboxDesktopOwner = (ownerId: number) => {
+  const contents = mainWindow?.webContents;
+  return contents && !contents.isDestroyed() && contents.id === ownerId ? contents : undefined;
+};
 let sidecarSupervisor: SidecarSupervisor | null = null;
 const SIDECAR_HANDSHAKE_TIMEOUT_MS = 180_000;
 let cloudAuthenticationAuthority: DesktopCloudAuthenticationAuthority | null = null;
@@ -627,6 +638,17 @@ async function executeDesktopCommand(
     case 'open_web_control_plane':
       await openWebControlPlane(args);
       return undefined;
+    case 'sandbox_desktop_grant_open': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+      return sandboxDesktopGrants.open(ownerId, event.sender.mainFrame.frameTreeNodeId, args);
+    }
+    case 'sandbox_desktop_grant_close': {
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+      await sandboxDesktopGrants.close(ownerId, args);
+      return undefined;
+    }
     case 'cloud_request': {
       const ownerId = authorizedCloudRequestOwner(event);
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
@@ -636,6 +658,10 @@ async function executeDesktopCommand(
           loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
           fetch: (url, init) => net.fetch(url, init),
           signal: lease.signal,
+          withContextSwitch: (operation) => {
+            if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+            return sandboxDesktopGrants.withAuthorityTransition(operation);
+          },
         });
       } finally {
         lease.release();
@@ -762,6 +788,18 @@ async function executeDesktopCommand(
     default:
       if (SIDECAR_COMMANDS.has(command)) {
         if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+        if ([
+          'trusted_session_clear',
+          'local_trusted_session_save',
+          'local_trusted_session_clear',
+          'platform_plugin_authority_select_v2',
+        ].includes(command)) {
+          const supervisor = sidecarSupervisor;
+          if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+          return sandboxDesktopGrants.withAuthorityTransition(
+            () => supervisor.invoke(command, args),
+          );
+        }
         return sidecarSupervisor.invoke(command, args);
       }
       throw new Error('desktop command is not supported');
@@ -1048,16 +1086,27 @@ async function createMainWindow(): Promise<void> {
   });
   mainWindow = window;
   const cloudRequestOwnerId = window.webContents.id;
+  if (sandboxDesktopGrants) {
+    installSandboxDesktopGrantElectron(window.webContents.session, sandboxDesktopGrants, {
+      resolveOwner: resolveSandboxDesktopOwner,
+    });
+  }
   installNavigationPolicy(window, developmentUrl);
   iabPool?.setHostWindow(window);
   window.once('ready-to-show', () => window.show());
   window.on('closed', () => {
+    void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
+      console.warn('Sandbox desktop owner cleanup failed');
+    });
     cloudRequestExecutions.cancelOwner(cloudRequestOwnerId);
     cloudSocketBroker?.cancelOwner(cloudRequestOwnerId);
     iabPool?.setHostWindow(null);
     if (mainWindow === window) mainWindow = null;
   });
   window.webContents.on('render-process-gone', () => {
+    void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
+      console.warn('Sandbox desktop owner cleanup failed');
+    });
     cloudRequestExecutions.cancelOwner(cloudRequestOwnerId);
     cloudSocketBroker?.cancelOwner(cloudRequestOwnerId);
   });
@@ -1146,11 +1195,23 @@ async function bootstrapApplication(): Promise<void> {
     takePlatformPluginDataPlaneCredentialEnvironmentV2(process.env);
   sidecarSupervisor = createSidecarSupervisor();
   await sidecarSupervisor.start();
+  const applicationSupervisor = sidecarSupervisor;
   if (pluginDataPlaneCredentialV2) {
     await sidecarSupervisor.invoke('plugin_data_plane_credential_import_v2', {
       input: pluginDataPlaneCredentialV2,
     });
   }
+  sandboxDesktopGrants = new SandboxDesktopGrantRegistry({
+    authorize: (request, signal) =>
+      authorizeVaultBoundSandboxDesktopGrant(request, {
+        loadTrustedSession: () => applicationSupervisor.invoke('trusted_session_load'),
+        fetch: (url, init) => net.fetch(url, init),
+        signal,
+      }),
+    randomId: () => randomUUID(),
+    blankFrame: (ownerId, frameId) =>
+      blankSandboxDesktopGrantFrame(resolveSandboxDesktopOwner, ownerId, frameId),
+  });
   cloudSocketBroker = new DesktopCloudSocketBroker({
     authorize: (input) =>
       authorizeVaultBoundCloudSocket(input, {
@@ -1166,14 +1227,29 @@ async function bootstrapApplication(): Promise<void> {
     randomId: () => randomUUID(),
     fetch: (url, init) => net.fetch(url, init),
     loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
-    saveTrustedSession: (input) => sidecarSupervisor!.invoke('trusted_session_save', input),
-    clearTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_clear'),
+    saveTrustedSession: async (input) => {
+      if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+      return sandboxDesktopGrants.withAuthorityTransition(
+        () => applicationSupervisor.invoke('trusted_session_save', input),
+      );
+    },
+    clearTrustedSession: async () => {
+      if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+      return sandboxDesktopGrants.withAuthorityTransition(
+        () => applicationSupervisor.invoke('trusted_session_clear'),
+      );
+    },
   });
   oauthCallbackAuthority = new DesktopOAuthCallbackAuthority({
     now: () => Date.now(),
     fetch: (url, init) => net.fetch(url, init),
     openExternal: async (url) => shell.openExternal(url, { activate: true }),
-    saveTrustedSession: (input) => sidecarSupervisor!.invoke('trusted_session_save', input),
+    saveTrustedSession: async (input) => {
+      if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
+      return sandboxDesktopGrants.withAuthorityTransition(
+        () => applicationSupervisor.invoke('trusted_session_save', input),
+      );
+    },
     normalizeResumeRoute: normalizeOAuthResumeRoute,
     pendingAttemptPersistence: {
       load: () => sidecarSupervisor!.invoke('oauth_pending_attempt_load'),
@@ -1238,6 +1314,9 @@ if (!hasSingleInstanceLock) {
     if (process.platform !== 'darwin') app.quit();
   });
   app.on('before-quit', (event) => {
+    const grantsClosed = sandboxDesktopGrants?.revokeAll().catch(() => {
+      console.warn('Sandbox desktop shutdown cleanup failed');
+    });
     cloudRequestExecutions.cancelAll();
     cloudSocketBroker?.cancelAll();
     cloudSocketBroker = null;
@@ -1259,7 +1338,8 @@ if (!hasSingleInstanceLock) {
     const cloudAuth = cloudAuthenticationAuthority;
     sidecarSupervisor = null;
     cloudAuthenticationAuthority = null;
-    void Promise.resolve(cloudAuth?.clearTransientSession())
+    void Promise.resolve(grantsClosed)
+      .then(() => cloudAuth?.clearTransientSession())
       .finally(() => supervisor.stop())
       .finally(() => {
         sidecarShutdownComplete = true;

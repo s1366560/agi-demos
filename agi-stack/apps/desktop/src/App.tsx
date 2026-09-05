@@ -1637,10 +1637,6 @@ export function App() {
     ),
     [config, desktopProjectActivityReadStateOperationsV2],
   );
-  const desktopProjectSandboxSurfaceClientV2 = useMemo(
-    () => createDesktopProjectSandboxSurfaceClientV2(desktopProjectSandboxSurfaceOperationsV2, config),
-    [config, desktopProjectSandboxSurfaceOperationsV2],
-  );
   const desktopProjectMcpAppsClientV2 = useMemo(
     () => createDesktopProjectMcpAppsClientV2(desktopProjectMcpAppsOperationsV2, config),
     [config, desktopProjectMcpAppsOperationsV2],
@@ -1804,6 +1800,10 @@ export function App() {
     config,
     identityAuthenticated,
     desktopRendererCompositionV2,
+  );
+  const desktopProjectSandboxSurfaceClientV2 = useMemo(
+    () => createDesktopProjectSandboxSurfaceClientV2(desktopProjectSandboxSurfaceOperationsV2, config),
+    [config, desktopProjectSandboxSurfaceOperationsV2, desktopRendererGenerationV2.actions, auth.user?.user_id],
   );
   const desktopVoiceSessionOperationsV2 = useMemo(() => {
     const actions = desktopRendererGenerationV2.actions;

@@ -17,6 +17,7 @@ export type RemoteDesktopResolution = '1280x720' | '1600x900' | '1920x1080' | '2
 export type RemoteDesktopSession = {
   descriptor: KasmProxySession;
   frame_url: string;
+  frame_name?: string;
 };
 
 export type SandboxRuntimeSurfaceClient = {

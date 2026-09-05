@@ -51,7 +51,7 @@
       "entrypoint": "applyDesktopProjectSandboxSurfaceAuthorityV2",
       "artifact": {
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceAuthorityModuleV2.ts",
-        "digest": "sha256:de7672b69bd4e3cb86023f6581dcb4b6dffa2f165559078aa5f84e0721d8ed30"
+        "digest": "sha256:f7d087a62a413f9ca78b8e7abf4d25926022241e5a8cd81a9c9187e6224baf67"
       },
       "targets": [
         "desktop-renderer"

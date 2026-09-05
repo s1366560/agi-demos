@@ -1,4 +1,8 @@
 import {
+  openNativeSandboxDesktopGrantV2,
+  type NativeSandboxDesktopGrantV2,
+} from '../features/sandbox/nativeSandboxDesktopGrantV2';
+import {
   PLUGIN_MODULE_CATALOG_V2,
   RuntimeV2Error,
   type ContextV2,
@@ -83,6 +87,7 @@ export function createDesktopProjectSandboxSurfaceOperationsV2(
     let failed = false;
     let retained = false;
     let consumed = false;
+    let nativeGrant: NativeSandboxDesktopGrantV2 | null = null;
     let releasePromise: Promise<void> | undefined;
     const onAbort = () => {
       void release().catch(() => undefined);
@@ -91,7 +96,20 @@ export function createDesktopProjectSandboxSurfaceOperationsV2(
       if (releasePromise) return releasePromise;
       active = false;
       p.signal?.removeEventListener('abort', onAbort);
-      releasePromise = Promise.resolve().then(() => lease.release());
+      releasePromise = Promise.resolve().then(async () => {
+        let cleanupError: unknown;
+        try {
+          await nativeGrant?.release();
+        } catch (error) {
+          cleanupError = error;
+        }
+        try {
+          await lease.release();
+        } catch (error) {
+          if (!cleanupError) cleanupError = error;
+        }
+        if (cleanupError) throw cleanupError;
+      });
       return releasePromise;
     };
     const check = () => {
@@ -125,12 +143,27 @@ export function createDesktopProjectSandboxSurfaceOperationsV2(
         check();
         const result = requireSandboxSurfaceResultV2(method, raw, p);
         if (method === 'openRemoteDesktop' && 'status' in result && result.status === 'ready') {
+          const remoteSession = (
+            result as Extract<SandboxSurfaceResultsV2['openRemoteDesktop'], { status: 'ready' }>
+          ).value;
+          nativeGrant = await openNativeSandboxDesktopGrantV2(
+            p.config,
+            remoteSession.descriptor,
+            p.signal,
+          );
+          check();
           p.signal?.addEventListener('abort', onAbort, { once: true });
           if (p.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
           retained = true;
           return Object.freeze({
             status: 'ready',
-            value: Object.freeze({ ...result.value, release }),
+            value: Object.freeze({
+              ...result.value,
+              ...(nativeGrant
+                ? { frame_name: nativeGrant.frameName, frame_url: nativeGrant.frameUrl }
+                : {}),
+              release,
+            }),
           }) as SandboxSurfaceResultsV2[K];
         }
         return result;

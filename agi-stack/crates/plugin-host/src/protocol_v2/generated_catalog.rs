@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:d8a5e91b2b85f09a242eb6e595013d192ff12377207408f84b5447e5c5e126",
-    "63\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:305440fdefbaf67ea55648b651e95c337cf582071a499f4591950398144af1",
+    "d7\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -1922,8 +1922,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "3b389008a8e6dd71ec82ae0899\",\"entrypoint\":\"applyDesktopProjectPlaybooksReadAuthorityV2\",\"",
     "module_ref\":\"builtin://memstack/desktop/project-playbooks-read-authority\",\"plugin_id\":\"m",
     "emstack-renderer-target-hosts\",\"plugin_version\":\"2.0.0\",\"targets\":[\"desktop-renderer\"]},",
-    "{\"artifact_digest\":\"sha256:de7672b69bd4e3cb86023f6581dcb4b6dffa2f165559078aa5f84e0721d8e",
-    "d30\",\"artifact_source\":\"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProj",
+    "{\"artifact_digest\":\"sha256:f7d087a62a413f9ca78b8e7abf4d25926022241e5a8cd81a9c9187e6224ba",
+    "f67\",\"artifact_source\":\"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProj",
     "ectSandboxSurfaceAuthorityModuleV2.ts\",\"contract\":{\"config_schema\":{\"$schema\":\"https://j",
     "son-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strateg",
     "y\":{\"const\":\"desktop-api-fetch\",\"type\":\"string\"}},\"required\":[\"strategy\"],\"type\":\"object",
@@ -4480,4 +4480,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "ts\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:d8a5e91b2b85f09a242eb6e595013d192ff12377207408f84b5447e5c5e12663";
+    "sha256:305440fdefbaf67ea55648b651e95c337cf582071a499f4591950398144af1d7";

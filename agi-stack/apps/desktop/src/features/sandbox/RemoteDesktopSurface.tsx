@@ -246,7 +246,8 @@ export function RemoteDesktopSurface({
             </Text>
           ) : null}
           <iframe
-            key={`${session.frame_url}:${sessionRevision}`}
+            key={`${session.frame_name ?? 'web'}:${session.frame_url}:${sessionRevision}`}
+            name={session.frame_name}
             src={session.frame_url}
             title={t('sandbox.desktopFrameTitle')}
             sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock"

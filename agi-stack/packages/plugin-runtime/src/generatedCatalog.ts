@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:d8a5e91b2b85f09a242eb6e595013d192ff12377207408f84b5447e5c5',
-  'e12663","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:305440fdefbaf67ea55648b651e95c337cf582071a499f459195039814',
+  '4af1d7","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -2033,8 +2033,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'c4502ee01cd57ebaa7bb3b389008a8e6dd71ec82ae0899","entrypoint":"applyDesktopProjectPla',
   'ybooksReadAuthorityV2","module_ref":"builtin://memstack/desktop/project-playbooks-re',
   'ad-authority","plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.0.0",',
-  '"targets":["desktop-renderer"]},{"artifact_digest":"sha256:de7672b69bd4e3cb86023f658',
-  '1dcb4b6dffa2f165559078aa5f84e0721d8ed30","artifact_source":"repo+typescript://agi-st',
+  '"targets":["desktop-renderer"]},{"artifact_digest":"sha256:f7d087a62a413f9ca78b8e7ab',
+  'f4d25926022241e5a8cd81a9c9187e6224baf67","artifact_source":"repo+typescript://agi-st',
   'ack/apps/desktop/src/plugins/desktopProjectSandboxSurfaceAuthorityModuleV2.ts","cont',
   'ract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","ad',
   'ditionalProperties":false,"properties":{"strategy":{"const":"desktop-api-fetch","typ',
@@ -4718,4 +4718,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:d8a5e91b2b85f09a242eb6e595013d192ff12377207408f84b5447e5c5e12663' as const;
+  'sha256:305440fdefbaf67ea55648b651e95c337cf582071a499f4591950398144af1d7' as const;

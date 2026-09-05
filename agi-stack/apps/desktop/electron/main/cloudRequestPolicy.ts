@@ -77,6 +77,9 @@ export type VaultBoundCloudRequestDependencies = Readonly<{
   loadTrustedSession(): Promise<unknown>;
   fetch(url: string, init: RequestInit): Promise<Response>;
   signal?: AbortSignal;
+  withContextSwitch?(
+    operation: () => Promise<VaultBoundCloudRequestResult>,
+  ): Promise<VaultBoundCloudRequestResult>;
 }>;
 
 export type CloudRequestExecutionLease = Readonly<{
@@ -213,6 +216,34 @@ export class CloudRequestExecutionRegistry {
   }
 }
 
+/** Main-only material; IPC callers must return opaque grants, never this value. */
+export async function authorizeVaultBoundSandboxDesktopGrant(
+  input: Readonly<{ tenantId: string; projectId: string }>,
+  dependencies: VaultBoundCloudRequestDependencies,
+): Promise<Readonly<{ apiBaseUrl: string; credential: string; expiresAt: string | null }>> {
+  dependencies.signal?.throwIfAborted();
+  const tenantId = identifier(input.tenantId, 'sandbox grant tenant scope is invalid');
+  const projectId = identifier(input.projectId, 'sandbox grant project scope is invalid');
+  const session = parseTrustedCloudSession(await dependencies.loadTrustedSession());
+  dependencies.signal?.throwIfAborted();
+  const response = await authorizedFetch(session, dependencies, {
+    path: '/api/v1/workspace-context', method: 'GET',
+  });
+  dependencies.signal?.throwIfAborted();
+  const body = await boundedJson(response, false, session.credential);
+  dependencies.signal?.throwIfAborted();
+  if (!response.ok) throw new Error('sandbox grant scope observation failed');
+  const observed = parseObservedContext(body);
+  if (observed.tenantId !== tenantId || observed.projectId !== projectId) {
+    throw new Error('sandbox grant scope mismatch');
+  }
+  return Object.freeze({
+    apiBaseUrl: session.api_base_url,
+    credential: session.credential,
+    expiresAt: session.expires_at,
+  });
+}
+
 export async function executeVaultBoundCloudRequest(
   input: unknown,
   dependencies: VaultBoundCloudRequestDependencies,
@@ -231,6 +262,18 @@ export async function executeVaultBoundCloudRequest(
   if (!contextResponse.ok) throw new Error('cloud request scope observation failed');
   const context = parseObservedContext(contextBody);
   assertEndpointScope(endpoint, context);
+  if (endpoint.kind === 'workspace-context-switch') {
+    const switchContext = async (): Promise<VaultBoundCloudRequestResult> => {
+      dependencies.signal?.throwIfAborted();
+      const response = await authorizedFetch(session, dependencies, request);
+      const body = await boundedJson(response, true, session.credential);
+      dependencies.signal?.throwIfAborted();
+      return Object.freeze({ status: response.status, body });
+    };
+    return dependencies.withContextSwitch
+      ? dependencies.withContextSwitch(switchContext)
+      : switchContext();
+  }
   if (endpoint.kind === 'workspace-context') {
     return Object.freeze({ status: contextResponse.status, body: contextBody });
   }

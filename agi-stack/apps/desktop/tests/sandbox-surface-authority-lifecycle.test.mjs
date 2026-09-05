@@ -38,7 +38,7 @@ function harness(client) {
     useCallback(fn, deps) {
       return react.useMemo(() => fn, deps);
     },
-    useEffect(effect, deps) {
+    useLayoutEffect(effect, deps) {
       const i = cursor++;
       if (!equal(slots[i]?.deps, deps))
         effects.push(() => {
@@ -500,14 +500,27 @@ test('remote component cleanup invokes the required stop callback when its pane 
     module,
     module.exports,
   );
-  module.exports.RemoteDesktopSurface({
-    capability: { availability: 'unavailable' },
-    session: null,
-    status: 'idle',
+  const tree = module.exports.RemoteDesktopSurface({
+    capability: { availability: 'available' },
+    session: { frame_url: 'https://api.test/desktop', frame_name: 'native-frame', descriptor: {} },
+    sessionRevision: 2,
+    status: 'ready',
     onStop: async () => {
       stops++;
     },
   });
+  const findFrame = (node) => {
+    if (!node || typeof node !== 'object') return null;
+    if (node.type === 'iframe') return node;
+    for (const child of [node.props?.children].flat()) {
+      const match = findFrame(child);
+      if (match) return match;
+    }
+    return null;
+  };
+  const frame = findFrame(tree);
+  assert.equal(frame.props.name, 'native-frame');
+  assert.equal(frame.props.src, 'https://api.test/desktop');
   // This is the actual component's onStop effect; other effects require the browser DOM.
   const cleanup = callbacks[0]();
   assert.equal(stops, 0);

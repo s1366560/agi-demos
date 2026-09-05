@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import type { DesktopProjectSandboxSurfaceClientV2 } from '../../plugins/desktopProjectSandboxSurfaceAuthorityModuleV2';
 import type { DesktopRuntimeConfig } from '../../types';
@@ -75,7 +75,7 @@ export function useSandboxRuntimeSurface(
     setCapabilityAttempt((current) => current + 1);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const lifetime = {
       context,
       controller: new AbortController(),
