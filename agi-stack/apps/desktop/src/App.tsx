@@ -1,3 +1,4 @@
+import { createDesktopBrowserBridgeManagementOperationsV2, createDesktopBrowserBridgeManagementClientV2 } from './plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
 import { createDesktopVoiceSessionOperationsV2 } from './plugins/desktopVoiceSessionAuthorityModuleV2';
 import { createDesktopConversationMessagingOperationsV2 } from './plugins/desktopConversationMessagingAuthorityModuleV2';
 import {
@@ -1805,6 +1806,12 @@ export function App() {
     () => createDesktopProjectSandboxSurfaceClientV2(desktopProjectSandboxSurfaceOperationsV2, config),
     [config, desktopProjectSandboxSurfaceOperationsV2, desktopRendererGenerationV2.actions, auth.user?.user_id],
   );
+  const desktopBrowserBridgeManagementClientV2 = useMemo(() => {
+    const actions = desktopRendererGenerationV2.actions;
+    return createDesktopBrowserBridgeManagementClientV2(
+      createDesktopBrowserBridgeManagementOperationsV2(() => actions), config,
+    );
+  }, [config, desktopRendererGenerationV2.actions, auth.user?.user_id]);
   const desktopVoiceSessionOperationsV2 = useMemo(() => {
     const actions = desktopRendererGenerationV2.actions;
     return createDesktopVoiceSessionOperationsV2(() => actions);
@@ -7756,6 +7763,7 @@ export function App() {
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
         browserIntegrationOperationsV2: desktopBrowserIntegrationOperationsV2,
+        browserBridgeManagementClientV2: desktopBrowserBridgeManagementClientV2,
         projectMcpServersOperationsV2: desktopProjectMcpServersOperationsV2,
         tenantSkillPackagesOperationsV2: desktopTenantSkillPackagesOperationsV2,
         tenantSkillEvolutionOperationsV2: desktopTenantSkillEvolutionOperationsV2,

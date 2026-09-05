@@ -987,6 +987,20 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-desktop-browser-bridge-management-authority
+      parent_entry_id: builtin-desktop-renderer-host
+      plugin_ref: memstack-renderer-target-hosts
+      module_ref: builtin://memstack/desktop/browser-bridge-management-authority
+      enabled: true
+      config:
+        strategy: native-browser-bridge
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-desktop-structured-image-preview-authority
       parent_entry_id: builtin-desktop-renderer-host
       plugin_ref: memstack-renderer-target-hosts

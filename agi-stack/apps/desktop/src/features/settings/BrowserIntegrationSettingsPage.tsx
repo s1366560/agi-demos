@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
@@ -10,25 +9,13 @@ import {
 } from '@radix-ui/react-icons';
 
 import type { DesktopBrowserIntegrationClientV2 } from '../../plugins/desktopBrowserIntegrationAuthorityModuleV2';
+import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
+import { useBrowserBridgeManagementV2 } from './useBrowserBridgeManagementV2';
 import { useBrowserIntegrationManagementV2 } from './useBrowserIntegrationManagementV2';
 import { useI18n } from '../../i18n';
-import type {
-  BrowserAuditEntry,
-  BrowserBridgeInstallResult,
-  BrowserBridgeStatus,
-  BrowserBridgeUninstallResult,
-  BrowserOriginGrant,
-  DesktopRuntimeConfig,
-  LocalRuntimeStatus,
-} from '../../types';
+import type { BrowserAuditEntry, BrowserOriginGrant, DesktopRuntimeConfig } from '../../types';
 import { SettingsPage } from './SettingsCorePages';
 import './BrowserIntegrationSettingsPage.css';
-
-const BROWSER_BRIDGE_STATUS_POLL_MS = 5_000;
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function formatGrantCreatedAt(value: string): string {
   const parsed = Date.parse(value);
@@ -54,24 +41,30 @@ function auditOutcomeColor(outcome: BrowserAuditEntry['outcome']): 'green' | 'am
 export function BrowserIntegrationSettingsPage({
   config,
   browserIntegrationClientV2,
+  browserBridgeManagementClientV2,
 }: {
   config?: DesktopRuntimeConfig;
   browserIntegrationClientV2: DesktopBrowserIntegrationClientV2;
+  browserBridgeManagementClientV2: DesktopBrowserBridgeManagementClientV2;
 }) {
   const { t } = useI18n();
-  const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
-  const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
-  const [bridgeStatus, setBridgeStatus] = useState<BrowserBridgeStatus | null>(null);
-  const [optimisticEnabled, setOptimisticEnabled] = useState<boolean | null>(null);
-  const [toggleBusy, setToggleBusy] = useState(false);
-  const [toggleError, setToggleError] = useState<string | null>(null);
-  const [actionBusy, setActionBusy] = useState<'install' | 'uninstall' | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [installResult, setInstallResult] = useState<BrowserBridgeInstallResult | null>(null);
-  const [uninstallResult, setUninstallResult] = useState<BrowserBridgeUninstallResult | null>(null);
-  const [optimisticFullCdpEnabled, setOptimisticFullCdpEnabled] = useState<boolean | null>(null);
-  const [fullCdpToggleBusy, setFullCdpToggleBusy] = useState(false);
-  const [fullCdpToggleError, setFullCdpToggleError] = useState<string | null>(null);
+  const {
+    bridgeStatus,
+    enabled,
+    fullCdpEnabled,
+    toggleBusy,
+    toggleError,
+    fullCdpToggleBusy,
+    fullCdpToggleError,
+    actionBusy,
+    actionError,
+    installResult,
+    uninstallResult,
+    loadError,
+    toggleBridge,
+    toggleFullCdp,
+    runRegistration,
+  } = useBrowserBridgeManagementV2(browserBridgeManagementClientV2, config);
   const {
     bridgeClient,
     originGrants,
@@ -101,131 +94,6 @@ export function BrowserIntegrationSettingsPage({
     auditLoading,
     refreshAuditEntries,
   } = useBrowserIntegrationManagementV2(browserIntegrationClientV2, config);
-
-  const refreshBridgeStatus = useCallback(async () => {
-    if (!invoke) return;
-    try {
-      const status = await invoke<BrowserBridgeStatus>('browser_bridge_status');
-      setBridgeStatus(status);
-    } catch {
-      setBridgeStatus(null);
-    }
-  }, [invoke]);
-
-  useEffect(() => {
-    if (!invoke) return;
-    let cancelled = false;
-    invoke<LocalRuntimeStatus>('local_runtime_status')
-      .then((status) => {
-        if (!cancelled) setRuntimeStatus(status);
-      })
-      .catch(() => {
-        if (!cancelled) setRuntimeStatus(null);
-      });
-    void refreshBridgeStatus();
-    const interval = window.setInterval(() => {
-      void refreshBridgeStatus();
-    }, BROWSER_BRIDGE_STATUS_POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [invoke, refreshBridgeStatus]);
-
-  const configuredEnabled = runtimeStatus?.config.browser_bridge?.enabled;
-  const enabled = optimisticEnabled ?? configuredEnabled ?? bridgeStatus?.enabled ?? false;
-
-  const configuredFullCdpEnabled = runtimeStatus?.config.browser_bridge?.full_cdp_access_enabled;
-  const fullCdpEnabled = optimisticFullCdpEnabled ?? configuredFullCdpEnabled ?? false;
-
-  const toggleBridge = async (next: boolean) => {
-    if (!invoke || toggleBusy) return;
-    setOptimisticEnabled(next);
-    setToggleError(null);
-    setToggleBusy(true);
-    try {
-      const current = await invoke<LocalRuntimeStatus>('local_runtime_status');
-      const config = {
-        ...current.config,
-        browser_bridge: { ...current.config?.browser_bridge, enabled: next },
-      };
-      const updated = await invoke<LocalRuntimeStatus>('local_runtime_configure', { config });
-      setRuntimeStatus(updated);
-      setOptimisticEnabled(null);
-      void refreshBridgeStatus();
-    } catch (error) {
-      setOptimisticEnabled(null);
-      setToggleError(formatError(error));
-    } finally {
-      setToggleBusy(false);
-    }
-  };
-
-  const toggleFullCdp = async (next: boolean) => {
-    if (!invoke || fullCdpToggleBusy) return;
-    setOptimisticFullCdpEnabled(next);
-    setFullCdpToggleError(null);
-    setFullCdpToggleBusy(true);
-    try {
-      const current = await invoke<LocalRuntimeStatus>('local_runtime_status');
-      const config = {
-        ...current.config,
-        browser_bridge: {
-          ...current.config?.browser_bridge,
-          full_cdp_access_enabled: next,
-        },
-      };
-      const updated = await invoke<LocalRuntimeStatus>('local_runtime_configure', { config });
-      setRuntimeStatus(updated);
-      setOptimisticFullCdpEnabled(null);
-    } catch (error) {
-      setOptimisticFullCdpEnabled(null);
-      setFullCdpToggleError(formatError(error));
-    } finally {
-      setFullCdpToggleBusy(false);
-    }
-  };
-
-  const runRegistration = async (action: 'install' | 'uninstall') => {
-    if (!invoke || actionBusy) return;
-    setActionBusy(action);
-    setActionError(null);
-    try {
-      if (action === 'install') {
-        setInstallResult(await invoke<BrowserBridgeInstallResult>('browser_bridge_install'));
-        setUninstallResult(null);
-      } else {
-        setUninstallResult(await invoke<BrowserBridgeUninstallResult>('browser_bridge_uninstall'));
-        setInstallResult(null);
-      }
-      void refreshBridgeStatus();
-    } catch (error) {
-      setActionError(formatError(error));
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  if (!invoke) {
-    return (
-      <SettingsPage
-        eyebrow={t('settings.preferences')}
-        title={t('settings.browserTitle')}
-        description={t('settings.browserSubtitle')}
-        className="settings-preference-page settings-browser-page"
-      >
-        <section className="settings-panel">
-          <header>
-            <GlobeIcon />
-            <span>
-              <strong>{t('settings.browser')}</strong>
-              <small>{t('settings.browserUnavailable')}</small>
-            </span>
-          </header>
-        </section>
-      </SettingsPage>
-    );
-  }
 
   const brokerConnected = bridgeStatus?.brokerConnected ?? false;
 
@@ -261,9 +129,9 @@ export function BrowserIntegrationSettingsPage({
             {t(enabled ? 'settings.preferenceOn' : 'settings.preferenceOff')}
           </button>
         </div>
-        {toggleError ? (
+        {toggleError || loadError ? (
           <p className="settings-browser-error" role="alert">
-            {toggleError}
+            {toggleError ?? loadError}
           </p>
         ) : null}
       </section>

@@ -1,3 +1,4 @@
+import type { DesktopBrowserBridgeManagementClientV2 } from '../../plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
 import {
   createDesktopBrowserIntegrationClientV2,
   type DesktopBrowserIntegrationOperationsV2,
@@ -111,6 +112,7 @@ type SettingsWindowProps = {
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
   browserIntegrationOperationsV2: DesktopBrowserIntegrationOperationsV2;
+  browserBridgeManagementClientV2: DesktopBrowserBridgeManagementClientV2;
   projectMcpServersOperationsV2: DesktopProjectMcpServersOperationsV2;
   tenantProvidersOperationsV2: DesktopTenantProvidersOperationsV2;
   tenantSkillDefinitionsOperationsV2: DesktopTenantSkillDefinitionsOperationsV2;
@@ -142,6 +144,7 @@ export function SettingsWindow({
   tenantTemplatesOperationsV2,
   tenantEvolutionOperationsV2,
   browserIntegrationOperationsV2,
+  browserBridgeManagementClientV2,
   projectMcpServersOperationsV2,
   tenantProvidersOperationsV2,
   tenantSkillDefinitionsOperationsV2,
@@ -749,6 +752,7 @@ export function SettingsWindow({
                 <BrowserIntegrationSettingsPage
                   config={config}
                   browserIntegrationClientV2={browserIntegrationClientV2}
+                  browserBridgeManagementClientV2={browserBridgeManagementClientV2}
                 />
               ) : null}
 

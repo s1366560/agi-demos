@@ -52,6 +52,13 @@ const browserSourcePaths = [
   'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationOperationContractV2.ts',
   'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationResponseContractV2.ts',
   'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationHttpProjectionV2.ts',
+  'agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementAuthorityModuleV2.ts',
+  'agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementOperationContractV2.ts',
+  'agi-stack/apps/desktop/src/plugins/desktopBrowserBridgeManagementNativeProjectionV2.ts',
+  'agi-stack/apps/desktop/src/features/settings/useBrowserBridgeManagementV2.ts',
+  'agi-stack/apps/desktop/tests/desktop-browser-bridge-management-authority-v2.test.mjs',
+  'agi-stack/apps/desktop/tests/browser-bridge-management-lifecycle.test.mjs',
+  'agi-stack/apps/desktop/tests/desktop-browser-bridge-management-loader-v2.test.mjs',
   'agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs',
   'agi-stack/apps/desktop/sidecar/src/local_runtime/session_store.rs',
   'agi-stack/apps/desktop/sidecar/src/local_runtime/browser_run_tool_host.rs',
@@ -412,6 +419,10 @@ test('v4 emits one protected Browser Bridge review input before fresh generation
     .map((line) => JSON.parse(line));
   assert.equal(records.length, 1);
   assert.equal(records[0].input.capability_id, 'browser-integration-browser-bridge');
+  assert.deepEqual(
+    records[0].input.production_entries.native_only.map(({ path }) => path),
+    browserSourcePaths,
+  );
   assert.match(records[0].input_digest, /^sha256:[0-9a-f]{64}$/u);
 });
 

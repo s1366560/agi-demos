@@ -1,3 +1,4 @@
+import { desktopBrowserBridgeManagementAuthorityDefinitionV2 } from './desktopBrowserBridgeManagementAuthorityModuleV2';
 import { desktopVoiceSessionAuthorityDefinitionV2 } from './desktopVoiceSessionAuthorityModuleV2';
 import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 
@@ -125,6 +126,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopArtifactContentAuthorityDefinitionV2,
     desktopStructuredImagePreviewAuthorityDefinitionV2,
     desktopVoiceSessionAuthorityDefinitionV2,
+    desktopBrowserBridgeManagementAuthorityDefinitionV2,
     desktopAutomationAuthorityDefinitionV2,
     desktopPluginMarketplaceCatalogDefinitionV2,
     desktopPluginMarketplaceManagementDefinitionV2,

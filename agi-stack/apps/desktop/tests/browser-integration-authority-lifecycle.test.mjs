@@ -21,11 +21,11 @@ function harness(overrides = {}, page = false) {
   const react = {
     useState(value) {
       const i = cursor++;
-      slots[i] ??= { value };
+      slots[i] ??= { value: typeof value === 'function' ? value() : value };
       return [
         slots[i].value,
         (v) => {
-          slots[i].value = v;
+          slots[i].value = typeof v === 'function' ? v(slots[i].value) : v;
         },
       ];
     },
@@ -49,6 +49,7 @@ function harness(overrides = {}, page = false) {
         });
     },
   };
+  react.useLayoutEffect = react.useEffect;
   const cache = new Map();
   const window = {
     __MEMSTACK_DESKTOP__: { core: { invoke: async () => ({ config: {} }) } },
@@ -67,7 +68,7 @@ function harness(overrides = {}, page = false) {
         jsx: ts.JsxEmit.ReactJSX,
       },
     }).outputText;
-    new Function('require', 'module', 'exports', 'window', code)(
+    new Function('require', 'module', 'exports', 'window', 'setTimeout', 'clearTimeout', code)(
       (name) => {
         if (name === 'react') return react;
         if (name === 'react/jsx-runtime')
@@ -77,16 +78,46 @@ function harness(overrides = {}, page = false) {
           };
         if (name === '../../i18n') return { useI18n: () => ({ t: (key) => key }) };
         if (name.endsWith('.css')) return {};
-        if (name === './useBrowserIntegrationManagementV2') return load(new URL(`${name}.ts`, url));
+        if (
+          name === './useBrowserIntegrationManagementV2' ||
+          name === './useBrowserBridgeManagementV2'
+        )
+          return load(new URL(`${name}.ts`, url));
         return new Proxy({}, { get: (_, key) => key });
       },
       module,
       module.exports,
       window,
+      () => 1,
+      () => {},
     );
     return module.exports;
   }
-  const calls = { lists: 0, saves: [], deletes: [] };
+  const calls = { lists: 0, saves: [], deletes: [], bridgeLoads: 0 };
+  // This fixture keeps the real page and both hooks. Management lifecycle races
+  // remain covered by browser-bridge-management-lifecycle.test.mjs.
+  const browserBridgeManagementClientV2 = {
+    async loadSnapshot(signal) {
+      assert.ok(signal instanceof AbortSignal);
+      calls.bridgeLoads++;
+      return {
+        runtimeStatus: { config: { browser_bridge: { enabled: false } } },
+        bridgeStatus: { enabled: false, brokerConnected: false, port: 0 },
+      };
+    },
+    async setEnabled() {
+      assert.fail('unexpected bridge toggle in audit rendering test');
+    },
+    async setFullCdpEnabled() {
+      assert.fail('unexpected CDP toggle in audit rendering test');
+    },
+    async install() {
+      assert.fail('unexpected install in audit rendering test');
+    },
+    async uninstall() {
+      assert.fail('unexpected uninstall in audit rendering test');
+    },
+  };
   const client = {
     async listBrowserOriginGrants() {
       return [];
@@ -127,7 +158,7 @@ function harness(overrides = {}, page = false) {
     cursor = 0;
     effects = [];
     const result = page
-      ? hook({ config, browserIntegrationClientV2: currentClient })
+      ? hook({ config, browserIntegrationClientV2: currentClient, browserBridgeManagementClientV2 })
       : hook(currentClient, config);
     for (const effect of effects) effect();
     return result;
@@ -291,6 +322,8 @@ for (const [outcome, color] of [
       }
     }
     visit(tree);
+    assert.equal(h.calls.bridgeLoads, 1);
+    h.unmount();
     assert.ok(
       badges.some(
         (badge) =>
