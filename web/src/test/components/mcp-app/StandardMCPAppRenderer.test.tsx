@@ -62,8 +62,8 @@ vi.mock('../../../stores/theme', () => ({
 }));
 
 // Mock @mcp-ui/client (lazy loaded)
-vi.mock('@mcp-ui/client', () => ({
-  AppRenderer: ({ toolName, html, onCallTool, toolResourceUri, sandbox }: any) => (
+vi.mock('../../../components/mcp-app/ControlledMCPAppRendererV2', () => ({
+  default: ({ toolName, html, onCallTool, toolResourceUri, sandbox }: any) => (
     <div
       data-testid="app-renderer"
       data-tool={toolName}
@@ -104,6 +104,24 @@ const mockMcpAppAPI = mcpAppAPI as unknown as {
 };
 
 const mockUseMCPClient = useMCPClient as ReturnType<typeof vi.fn>;
+// Renderer-only fixture: actual SDK/Loader retirement is covered independently.
+const fixtureOperation: import('../../../plugins/webOperationAdmissionV2').WebOperationContextV2 = {
+  owner: {},
+  signal: new AbortController().signal,
+  generation:
+    {} as import('../../../plugins/webOperationAdmissionV2').WebOperationContextV2['generation'],
+  check() {},
+  runChild: async (work) => work(fixtureOperation),
+};
+function setMcpState(state: Record<string, unknown>) {
+  mockUseMCPClient.mockReturnValue({
+    operation: fixtureOperation,
+    assertFallback: () => fixtureOperation,
+    retired: false,
+    canFallback: state.status === 'error',
+    ...state,
+  });
+}
 
 beforeEach(() => {
   storeMocks.project.currentProject = { id: 'proj-1', tenant_id: 'tenant-1' };
@@ -113,10 +131,10 @@ beforeEach(() => {
 describe('StandardMCPAppRenderer - Synthetic ID Problem (P2)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default MCP client state: disconnected (Mode B)
-    mockUseMCPClient.mockReturnValue({
+    // Explicit admitted HTTP fallback after WebSocket failure.
+    setMcpState({
       client: null,
-      status: 'disconnected',
+      status: 'error',
       error: null,
       reconnect: vi.fn(),
     });
@@ -292,7 +310,7 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
     it('should not immediately switch to Mode B on temporary disconnect', async () => {
       // Start connected
       const mockReconnect = vi.fn();
-      mockUseMCPClient.mockReturnValue({
+      setMcpState({
         client: { connected: true },
         status: 'connected',
         error: null,
@@ -309,7 +327,7 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
       expect(screen.getByTestId('app-renderer')).toBeInTheDocument();
 
       // Simulate temporary disconnect
-      mockUseMCPClient.mockReturnValue({
+      setMcpState({
         client: null,
         status: 'disconnected',
         error: null,
@@ -329,7 +347,7 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
       const mockReconnect = vi.fn();
 
       // Start disconnected
-      mockUseMCPClient.mockReturnValue({
+      setMcpState({
         client: null,
         status: 'disconnected',
         error: null,
@@ -347,7 +365,7 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
     });
 
     it('should use Mode A when WebSocket is connected', async () => {
-      mockUseMCPClient.mockReturnValue({
+      setMcpState({
         client: { callTool: vi.fn() },
         status: 'connected',
         error: null,
@@ -369,9 +387,9 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
     });
 
     it('should use Mode B when WebSocket is unavailable', async () => {
-      mockUseMCPClient.mockReturnValue({
+      setMcpState({
         client: null,
-        status: 'disconnected',
+        status: 'error',
         error: 'Connection failed',
         reconnect: vi.fn(),
       });
@@ -395,7 +413,7 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
         html: '<div>Test</div>',
       });
 
-      mockUseMCPClient.mockReturnValue({
+      setMcpState({
         client: { callTool: vi.fn() },
         status: 'connected',
         error: null,
@@ -408,7 +426,7 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
       expect(screen.getByTestId('app-renderer')).toBeInTheDocument();
 
       // Brief fluctuation (still connected)
-      mockUseMCPClient.mockReturnValue({
+      setMcpState({
         client: { callTool: vi.fn() },
         status: 'connected',
         error: null,
@@ -430,7 +448,7 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
       // The actual backoff logic is in useMCPClient hook
       const mockReconnect = vi.fn();
 
-      mockUseMCPClient.mockReturnValue({
+      setMcpState({
         client: null,
         status: 'disconnected',
         error: null,
@@ -452,9 +470,9 @@ describe('StandardMCPAppRenderer - Canvas Mode Switching (P3)', () => {
 describe('StandardMCPAppRenderer - General Functionality', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseMCPClient.mockReturnValue({
+    setMcpState({
       client: null,
-      status: 'disconnected',
+      status: 'error',
       error: null,
       reconnect: vi.fn(),
     });

@@ -175,6 +175,50 @@
         {
           "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
           "source_entry": "web/src/stores/sandboxTerminalRequestV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/canvas/CanvasPanel.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/ControlledMCPAppRendererV2.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/mcpAppHttpSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/mcpAppRendererProtocolV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/mcp-app/useMcpAppFrameSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/hooks/useMCPClient.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/mcp/BrowserWebSocketTransport.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/mcpAppService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/projectSandboxService.ts"
         }
       ],
       "api_method": "WS",

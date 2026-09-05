@@ -1,26 +1,10 @@
-/**
- * StandardMCPAppRenderer - Wraps the official @mcp-ui/client AppRenderer
- *
- * Uses the MCP Apps standard SDK for rendering MCP App UIs.
- * The sandbox proxy runs on the backend (different origin) for iframe security.
- *
- * Two client modes:
- * - Mode A (preferred): Direct WebSocket MCP client via `client` prop
- *   Browser <-> WS proxy <-> Sandbox MCP server (2 logical hops)
- * - Mode B (fallback): HTTP callback handlers when WS unavailable
- *   Browser <-> HTTP POST <-> Backend <-> WS <-> Sandbox (5 hops)
- *
- * Two rendering modes:
- * - html prop provided (SSE streaming): renders immediately, no fetch
- * - resourceUri provided (Open App / refresh): fetches HTML via backend proxy
- */
-
 import React, {
   useMemo,
   useCallback,
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   useImperativeHandle,
   forwardRef,
 } from 'react';
@@ -45,165 +29,63 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { Spinner } from '@/components/common/Spinner';
 
 import { buildHostStyles } from './hostStyles';
+import { callMcpAppHttpSessionV2 } from './mcpAppHttpSessionV2';
+import {
+  isRecord,
+  toCallToolResult,
+  getMessageText,
+  getMessageRole,
+  getSandboxProxyUrl,
+  getMcpAppRenderKeyV2,
+} from './mcpAppRendererProtocolV2';
+import { useMcpAppFrameSessionV2 } from './useMcpAppFrameSessionV2';
 
 import type {
   MCPAppUIMetadata,
   MCPAppDisplayMode,
   MCPAppCapabilities,
   MCPAppTool,
-  MCPAppToolCallResponse,
 } from '@/types/mcpApp';
 
 import type { AppRendererHandle, AppRendererProps, McpUiHostContext } from '@mcp-ui/client';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-/**
- * Prefix for synthetic (auto-discovered) MCP App IDs that have no DB record.
- * Uses a non-colliding prefix to avoid clashing with real UUID-based app IDs.
- */
+// Synthetic IDs are a declared wire identifier namespace.
 export const SYNTHETIC_APP_ID_PREFIX = '_synthetic_';
 
-// Lazy import to avoid pulling @mcp-ui/client into the main bundle
-// when MCP Apps are not used.
 const LazyAppRenderer = React.lazy(async () => {
-  const mod = await import('@mcp-ui/client');
-  return { default: mod.AppRenderer };
+  const mod = await import('./ControlledMCPAppRendererV2');
+  return { default: mod.default };
 });
-
-/** Valid display modes for MCP App ui/request-display-mode handling */
-const VALID_DISPLAY_MODES: readonly MCPAppDisplayMode[] = ['inline', 'fullscreen', 'pip'];
 
 type AppMessageHandler = NonNullable<AppRendererProps['onMessage']>;
 type AppSizeChangedHandler = NonNullable<AppRendererProps['onSizeChanged']>;
 type AppOpenLinkHandler = NonNullable<AppRendererProps['onOpenLink']>;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isDisplayMode(value: unknown): value is MCPAppDisplayMode {
-  return typeof value === 'string' && VALID_DISPLAY_MODES.includes(value as MCPAppDisplayMode);
-}
-
-function toCallToolResult(value: unknown): CallToolResult {
-  if (isRecord(value) && Array.isArray(value.content)) {
-    return value as CallToolResult;
-  }
-
-  const text =
-    typeof value === 'string'
-      ? value
-      : (() => {
-          try {
-            return JSON.stringify(value, null, 2);
-          } catch {
-            return String(value);
-          }
-        })();
-
-  return {
-    content: [{ type: 'text', text }],
-  };
-}
-
-function createToolCallResult(
-  content: MCPAppToolCallResponse['content'],
-  isError: boolean
-): CallToolResult {
-  return {
-    content: content as CallToolResult['content'],
-    isError,
-  };
-}
-
-function getMessageText(params: unknown): string | undefined {
-  if (!isRecord(params)) return undefined;
-
-  const content = params.content;
-  if (Array.isArray(content)) {
-    const contentBlocks = content as unknown[];
-    const textBlock = contentBlocks.find((block) => {
-      return isRecord(block) && block.type === 'text' && typeof block.text === 'string';
-    });
-    return isRecord(textBlock) && typeof textBlock.text === 'string' ? textBlock.text : undefined;
-  }
-
-  if (isRecord(content) && typeof content.text === 'string') {
-    return content.text;
-  }
-
-  return undefined;
-}
-
-function getMessageRole(params: unknown): string {
-  if (!isRecord(params) || typeof params.role !== 'string') {
-    return 'user';
-  }
-  return params.role;
-}
-
-/** Imperative handle exposed to parent for lifecycle management */
 export interface StandardMCPAppRendererHandle {
-  /** Call teardownResource() on the inner AppRenderer before unmounting */
   teardown: () => void;
-  /** List tools exposed by the guest MCP App (SEP-1865 P1-3). Resolves to empty array if app has no tools capability. */
   listAppTools: () => Promise<MCPAppTool[]>;
-  /** Call a tool exposed by the guest MCP App (SEP-1865 P1-3). Throws if app has no tools capability. */
   callAppTool: (name: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
 export interface StandardMCPAppRendererProps {
-  /** MCP tool name (required by AppRenderer) */
   toolName: string;
-  /** Resource URI for deferred HTML fetching */
   resourceUri?: string | undefined;
-  /** Pre-fetched HTML content (skips all fetching when provided) */
   html?: string | undefined;
-  /** Tool input arguments */
   toolInput?: Record<string, unknown> | undefined;
-  /** Tool execution result (loosely typed - cast to CallToolResult internally) */
   toolResult?: unknown;
-  /** Whether tool execution was cancelled (SEP-1865 ui/notifications/tool-cancelled) */
   toolCancelled?: boolean | undefined;
-  /** Project ID for backend proxy calls */
   projectId?: string | undefined;
-  /** MCP server name (for proxy routing) */
   serverName?: string | undefined;
-  /** MCP App ID (for efficient tool call proxy - avoids listing all apps) */
   appId?: string | undefined;
-  /** UI metadata with CSP, permissions, and display preferences */
   uiMetadata?: MCPAppUIMetadata | undefined;
-  /** Callback when the app sends a ui/message to add to conversation */
   onMessage?:
     | ((message: { role: string; content: { type: string; text: string } }) => void)
     | undefined;
-  /** Callback when the app updates model context via ui/update-model-context (SEP-1865) */
   onUpdateModelContext?: ((context: Record<string, unknown>) => void) | undefined;
-  /** Callback when the app reports a size change */
   onSizeChanged?:
     | ((size: { width?: number | undefined; height?: number | undefined }) => void)
     | undefined;
-  /** Height of the container */
   height?: string | number | undefined;
-}
-
-/**
- * Get the sandbox proxy URL.
- * The proxy must be on a different origin from the frontend for iframe security.
- */
-function getSandboxProxyUrl(): URL {
-  const SANDBOX_PROXY_VERSION = '20260310-csp-open';
-  // Accept both host-only (localhost:8000) and full URL forms
-  // (http://localhost:8000/api/v1) from env configs.
-  const envApiTarget =
-    import.meta.env.VITE_API_HOST ||
-    (import.meta.env as { VITE_API_URL?: string | undefined }).VITE_API_URL ||
-    (window.location.host.includes(':3000') ? 'localhost:8000' : window.location.host);
-  const apiHost = envApiTarget.replace(/^[a-z]+:\/\//i, '').split('/')[0] || 'localhost:8000';
-  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-  const url = new URL(`${protocol}//${apiHost}/static/sandbox_proxy.html`);
-  url.searchParams.set('v', SANDBOX_PROXY_VERSION);
-  return url;
 }
 
 export const StandardMCPAppRenderer = forwardRef<
@@ -237,8 +119,6 @@ export const StandardMCPAppRenderer = forwardRef<
       },
       [t]
     );
-    // Fall back to the active conversation before the global project store. The store can briefly
-    // point at another tenant during route transitions, while the conversation owns this MCP app.
     const storeProjectId = useProjectStore((state) => state.currentProject?.id);
     const conversationProjectId = useConversationsStore(
       (state) => state.currentConversation?.project_id
@@ -250,13 +130,10 @@ export const StandardMCPAppRenderer = forwardRef<
       width: 0,
       height: 0,
     });
-    // Defer hostContext until the app bridge is connected to avoid
-    // "Not connected" errors from @mcp-ui/client setHostContext.
     const [appInitialized, setAppInitialized] = useState(false);
     const [displayMode, setDisplayMode] = useState<MCPAppDisplayMode>('inline');
     const fullscreenExitRef = useRef<HTMLButtonElement>(null);
 
-    // Fullscreen overlay: Escape exits and focus moves into the overlay.
     useEffect(() => {
       if (displayMode !== 'fullscreen') return undefined;
       const handleKeyDown = (event: KeyboardEvent) => {
@@ -272,19 +149,10 @@ export const StandardMCPAppRenderer = forwardRef<
     }, [displayMode]);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // SEP-1865 P1-1: Track app capabilities parsed from ui/initialize postMessage
     const [appCapabilities, setAppCapabilities] = useState<MCPAppCapabilities | null>(null);
 
-    // SEP-1865 P1-3: JSON-RPC request infrastructure for app-exposed tools.
-    // We send JSON-RPC requests to the iframe via postMessage and resolve via
-    // a pending-requests map keyed by request id.
-    const rpcIdCounter = useRef(0);
-    const pendingRpcRequests = useRef<
-      Map<number, { resolve: (value: unknown) => void; reject: (err: Error) => void }>
-    >(new Map());
-
-    // Mode A: Direct WebSocket MCP client (low-latency, 2-hop)
-    // Memoize reconnectionConfig to prevent reconnection loops
+    const frameCleanup = useRef<() => void>(() => {});
+    const frameOwner = useRef<unknown>(null);
     const mcpClientReconnectionConfig = useMemo(
       () => ({
         maxAttempts: 5,
@@ -298,83 +166,59 @@ export const StandardMCPAppRenderer = forwardRef<
     const {
       client: mcpClient,
       status: mcpStatus,
-      isInGracePeriod,
+      operation,
+      canFallback,
+      assertFallback,
+      retired,
     } = useMCPClient({
       projectId: effectiveProjectId,
+      appId,
+      serverName,
+      toolName,
+      resourceUri:
+        resourceUri ||
+        uiMetadata?.resourceUri ||
+        (uiMetadata as { resource_uri?: string } | undefined)?.resource_uri,
+      onAdmitted: (admitted) => () => {
+        if (frameOwner.current !== admitted) return;
+        frameCleanup.current();
+        containerRef.current?.querySelectorAll('iframe').forEach((frame) => {
+          frame.src = 'about:blank';
+        });
+      },
       enabled: !!effectiveProjectId && !!serverName,
       reconnectionConfig: mcpClientReconnectionConfig,
     });
 
-    // Only use direct client if connected OR in grace period (prevents UI flickering)
-    // During grace period, we keep using the last known good state
     const useDirectClient = mcpClient !== null && mcpStatus === 'connected';
 
-    // Determine if we should show Mode B (HTTP fallback)
-    // Only switch to Mode B if:
-    // 1. We're not connected AND not connecting (to avoid interrupting initial connection)
-    // 2. We're NOT in grace period
-    // 3. Connection has failed completely (status === 'error')
-    const isConnecting = mcpStatus === 'connecting';
-    const shouldUseFallback =
-      !useDirectClient && !isInGracePeriod && !isConnecting && mcpStatus === 'error';
-    const shouldUseHttpToolCall = shouldUseFallback || !mcpClient;
-
+    const shouldUseFallback = canFallback && !retired;
+    const shouldUseHttpToolCall = shouldUseFallback;
+    const requireOperation = useCallback(() => {
+      if (!operation || retired) throw new DOMException('MCP app session retired', 'AbortError');
+      operation.check();
+      return operation;
+    }, [operation, retired]);
+    const requireFallback = useCallback(() => {
+      requireOperation();
+      const active = assertFallback();
+      if (active !== operation) throw new DOMException('MCP app session replaced', 'AbortError');
+    }, [requireOperation, assertFallback, operation]);
     const appRendererRef = useRef<AppRendererHandle | null>(null);
     const computedTheme = useThemeStore((s) => s.computedTheme);
 
-    // Helper: send a JSON-RPC request to the guest app iframe and await the response.
-    // Returns a promise that resolves when the iframe posts back a matching JSON-RPC response.
-    // Narrow postMessage targets to the sandbox iframe origin when it is an
-    // absolute http(s) URL; fall back to '*' for srcdoc/about:blank frames.
-    const resolveIframeTargetOrigin = (iframe: HTMLIFrameElement): string => {
-      try {
-        const url = new URL(iframe.src);
-        return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : '*';
-      } catch {
-        return '*';
-      }
-    };
-
-    const sendRpcToApp = useCallback(
-      (method: string, params?: Record<string, unknown>): Promise<unknown> => {
-        return new Promise<unknown>((resolve, reject) => {
-          const iframe = containerRef.current?.querySelector('iframe');
-          if (!iframe?.contentWindow) {
-            reject(new Error('No iframe found for app communication'));
-            return;
-          }
-          const id = ++rpcIdCounter.current;
-          pendingRpcRequests.current.set(id, { resolve, reject });
-          iframe.contentWindow.postMessage(
-            { jsonrpc: '2.0', id, method, ...(params !== undefined ? { params } : {}) },
-            resolveIframeTargetOrigin(iframe)
-          );
-          // Timeout after 30s to prevent memory leaks from unresolved promises
-          setTimeout(() => {
-            if (pendingRpcRequests.current.has(id)) {
-              pendingRpcRequests.current.delete(id);
-              reject(new Error(`RPC call '${method}' timed out after 30s`));
-            }
-          }, 30_000);
-        });
-      },
-      []
-    );
-
-    // One-way notification helper (no response expected) -- SEP-1865 P2-1
-    const sendNotificationToApp = useCallback(
-      (method: string, params?: Record<string, unknown>) => {
-        const iframe = containerRef.current?.querySelector('iframe');
-        if (!iframe?.contentWindow) return;
-        iframe.contentWindow.postMessage(
-          { jsonrpc: '2.0', method, ...(params !== undefined ? { params } : {}) },
-          resolveIframeTargetOrigin(iframe)
-        );
-      },
-      []
-    );
-
-    // Forward toolResult changes as progressive chunks to app iframe (SEP-1865 P2-1)
+    const {
+      sendRpc: sendRpcToApp,
+      notify: sendNotificationToApp,
+      clear: clearFrameRequests,
+    } = useMcpAppFrameSessionV2(operation, containerRef, setAppCapabilities, setDisplayMode);
+    useLayoutEffect(() => {
+      frameCleanup.current = clearFrameRequests;
+      frameOwner.current = operation;
+      return () => {
+        if (frameOwner.current === operation) frameOwner.current = null;
+      };
+    }, [clearFrameRequests, operation]);
     useEffect(() => {
       if (toolResult != null && appInitialized) {
         sendNotificationToApp('ui/notifications/tool-result-chunk', {
@@ -384,43 +228,53 @@ export const StandardMCPAppRenderer = forwardRef<
       }
     }, [toolResult, appInitialized, toolName, sendNotificationToApp]);
 
-    // Expose teardown + app-tool methods to parent (SEP-1865 P1-3)
     useImperativeHandle(
       ref,
       () => ({
         teardown: () => {
+          clearFrameRequests();
           try {
-            appRendererRef.current?.teardownResource();
+            requireOperation();
+            void Promise.resolve(appRendererRef.current?.teardownResource()).catch(() => {
+              /* A retired app may reject teardown. */
+            });
           } catch {
-            // Ignore errors during teardown
+            /* An already-retired bridge needs no teardown notification. */
           }
         },
         listAppTools: async (): Promise<MCPAppTool[]> => {
+          requireOperation();
           if (!appCapabilities?.tools) return [];
           try {
             const result = await sendRpcToApp('tools/list');
             const data = result as { tools?: MCPAppTool[] } | undefined;
             return data?.tools ?? [];
           } catch (err) {
+            requireOperation();
             console.error('[StandardMCPAppRenderer] listAppTools failed:', err);
             return [];
           }
         },
         callAppTool: async (name: string, args?: Record<string, unknown>): Promise<unknown> => {
+          requireOperation();
           if (!appCapabilities?.tools) {
             throw new Error('App does not declare tools capability');
           }
           return sendRpcToApp('tools/call', { name, arguments: args ?? {} });
         },
       }),
-      [appCapabilities, sendRpcToApp]
+      [appCapabilities, sendRpcToApp, requireOperation, clearFrameRequests]
     );
 
-    // Track container dimensions via ResizeObserver for hostContext
     useEffect(() => {
       const el = containerRef.current;
-      if (!el) return;
+      if (!el || !operation) return;
       const observer = new ResizeObserver((entries) => {
+        try {
+          operation.check();
+        } catch {
+          return;
+        }
         const entry = entries[0];
         if (entry) {
           setContainerSize({
@@ -430,47 +284,30 @@ export const StandardMCPAppRenderer = forwardRef<
         }
       });
       observer.observe(el);
-      return () => {
+      const stop = () => {
         observer.disconnect();
       };
-    }, []);
-
-    // Defer hostContext until the sandbox bridge is connected to avoid
-    // "Not connected" Promise rejections from @mcp-ui/client setHostContext.
-    //
-    // The bridge connects after: React.lazy bundle download + iframe load +
-    // PROXY_READY handshake. On cold cache this can take 500-1000ms total.
-    //
-    // We reset appInitialized when appId/effectiveUri changes so a new app
-    // opened with the stable key="mcp-app-renderer" properly re-initializes.
-    //
-    // We also set appInitialized=true immediately when the app sends a
-    // size-change notification (handled in handleSizeChanged), giving an
-    // early signal for apps that initialize quickly.
-    useEffect(() => {
-      setAppInitialized(false);
-
-      if (useDirectClient) {
-        // Mode A: WS client connected; iframe proxy handshake still needed.
-        // 1500ms covers lazy-bundle load + proxy handshake on cold cache.
-        const timer = setTimeout(() => {
-          setAppInitialized(true);
-        }, 1500);
-        return () => {
-          clearTimeout(timer);
-        };
-      }
-      // Mode B: no direct client. 3000ms generous fallback for cold cache.
-      // handleSizeChanged fires earlier when the app reports its size.
-      const timer = setTimeout(() => {
-        setAppInitialized(true);
-      }, 3000);
+      operation.signal.addEventListener('abort', stop, { once: true });
       return () => {
-        clearTimeout(timer);
+        operation.signal.removeEventListener('abort', stop);
+        observer.disconnect();
       };
-    }, [useDirectClient, appId, resourceUri]);
+    }, [operation]);
 
-    // Normalize: treat empty strings as undefined
+    useLayoutEffect(() => {
+      setAppInitialized(false);
+      setError(null);
+      setAppCapabilities(null);
+    }, [appId, resourceUri, operation]);
+    const handleInitialized = useCallback(() => {
+      try {
+        requireOperation();
+      } catch {
+        return;
+      }
+      setAppInitialized(true);
+    }, [requireOperation]);
+
     const effectiveHtml = html || undefined;
     const effectiveUri =
       resourceUri ||
@@ -492,9 +329,6 @@ export const StandardMCPAppRenderer = forwardRef<
         url: getSandboxProxyUrl(),
         permissions: 'allow-scripts allow-same-origin allow-forms',
       };
-      // Forward CSP metadata to sandbox proxy for enforcement
-      // Includes frameDomains and baseUriDomains from MCPAppUIMetadata
-      // even though McpUiResourceCsp does not define them (SEP-1865 extension).
       if (uiMetadata?.csp) {
         const csp: {
           connectDomains?: string[];
@@ -519,10 +353,6 @@ export const StandardMCPAppRenderer = forwardRef<
       return config;
     }, [uiMetadata?.csp]);
 
-    // SEP-1865 P0-1: Enforce iframe Feature Policy / Permissions Policy from
-    // MCPAppUIPermissions. The @mcp-ui/client SandboxConfig type has no `allow`
-    // prop, so we compute the allow string and apply it to the iframe DOM element
-    // after render via a MutationObserver.
     const iframeAllowPolicy = useMemo(() => {
       const permissions = uiMetadata?.permissions;
       if (!permissions) return '';
@@ -535,9 +365,13 @@ export const StandardMCPAppRenderer = forwardRef<
     }, [uiMetadata?.permissions]);
 
     useEffect(() => {
-      if (!iframeAllowPolicy || !containerRef.current) return;
-      // Apply to any existing iframes
+      if (!iframeAllowPolicy || !containerRef.current || !operation) return;
       const applyAllow = (): void => {
+        try {
+          operation.check();
+        } catch {
+          return;
+        }
         const iframes = containerRef.current?.querySelectorAll('iframe');
         iframes?.forEach((iframe) => {
           if (iframe.allow !== iframeAllowPolicy) {
@@ -546,23 +380,22 @@ export const StandardMCPAppRenderer = forwardRef<
         });
       };
       applyAllow();
-      // Watch for new iframes added by @mcp-ui/client
       const observer = new MutationObserver(() => {
         applyAllow();
       });
       observer.observe(containerRef.current, { childList: true, subtree: true });
-      return () => {
+      const stop = () => {
         observer.disconnect();
       };
-    }, [iframeAllowPolicy]);
+      operation.signal.addEventListener('abort', stop, { once: true });
+      return () => {
+        operation.signal.removeEventListener('abort', stop);
+        observer.disconnect();
+      };
+    }, [iframeAllowPolicy, operation]);
 
-    // SEP-1865 host styles: map Ant Design tokens to standardized CSS variables
     const hostStyles = useMemo(() => buildHostStyles(computedTheme), [computedTheme]);
 
-    // Host context per SEP-1865: theme, styles, dimensions, display modes
-    // Only provided after app initialization to avoid "Not connected" errors
-    // from @mcp-ui/client's internal setHostContext -> notification call.
-    // When hostContext prop changes, @mcp-ui/client sends ui/notifications/host-context-changed.
     const hostContext = useMemo<McpUiHostContext | undefined>(() => {
       if (!appInitialized) return undefined;
 
@@ -583,8 +416,6 @@ export const StandardMCPAppRenderer = forwardRef<
         availableDisplayModes: ['inline', 'fullscreen', 'pip'],
         locale: navigator.language,
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        // SEP-1865 P0-2: Advertise host capabilities to the guest app.
-        // McpUiHostContext has [key: string]: unknown so extra keys are safe.
         hostCapabilities: {
           openLinks: {},
           serverTools: { listChanged: false },
@@ -602,153 +433,70 @@ export const StandardMCPAppRenderer = forwardRef<
       displayMode,
     ]);
 
-    // Handler for resources/read requests (when html prop is not provided)
-    // @mcp-ui/client expects the MCP format { contents: [{ uri, mimeType, text }] }
-    // It will extract the text internally
     const handleReadResource = useCallback<NonNullable<AppRendererProps['onReadResource']>>(
       async (params) => {
-        logger.debug('[StandardMCPAppRenderer] handleReadResource called:', {
-          uri: params.uri,
-          effectiveProjectId,
-          serverName,
-        });
-
-        if (!effectiveProjectId) {
-          const error = 'projectId required for resource fetching';
-          console.error('[StandardMCPAppRenderer] handleReadResource error:', error);
-          throw new Error(error);
-        }
-
-        try {
-          const result = await mcpAppAPI.readResource(params.uri, effectiveProjectId, serverName);
-          logger.debug('[StandardMCPAppRenderer] readResource result:', result);
-
-          // Return the full MCP format - @mcp-ui/client will extract the text
-          // The API returns { contents: [{ uri, mimeType, text }] }
+        const parent = requireOperation();
+        if (!effectiveProjectId) throw new Error('projectId required for resource fetching');
+        return parent.runChild(async (child) => {
+          child.check();
+          const result = await mcpAppAPI.readResource(params.uri, effectiveProjectId, serverName, {
+            operation: child,
+            signal: child.signal,
+          });
+          child.check();
           return result;
-        } catch (err) {
-          console.error('[StandardMCPAppRenderer] handleReadResource failed:', err);
-          throw err;
-        }
+        });
       },
-      [effectiveProjectId, serverName]
+      [requireOperation, effectiveProjectId, serverName]
     );
-
-    // Handler for tool calls from the guest app back to its MCP server
-
     const handleCallTool = useCallback<NonNullable<AppRendererProps['onCallTool']>>(
       async (params) => {
-        if (!effectiveProjectId) {
-          throw new Error('projectId required for tool calls');
-        }
-
-        // For synthetic auto-discovered apps (no DB record), use the direct proxy
-        // endpoint that routes by project_id + server_name without DB lookup.
-        if (appId?.startsWith(SYNTHETIC_APP_ID_PREFIX) && serverName) {
-          // Log warning when using synthetic ID for diagnostics
-          console.warn(
-            `[StandardMCPAppRenderer] Using synthetic app ID "${appId}" for tool call. ` +
-              `Attempting to find real app via server_name="${serverName}" tool_name="${params.name}"`
-          );
-
-          // Try to find real app by server_name + tool_name for better routing
-          try {
-            const apps = await mcpAppAPI.list(effectiveProjectId);
-            const realApp = apps.find(
-              (a) => a.server_name === serverName && a.tool_name === params.name
-            );
-            if (realApp) {
-              console.info(
-                `[StandardMCPAppRenderer] Found real app ID "${realApp.id}" for synthetic "${appId}", using real ID for tool call`
-              );
-              const result = await mcpAppAPI.proxyToolCall(realApp.id, {
-                tool_name: params.name,
-                arguments: params.arguments ?? {},
-              });
-              return createToolCallResult(result.content, result.is_error);
-            }
-          } catch (err) {
-            console.warn(
-              `[StandardMCPAppRenderer] Failed to lookup real app for synthetic ID, falling back to direct proxy:`,
-              err
-            );
-          }
-
-          // Fallback to direct proxy if no real app found
-          const result = await mcpAppAPI.proxyToolCallDirect({
-            project_id: effectiveProjectId,
-            server_name: serverName,
-            tool_name: params.name,
-            arguments: params.arguments ?? {},
-          });
-          return createToolCallResult(result.content, result.is_error);
-        }
-
-        // Fast path: use appId directly if available (DB-backed app)
-        if (appId) {
-          const result = await mcpAppAPI.proxyToolCall(appId, {
-            tool_name: params.name,
-            arguments: params.arguments ?? {},
-          });
-          return createToolCallResult(result.content, result.is_error);
-        }
-
-        // Fallback: find the app by server/tool name
-        const apps = await mcpAppAPI.list(effectiveProjectId);
-        const app = apps.find((a) => a.server_name === serverName || a.tool_name === toolName);
-        if (!app) {
-          // Last resort: try direct proxy if we have a serverName
-          if (serverName) {
-            const result = await mcpAppAPI.proxyToolCallDirect({
-              project_id: effectiveProjectId,
-              server_name: serverName,
-              tool_name: params.name,
-              arguments: params.arguments ?? {},
-            });
-            return createToolCallResult(result.content, result.is_error);
-          }
-          return {
-            content: [{ type: 'text' as const, text: `No app found for tool ${toolName}` }],
-            isError: true,
-          };
-        }
-        const result = await mcpAppAPI.proxyToolCall(app.id, {
-          tool_name: params.name,
-          arguments: params.arguments ?? {},
-        });
-        return createToolCallResult(result.content, result.is_error);
+        requireFallback();
+        const parent = requireOperation();
+        if (!effectiveProjectId) throw new Error('projectId required for tool calls');
+        return callMcpAppHttpSessionV2(
+          parent,
+          { projectId: effectiveProjectId, serverName, appId, toolName },
+          params,
+          requireFallback,
+          translate('common.notFound', 'Not Found')
+        );
       },
-      [effectiveProjectId, serverName, toolName, appId]
+      [
+        requireFallback,
+        requireOperation,
+        effectiveProjectId,
+        serverName,
+        appId,
+        toolName,
+        translate,
+      ]
     );
-
-    // Handler for resources/list requests from the guest app
     const handleListResources = useCallback<
       NonNullable<AppRendererProps['onListResources']>
     >(async () => {
-      if (!effectiveProjectId) {
-        return { resources: [] };
-      }
-      try {
-        const result = await mcpAppAPI.listResources(effectiveProjectId, serverName);
+      requireFallback();
+      const parent = requireOperation();
+      if (!effectiveProjectId) throw new Error('projectId required for resources');
+      return parent.runChild(async (child) => {
+        child.check();
+        const result = await mcpAppAPI.listResources(effectiveProjectId, serverName, {
+          operation: child,
+          signal: child.signal,
+        });
+        child.check();
         return {
           resources: result.resources.map((resource) => ({
             ...resource,
             name: resource.name ?? resource.uri,
           })),
         };
-      } catch {
-        return { resources: [] };
-      }
-    }, [effectiveProjectId, serverName]);
+      });
+    }, [requireFallback, requireOperation, effectiveProjectId, serverName]);
 
-    // Handler for ui/message from the app (SEP-1865 section: MCP Apps Specific Messages)
-    // Also handles ui/update-model-context if the app sends context via the message channel.
-    //
-    // @mcp-ui/client validates ui/message with schema: { role: 'user', content: ContentBlock[] }
-    // where content is an ARRAY of content blocks. We extract the first text block.
     const handleMessage: AppMessageHandler = useCallback(
       (params: unknown) => {
-        // Route ui/update-model-context
+        requireOperation();
         if (isRecord(params) && params.method === 'ui/update-model-context') {
           const context: unknown = params.context;
           if (isRecord(context)) {
@@ -756,10 +504,6 @@ export const StandardMCPAppRenderer = forwardRef<
           }
           return Promise.resolve({});
         }
-        // Route regular ui/message
-        // content can be either:
-        //   - An array of ContentBlock: [{type:'text', text:'...'}] (per @mcp-ui/client spec)
-        //   - A single object: {type:'text', text:'...'} (legacy/simplified format)
         if (onMessage) {
           const text = getMessageText(params);
           if (text) {
@@ -771,42 +515,52 @@ export const StandardMCPAppRenderer = forwardRef<
         }
         return Promise.resolve({});
       },
-      [onMessage, onUpdateModelContext]
+      [onMessage, onUpdateModelContext, requireOperation]
     );
 
-    // Handler for ui/notifications/size-changed from the app (SEP-1865)
-    // Also fires immediately when the bridge is working — used as an early
-    // "ready" signal to unblock hostContext delivery before the fallback timer.
     const handleSizeChanged = useCallback<AppSizeChangedHandler>(
       (params) => {
-        // Bridge is confirmed live: app can only send notifications after connect()
-        setAppInitialized(true);
+        try {
+          requireOperation();
+        } catch {
+          return;
+        }
         onSizeChanged?.({ width: params.width, height: params.height });
       },
-      [onSizeChanged]
+      [onSizeChanged, requireOperation]
     );
 
-    const handleOpenLink = useCallback<AppOpenLinkHandler>(({ url }) => {
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(url, window.location.origin);
-      } catch {
+    const handleOpenLink = useCallback<AppOpenLinkHandler>(
+      ({ url }) => {
+        requireOperation();
+        let parsedUrl: URL;
+        try {
+          parsedUrl = new URL(url, window.location.origin);
+        } catch {
+          return Promise.resolve({});
+        }
+        if (!['http:', 'https:', 'mailto:'].includes(parsedUrl.protocol)) {
+          return Promise.resolve({});
+        }
+        window.open(parsedUrl.toString(), '_blank', 'noopener,noreferrer');
         return Promise.resolve({});
-      }
-      if (!['http:', 'https:', 'mailto:'].includes(parsedUrl.protocol)) {
-        return Promise.resolve({});
-      }
-      window.open(parsedUrl.toString(), '_blank', 'noopener,noreferrer');
-      return Promise.resolve({});
-    }, []);
+      },
+      [requireOperation]
+    );
 
-    const handleError = useCallback((err: Error) => {
-      console.error('[StandardMCPAppRenderer] Error:', err);
-      setError(err.message);
-    }, []);
+    const handleError = useCallback(
+      (err: Error) => {
+        try {
+          requireOperation();
+        } catch {
+          return;
+        }
+        console.error('[StandardMCPAppRenderer] Error:', err);
+        setError(err.message);
+      },
+      [requireOperation]
+    );
 
-    // Debug log for props being passed to AppRenderer
-    // MUST be called before any conditional returns to satisfy React hooks rules
     useEffect(() => {
       logger.debug('[StandardMCPAppRenderer] Props for AppRenderer:', {
         effectiveHtml: effectiveHtml ? `${effectiveHtml.slice(0, 50)}...` : undefined,
@@ -818,101 +572,7 @@ export const StandardMCPAppRenderer = forwardRef<
       });
     }, [effectiveHtml, effectiveUri, effectiveProjectId, serverName, shouldUseFallback, mcpClient]);
 
-    // Listen for ui/request-display-mode JSON-RPC messages from MCP App iframes.
-    // The @mcp-ui/client library does NOT expose a callback for this method,
-    // so we handle it manually via the postMessage bridge.
-    useEffect(() => {
-      const handleDisplayModeRequest = (event: MessageEvent<unknown>): void => {
-        // Only process object payloads that look like JSON-RPC
-        if (typeof event.data !== 'object' || event.data === null) return;
-
-        const data = event.data as Record<string, unknown>;
-        if (data.jsonrpc !== '2.0' || data.method !== 'ui/request-display-mode') return;
-
-        // Validate params.mode
-        const params = isRecord(data.params) ? data.params : undefined;
-        const requestedMode = params?.mode;
-        if (!isDisplayMode(requestedMode)) {
-          return;
-        }
-
-        // Update local state
-        setDisplayMode(requestedMode);
-
-        // Send JSON-RPC success response back to the source iframe
-        if (event.source) {
-          (event.source as Window).postMessage(
-            {
-              jsonrpc: '2.0',
-              id: data.id,
-              result: { mode: requestedMode },
-            },
-            event.origin
-          );
-        }
-      };
-
-      window.addEventListener('message', handleDisplayModeRequest);
-      return () => {
-        window.removeEventListener('message', handleDisplayModeRequest);
-      };
-    }, []);
-
-    // SEP-1865 P1-1: Listen for ui/initialize JSON-RPC request from the guest app
-    // to capture appCapabilities. Also handles JSON-RPC responses for the
-    // sendRpcToApp request/response pattern (Fix 6).
-    useEffect(() => {
-      const handleAppMessage = (event: MessageEvent<unknown>): void => {
-        if (typeof event.data !== 'object' || event.data === null) return;
-        const data = event.data as Record<string, unknown>;
-        if (data.jsonrpc !== '2.0') return;
-
-        // Case 1: JSON-RPC response (has 'id' + 'result' or 'error', no 'method')
-        // This resolves pending sendRpcToApp promises.
-        if (
-          typeof data.id === 'number' &&
-          !('method' in data) &&
-          ('result' in data || 'error' in data)
-        ) {
-          const pending = pendingRpcRequests.current.get(data.id);
-          if (pending) {
-            pendingRpcRequests.current.delete(data.id);
-            if ('error' in data) {
-              const message =
-                isRecord(data.error) && typeof data.error.message === 'string'
-                  ? data.error.message
-                  : 'RPC error';
-              pending.reject(new Error(message));
-            } else {
-              pending.resolve(data.result);
-            }
-          }
-          return;
-        }
-
-        // Case 2: ui/initialize request from the guest -- extract appCapabilities
-        if (data.method === 'ui/initialize') {
-          const params = isRecord(data.params) ? data.params : undefined;
-          if (isRecord(params?.appCapabilities)) {
-            setAppCapabilities(params.appCapabilities as MCPAppCapabilities);
-          }
-          return;
-        }
-
-        // Case 3: ui/notifications/initialized notification -- secondary signal
-        if (data.method === 'ui/notifications/initialized') {
-          const params = isRecord(data.params) ? data.params : undefined;
-          if (isRecord(params?.appCapabilities)) {
-            setAppCapabilities(params.appCapabilities as MCPAppCapabilities);
-          }
-        }
-      };
-
-      window.addEventListener('message', handleAppMessage);
-      return () => {
-        window.removeEventListener('message', handleAppMessage);
-      };
-    }, []);
+    if (!operation || retired) return <Spinner />;
 
     if (error) {
       return (
@@ -936,8 +596,6 @@ export const StandardMCPAppRenderer = forwardRef<
       );
     }
 
-    // AppRenderer requires either html, client, or (toolResourceUri + onReadResource).
-    // If none is available, show tool result as fallback instead of crashing.
     if (!effectiveHtml && !effectiveUri) {
       return (
         <div className="h-full overflow-auto p-4" style={{ height }}>
@@ -960,7 +618,6 @@ export const StandardMCPAppRenderer = forwardRef<
       );
     }
 
-    // Determine container border based on prefersBorder metadata
     const borderStyle =
       uiMetadata?.prefersBorder === false
         ? {}
@@ -968,7 +625,6 @@ export const StandardMCPAppRenderer = forwardRef<
     const portalSurfaceBackground =
       computedTheme === 'dark' ? 'var(--color-surface-dark)' : 'var(--color-surface-light)';
 
-    // Core content rendered by AppRenderer (shared across all display modes)
     const appContent = (
       <div
         ref={displayMode === 'inline' ? containerRef : undefined}
@@ -982,13 +638,16 @@ export const StandardMCPAppRenderer = forwardRef<
           <React.Suspense
             fallback={
               <div className="flex items-center justify-center" style={{ height }}>
-                <Spinner tip={translate('components.mcpApp.renderer.loading', 'Loading MCP App…')} />
+                <Spinner
+                  tip={translate('components.mcpApp.renderer.loading', 'Loading MCP App…')}
+                />
               </div>
             }
           >
             <LazyAppRenderer
-              key="mcp-app-renderer"
+              key={getMcpAppRenderKeyV2(operation)}
               ref={appRendererRef}
+              operation={operation}
               toolName={toolName}
               sandbox={sandboxConfig}
               {...(effectiveHtml != null ? { html: effectiveHtml } : {})}
@@ -997,7 +656,7 @@ export const StandardMCPAppRenderer = forwardRef<
               {...(toolCancelled != null ? { toolCancelled } : {})}
               {...(toolResult != null ? { toolResult: toCallToolResult(toolResult) } : {})}
               {...(hostContext != null ? { hostContext } : {})}
-              {...(!shouldUseFallback && mcpClient
+              {...(useDirectClient && mcpClient
                 ? { client: mcpClient as unknown as NonNullable<AppRendererProps['client']> }
                 : {})}
               {...(effectiveUri ? { onReadResource: handleReadResource } : {})}
@@ -1005,6 +664,7 @@ export const StandardMCPAppRenderer = forwardRef<
               {...(shouldUseFallback ? { onListResources: handleListResources } : {})}
               onMessage={handleMessage}
               onSizeChanged={handleSizeChanged}
+              onInitialized={handleInitialized}
               onError={handleError}
               onOpenLink={handleOpenLink}
             />
@@ -1013,7 +673,6 @@ export const StandardMCPAppRenderer = forwardRef<
       </div>
     );
 
-    // SEP-1865 P1-2: Render based on display mode
     if (displayMode === 'fullscreen') {
       return (
         <>
@@ -1124,7 +783,6 @@ export const StandardMCPAppRenderer = forwardRef<
       );
     }
 
-    // Default: inline mode
     return appContent;
   }
 );

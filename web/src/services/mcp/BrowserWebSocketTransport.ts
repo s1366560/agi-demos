@@ -1,117 +1,183 @@
-/**
- * Browser-compatible WebSocket transport for the MCP SDK Client.
- *
- * Implements the Transport interface using the browser's native WebSocket API.
- * Designed for direct communication between browser MCP clients and sandbox
- * MCP servers via backend WebSocket proxy.
- */
+import { JSONRPCMessageSchema, type JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+
+import {
+  WebOperationCleanupErrorV2,
+  type WebOperationContextV2,
+} from '@/plugins/webOperationAdmissionV2';
 
 import type {
   Transport,
   TransportSendOptions,
 } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 export interface BrowserWebSocketTransportOptions {
-  /** WebSocket URL to connect to */
   url: string;
-  /** Connection timeout in milliseconds (default: 10000) */
+  operation: WebOperationContextV2;
+  onRetire?: (() => void) | undefined;
   connectTimeout?: number | undefined;
 }
-
-/**
- * MCP Transport implementation using browser's native WebSocket.
- *
- * Usage:
- *   const transport = new BrowserWebSocketTransport({ url: 'ws://...' });
- *   const client = new Client({ name: 'web', version: '1.0.0' });
- *   await client.connect(transport); // handles initialize handshake
- */
+function completion() {
+  let resolve!: () => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<void>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  void promise.catch(() => undefined);
+  return { promise, resolve, reject };
+}
+const cancelled = () => new DOMException('MCP transport retired', 'AbortError');
+/** Logical retirement settles SDK RPCs immediately; physical close retains the parent operation. */
 export class BrowserWebSocketTransport implements Transport {
   private ws: WebSocket | null = null;
-  private readonly url: string;
-  private readonly connectTimeout: number;
-
+  private readonly options: Readonly<BrowserWebSocketTransportOptions>;
+  private started = false;
+  private retired = false;
+  private notified = false;
+  private readonly opened = completion();
+  private readonly closed = completion();
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private readonly cleanupErrors: unknown[] = [];
+  private closing: Promise<void> | undefined;
   onclose?: () => void;
   onerror?: (error: Error) => void;
   onmessage?: (message: JSONRPCMessage) => void;
   sessionId?: string;
-
   constructor(options: BrowserWebSocketTransportOptions) {
-    this.url = options.url;
-    this.connectTimeout = options.connectTimeout ?? 10_000;
+    this.options = Object.freeze({ ...options });
   }
-
-  async start(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const ws = new WebSocket(this.url);
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        // Clean up event handlers to prevent memory leaks
-        ws.onopen = null;
-        ws.onerror = null;
-        ws.onmessage = null;
-        ws.onclose = null;
-        ws.close();
-        reject(new Error(`WebSocket connection timeout after ${String(this.connectTimeout)}ms`));
-      }, this.connectTimeout);
-
+  private check(): void {
+    if (this.retired) throw cancelled();
+    this.options.operation.check();
+  }
+  private live(): boolean {
+    try {
+      this.check();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  private readonly onAbort = () => {
+    void this.close().catch(() => undefined);
+  };
+  start(): Promise<void> {
+    if (this.started) return Promise.reject(new Error('MCP transport already started'));
+    this.started = true;
+    this.options.operation.signal.addEventListener('abort', this.onAbort, { once: true });
+    try {
+      this.check();
+      const ws = new WebSocket(this.options.url);
+      this.ws = ws;
+      this.timer = setTimeout(() => {
+        const error = new Error(
+          `WebSocket connection timeout after ${String(this.options.connectTimeout ?? 10000)}ms`
+        );
+        this.opened.reject(error);
+        void this.close().catch(() => undefined);
+      }, this.options.connectTimeout ?? 10000);
       ws.onopen = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        this.ws = ws;
-        resolve();
+        if (!this.live()) {
+          this.closeSocket();
+          return;
+        }
+        this.clearTimer();
+        this.opened.resolve();
       };
-
-      ws.onerror = (event) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        const error = new Error(`WebSocket connection failed: ${this.url}`);
+      ws.onerror = () => {
+        if (!this.live()) return;
+        const error = new Error('MCP WebSocket connection failed');
+        this.opened.reject(error);
         this.onerror?.(error);
-        reject(error);
-        // Suppress unhandled event after rejection
-        void event;
       };
-
       ws.onmessage = (event) => {
+        if (!this.live() || typeof event.data !== 'string') return;
         try {
-          const message = JSON.parse(event.data as string) as JSONRPCMessage;
+          const message = JSONRPCMessageSchema.parse(JSON.parse(event.data));
           this.onmessage?.(message);
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          this.onerror?.(new Error(`Failed to parse message: ${message}`));
+        } catch (error) {
+          this.onerror?.(error instanceof Error ? error : new Error('Invalid MCP message'));
         }
       };
-
       ws.onclose = () => {
         this.ws = null;
-        this.onclose?.();
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        this.retire();
+        this.closed.resolve();
       };
-    });
+    } catch (error) {
+      this.opened.reject(error);
+      this.retire();
+      if (!this.ws) this.closed.resolve();
+    }
+    return this.opened.promise;
   }
-
   send(message: JSONRPCMessage, _options?: TransportSendOptions): Promise<void> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket not connected');
+    try {
+      this.check();
+      if (this.ws?.readyState !== WebSocket.OPEN) throw new Error('MCP WebSocket not connected');
+      this.ws.send(JSON.stringify(message));
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(error);
     }
-    this.ws.send(JSON.stringify(message));
-    return Promise.resolve();
   }
-
-  close(): Promise<void> {
-    const ws = this.ws;
-    if (ws) {
-      this.ws = null;
-      ws.onopen = null;
-      ws.onerror = null;
-      ws.onmessage = null;
-      ws.onclose = null;
-      ws.close(1000, 'Client closed');
+  private clearTimer(): void {
+    if (this.timer !== undefined) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
     }
-    return Promise.resolve();
+  }
+  private retire(): void {
+    const first = !this.retired;
+    this.retired = true;
+    if (first) {
+      try {
+        this.options.onRetire?.();
+      } catch (error) {
+        this.cleanupErrors.push(error);
+      }
+    }
+    this.clearTimer();
+    this.opened.reject(cancelled());
+    this.options.operation.signal.removeEventListener('abort', this.onAbort);
+    if (!this.notified) {
+      this.notified = true;
+      try {
+        this.onclose?.();
+      } catch (error) {
+        this.cleanupErrors.push(error);
+      }
+    }
+  }
+  private closeSocket(): void {
+    const ws = this.ws;
+    if (!ws) {
+      this.closed.resolve();
+      return;
+    }
+    if (ws.readyState === WebSocket.CLOSED) {
+      this.closed.resolve();
+      return;
+    }
+    if (ws.readyState === WebSocket.CLOSING) return;
+    try {
+      ws.close(1000, 'MCP client retired');
+    } catch (error) {
+      this.cleanupErrors.push(error);
+    }
+  }
+  close(): Promise<void> {
+    this.retire();
+    this.closeSocket();
+    this.closing ??= this.closed.promise.then(() => {
+      if (this.cleanupErrors.length)
+        throw new WebOperationCleanupErrorV2([...this.cleanupErrors], 'MCP socket cleanup failed');
+    });
+    void this.closing.catch(() => undefined);
+    return this.closing;
   }
 }
