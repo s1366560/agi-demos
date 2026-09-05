@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "76bc98682faeacf8d1f14bd16a7a78b0ee2d2fa3",
+  "source_revision": "97541f5a6a09a6d62be956e4d819d78a2eaf5867",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 715,
+    "audited_sources": 720,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1949,
-    "production_dependency_ownership": 714,
-    "production_dependency_sources": 714,
+    "production_dependency_edges": 1957,
+    "production_dependency_ownership": 719,
+    "production_dependency_sources": 719,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 5
@@ -1537,11 +1537,18 @@
       "sha256": "sha256:5099a4b97a17d8fc0f561e6b032c76088f37f70382d6acbb3afb2068f90ae458"
     },
     {
+      "source_entry": "web/src/components/mcp-app/ControlledMCPAppRendererV2.tsx",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:6965ab93e9fd243c5957f9435a95a4f3459e63c63116cc7ec7ad8a2b05256081"
+    },
+    {
       "source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:473d3010ba620170a426a98ec23997df680c0cdbcebe13959f4d050e84389ba5"
+      "sha256": "sha256:f4272249397b8cdad603311b7498964209b06d2d0d966c917503ea1b3729b015"
     },
     {
       "source_entry": "web/src/components/mcp-app/hostStyles.ts",
@@ -1549,6 +1556,27 @@
         "production_dependency"
       ],
       "sha256": "sha256:0738b932fd01cfb8eb4fd8a7caecece71e5a50146205ef12b0d4d52977169497"
+    },
+    {
+      "source_entry": "web/src/components/mcp-app/mcpAppHttpSessionV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:bfeb7f40d813134edc11de3fa546f5af050885d91d37e776a0544000ebce201e"
+    },
+    {
+      "source_entry": "web/src/components/mcp-app/mcpAppRendererProtocolV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:11d7460f1145dbd6b5e753156f9381260885073a0f70c575229895bbbf82faa9"
+    },
+    {
+      "source_entry": "web/src/components/mcp-app/useMcpAppFrameSessionV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:50b7fce3449b6f5bda9ffb038231fb2430d90199938afe7a5d23f2336c52830d"
     },
     {
       "source_entry": "web/src/components/mcp/McpAppCardV2.tsx",
@@ -2333,7 +2361,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:43dbaf791a0a755a2194872a8cf9d29031b2be29979e410ec4b3ba7bc4264e8a"
+      "sha256": "sha256:0b725a908b4b56aaa29e710420a71e762200a213d316b69987f03e9664e7574c"
     },
     {
       "source_entry": "web/src/hooks/useMentionCandidates.ts",
@@ -3782,14 +3810,21 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:8894e4cae6fcf5900ce98467892d97458ebb73e4ccae5a3dafe22b01a204e627"
+      "sha256": "sha256:2fd388a04973bcc0a744975561979e47bd2bb3a9d394b3dd1da4a176b0b67a29"
+    },
+    {
+      "source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:7997b9bd4a580e1437f4fd9c293c790a918e798d423c1c77b4ef67f87fff44af"
     },
     {
       "source_entry": "web/src/services/mcpAppService.ts",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:bd6f805143009ba2b06be8f447c9ae098ece4f0b1cf81a21d4d60b226cabbcde"
+      "sha256": "sha256:f13694fde5246d15a1b2f1510f89e2e6e4d6bc7d71df5a65d93f8ffefb44b830"
     },
     {
       "source_entry": "web/src/services/mcpService.ts",
@@ -3873,7 +3908,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:1dea352de3a50dbb4739f3a32cd602eb090967b1832ec291727be1ff5fc9284b"
+      "sha256": "sha256:eb75c5d5c43c3a6e48868be20aec8571651835f3e29da594835126d77e968320"
     },
     {
       "source_entry": "web/src/services/projectService.ts",
@@ -12484,6 +12519,11 @@
       "to_source_entry": "web/src/stores/mcpAppStore.ts"
     },
     {
+      "from_source_entry": "web/src/components/mcp-app/ControlledMCPAppRendererV2.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
       "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/common/ErrorBoundary.tsx"
@@ -12495,8 +12535,28 @@
     },
     {
       "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
+      "relationship": "dynamic_import",
+      "to_source_entry": "web/src/components/mcp-app/ControlledMCPAppRendererV2.tsx"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/mcp-app/hostStyles.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/mcp-app/mcpAppHttpSessionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/mcp-app/mcpAppRendererProtocolV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/components/mcp-app/useMcpAppFrameSessionV2.ts"
     },
     {
       "from_source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
@@ -12532,6 +12592,11 @@
       "from_source_entry": "web/src/components/mcp-app/hostStyles.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/theme/antdTheme.ts"
+    },
+    {
+      "from_source_entry": "web/src/components/mcp-app/mcpAppHttpSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/mcpAppService.ts"
     },
     {
       "from_source_entry": "web/src/components/mcp/McpAppCardV2.tsx",
@@ -13731,27 +13796,12 @@
     {
       "from_source_entry": "web/src/hooks/useMCPClient.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/mcp/BrowserWebSocketTransport.ts"
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
     },
     {
       "from_source_entry": "web/src/hooks/useMCPClient.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/projectSandboxService.ts"
-    },
-    {
-      "from_source_entry": "web/src/hooks/useMCPClient.ts",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/services/sandboxWebSocketUtils.ts"
-    },
-    {
-      "from_source_entry": "web/src/hooks/useMCPClient.ts",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/stores/auth.ts"
-    },
-    {
-      "from_source_entry": "web/src/hooks/useMCPClient.ts",
-      "relationship": "static_import",
-      "to_source_entry": "web/src/utils/logger.ts"
+      "to_source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts"
     },
     {
       "from_source_entry": "web/src/hooks/useMentionCandidates.ts",
@@ -17769,6 +17819,31 @@
       "to_source_entry": "web/src/services/client/httpClient.ts"
     },
     {
+      "from_source_entry": "web/src/services/mcp/BrowserWebSocketTransport.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/urlUtils.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/mcp/BrowserWebSocketTransport.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/projectSandboxService.ts"
+    },
+    {
       "from_source_entry": "web/src/services/mcpAppService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
@@ -21431,6 +21506,15 @@
         "web/src/pages/tenant/AgentWorkspace.tsx"
       ],
       "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/mcp-app/ControlledMCPAppRendererV2.tsx"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/components/mcp-app/StandardMCPAppRenderer.tsx"
     },
     {
@@ -21441,6 +21525,33 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/components/mcp-app/hostStyles.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/mcp-app/mcpAppHttpSessionV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/mcp-app/mcpAppRendererProtocolV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/components/mcp-app/useMcpAppFrameSessionV2.ts"
     },
     {
       "classification": "shared",
@@ -25200,6 +25311,15 @@
     {
       "classification": "shared",
       "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/tenant/AgentWorkspace.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/services/mcp/MCPAppRetainedSessionV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
         "web/src/components/mcp/McpServerListV2.tsx",
         "web/src/layouts/TenantLayout.tsx",
         "web/src/pages/project/Blackboard.tsx",
@@ -27500,8 +27620,12 @@
     "web/src/components/marketplace/entityI18n.ts",
     "web/src/components/marketplace/useDeleteEntityConfirm.ts",
     "web/src/components/mcp-app/AppLauncher.tsx",
+    "web/src/components/mcp-app/ControlledMCPAppRendererV2.tsx",
     "web/src/components/mcp-app/StandardMCPAppRenderer.tsx",
     "web/src/components/mcp-app/hostStyles.ts",
+    "web/src/components/mcp-app/mcpAppHttpSessionV2.ts",
+    "web/src/components/mcp-app/mcpAppRendererProtocolV2.ts",
+    "web/src/components/mcp-app/useMcpAppFrameSessionV2.ts",
     "web/src/components/mcp/McpAppCardV2.tsx",
     "web/src/components/mcp/McpAppsTabV2.tsx",
     "web/src/components/mcp/McpLogsTabV2.tsx",
@@ -27821,6 +27945,7 @@
     "web/src/services/instanceTemplateService.ts",
     "web/src/services/invitationService.ts",
     "web/src/services/mcp/BrowserWebSocketTransport.ts",
+    "web/src/services/mcp/MCPAppRetainedSessionV2.ts",
     "web/src/services/mcpAppService.ts",
     "web/src/services/mcpService.ts",
     "web/src/services/mentionService.ts",
