@@ -1,3 +1,4 @@
+import type { McpServersRouteAuthority } from '../settings-routes/mcpServersRouteClient';
 import type { ProviderRouteAuthority } from '../settings-routes/providerRouteClient';
 import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { RuntimeV2Error } from '@agistack/plugin-runtime';
@@ -234,13 +235,14 @@ type ManagementRouteCapabilityClientOverrides = Readonly<
   Partial<
     Omit<
       ManagementRouteCapabilityClients,
-      'tenant-tenant-agent-definitions' | 'tenant-tenant-skills' | 'tenant-tenant-providers'
+      'tenant-tenant-agent-definitions' | 'tenant-tenant-skills' | 'tenant-tenant-providers' | 'tenant-tenant-mcp-servers'
     >
   >
 >;
 
 export type DesktopWorkbenchCapabilityClientOptions = Readonly<{
   tenantProvidersOperationsV2: ProviderRouteAuthority;
+  projectMcpServersOperationsV2: McpServersRouteAuthority;
   tenantAgentBindingsOperationsV2: Pick<
     DesktopTenantAgentBindingsOperationsV2,
     'listTenantAgentBindings'
@@ -475,6 +477,10 @@ export function createDesktopWorkbenchCapabilityClient(
   ) {
     throw new Error('desktop_tenant_agent_definitions_authority_required');
   }
+  const projectMcpServersOperationsV2 = options?.projectMcpServersOperationsV2;
+  if (typeof projectMcpServersOperationsV2?.listMCPServers !== 'function') {
+    throw new Error('desktop_project_mcp_servers_authority_required');
+  }
   const tenantProvidersOperationsV2 = options?.tenantProvidersOperationsV2;
   if (typeof tenantProvidersOperationsV2?.listLlmProviders !== 'function' ||
       typeof tenantProvidersOperationsV2?.listLlmProviderTypes !== 'function') {
@@ -616,6 +622,7 @@ export function createDesktopWorkbenchCapabilityClient(
     tenantAgentDefinitionsOperationsV2,
     tenantSkillDefinitionsOperationsV2,
     tenantProvidersOperationsV2,
+    projectMcpServersOperationsV2,
     options.managementRouteClients,
   );
   const injectedAgentWorkspaceClient = options.agentWorkspaceClient ?? null;
@@ -1713,6 +1720,7 @@ function createManagementRouteClients(
     'loadTenantSkillDefinitions'
   >,
   tenantProvidersOperationsV2: ProviderRouteAuthority,
+  projectMcpServersOperationsV2: McpServersRouteAuthority,
   overrides: ManagementRouteCapabilityClientOverrides = {},
 ): ManagementRouteCapabilityClients {
   return Object.freeze({
@@ -1729,7 +1737,7 @@ function createManagementRouteClients(
       overrides['tenant-tenant-plugins'] ??
       createPluginsRouteClient(config, pluginMarketplaceOperationsV2),
     'tenant-tenant-mcp-servers':
-      overrides['tenant-tenant-mcp-servers'] ?? createMcpServersRouteClient(config),
+      createMcpServersRouteClient(config, projectMcpServersOperationsV2),
   });
 }
 

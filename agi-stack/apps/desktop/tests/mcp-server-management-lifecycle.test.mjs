@@ -23,7 +23,7 @@ test('MCP request completions stay bound to their client and project context', (
   assert.match(managementSource, /const mountedRef = useRef\(true\)/);
   assert.match(
     managementSource,
-    /const client = useMemo\(\(\) => new DesktopApiClient\(config\), \[config\]\)/,
+    /client: DesktopProjectMcpServersClientV2/,
   );
   assert.match(managementSource, /const clientRef = useRef\(client\)/);
   assert.match(managementSource, /const requestContextIsCurrent = useCallback/);
@@ -101,7 +101,7 @@ test('MCP update rotates by submission while delete retries keep the dialog key'
 test('MCP toggle retries retain one key until canonical server state advances', () => {
   const toggleSource = callbackSource('toggleServer', 'remove');
   assert.match(managementSource, /const toggleAttemptKeysRef = useRef\(new Map/);
-  assert.match(toggleSource, /mcpToggleAttemptIdentity\(contextKey, server\)/);
+  assert.match(toggleSource, /mcpToggleAttemptIdentity\(contextKey, server, config\.mode\)/);
   assert.match(toggleSource, /resolveMCPMutationAttemptKey\(/);
   assert.match(toggleSource, /idempotency_key: `mcp-server-toggle:\$\{attemptKey\}`/);
   assert.doesNotMatch(toggleSource, /mcp-server-toggle:\$\{crypto\.randomUUID\(\)\}/);
@@ -133,4 +133,17 @@ test('busy MCP dialogs reject backdrop, close-button, and Escape dismissal', () 
     dialogSource,
     /aria-label=\{t\('common\.close'\)\}[\s\S]*disabled=\{busy\}[\s\S]*onClick=\{requestClose\}/,
   );
+});
+
+
+test('MCP Server management requires V2 injection and retires seven static methods', async () => {
+  const apiSource = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8');
+  const settingsSource = readFileSync(new URL('../src/features/settings/SettingsWindow.tsx', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(managementSource, /new DesktopApiClient/);
+  assert.match(settingsSource, /createDesktopProjectMcpServersClientV2/);
+  assert.match(appSource, /projectMcpServersOperationsV2/);
+  for (const method of ['listMCPServers', 'provisionMCPServerCredential', 'createMCPServer', 'updateMCPServer', 'setMCPServerEnabled', 'deleteMCPServer', 'testMCPServer']) {
+    assert.doesNotMatch(apiSource, new RegExp(`\\b(?:async )?${method}\\s*\\(`));
+  }
 });

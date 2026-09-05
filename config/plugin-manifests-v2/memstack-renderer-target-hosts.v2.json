@@ -6,6 +6,47 @@
   "trust": "builtin",
   "modules": [
     {
+      "module_ref": "builtin://memstack/desktop/project-mcp-servers-authority",
+      "entrypoint": "applyDesktopProjectMcpServersAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMcpServersAuthorityModuleV2.ts",
+        "digest": "sha256:60d2533a8b011c0134826e6a5aabc7229c13ebaedfe380e7ed4eca226680ccfd"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-mcp-servers-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:659eb9dcbc9f1da819f67ec7453efea390000fedbd5cce99492728eb309be604"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/workspace-agent-policy-authority",
       "entrypoint": "applyDesktopWorkspaceAgentPolicyAuthorityV2",
       "artifact": {

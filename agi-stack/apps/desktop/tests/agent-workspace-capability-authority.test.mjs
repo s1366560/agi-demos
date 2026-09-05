@@ -1,3 +1,4 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
 import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
@@ -119,6 +120,7 @@ test('Workbench fails closed when Agent Workspace authority has no revision', as
         {
           projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
           tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
           tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
           tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
           projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
@@ -238,6 +240,7 @@ test('Workbench consumes the revision-bound journey authority in production', as
     {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
       tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
       tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
       tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
@@ -362,6 +365,7 @@ test('Workbench default production journey authority supports tenant-level scope
       {
         projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
         tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
         tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),
@@ -486,6 +490,7 @@ test('Agent Workspace scope and authority failures stay unavailable with stable 
     {
       projectAgentDashboardOperationsV2: projectAgentDashboardOperationsV2Fixture(),
       tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
       tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
       tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
       projectAgentLogsOperationsV2: projectAgentLogsOperationsV2Fixture(),

@@ -116,6 +116,9 @@ const { desktopTenantPromptTemplatesAuthorityDefinitionV2 } = require(
 const { desktopTenantProvidersAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopTenantProvidersAuthorityModuleV2.js',
 );
+const { desktopProjectMcpServersAuthorityDefinitionV2 } = require(
+  COMPILED_ROOT + '/src/plugins/desktopProjectMcpServersAuthorityModuleV2.js',
+);
 const { desktopWorkspaceAgentPolicyAuthorityDefinitionV2 } = require(
   COMPILED_ROOT + '/src/plugins/desktopWorkspaceAgentPolicyAuthorityModuleV2.js',
 );
@@ -297,6 +300,7 @@ function rendererDefinitions() {
     desktopTenantSubAgentDefinitionsAuthorityDefinitionV2,
     desktopTenantSkillDefinitionsAuthorityDefinitionV2,
     desktopTenantProvidersAuthorityDefinitionV2,
+    desktopProjectMcpServersAuthorityDefinitionV2,
     desktopWorkspaceAgentPolicyAuthorityDefinitionV2,
     desktopTenantSkillPackagesAuthorityDefinitionV2,
     desktopTenantSkillEvolutionAuthorityDefinitionV2,

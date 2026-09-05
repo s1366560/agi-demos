@@ -1,3 +1,4 @@
+import type { McpServersRouteAuthority } from '../settings-routes/mcpServersRouteClient';
 import type { ProviderRouteAuthority } from '../settings-routes/providerRouteClient';
 import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import type { DesktopRuntimeConfig } from '../../types';
@@ -193,6 +194,7 @@ export type DesktopWorkbenchCapabilityClientProviderInputV2 = Readonly<{
   >;
   tenantAgentDefinitionsOperationsV2: DesktopTenantAgentDefinitionsOperationsV2;
   tenantProvidersOperationsV2: ProviderRouteAuthority;
+  projectMcpServersOperationsV2: McpServersRouteAuthority;
   tenantSkillDefinitionsOperationsV2: Pick<DesktopTenantSkillDefinitionsOperationsV2, 'loadTenantSkillDefinitions'>;
   tenantOverviewOperationsV2: Pick<
     DesktopTenantOverviewOperationsV2,
@@ -294,6 +296,7 @@ function createDesktopWorkbenchCapabilityClientBindingV2(
         input.tenantAgentDefinitionsOperationsV2,
       tenantSkillDefinitionsOperationsV2: input.tenantSkillDefinitionsOperationsV2,
       tenantProvidersOperationsV2: input.tenantProvidersOperationsV2,
+      projectMcpServersOperationsV2: input.projectMcpServersOperationsV2,
       tenantAnalyticsOperationsV2: input.tenantAnalyticsOperationsV2,
       tenantOverviewOperationsV2: input.tenantOverviewOperationsV2,
       tenantProjectsOperationsV2: input.tenantProjectsOperationsV2,

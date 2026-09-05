@@ -143,6 +143,7 @@ import {
   createDesktopTenantSubAgentDefinitionsClientV2,
   createDesktopTenantSubAgentDefinitionsOperationsV2,
 } from './plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
+import { createDesktopProjectMcpServersOperationsV2 } from './plugins/desktopProjectMcpServersAuthorityModuleV2';
 import {
   createDesktopTenantProvidersClientV2,
   createDesktopTenantProvidersOperationsV2,
@@ -1119,6 +1120,12 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectMcpServersOperationsV2 = useMemo(
+    () => createDesktopProjectMcpServersOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
+    [],
+  );
   const desktopTenantProvidersOperationsV2 = useMemo(
     () => createDesktopTenantProvidersOperationsV2(
       () => desktopPluginMarketplaceGenerationActionsRefV2.current,
@@ -1630,6 +1637,7 @@ export function App() {
       tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
       tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
       tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
+      projectMcpServersOperationsV2: desktopProjectMcpServersOperationsV2,
       tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
       tenantAgentDefinitionsOperationsV2:
         desktopTenantAgentDefinitionsOperationsV2,
@@ -1706,6 +1714,7 @@ export function App() {
       desktopTenantAgentDefinitionsOperationsV2,
       desktopTenantSkillDefinitionsOperationsV2,
       desktopTenantProvidersOperationsV2,
+      desktopProjectMcpServersOperationsV2,
       desktopUserProfileOperationsV2,
       desktopTenantOrganizationSettingsOperationsV2,
       desktopTenantOverviewOperationsV2,
@@ -1771,6 +1780,7 @@ export function App() {
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,
         tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
+        projectMcpServersOperationsV2: desktopProjectMcpServersOperationsV2,
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         tenantAgentDefinitionsOperationsV2:
           desktopTenantAgentDefinitionsOperationsV2,
@@ -1822,6 +1832,7 @@ export function App() {
       desktopTenantEvolutionOperationsV2,
       desktopTenantSkillDefinitionsOperationsV2,
       desktopTenantProvidersOperationsV2,
+      desktopProjectMcpServersOperationsV2,
       desktopTenantTemplatesOperationsV2,
       desktopTenantAgentDefinitionsOperationsV2,
       desktopUserProfileOperationsV2,
@@ -7789,6 +7800,7 @@ export function App() {
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
+        projectMcpServersOperationsV2: desktopProjectMcpServersOperationsV2,
         tenantSkillPackagesOperationsV2: desktopTenantSkillPackagesOperationsV2,
         tenantSkillEvolutionOperationsV2: desktopTenantSkillEvolutionOperationsV2,
         tenantSkillDefinitionsOperationsV2: desktopTenantSkillDefinitionsOperationsV2,

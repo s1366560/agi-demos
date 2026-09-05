@@ -205,19 +205,19 @@ export type DesktopMCPServerCreateInput = {
 };
 
 export type DesktopMCPServerUpdateInput = DesktopMCPServerCreateInput & {
-  expected_revision: number;
+  expected_revision?: number;
 };
 
 export type DesktopMCPServerToggleInput = {
   enabled: boolean;
   project_id: string;
-  expected_revision: number;
+  expected_revision?: number;
   idempotency_key: string;
 };
 
 export type DesktopMCPServerDeleteInput = {
   project_id: string;
-  expected_revision: number;
+  expected_revision?: number;
   idempotency_key: string;
 };
 
@@ -1773,82 +1773,6 @@ export class DesktopApiClient {
     const scopedProjectId = requireValue(projectId, 'project id');
     const params = new URLSearchParams({ project_id: scopedProjectId });
     return this.request<DesktopMCPAppSummary[]>(`/api/v1/mcp/apps?${params.toString()}`);
-  }
-
-  async listMCPServers(
-    projectId: string,
-    signal?: AbortSignal,
-  ): Promise<DesktopMCPServerSummary[]> {
-    const scopedProjectId = requireValue(projectId, 'project id');
-    const params = new URLSearchParams({ project_id: scopedProjectId });
-    return this.request<DesktopMCPServerSummary[]>(
-      `/api/v1/mcp?${params.toString()}`,
-      { signal },
-    );
-  }
-
-  async provisionMCPServerCredential(
-    input: DesktopMCPCredentialProvisionInput,
-  ): Promise<DesktopMCPCredentialProvisionResponse> {
-    return this.request<DesktopMCPCredentialProvisionResponse>(
-      '/api/v1/mcp/credentials/provision',
-      {
-        method: 'POST',
-        body: input,
-      },
-    );
-  }
-
-  async createMCPServer(
-    input: DesktopMCPServerCreateInput,
-  ): Promise<DesktopMCPServerSummary> {
-    return this.request<DesktopMCPServerSummary>('/api/v1/mcp', {
-      method: 'POST',
-      body: input,
-    });
-  }
-
-  async updateMCPServer(
-    serverId: string,
-    input: DesktopMCPServerUpdateInput,
-  ): Promise<DesktopMCPServerSummary> {
-    return this.request<DesktopMCPServerSummary>(
-      `/api/v1/mcp/${encodeURIComponent(requireValue(serverId, 'MCP server id'))}`,
-      {
-        method: 'PUT',
-        body: input,
-      },
-    );
-  }
-
-  async setMCPServerEnabled(
-    serverId: string,
-    input: DesktopMCPServerToggleInput,
-  ): Promise<DesktopMCPServerSummary> {
-    return this.request<DesktopMCPServerSummary>(
-      `/api/v1/mcp/${encodeURIComponent(requireValue(serverId, 'MCP server id'))}`,
-      {
-        method: 'PUT',
-        body: input,
-      },
-    );
-  }
-
-  async deleteMCPServer(serverId: string, input: DesktopMCPServerDeleteInput): Promise<void> {
-    await this.request<unknown>(
-      `/api/v1/mcp/${encodeURIComponent(requireValue(serverId, 'MCP server id'))}`,
-      {
-        method: 'DELETE',
-        body: input,
-      },
-    );
-  }
-
-  async testMCPServer(serverId: string): Promise<DesktopMCPServerTestResult> {
-    return this.request<DesktopMCPServerTestResult>(
-      `/api/v1/mcp/${encodeURIComponent(requireValue(serverId, 'MCP server id'))}/test`,
-      { method: 'POST' },
-    );
   }
 
   async callMCPAppTool(

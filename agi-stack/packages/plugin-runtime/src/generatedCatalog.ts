@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:8c1a095d15e38cb53d0795c0c9d6deff6a369a48ef88e21f4c46f10277',
-  'e94b35","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:9ff0752bc6798a45e66aac1361bd0ce1216e737eaddf310d436e259994',
+  'bdf54f","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1933,6 +1933,17 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '6:301d889f52c7a47b5904e6d9f85dce47d60ef94b626a24c6c573dd9e205aa488","entrypoint":"ap',
   'plyDesktopProjectMaintenanceAuthorityV2","module_ref":"builtin://memstack/desktop/pr',
   'oject-maintenance-authority","plugin_id":"memstack-renderer-target-hosts","plugin_ve',
+  'rsion":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:60d2533a8b',
+  '011c0134826e6a5aabc7229c13ebaedfe380e7ed4eca226680ccfd","artifact_source":"repo+type',
+  'script://agi-stack/apps/desktop/src/plugins/desktopProjectMcpServersAuthorityModuleV',
+  '2.ts","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/',
+  'schema","additionalProperties":false,"properties":{"strategy":{"const":"desktop-api-',
+  'fetch","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":',
+  '[],"handles":[]},"services":{"provides":[{"service":"service:desktop-renderer.projec',
+  't-mcp-servers-authority","version":"1.0.0"}],"requires":[]}},"contract_digest":"sha2',
+  '56:659eb9dcbc9f1da819f67ec7453efea390000fedbd5cce99492728eb309be604","entrypoint":"a',
+  'pplyDesktopProjectMcpServersAuthorityV2","module_ref":"builtin://memstack/desktop/pr',
+  'oject-mcp-servers-authority","plugin_id":"memstack-renderer-target-hosts","plugin_ve',
   'rsion":"2.0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:feb6be54d6',
   '25637099ab26328f5c9aa860b26c5ce8969520b05ec22b8e63dd9a","artifact_source":"repo+type',
   'script://agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV2.',
@@ -4607,4 +4618,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:8c1a095d15e38cb53d0795c0c9d6deff6a369a48ef88e21f4c46f10277e94b35' as const;
+  'sha256:9ff0752bc6798a45e66aac1361bd0ce1216e737eaddf310d436e259994bdf54f' as const;

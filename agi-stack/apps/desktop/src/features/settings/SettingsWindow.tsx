@@ -1,3 +1,4 @@
+import { createDesktopProjectMcpServersClientV2, type DesktopProjectMcpServersOperationsV2 } from '../../plugins/desktopProjectMcpServersAuthorityModuleV2';
 import { createDesktopTenantProvidersClientV2, type DesktopTenantProvidersOperationsV2 } from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
 import { createDesktopTenantSkillDefinitionsClientV2, type DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { createDesktopTenantSkillPackagesClientV2, type DesktopTenantSkillPackagesOperationsV2 } from '../../plugins/desktopTenantSkillPackagesAuthorityModuleV2';
@@ -105,6 +106,7 @@ type SettingsWindowProps = {
   pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  projectMcpServersOperationsV2: DesktopProjectMcpServersOperationsV2;
   tenantProvidersOperationsV2: DesktopTenantProvidersOperationsV2;
   tenantSkillDefinitionsOperationsV2: DesktopTenantSkillDefinitionsOperationsV2;
   tenantSkillPackagesOperationsV2: DesktopTenantSkillPackagesOperationsV2;
@@ -134,6 +136,7 @@ export function SettingsWindow({
   pluginMarketplaceOperationsV2,
   tenantTemplatesOperationsV2,
   tenantEvolutionOperationsV2,
+  projectMcpServersOperationsV2,
   tenantProvidersOperationsV2,
   tenantSkillDefinitionsOperationsV2,
   tenantSkillPackagesOperationsV2,
@@ -171,6 +174,10 @@ export function SettingsWindow({
   const resourceContextKeyRef = useRef(resourceContextKey);
   activeSectionRef.current = section;
   resourceContextKeyRef.current = resourceContextKey;
+  const projectMcpServersClientV2 = useMemo(
+    () => createDesktopProjectMcpServersClientV2(projectMcpServersOperationsV2, config),
+    [config, projectMcpServersOperationsV2],
+  );
   const tenantProvidersClientV2 = useMemo(
     () => createDesktopTenantProvidersClientV2(tenantProvidersOperationsV2, config),
     [config, tenantProvidersOperationsV2],
@@ -339,6 +346,7 @@ export function SettingsWindow({
     projectChannelsOperationsV2,
   });
   const mcpServerManagement = useMCPServerManagement({
+    client: projectMcpServersClientV2,
     active: open && section === 'mcp',
     config,
     contextKey: resourceContextKey,

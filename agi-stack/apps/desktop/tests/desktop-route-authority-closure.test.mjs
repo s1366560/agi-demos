@@ -1,3 +1,4 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
 import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
@@ -180,6 +181,7 @@ test('runtime snapshot declares tenant workspaces and canonical Agent Workspace 
         tenantTasksOperationsV2: tenantTasksOperationsV2Fixture(),
         tenantAgentDashboardOperationsV2: tenantAgentDashboardOperationsV2Fixture(),
         tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture(),
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture(),
         tenantSkillDefinitionsOperationsV2: tenantSkillDefinitionsOperationsV2Fixture(),
         tenantAgentDefinitionsOperationsV2: tenantAgentDefinitionsOperationsV2Fixture(),
         tenantAnalyticsOperationsV2: tenantAnalyticsOperationsV2Fixture(),

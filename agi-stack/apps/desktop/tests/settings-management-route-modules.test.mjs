@@ -209,7 +209,9 @@ test('each route owns a typed authority adapter and validates its runtime scope'
     ],
     [
       createMcpServersRouteClient(config(), {
-        listMCPServers: async (projectId) => {
+        listMCPServers: async ({ config: requestConfig, scope: requestScope, args: [projectId] }) => {
+          assert.equal(requestConfig.tenantId, requestScope.tenantId);
+          assert.equal(projectId, requestScope.projectId);
           calls.push(`mcp:${projectId}`);
           return [{ id: 'mcp-1' }];
         },

@@ -1,3 +1,4 @@
+import { projectMcpServersOperationsV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
 import { tenantProvidersOperationsV2Fixture } from './tenantProvidersOperationsV2Fixture.mjs';
 import { tenantSkillDefinitionsOperationsV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
@@ -43,6 +44,8 @@ const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js
 function createDesktopWorkbenchCapabilityClient(automationApi, config, options) {
   return createDesktopWorkbenchCapabilityClientRaw(automationApi, config, {
     ...options,
+    projectMcpServersOperationsV2:
+      options?.projectMcpServersOperationsV2 ?? projectMcpServersOperationsV2Fixture(),
     tenantProvidersOperationsV2:
       options?.tenantProvidersOperationsV2 ?? tenantProvidersOperationsV2Fixture(),
     tenantSkillDefinitionsOperationsV2:
@@ -1828,6 +1831,9 @@ test('management routes become observed only after their typed clients read curr
         },
         config,
         {
+          projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture({
+            listMCPServers: async () => [{ id: 'server-1' }, { id: 'server-2' }],
+          }),
           tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture({
             listLlmProviders: async () => [{ id: 'provider-1' }, { id: 'provider-2' }],
           }),
@@ -1891,6 +1897,9 @@ test('management route observation failures stay unavailable and never promote r
         projectId: 'project-1',
       },
       {
+        projectMcpServersOperationsV2: projectMcpServersOperationsV2Fixture({
+          listMCPServers: async () => { throw new Error('authority unavailable'); },
+        }),
         tenantProvidersOperationsV2: tenantProvidersOperationsV2Fixture({
           listLlmProviders: async () => { throw new Error('authority unavailable'); },
         }),

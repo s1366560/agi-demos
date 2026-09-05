@@ -1,3 +1,4 @@
+import { createProjectMcpServersHttpClientV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -310,6 +311,7 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
         duplicate: false,
       });
     }
+    if (url.pathname.endsWith('/mcp') && (init.method ?? 'GET') === 'GET') return Response.json([]);
     if (url.pathname.endsWith('/mcp')) {
       return Response.json({
         id: 'server-1',
@@ -332,9 +334,13 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
       apiKey: 'cloud-session',
       projectId: 'project-selected',
     });
+    const serversClient = createProjectMcpServersHttpClientV2Fixture({
+      ...DEFAULT_CONFIG, mode: 'cloud', apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session', tenantId: 'tenant-selected', projectId: 'project-selected',
+    });
     await client.listMCPApps('project-selected');
-    await client.listMCPServers('project-selected');
-    const provisioned = await client.provisionMCPServerCredential({
+    await serversClient.listMCPServers('project-selected');
+    await assert.rejects(serversClient.provisionMCPServerCredential({
       project_id: 'project-selected',
       server_name: 'release-tools',
       server_type: 'http',
@@ -343,16 +349,12 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
       credential_name: 'authorization',
       secret: 'Bearer renderer-submitted-secret',
       idempotency_key: 'mcp-credential-action-1',
-    });
-    assert.equal(provisioned.stored, true);
-    assert.equal('secret' in provisioned, false);
-    assert.equal('reference' in provisioned, false);
-    await client.createMCPServer({
+    }), (error) => error.status === 501);
+    await serversClient.createMCPServer({
       name: 'release-tools',
       server_type: 'http',
       transport_config: {
         url: 'https://mcp.memstack.test',
-        credential_header_names: ['authorization'],
       },
       enabled: true,
       project_id: 'project-selected',
@@ -405,21 +407,6 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
           body: undefined,
         },
         {
-          path: '/api/v1/mcp/credentials/provision',
-          method: 'POST',
-          auth: 'Bearer cloud-session',
-          body: {
-            project_id: 'project-selected',
-            server_name: 'release-tools',
-            server_type: 'http',
-            transport_config: { url: 'https://mcp.memstack.test' },
-            credential_kind: 'header',
-            credential_name: 'authorization',
-            secret: 'Bearer renderer-submitted-secret',
-            idempotency_key: 'mcp-credential-action-1',
-          },
-        },
-        {
           path: '/api/v1/mcp',
           method: 'POST',
           auth: 'Bearer cloud-session',
@@ -428,8 +415,7 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
             server_type: 'http',
             transport_config: {
               url: 'https://mcp.memstack.test',
-              credential_header_names: ['authorization'],
-            },
+                  },
             enabled: true,
             project_id: 'project-selected',
             idempotency_key: 'mcp-create-action-1',
@@ -500,8 +486,9 @@ test('Desktop MCP server mutations preserve revision and idempotency contracts',
       method: init.method ?? 'GET',
       body: init.body ? JSON.parse(String(init.body)) : undefined,
     });
+    if (init.method === 'DELETE') return Response.json({ deleted: true, id: 'server/1', revision: 7, duplicate: false });
     return Response.json({
-      id: 'server-1',
+      id: 'server/1',
       tenant_id: 'tenant-selected',
       project_id: 'project-selected',
       name: 'release-tools',
@@ -513,11 +500,12 @@ test('Desktop MCP server mutations preserve revision and idempotency contracts',
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createProjectMcpServersHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:8088',
-      apiKey: '',
+      apiKey: 'trusted-session',
+      tenantId: 'tenant-selected',
       localApiToken: 'sidecar-launch-capability',
       projectId: 'project-selected',
     });

@@ -14,17 +14,13 @@ import type {
   ManagementRouteContent,
 } from './managementRouteTypes';
 import { managementRouteScopeForRuntime } from './managementRouteTypes';
-import { createMcpServersRouteClient } from './mcpServersRouteClient';
+import { createMcpServersRouteClient, type McpServersRouteAuthority } from './mcpServersRouteClient';
 import {
   createPluginsRouteClient,
   type PluginsRouteAuthority,
 } from './pluginsRouteClient';
 import { createProviderRouteClient, type ProviderRouteAuthority } from './providerRouteClient';
 import { createSkillsRouteClient, type SkillsRouteAuthority } from './skillsRouteClient';
-
-type ManagementRouteRuntimeDependencies = Readonly<{
-  createClient?: (config: DesktopRuntimeConfig) => ManagementRouteClient;
-}>;
 
 export function createProvidersRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
@@ -92,14 +88,15 @@ export function createMcpServersRouteBindingForRuntime(
   config: DesktopRuntimeConfig,
   context: ManagementRouteContext,
   Content: ManagementRouteContent,
-  dependencies: ManagementRouteRuntimeDependencies = {},
+  projectMcpServersOperationsV2: McpServersRouteAuthority,
 ): ManagementRouteBinding {
   return createRuntimeBinding(
     'tenant-tenant-mcp-servers',
     config,
     context,
     Content,
-    dependencies.createClient ?? createMcpServersRouteClient,
+    (runtimeConfig) =>
+      createMcpServersRouteClient(runtimeConfig, projectMcpServersOperationsV2),
   );
 }
 

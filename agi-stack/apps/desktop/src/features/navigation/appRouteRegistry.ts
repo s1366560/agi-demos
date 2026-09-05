@@ -1,3 +1,4 @@
+import type { McpServersRouteAuthority } from '../settings-routes/mcpServersRouteClient';
 import type { ProviderRouteAuthority } from '../settings-routes/providerRouteClient';
 import type { DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
 import { type Dispatch, type RefObject, type SetStateAction, useEffect } from 'react';
@@ -317,6 +318,7 @@ import type {
 
 export type AppRouteRegistryRefs = {
   tenantProvidersOperationsV2: ProviderRouteAuthority;
+  projectMcpServersOperationsV2: McpServersRouteAuthority;
   authRef: RefObject<AuthState>;
   configRef: RefObject<DesktopRuntimeConfig>;
   pluginMarketplaceOperationsV2: Pick<
@@ -485,6 +487,7 @@ export type AppTenantExtensionsIntegrationsRouteRegistryRefs = Pick<
   | 'pluginMarketplaceOperationsV2'
   | 'tenantAcpOperationsV2'
   | 'tenantProvidersOperationsV2'
+  | 'projectMcpServersOperationsV2'
   | 'tenantTemplatesOperationsV2'
   | 'tenantWebhooksOperationsV2'
 > &
@@ -1316,6 +1319,7 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
     pluginMarketplaceOperationsV2,
     tenantWebhooksOperationsV2,
     tenantProvidersOperationsV2,
+    projectMcpServersOperationsV2,
     tenantAcpOperationsV2,
     tenantTemplatesOperationsV2,
   } = refs;
@@ -1358,6 +1362,7 @@ export function createAppTenantExtensionsIntegrationsRouteRegistry(
             configRef.current,
             context,
             settingsRouteContent('mcp'),
+            projectMcpServersOperationsV2,
           ),
       }),
       [TENANT_TEMPLATES_ROUTE_ID]: createTemplatesRouteModuleLoader({
