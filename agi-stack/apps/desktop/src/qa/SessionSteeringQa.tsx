@@ -2578,9 +2578,19 @@ function SessionSteeringQa() {
   );
   const mcpAppHostApi = useMemo(
     () => ({
+      listMCPApps: async () => [],
       callMCPAppTool: async (_appId: string, toolName: string) => ({
         content: [{ type: 'text', text: `${toolName} accepted` }],
         is_error: false,
+      }),
+      callMCPAppToolDirect: async (_projectId: string, _serverName: string, toolName: string) => ({
+        content: [{ type: 'text', text: `${toolName} accepted` }],
+        is_error: false,
+      }),
+      callMCPToolByServerId: async (_serverId: string, toolName: string) => ({
+        result: `${toolName} accepted`,
+        is_error: false,
+        execution_time_ms: 0,
       }),
       readMCPAppResource: async (_projectId: string, uri: string) => ({
         contents: [{ uri, mimeType: 'text/plain', text: 'QA resource' }],

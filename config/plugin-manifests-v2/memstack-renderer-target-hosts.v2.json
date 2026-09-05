@@ -6,6 +6,47 @@
   "trust": "builtin",
   "modules": [
     {
+      "module_ref": "builtin://memstack/desktop/project-mcp-apps-authority",
+      "entrypoint": "applyDesktopProjectMcpAppsAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsAuthorityModuleV2.ts",
+        "digest": "sha256:fa0401073601052082ca495546f51c15ac447e0f4c23abf15ff3276727dec841"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.project-mcp-apps-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:8d652e9172e2e7b2974e0d99ae18094a14d242fae94bcfb54786359738f18d3a"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-mcp-servers-authority",
       "entrypoint": "applyDesktopProjectMcpServersAuthorityV2",
       "artifact": {

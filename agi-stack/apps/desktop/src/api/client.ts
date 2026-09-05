@@ -134,7 +134,7 @@ export type DesktopMCPAppToolCallResponse = {
   content: unknown[];
   is_error: boolean;
   error_message?: string | null;
-  error_code?: string | null;
+  error_code?: string | number | null;
 };
 
 export type DesktopMCPToolCallResponse = {
@@ -146,15 +146,26 @@ export type DesktopMCPToolCallResponse = {
 };
 
 export type DesktopMCPAppResourceReadResponse = {
-  contents: Array<{ uri: string; mimeType: string; text: string }>;
+  _meta?: Record<string, unknown>;
+  contents: Array<
+    {
+      uri: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+      [key: string]: unknown;
+    } & ({ text: string; blob?: string } | { blob: string; text?: string })
+  >;
 };
 
 export type DesktopMCPAppResourceListResponse = {
+  _meta?: Record<string, unknown>;
   resources: Array<{
     uri: string;
     name?: string;
     mimeType?: string;
     description?: string;
+    _meta?: Record<string, unknown>;
+    [key: string]: unknown;
   }>;
 };
 
@@ -1767,95 +1778,6 @@ export class DesktopApiClient {
         body: { expected_revision: expectedRevision },
       },
     );
-  }
-
-  async listMCPApps(projectId: string): Promise<DesktopMCPAppSummary[]> {
-    const scopedProjectId = requireValue(projectId, 'project id');
-    const params = new URLSearchParams({ project_id: scopedProjectId });
-    return this.request<DesktopMCPAppSummary[]>(`/api/v1/mcp/apps?${params.toString()}`);
-  }
-
-  async callMCPAppTool(
-    appId: string,
-    toolName: string,
-    argumentsValue: Record<string, unknown>,
-    idempotencyKey: string,
-  ): Promise<DesktopMCPAppToolCallResponse> {
-    return this.request<DesktopMCPAppToolCallResponse>(
-      `/api/v1/mcp/apps/${encodeURIComponent(requireValue(appId, 'MCP App id'))}/tool-call`,
-      {
-        method: 'POST',
-        body: {
-          tool_name: requireValue(toolName, 'MCP tool name'),
-          arguments: argumentsValue,
-          idempotency_key: requireValue(idempotencyKey, 'MCP idempotency key'),
-        },
-      },
-    );
-  }
-
-  async callMCPToolByServerId(
-    serverId: string,
-    toolName: string,
-    argumentsValue: Record<string, unknown>,
-    idempotencyKey: string,
-  ): Promise<DesktopMCPToolCallResponse> {
-    return this.request<DesktopMCPToolCallResponse>('/api/v1/mcp/tools/call', {
-      method: 'POST',
-      body: {
-        server_id: requireValue(serverId, 'MCP server id'),
-        tool_name: requireValue(toolName, 'MCP tool name'),
-        arguments: argumentsValue,
-        idempotency_key: requireValue(idempotencyKey, 'MCP idempotency key'),
-      },
-    });
-  }
-
-  async callMCPAppToolDirect(
-    projectId: string,
-    serverName: string,
-    toolName: string,
-    argumentsValue: Record<string, unknown>,
-    idempotencyKey: string,
-  ): Promise<DesktopMCPAppToolCallResponse> {
-    return this.request<DesktopMCPAppToolCallResponse>('/api/v1/mcp/apps/proxy/tool-call', {
-      method: 'POST',
-      body: {
-        project_id: requireValue(projectId, 'project id'),
-        server_name: requireValue(serverName, 'MCP server name'),
-        tool_name: requireValue(toolName, 'MCP tool name'),
-        arguments: argumentsValue,
-        idempotency_key: requireValue(idempotencyKey, 'MCP idempotency key'),
-      },
-    });
-  }
-
-  async readMCPAppResource(
-    projectId: string,
-    uri: string,
-    serverName?: string | null,
-  ): Promise<DesktopMCPAppResourceReadResponse> {
-    return this.request<DesktopMCPAppResourceReadResponse>('/api/v1/mcp/apps/resources/read', {
-      method: 'POST',
-      body: {
-        project_id: requireValue(projectId, 'project id'),
-        uri: requireValue(uri, 'MCP resource URI'),
-        ...(serverName?.trim() ? { server_name: serverName.trim() } : {}),
-      },
-    });
-  }
-
-  async listMCPAppResources(
-    projectId: string,
-    serverName?: string | null,
-  ): Promise<DesktopMCPAppResourceListResponse> {
-    return this.request<DesktopMCPAppResourceListResponse>('/api/v1/mcp/apps/resources/list', {
-      method: 'POST',
-      body: {
-        project_id: requireValue(projectId, 'project id'),
-        ...(serverName?.trim() ? { server_name: serverName.trim() } : {}),
-      },
-    });
   }
 
   async listMarketplacePlugins(signal?: AbortSignal): Promise<ManagedPlugin[]> {

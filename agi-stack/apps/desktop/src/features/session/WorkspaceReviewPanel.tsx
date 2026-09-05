@@ -29,9 +29,7 @@ import {
   RocketIcon,
   ExclamationTriangleIcon,
 } from '@radix-ui/react-icons';
-import {
-  DesktopApiClient,
-} from '../../api/client';
+import type { DesktopProjectMcpAppsClientV2 } from '../../plugins/desktopProjectMcpAppsAuthorityModuleV2';
 import {
   RunChangeScope,
 } from '../agent-authority/agentAuthorityTypes';
@@ -251,7 +249,7 @@ export function WorkspaceReviewPanel({
   artifactCanvas: LiveArtifactCanvasState;
   artifactClient: DesktopArtifactClient;
   mcpAppCanvas: MCPAppCanvasState;
-  mcpAppApi: DesktopApiClient;
+  mcpAppApi: DesktopProjectMcpAppsClientV2;
   mcpAppProjectId: string;
   mcpAppSandboxProxyUrl: string;
   onSendMCPAppMessage: (message: string) => void;

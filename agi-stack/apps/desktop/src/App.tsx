@@ -143,6 +143,10 @@ import {
   createDesktopTenantSubAgentDefinitionsClientV2,
   createDesktopTenantSubAgentDefinitionsOperationsV2,
 } from './plugins/desktopTenantSubAgentDefinitionsAuthorityModuleV2';
+import {
+  createDesktopProjectMcpAppsOperationsV2,
+  createDesktopProjectMcpAppsClientV2,
+} from './plugins/desktopProjectMcpAppsAuthorityModuleV2';
 import { createDesktopProjectMcpServersOperationsV2 } from './plugins/desktopProjectMcpServersAuthorityModuleV2';
 import {
   createDesktopTenantProvidersClientV2,
@@ -1120,6 +1124,13 @@ export function App() {
       ),
     [],
   );
+  const desktopProjectMcpAppsOperationsV2 = useMemo(
+    () =>
+      createDesktopProjectMcpAppsOperationsV2(
+        () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+      ),
+    [],
+  );
   const desktopProjectMcpServersOperationsV2 = useMemo(
     () => createDesktopProjectMcpServersOperationsV2(
       () => desktopPluginMarketplaceGenerationActionsRefV2.current,
@@ -1573,6 +1584,10 @@ export function App() {
     );
   }, [scopedConversation, config.projectId, config.workspaceId]);
   const api = useMemo(() => new DesktopApiClient(config), [config]);
+  const desktopProjectMcpAppsClientV2 = useMemo(
+    () => createDesktopProjectMcpAppsClientV2(desktopProjectMcpAppsOperationsV2, config),
+    [config, desktopProjectMcpAppsOperationsV2],
+  );
   const desktopTenantAgentDefinitionsClientV2 = useMemo(
     () =>
       createDesktopTenantAgentDefinitionsClientV2(
@@ -7380,7 +7395,7 @@ export function App() {
     },
     meta: {
       artifactClient: desktopArtifactClientV2,
-      mcpAppApi: api,
+      mcpAppApi: desktopProjectMcpAppsClientV2,
       mcpAppProjectId: config.projectId,
       mcpAppSandboxProxyUrl: desktopMCPAppSandboxProxyUrl(config.apiBaseUrl),
       sandboxRuntime,

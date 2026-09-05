@@ -6,9 +6,7 @@
       "title": "MCP Servers",
       "domain": "extensions",
       "scope": ["tenant"],
-      "web_route_ids": [
-        "tenant-tenant-mcp-servers"
-      ],
+      "web_route_ids": ["tenant-tenant-mcp-servers"],
       "api_method": "GET",
       "api_path": "/api/v1/mcp",
       "api_contracts": [
@@ -188,16 +186,8 @@
         "refresh-app",
         "open-app-in-canvas"
       ],
-      "cloud_actions": [
-        "view",
-        "list",
-        "create"
-      ],
-      "local_actions": [
-        "view",
-        "list",
-        "create"
-      ],
+      "cloud_actions": ["view", "list", "create"],
+      "local_actions": ["view", "list", "create"],
       "permission_requirements": [
         {
           "surface": "web",
@@ -213,9 +203,7 @@
             "open-app-in-canvas"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -235,59 +223,39 @@
             "refresh-app"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "project_contributor"
-          ],
+          "authorization": ["project_contributor"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_cloud",
-          "actions": [
-            "view",
-            "list"
-          ],
+          "actions": ["view", "list"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_cloud",
-          "actions": [
-            "create"
-          ],
+          "actions": ["create"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_contributor"
-          ],
+          "authorization": ["project_contributor"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_local",
-          "actions": [
-            "view",
-            "list"
-          ],
+          "actions": ["view", "list"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_member"
-          ],
+          "authorization": ["project_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_local",
-          "actions": [
-            "create"
-          ],
+          "actions": ["create"],
           "authentication": "authenticated",
-          "authorization": [
-            "project_contributor"
-          ],
+          "authorization": ["project_contributor"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -322,7 +290,16 @@
         "agi-stack/apps/desktop/src/features/settings/mcpMutationAttemptModel.ts",
         "agi-stack/apps/desktop/src/api/cloudRequestBroker.ts",
         "agi-stack/apps/desktop/electron/main/cloudRequestPolicy.ts",
-        "agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts"
+        "agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsResponseContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/DesktopSessionCanvasSurfaceV2.tsx",
+        "agi-stack/apps/desktop/src/features/session/WorkspaceReviewPanel.tsx",
+        "agi-stack/apps/desktop/src/features/chat/DesktopMCPAppCanvas.tsx",
+        "agi-stack/apps/desktop/src/features/chat/mcpAppsClient.ts",
+        "agi-stack/apps/desktop/src/features/chat/mcpAppHostBridge.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -352,9 +329,18 @@
         "agi-stack/apps/desktop/src/features/settings/mcpMutationAttemptModel.ts",
         "agi-stack/apps/desktop/src/api/cloudRequestBroker.ts",
         "agi-stack/apps/desktop/src/features/navigation/appRouteRegistry.ts",
-        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts"
+        "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsAuthorityModuleV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsOperationContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsResponseContractV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProjectMcpAppsHttpProjectionV2.ts",
+        "agi-stack/apps/desktop/src/plugins/DesktopSessionCanvasSurfaceV2.tsx",
+        "agi-stack/apps/desktop/src/features/session/WorkspaceReviewPanel.tsx",
+        "agi-stack/apps/desktop/src/features/chat/DesktopMCPAppCanvas.tsx",
+        "agi-stack/apps/desktop/src/features/chat/mcpAppsClient.ts",
+        "agi-stack/apps/desktop/src/features/chat/mcpAppHostBridge.ts"
       ],
-      "judgment_rationale": "Web owns the complete MCP server lifecycle plus tool, prompt, and log authority. McpAppsTabV2 directly binds MCP Apps list, search, delete, refresh, and open-in-Canvas interactions, while the Canvas resource and tool-call context remains incomplete and therefore Web stays partial without claiming unbound proxy APIs. Desktop Settings now injects the required Project MCP Servers V2 client for list, credential provision, create, update, enable, delete and test; route and workbench observations use the same required list operation without static client or override fallback. The operation contract, response contract and HTTP projection run under a generation-scoped project service lease with tenant/project and response identity checks, abort checks and release on failure. Cloud item mutations and test first validate GET-by-id ownership because Python ignores body.project_id on writes. Python Cloud has no optimistic revision/CAS contract; the projection omits expected_revision and rejects credential provision and unresolved credential markers with 501 rather than claiming Local vault semantics. Local retains authenticated active scope, application-vault provisioning, revision/idempotency mutation contracts and structured deletion receipts. These are source-level management bindings, not added native execution evidence or chat MCP Apps/tool authority. In the real Electron Cloud path, executeVaultBoundCloudRequest authorizes endpoints before loading the trusted session: MCP endpoints have no product-policy rule and are rejected as cloud request endpoint is not allowed before session access or fetch. This batch does not broaden that broker policy. Existing conservative Desktop view/list/create actions and GET/POST contracts remain recorded without an acceptance upgrade. Management Snapshot observations still do not carry the authority_revision required by Snapshot v4, so Cloud and Local retain capability_authority_revision_unavailable. Detail, sync, test, reconcile, discovery and tool-call contracts are not promoted by this management-authority migration; the existing Web MCP Apps Canvas limitation also remains unchanged."
+      "judgment_rationale": "Web owns the complete MCP server lifecycle plus tool, prompt, and log authority. McpAppsTabV2 directly binds MCP Apps list, search, delete, refresh, and open-in-Canvas interactions, while the Canvas resource and tool-call context remains incomplete and therefore Web stays partial without claiming unbound proxy APIs. Desktop Settings now injects the required Project MCP Servers V2 client for list, credential provision, create, update, enable, delete and test; route and workbench observations use the same required list operation without static client or override fallback. The operation contract, response contract and HTTP projection run under a generation-scoped project service lease with tenant/project and response identity checks, abort checks and release on failure. Cloud item mutations and test first validate GET-by-id ownership because Python ignores body.project_id on writes. Python Cloud has no optimistic revision/CAS contract; the projection omits expected_revision and rejects credential provision and unresolved credential markers with 501 rather than claiming Local vault semantics. Local retains authenticated active scope, application-vault provisioning, revision/idempotency mutation contracts and structured deletion receipts. These are source-level management bindings, not added native execution evidence or chat MCP Apps/tool authority. In the real Electron Cloud path, executeVaultBoundCloudRequest authorizes endpoints before loading the trusted session: MCP endpoints have no product-policy rule and are rejected as cloud request endpoint is not allowed before session access or fetch. This batch does not broaden that broker policy. Existing conservative Desktop view/list/create actions and GET/POST contracts remain recorded without an acceptance upgrade. Management Snapshot observations still do not carry the authority_revision required by Snapshot v4, so Cloud and Local retain capability_authority_revision_unavailable. Detail, sync, test, reconcile, discovery and tool-call contracts are not promoted by this management-authority migration; the existing Web MCP Apps Canvas limitation also remains unchanged. The adjacent chat MCP Apps surface now receives a separate required Project MCP Apps V2 client through App, DesktopSessionCanvasSurfaceV2 and WorkspaceReviewPanel into DesktopMCPAppCanvas and its five-method host projection. Its six operations cover App discovery, App-ID/direct/Server-ID tool calls and resource read/list; these are distinct from the seven Server management operations. Cloud App-ID and Server-ID calls validate target ownership before dispatch within the same lease; Local continues its active-scope and App-visibility checks. Cloud App and direct tool calls with replay keys return HTTP 200 with is_error true and error_code -32000, while generic Server-ID tool calls return HTTP 409 with cloud_mcp_tool_idempotency_unavailable. These protocol failures remain failures and retain persisted retry keys, including window restoration. Abort signals and post-await checks prevent obsolete Canvas requests from completing into a new client/context. Resource text/blob and protocol metadata remain intact; Cloud resource listing is project-wide, not a guaranteed server-name filter. This Apps authority wiring adds source provenance only: the native broker rejection, conservative route claims, Web Canvas limitation and missing native/release evidence remain unchanged."
     },
     {
       "id": "tenant-tenant-acp",
@@ -362,9 +348,7 @@
       "title": "Agent Client Protocol",
       "domain": "extensions",
       "scope": ["tenant"],
-      "web_route_ids": [
-        "tenant-tenant-acp"
-      ],
+      "web_route_ids": ["tenant-tenant-acp"],
       "api_method": "GET",
       "api_path": "/api/v1/acp/tenants/{tenant_id}/status",
       "api_contracts": [
@@ -453,11 +437,7 @@
           "authority": "none"
         }
       ],
-      "permissions": [
-        "authenticated",
-        "tenant_member_for_read",
-        "tenant_admin_for_acp_mutations"
-      ],
+      "permissions": ["authenticated", "tenant_member_for_read", "tenant_admin_for_acp_mutations"],
       "actions": [
         "view",
         "view-status",
@@ -492,60 +472,33 @@
       "permission_requirements": [
         {
           "surface": "web",
-          "actions": [
-            "view",
-            "view-status",
-            "list-runner-pools",
-            "list-agents",
-            "list-sessions"
-          ],
+          "actions": ["view", "view-status", "list-runner-pools", "list-agents", "list-sessions"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "web",
-          "actions": [
-            "create-agent",
-            "update-agent",
-            "delete-agent",
-            "test-agent"
-          ],
+          "actions": ["create-agent", "update-agent", "delete-agent", "test-agent"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_admin"
-          ],
+          "authorization": ["tenant_admin"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_cloud",
-          "actions": [
-            "view",
-            "list-agents"
-          ],
+          "actions": ["view", "list-agents"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
         {
           "surface": "desktop_cloud",
-          "actions": [
-            "create-agent",
-            "update-agent",
-            "delete-agent",
-            "test-agent"
-          ],
+          "actions": ["create-agent", "update-agent", "delete-agent", "test-agent"],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_admin"
-          ],
+          "authorization": ["tenant_admin"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -582,12 +535,8 @@
       "kind": "canonical",
       "title": "Template Marketplace",
       "domain": "extensions",
-      "scope": [
-        "tenant"
-      ],
-      "web_route_ids": [
-        "tenant-tenant-templates"
-      ],
+      "scope": ["tenant"],
+      "web_route_ids": ["tenant-tenant-templates"],
       "api_method": "GET",
       "api_path": "/api/v1/subagents/templates/list",
       "api_contracts": [
@@ -670,20 +619,8 @@
           "authority": "none"
         }
       ],
-      "permissions": [
-        "authenticated",
-        "tenant_member"
-      ],
-      "actions": [
-        "view",
-        "list",
-        "search",
-        "filter",
-        "view-detail",
-        "install",
-        "seed",
-        "retry"
-      ],
+      "permissions": ["authenticated", "tenant_member"],
+      "actions": ["view", "list", "search", "filter", "view-detail", "install", "seed", "retry"],
       "web_actions": [
         "view",
         "list",
@@ -719,9 +656,7 @@
             "retry"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         },
@@ -738,9 +673,7 @@
             "retry"
           ],
           "authentication": "authenticated",
-          "authorization": [
-            "tenant_member"
-          ],
+          "authorization": ["tenant_member"],
           "enforcement": "enforced",
           "feature_gate": null
         }
@@ -784,15 +717,9 @@
     }
   ],
   "source_ownership": {
-    "tenant-tenant-mcp-servers": [
-      "McpServerList"
-    ],
-    "tenant-tenant-acp": [
-      "AcpDashboard"
-    ],
-    "tenant-tenant-templates": [
-      "TemplateMarketplace"
-    ]
+    "tenant-tenant-mcp-servers": ["McpServerList"],
+    "tenant-tenant-acp": ["AcpDashboard"],
+    "tenant-tenant-templates": ["TemplateMarketplace"]
   },
   "route_owner_overrides": {}
 }

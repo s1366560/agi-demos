@@ -74,6 +74,7 @@ const authorityModules = [
   'desktopTenantSkillDefinitionsAuthorityModuleV2',
   'desktopTenantProvidersAuthorityModuleV2',
   'desktopProjectMcpServersAuthorityModuleV2',
+  'desktopProjectMcpAppsAuthorityModuleV2',
   'desktopWorkspaceAgentPolicyAuthorityModuleV2',
   'desktopTenantSkillPackagesAuthorityModuleV2',
   'desktopTenantSkillEvolutionAuthorityModuleV2',

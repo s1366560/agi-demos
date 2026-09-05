@@ -1,3 +1,4 @@
+import { createProjectMcpAppsHttpClientV2Fixture } from './projectMcpAppsOperationsV2Fixture.mjs';
 import { createProjectMcpServersHttpClientV2Fixture } from './projectMcpServersOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -5,7 +6,6 @@ import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { DesktopApiClient } = require('/tmp/agistack-desktop-test-dist/src/api/client.js');
 const { DEFAULT_CONFIG } = require('/tmp/agistack-desktop-test-dist/src/types.js');
 const {
   callMCPAppTool,
@@ -93,6 +93,7 @@ test('synthetic MCP App resolves a registered app before falling back to a direc
       'approve_release',
       { release: '2026.07' },
       calls[1][4],
+      undefined,
     ],
   ]);
   assert.match(calls[1][4], /^desktop-mcp-tool-call:/u);
@@ -211,6 +212,7 @@ test('synthetic MCP App direct fallback remains scoped to the selected cloud pro
       'approve_release',
       { release: '2026.07' },
       calls[0][4],
+      undefined,
     ],
   ]);
   assert.match(calls[0][4], /^desktop-mcp-tool-call:/u);
@@ -248,8 +250,8 @@ test('MCP resources use the active project scope and resource names are stable',
     resources: [{ uri: 'ui://release/dashboard', name: 'ui://release/dashboard' }],
   });
   assert.deepEqual(calls, [
-    ['read', 'project-selected', 'ui://release/dashboard', 'release-tools'],
-    ['list', 'project-selected', 'release-tools'],
+    ['read', 'project-selected', 'ui://release/dashboard', 'release-tools', undefined],
+    ['list', 'project-selected', 'release-tools', undefined],
   ]);
 });
 
@@ -263,7 +265,7 @@ test('MCP resource discovery preserves unavailable and protocol errors', async (
 
   await assert.rejects(
     () => listMCPAppResources({}, context),
-    /MCP App resource proxy is unavailable/u,
+    { name: 'TypeError', message: /listMCPAppResources is not a function/u },
   );
   await assert.rejects(
     () =>
@@ -301,6 +303,18 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
     const url = new URL(String(input));
     calls.push({ url, init, body: init.body ? JSON.parse(String(init.body)) : undefined });
     if (url.pathname.endsWith('/mcp/apps')) return Response.json([]);
+    if (url.pathname === '/api/v1/mcp/apps/release-dashboard') return Response.json({
+      id: 'release-dashboard', tenant_id: 'tenant-selected', project_id: 'project-selected',
+      server_name: 'release-tools', tool_name: 'approve_release',
+    });
+    if (url.pathname === '/api/v1/mcp/release-tools-server-id') return Response.json({
+      id: 'release-tools-server-id', tenant_id: 'tenant-selected', project_id: 'project-selected',
+      name: 'release-tools', server_type: 'http', enabled: true, runtime_status: 'running',
+    });
+    if (url.pathname === '/api/v1/mcp/tools/call') return Response.json({
+      detail: { reason_code: 'cloud_mcp_tool_idempotency_unavailable' },
+    }, { status: 409 });
+
     if (url.pathname.endsWith('/resources/read')) return Response.json({ contents: [] });
     if (url.pathname.endsWith('/resources/list')) return Response.json({ resources: [] });
     if (url.pathname.endsWith('/credentials/provision')) {
@@ -323,15 +337,16 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
         runtime_status: 'starting',
       });
     }
-    return Response.json({ content: [], is_error: false });
+    return Response.json({ content: [], is_error: true, error_code: -32000, error_message: 'cloud_mcp_tool_idempotency_unavailable' });
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createProjectMcpAppsHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'cloud',
       apiBaseUrl: 'https://api.memstack.test',
       apiKey: 'cloud-session',
+      tenantId: 'tenant-selected',
       projectId: 'project-selected',
     });
     const serversClient = createProjectMcpServersHttpClientV2Fixture({
@@ -360,25 +375,29 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
       project_id: 'project-selected',
       idempotency_key: 'mcp-create-action-1',
     });
-    await client.callMCPAppTool(
+    const appFailure = await client.callMCPAppTool(
       'release-dashboard',
       'approve_release',
       { release: '2026.07' },
       'desktop-mcp-tool-call:registered-1',
     );
-    await client.callMCPToolByServerId(
+    assert.equal(appFailure.is_error, true);
+    assert.equal(appFailure.error_code, -32000);
+    await assert.rejects(client.callMCPToolByServerId(
       'release-tools-server-id',
       'approve_release',
       { release: '2026.07' },
       'desktop-mcp-tool-call:server-id-1',
-    );
-    await client.callMCPAppToolDirect(
+    ), (error) => error.status === 409);
+    const directFailure = await client.callMCPAppToolDirect(
       'project-selected',
       'release-tools',
       'approve_release',
       { release: '2026.07' },
       'desktop-mcp-tool-call:direct-1',
     );
+    assert.equal(directFailure.is_error, true);
+    assert.equal(directFailure.error_code, -32000);
     await client.readMCPAppResource(
       'project-selected',
       'ui://release/dashboard',
@@ -415,11 +434,15 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
             server_type: 'http',
             transport_config: {
               url: 'https://mcp.memstack.test',
-                  },
+            },
             enabled: true,
             project_id: 'project-selected',
             idempotency_key: 'mcp-create-action-1',
           },
+        },
+        {
+          path: '/api/v1/mcp/apps/release-dashboard',
+          method: 'GET', auth: 'Bearer cloud-session', body: undefined,
         },
         {
           path: '/api/v1/mcp/apps/release-dashboard/tool-call',
@@ -430,6 +453,10 @@ test('Desktop MCP App API methods preserve cloud auth and selected project in ev
             arguments: { release: '2026.07' },
             idempotency_key: 'desktop-mcp-tool-call:registered-1',
           },
+        },
+        {
+          path: '/api/v1/mcp/release-tools-server-id',
+          method: 'GET', auth: 'Bearer cloud-session', body: undefined,
         },
         {
           path: '/api/v1/mcp/tools/call',
@@ -593,4 +620,59 @@ test('MCP settings expose edit, enable-disable, and delete lifecycle actions', (
   assert.match(pageSource, /management\.toggleServer\(server\)/u);
   assert.match(dialogSource, /onDelete/u);
   assert.match(dialogSource, /arguments_redacted/u);
+});
+
+test('Cloud HTTP 200 tool errors preserve protocol fields and the persisted retry key through V2', async () => {
+  const originalFetch = globalThis.fetch;
+  const dispatchedKeys = [];
+  const persisted = new Map();
+  const payload = {
+    content: [{ type: 'text', text: 'upstream MCP tool unavailable' }],
+    is_error: true,
+    error_message: 'cloud_mcp_tool_idempotency_unavailable',
+    error_code: -32000,
+  };
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/api/v1/mcp/apps') return Response.json([]);
+    assert.equal(url.pathname, '/api/v1/mcp/apps/proxy/tool-call');
+    const body = JSON.parse(init.body);
+    assert.equal(body.project_id, 'project-selected');
+    dispatchedKeys.push(body.idempotency_key);
+    return Response.json(payload, { status: 200 });
+  };
+  try {
+    const client = createProjectMcpAppsHttpClientV2Fixture({
+      ...DEFAULT_CONFIG, mode: 'cloud', apiBaseUrl: 'https://api.memstack.test',
+      apiKey: 'cloud-session', tenantId: 'tenant-selected', projectId: 'project-selected',
+    });
+    const raw = await client.callMCPAppToolDirect(
+      'project-selected', 'release-tools', 'approve_release', {}, 'desktop-mcp-tool-call:raw-error',
+    );
+    assert.equal(raw.is_error, true);
+    assert.equal(raw.error_code, -32000);
+    assert.equal(raw.error_message, payload.error_message);
+    const storage = {
+      getItem: (key) => persisted.get(key) ?? null,
+      setItem: (key, value) => persisted.set(key, value),
+      removeItem: (key) => persisted.delete(key),
+    };
+    const context = {
+      projectId: 'project-selected', appId: '_synthetic_error_dashboard',
+      serverName: 'release-tools', originalToolName: 'show_release_dashboard',
+    };
+    const params = { name: 'approve_release', arguments: { release: '2026.09' } };
+    const first = await callMCPAppTool(client, context, params,
+      createMCPToolCallKeyStore(storage, () => 'protocol-error-key'));
+    assert.equal(first.isError, true);
+    assert.equal(persisted.size, 1);
+    const restored = await callMCPAppTool(client, context, params,
+      createMCPToolCallKeyStore(storage, () => 'unexpected-new-key'));
+    assert.equal(restored.isError, true);
+    assert.equal(dispatchedKeys[1], 'desktop-mcp-tool-call:protocol-error-key');
+    assert.equal(dispatchedKeys[2], dispatchedKeys[1]);
+    assert.equal(persisted.size, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
