@@ -1812,17 +1812,26 @@ function authorizeAgentResourceAction(
   target: URL,
   segments: readonly string[],
 ): CloudProductEndpoint | null {
-  if (!noQuery(target)) {
-    if (
-      segments.length === 7 &&
-      segments[4] === 'runs' &&
-      segments[6] === 'changes' &&
-      request.method === 'GET' &&
-      allowedQueryKeys(target.searchParams, new Set(['expected_revision']), ['expected_revision'])
-    ) {
-      requiredIdentifier(segments[5]);
-      return endpoint('project', null, null, null);
+  if (segments.length === 7 && segments[4] === 'runs' &&
+    ['summary', 'changes'].includes(segments[6] ?? '')) {
+    requiredIdentifier(segments[5]);
+    if (request.method !== 'GET' || request.body || request.form || request.mutation ||
+      request.response) return null;
+    if (segments[6] === 'summary') {
+      return noQuery(target) ? endpoint('project', null, null, null) : null;
     }
+    const query = target.searchParams;
+    if (!allowedQueryKeys(query, new Set(['scope', 'turn_id', 'expected_revision']),
+      ['scope', 'expected_revision'])) return null;
+    const scope = query.get('scope');
+    const revision = query.get('expected_revision')!;
+    if (!['turn', 'run', 'session'].includes(scope ?? '') ||
+      !/^[1-9][0-9]*$/u.test(revision) || !Number.isSafeInteger(Number(revision))) return null;
+    if (scope === 'turn' ? !query.has('turn_id') : query.has('turn_id')) return null;
+    if (scope === 'turn') requiredIdentifier(query.get('turn_id'));
+    return endpoint('project', null, null, null);
+  }
+  if (!noQuery(target)) {
     return null;
   }
   if (segments[4] === 'runs' && segments.length >= 6 && segments.length <= 7) {

@@ -41,7 +41,7 @@ import {
 import type { CloudSessionProjection } from './api/cloudSessionProjectionClient';
 import { useResizablePanelWidth } from './components/ResizeHandle';
 import type { RunChangeScope } from './features/agent-authority/agentAuthorityTypes';
-import { desktopChangeSnapshotFromCloud } from './features/agent-authority/agentAuthorityProjection';
+import { useRunReviewAuthorityV2 } from './features/session/useRunReviewAuthorityV2';
 import {
   createDesktopAgentAuthorityProviderV2,
 } from './features/agent-authority/desktopAgentAuthorityProviderV2';
@@ -5105,32 +5105,19 @@ export function App() {
       ),
     [config.mode, currentArtifactRun, selectedConversation],
   );
-  useEffect(() => {
-    let active = true;
-    if (
-      config.mode !== 'cloud' ||
-      !activityAuthorityAdapter.client ||
-      !activityAuthorityScope ||
-      !currentArtifactRun
-    ) {
-      setAuthoritativeRunSummary(null);
-      return () => {
-        active = false;
-      };
-    }
-    setAuthoritativeRunSummary(null);
-    void activityAuthorityAdapter.client
-      .getRunSummary(activityAuthorityScope, currentArtifactRun.id)
-      .then((summary) => {
-        if (active) setAuthoritativeRunSummary(summary);
-      })
-      .catch(() => {
-        if (active) setAuthoritativeRunSummary(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [activityAuthorityAdapter, activityAuthorityScope, config.mode, currentArtifactRun]);
+  const loadRunChanges = useRunReviewAuthorityV2({
+    config,
+    conversation: selectedConversation ?? null,
+    run: currentArtifactRun,
+    scope: changeScope,
+    projectionOperations: desktopSessionProjectionOperationsV2,
+    changesOperations: desktopSessionRunChangesOperationsV2,
+    setSummary: setAuthoritativeRunSummary,
+    setSnapshot: setChangeSnapshot,
+    setLoading: setChangeSnapshotLoading,
+    setError: setChangeSnapshotError,
+    setReferences: setRunInputReferences,
+  });
   const sessionUsageSummary = useMemo(
     () => deriveSessionUsage(conversationTimeline.items),
     [conversationTimeline],
@@ -5264,66 +5251,6 @@ export function App() {
       actionLabel: t('session.authorityRetry'),
     };
   }, [selectedConversation, sessionProjectionState.status, t]);
-  const loadRunChanges = useCallback(async (signal = new AbortController().signal) => {
-    const requestConfig = configRef.current;
-    if (!currentArtifactRun) {
-      setChangeSnapshot(null);
-      setChangeSnapshotError(null);
-      setChangeSnapshotLoading(false);
-      return;
-    }
-    setChangeSnapshotLoading(true);
-    setChangeSnapshotError(null);
-    try {
-      const snapshot =
-        requestConfig.mode === 'cloud'
-          ? activityAuthorityAdapter.client && activityAuthorityScope
-            ? desktopChangeSnapshotFromCloud(
-                await activityAuthorityAdapter.client.getRunChanges(
-                  activityAuthorityScope,
-                  currentArtifactRun.id,
-                  {
-                    scope: changeScope,
-                    expected_revision: currentArtifactRun.revision,
-                    ...(changeScope === 'turn' ? { turn_id: currentArtifactRun.message_id } : {}),
-                  },
-                ),
-              )
-            : (() => {
-                throw new Error('cloud_run_changes_authority_scope_unavailable');
-              })()
-          : changeScope === 'run' && scopedConversation
-            ? await desktopSessionRunChangesOperationsV2.getRunChanges({
-                config: requestConfig,
-                conversation: scopedConversation,
-                runId: currentArtifactRun.id,
-                expectedRevision: currentArtifactRun.revision,
-                signal,
-              })
-            : (() => {
-                throw new Error('local_run_changes_scope_unavailable');
-              })();
-      setChangeSnapshot(snapshot);
-      setRunInputReferences((current) =>
-        current.filter(
-          (reference) =>
-            reference.snapshot_id === snapshot.id &&
-            reference.environment_id === snapshot.environment_id,
-        ),
-      );
-    } catch (caught) {
-      setChangeSnapshotError(formatConnectionError(caught, requestConfig.apiBaseUrl));
-    } finally {
-      setChangeSnapshotLoading(false);
-    }
-  }, [
-    activityAuthorityAdapter,
-    activityAuthorityScope,
-    changeScope,
-    currentArtifactRun,
-    desktopSessionRunChangesOperationsV2,
-    scopedConversation,
-  ]);
   const availableChangeScopes = useMemo<readonly RunChangeScope[]>(
     () =>
       config.mode === 'cloud'
@@ -5336,11 +5263,6 @@ export function App() {
   useEffect(() => {
     if (!availableChangeScopes.includes(changeScope)) setChangeScope('run');
   }, [availableChangeScopes, changeScope]);
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadRunChanges(controller.signal);
-    return () => controller.abort();
-  }, [loadRunChanges]);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();

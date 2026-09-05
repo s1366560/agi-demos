@@ -6,7 +6,13 @@ import {
 } from '@agistack/plugin-runtime';
 
 import { DesktopApiClient } from '../api/client';
-import type { AgentConversation, DesktopRuntimeConfig } from '../types';
+import { createDesktopRunReviewHttpProjectionV2 } from './desktopRunReviewHttpProjectionV2';
+import {
+  checkRunReviewAbortV2,
+  runReviewErrorV2,
+  requireRunReviewSummaryV2,
+} from './desktopRunReviewContractV2';
+import type { AgentConversation, DesktopRuntimeConfig, RunSummary } from '../types';
 import type {
   DesktopRendererGenerationActionsV2,
   DesktopRendererServiceOperationLeaseAdmissionV2,
@@ -31,7 +37,15 @@ export type DesktopSessionProjectionOperationInputV2 = Readonly<{
   signal: AbortSignal;
 }>;
 
+export type DesktopSessionRunSummaryOperationInputV2 = DesktopSessionProjectionOperationInputV2 &
+  Readonly<{ runId: string }>;
+
 export interface DesktopSessionProjectionAuthorityV2 {
+  readonly getRunSummary: (
+    identity: DesktopSessionProjectionIdentityV2,
+    runId: string,
+    signal: AbortSignal,
+  ) => Promise<RunSummary>;
   readonly getConversationSession: (
     identity: DesktopSessionProjectionIdentityV2,
     signal: AbortSignal,
@@ -43,6 +57,7 @@ export interface DesktopSessionProjectionAuthorityServiceV2 {
 }
 
 export interface DesktopSessionProjectionOperationsV2 {
+  readonly getRunSummary: (input: DesktopSessionRunSummaryOperationInputV2) => Promise<RunSummary>;
   readonly getConversationSession: (
     input: DesktopSessionProjectionOperationInputV2,
   ) => Promise<unknown>;
@@ -104,6 +119,22 @@ export function createDesktopSessionProjectionOperationsV2(
   resolveActions: () => DesktopRendererGenerationActionsV2 | null,
 ): DesktopSessionProjectionOperationsV2 {
   return Object.freeze({
+    getRunSummary(input: DesktopSessionRunSummaryOperationInputV2) {
+      if (!isPlainRecordV2(input) || !isCanonicalStringV2(input.runId))
+        throw runReviewErrorV2('desktop_run_review_identity_invalid');
+      const runId = input.runId;
+      const actions = requireGenerationActionsV2(resolveActions());
+      return withDesktopSessionProjectionAuthorityOperationV2(
+        actions,
+        input,
+        async (authority, prepared) =>
+          requireRunReviewSummaryV2(
+            await authority.getRunSummary(prepared.identity, runId, prepared.signal),
+            prepared.identity,
+            runId,
+          ),
+      );
+    },
     getConversationSession(input: DesktopSessionProjectionOperationInputV2) {
       const actions = requireGenerationActionsV2(resolveActions());
       return withDesktopSessionProjectionAuthorityOperationV2(
@@ -153,16 +184,26 @@ async function runDesktopSessionProjectionAuthorityOperationV2<TResult>(
 
   let operationFailed = false;
   let operationActive = true;
+  let consumed = false;
   try {
-    return await admission.useService((service) =>
-      operation(
+    return await admission.useService(async (service) => {
+      if (!operationActive || consumed)
+        throw new RuntimeV2Error(
+          'desktop_session_projection_operation_released',
+          'operation callback already consumed',
+        );
+      consumed = true;
+      checkRunReviewAbortV2(prepared.signal);
+      const result = await operation(
         createRevocableDesktopSessionProjectionAuthorityV2(
           service.bindOperation(prepared.config),
           () => operationActive,
         ),
         prepared,
-      ),
-    );
+      );
+      checkRunReviewAbortV2(prepared.signal);
+      return result;
+    });
   } catch (error) {
     operationFailed = true;
     throw error;
@@ -181,7 +222,17 @@ function createDesktopSessionProjectionAuthorityV2(
 ): DesktopSessionProjectionAuthorityV2 {
   const operationConfig = cloneDesktopRuntimeConfigV2(config);
   const transport = new DesktopApiClient(operationConfig);
+  const runReview = createDesktopRunReviewHttpProjectionV2(operationConfig);
   return Object.freeze({
+    getRunSummary(
+      identity: DesktopSessionProjectionIdentityV2,
+      runId: string,
+      signal: AbortSignal,
+    ) {
+      const operationIdentity = cloneSessionProjectionIdentityV2(identity);
+      assertSessionProjectionScopeV2(operationConfig, operationIdentity);
+      return runReview.getRunSummary(operationIdentity, runId, signal);
+    },
     getConversationSession(identity: DesktopSessionProjectionIdentityV2, signal: AbortSignal) {
       const operationIdentity = cloneSessionProjectionIdentityV2(identity);
       if (!isAbortSignalV2(signal)) throw invalidSessionProjectionInputV2();
@@ -204,6 +255,19 @@ function createRevocableDesktopSessionProjectionAuthorityV2(
   isOperationActive: () => boolean,
 ): DesktopSessionProjectionAuthorityV2 {
   return Object.freeze({
+    getRunSummary(
+      identity: DesktopSessionProjectionIdentityV2,
+      runId: string,
+      signal: AbortSignal,
+    ) {
+      if (!isOperationActive())
+        throw new RuntimeV2Error(
+          'desktop_session_projection_operation_released',
+          'desktop session projection operation has been released',
+        );
+      checkRunReviewAbortV2(signal);
+      return authority.getRunSummary(identity, runId, signal);
+    },
     getConversationSession(identity: DesktopSessionProjectionIdentityV2, signal: AbortSignal) {
       if (!isOperationActive()) {
         throw new RuntimeV2Error(

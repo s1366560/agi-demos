@@ -5,7 +5,13 @@ import {
   type PluginDefinitionV2,
 } from '@agistack/plugin-runtime';
 
-import { DesktopApiClient } from '../api/client';
+import { createDesktopRunReviewHttpProjectionV2 } from './desktopRunReviewHttpProjectionV2';
+import {
+  checkRunReviewAbortV2,
+  prepareRunChangesScopeV2,
+  requireRunReviewSnapshotIdentityV2,
+  type DesktopRunChangesScopeV2,
+} from './desktopRunReviewContractV2';
 import type { AgentConversation, ChangeSnapshot, DesktopRuntimeConfig } from '../types';
 import type {
   DesktopRendererGenerationActionsV2,
@@ -30,6 +36,8 @@ export type DesktopSessionRunChangesOperationInputV2 = Readonly<{
   conversation: AgentConversation;
   expectedRevision: number;
   runId: string;
+  scope?: 'turn' | 'run' | 'session';
+  turnId?: string;
   signal: AbortSignal;
 }>;
 
@@ -39,6 +47,7 @@ export interface DesktopSessionRunChangesAuthorityV2 {
     runId: string,
     expectedRevision: number,
     signal: AbortSignal,
+    options?: DesktopRunChangesScopeV2,
   ) => Promise<ChangeSnapshot>;
 }
 
@@ -69,6 +78,8 @@ type PreparedSessionRunChangesOperationV2 = Readonly<{
   expectedRevision: number;
   identity: DesktopSessionRunChangesIdentityV2;
   runId: string;
+  scope?: 'turn' | 'run' | 'session';
+  turnId?: string;
   signal: AbortSignal;
 }>;
 
@@ -115,13 +126,24 @@ export function createDesktopSessionRunChangesOperationsV2(
       return withDesktopSessionRunChangesAuthorityOperationV2(
         actions,
         input,
-        (authority, prepared) =>
-          authority.getRunChanges(
+        async (authority, prepared) => {
+          const request = { scope: prepared.scope, turnId: prepared.turnId };
+          const value = await authority.getRunChanges(
             prepared.identity,
             prepared.runId,
             prepared.expectedRevision,
             prepared.signal,
-          ),
+            request,
+          );
+          return requireRunReviewSnapshotIdentityV2(
+            value,
+            prepared.config,
+            prepared.identity,
+            prepared.runId,
+            prepared.expectedRevision,
+            request,
+          );
+        },
       );
     },
   });
@@ -164,16 +186,26 @@ async function runDesktopSessionRunChangesAuthorityOperationV2<TResult>(
 
   let operationFailed = false;
   let operationActive = true;
+  let consumed = false;
   try {
-    return await admission.useService((service) =>
-      operation(
+    return await admission.useService(async (service) => {
+      if (!operationActive || consumed)
+        throw new RuntimeV2Error(
+          'desktop_session_run_changes_operation_released',
+          'operation callback already consumed',
+        );
+      consumed = true;
+      checkRunReviewAbortV2(prepared.signal);
+      const result = await operation(
         createRevocableDesktopSessionRunChangesAuthorityV2(
           service.bindOperation(prepared.config),
           () => operationActive,
         ),
         prepared,
-      ),
-    );
+      );
+      checkRunReviewAbortV2(prepared.signal);
+      return result;
+    });
   } catch (error) {
     operationFailed = true;
     throw error;
@@ -191,21 +223,24 @@ function createDesktopSessionRunChangesAuthorityV2(
   config: DesktopRuntimeConfig,
 ): DesktopSessionRunChangesAuthorityV2 {
   const operationConfig = cloneDesktopRuntimeConfigV2(config);
-  const transport = new DesktopApiClient(operationConfig);
+  const transport = createDesktopRunReviewHttpProjectionV2(operationConfig);
   return Object.freeze({
     getRunChanges(
       identity: DesktopSessionRunChangesIdentityV2,
       runId: string,
       expectedRevision: number,
       signal: AbortSignal,
+      options: DesktopRunChangesScopeV2 = {},
     ) {
       const operationIdentity = cloneSessionRunChangesIdentityV2(identity);
       const operationRequest = cloneSessionRunChangesRequestV2(runId, expectedRevision, signal);
       assertSessionRunChangesScopeV2(operationConfig, operationIdentity);
       return transport.getRunChanges(
+        operationIdentity,
         operationRequest.runId,
         operationRequest.expectedRevision,
         operationRequest.signal,
+        options,
       );
     },
   });
@@ -221,6 +256,7 @@ function createRevocableDesktopSessionRunChangesAuthorityV2(
       runId: string,
       expectedRevision: number,
       signal: AbortSignal,
+      options: DesktopRunChangesScopeV2 = {},
     ) {
       if (!isOperationActive()) {
         throw new RuntimeV2Error(
@@ -228,7 +264,8 @@ function createRevocableDesktopSessionRunChangesAuthorityV2(
           'desktop session run changes operation has been released',
         );
       }
-      return authority.getRunChanges(identity, runId, expectedRevision, signal);
+      checkRunReviewAbortV2(signal);
+      return authority.getRunChanges(identity, runId, expectedRevision, signal, options);
     },
   });
 }
@@ -245,7 +282,12 @@ function prepareSessionRunChangesOperationV2(
     input.signal,
   );
   assertSessionRunChangesScopeV2(config, identity);
-  return Object.freeze({ config, identity, ...request });
+  const scope = prepareRunChangesScopeV2(config, request.expectedRevision, {
+    scope: input.scope,
+    turnId: input.turnId,
+  });
+  checkRunReviewAbortV2(request.signal);
+  return Object.freeze({ config, identity, ...request, ...scope });
 }
 
 function cloneDesktopRuntimeConfigV2(config: DesktopRuntimeConfig): DesktopRuntimeConfig {

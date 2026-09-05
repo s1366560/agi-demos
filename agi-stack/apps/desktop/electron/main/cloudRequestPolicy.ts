@@ -4,6 +4,11 @@ import {
 } from '../../src/api/cloudSandboxDownloadAuthority';
 import { allowsCloudSandboxImportBudget } from './cloudSandboxImportBudget';
 import { authorizeCloudProductEndpoint } from './cloudProductEndpointPolicy';
+import {
+  cloudRunReviewTarget,
+  requireCloudRunSummaryScope,
+  requireCloudRunChangesScope,
+} from './cloudRunReviewAuthority';
 
 export type VaultBoundCloudRequestInput = Readonly<{
   path: string;
@@ -229,6 +234,19 @@ export async function executeVaultBoundCloudRequest(
   if (endpoint.kind === 'workspace-context') {
     return Object.freeze({ status: contextResponse.status, body: contextBody });
   }
+  const runReview = cloudRunReviewTarget(request.path);
+  let summaryIdentity: Readonly<{ conversationId: string }> | null = null;
+  if (runReview?.action === 'changes') {
+    const summaryResponse = await authorizedFetch(session, dependencies, {
+      path: `/api/v1/agent/runs/${encodeURIComponent(runReview.runId)}/summary`, method: 'GET',
+    });
+    const summaryBody = await boundedJson(summaryResponse, true, session.credential);
+    dependencies.signal?.throwIfAborted();
+    if (!summaryResponse.ok) {
+      return Object.freeze({ status: summaryResponse.status, body: summaryBody });
+    }
+    summaryIdentity = requireCloudRunSummaryScope(summaryBody, runReview.runId, context);
+  }
   const response = await authorizedFetch(
     session, activityDeliveryDependencies(request, dependencies), request,
   );
@@ -253,10 +271,14 @@ export async function executeVaultBoundCloudRequest(
       ),
     });
   }
-  return Object.freeze({
-    status: response.status,
-    body: await boundedJson(response, true, session.credential),
-  });
+  const body = await boundedJson(response, true, session.credential);
+  dependencies.signal?.throwIfAborted();
+  if (response.ok && runReview?.action === 'summary') {
+    requireCloudRunSummaryScope(body, runReview.runId, context);
+  } else if (response.ok && runReview?.action === 'changes' && summaryIdentity) {
+    requireCloudRunChangesScope(body, runReview, summaryIdentity);
+  }
+  return Object.freeze({ status: response.status, body });
 }
 
 function activityDeliveryDependencies(

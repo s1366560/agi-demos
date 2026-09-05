@@ -2598,7 +2598,7 @@
       "module_ref": "builtin://memstack/desktop/session-projection-authority",
       "entrypoint": "applyDesktopSessionProjectionAuthorityV2",
       "artifact": {
-        "digest": "sha256:dea849a68f4e87412e0453e2d6066af0fe6f919b4aa4aa128715e9ab77c7ddc9",
+        "digest": "sha256:fe9b67ec306df988549f4d780d015149b63de298f78497646de9193c3ec211ef",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionProjectionAuthorityModuleV2.ts"
       },
       "targets": ["desktop-renderer"],
@@ -2629,7 +2629,7 @@
       "module_ref": "builtin://memstack/desktop/session-run-changes-authority",
       "entrypoint": "applyDesktopSessionRunChangesAuthorityV2",
       "artifact": {
-        "digest": "sha256:d5d3e8194bd75b0ba5097ca37712d4dea460e96fbef16cdb7f4aceab8fe641c8",
+        "digest": "sha256:f5120c3102942314c7942ff0dada682a39fc5379c1e4f046df7305dd5aec4878",
         "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionRunChangesAuthorityModuleV2.ts"
       },
       "targets": ["desktop-renderer"],

@@ -397,10 +397,22 @@ function changeSnapshot(overrides = {}) {
   return {
     id: 'snapshot-1',
     run_id: 'run / one',
+    conversation_id: 'conversation-1',
     run_revision: 7,
     environment_id: 'environment-1',
+    repository_root: '/workspace',
+    workspace_path: '/workspace',
+    branch: 'codex/test',
+    base_revision: 'base-revision',
+    head_revision: 'head-revision',
+    status: 'ready',
+    reason: null,
+    additions: 0,
+    deletions: 0,
+    files_changed: 0,
+    truncated: false,
     files: [],
-    created_at: '2026-09-01T00:00:00Z',
+    captured_at: '2026-09-01T00:00:00Z',
     ...overrides,
   };
 }
@@ -910,10 +922,15 @@ test('HMR pins an in-flight read to old generation and sends the next to new', a
     Object.freeze({
       bindOperation() {
         return Object.freeze({
-          async getRunChanges() {
+          async getRunChanges(identity, runId, expectedRevision) {
             lifecycle.push('read:' + label);
             if (label === 'old') await oldPending;
-            return changeSnapshot({ source: label });
+            return changeSnapshot({
+              source: label,
+              run_id: runId,
+              conversation_id: identity.id,
+              run_revision: expectedRevision,
+            });
           },
         });
       },

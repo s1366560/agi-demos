@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:cf018f2d598cbf14dd7d510e1a6e946a65b25ad9a632f009d09ac5cba68b4f'
-    'f7","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:9e50ba4a30b8d1fd9e1963582e1b6223f38e91c15b0a02a82a342ca5d21e37'
+    '16","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -2074,7 +2074,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '24589e108edccd18db","entrypoint":"applyDesktopSessionArtifactActionAuthorityV2","module_'
     'ref":"builtin://memstack/desktop/session-artifact-action-authority","plugin_id":"memstac'
     'k-renderer-target-hosts","plugin_version":"2.0.0","targets":["desktop-renderer"]},{"arti'
-    'fact_digest":"sha256:dea849a68f4e87412e0453e2d6066af0fe6f919b4aa4aa128715e9ab77c7ddc9","'
+    'fact_digest":"sha256:fe9b67ec306df988549f4d780d015149b63de298f78497646de9193c3ec211ef","'
     'artifact_source":"repo+typescript://agi-stack/apps/desktop/src/plugins/desktopSessionPro'
     'jectionAuthorityModuleV2.ts","contract":{"config_schema":{"$schema":"https://json-schema'
     '.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const'
@@ -2084,8 +2084,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'ha256:3d55ba61108434385bf01d5d9ade9d67e545c7f96314bf8775f257d90e03b940","entrypoint":"ap'
     'plyDesktopSessionProjectionAuthorityV2","module_ref":"builtin://memstack/desktop/session'
     '-projection-authority","plugin_id":"memstack-renderer-target-hosts","plugin_version":"2.'
-    '0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:d5d3e8194bd75b0ba5097ca3'
-    '7712d4dea460e96fbef16cdb7f4aceab8fe641c8","artifact_source":"repo+typescript://agi-stack'
+    '0.0","targets":["desktop-renderer"]},{"artifact_digest":"sha256:f5120c3102942314c7942ff0'
+    'dada682a39fc5379c1e4f046df7305dd5aec4878","artifact_source":"repo+typescript://agi-stack'
     '/apps/desktop/src/plugins/desktopSessionRunChangesAuthorityModuleV2.ts","contract":{"con'
     'fig_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalPropert'
     'ies":false,"properties":{"strategy":{"const":"desktop-api-client","type":"string"}},"req'
@@ -4441,7 +4441,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:cf018f2d598cbf14dd7d510e1a6e946a65b25ad9a632f009d09ac5cba68b4ff7"
+    "sha256:9e50ba4a30b8d1fd9e1963582e1b6223f38e91c15b0a02a82a342ca5d21e3716"
 )
 # fmt: on
 
