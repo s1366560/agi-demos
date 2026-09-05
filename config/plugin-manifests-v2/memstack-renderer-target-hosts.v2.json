@@ -6,6 +6,47 @@
   "trust": "builtin",
   "modules": [
     {
+      "module_ref": "builtin://memstack/desktop/browser-integration-authority",
+      "entrypoint": "applyDesktopBrowserIntegrationAuthorityV2",
+      "artifact": {
+        "source": "repo+typescript://agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationAuthorityModuleV2.ts",
+        "digest": "sha256:d5f2fe31774a1b242c1d8bd675a6543186f636cbf310026a243ba980df2927fc"
+      },
+      "targets": [
+        "desktop-renderer"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:desktop-renderer.browser-integration-authority",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy"
+          ],
+          "properties": {
+            "strategy": {
+              "const": "desktop-api-fetch",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:3c66912a6af655866b71bd95b460b8dc9150b22d084e3d9d140095e32f8bd3da"
+    },
+    {
       "module_ref": "builtin://memstack/desktop/project-mcp-apps-authority",
       "entrypoint": "applyDesktopProjectMcpAppsAuthorityV2",
       "artifact": {

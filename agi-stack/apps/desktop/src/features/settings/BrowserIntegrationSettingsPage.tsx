@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button } from '@radix-ui/themes';
 import {
   ActivityLogIcon,
@@ -9,16 +9,15 @@ import {
   LockClosedIcon,
 } from '@radix-ui/react-icons';
 
-import { DesktopApiClient } from '../../api/client';
+import type { DesktopBrowserIntegrationClientV2 } from '../../plugins/desktopBrowserIntegrationAuthorityModuleV2';
+import { useBrowserIntegrationManagementV2 } from './useBrowserIntegrationManagementV2';
 import { useI18n } from '../../i18n';
 import type {
   BrowserAuditEntry,
   BrowserBridgeInstallResult,
   BrowserBridgeStatus,
   BrowserBridgeUninstallResult,
-  BrowserCapabilityGrant,
   BrowserOriginGrant,
-  BrowserSiteCredentialMeta,
   DesktopRuntimeConfig,
   LocalRuntimeStatus,
 } from '../../types';
@@ -26,7 +25,6 @@ import { SettingsPage } from './SettingsCorePages';
 import './BrowserIntegrationSettingsPage.css';
 
 const BROWSER_BRIDGE_STATUS_POLL_MS = 5_000;
-const BROWSER_AUDIT_PAGE_LIMIT = 200;
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -46,20 +44,22 @@ function grantDecisionColor(decision: BrowserOriginGrant['decision']): 'blue' | 
 
 function auditOutcomeColor(outcome: BrowserAuditEntry['outcome']): 'green' | 'amber' | 'red' {
   if (outcome === 'ok') return 'green';
-  if (outcome === 'consent') return 'amber';
+  if (outcome === 'consent' || outcome === 'consent_required') return 'amber';
   return 'red';
 }
 
 // Local-runtime bridge between the Chrome extension (native messaging broker)
 // and the desktop sidecar. Status polling runs only while this section is
 // mounted; leaving the section unmounts the page and clears the interval.
-export function BrowserIntegrationSettingsPage({ config }: { config?: DesktopRuntimeConfig }) {
+export function BrowserIntegrationSettingsPage({
+  config,
+  browserIntegrationClientV2,
+}: {
+  config?: DesktopRuntimeConfig;
+  browserIntegrationClientV2: DesktopBrowserIntegrationClientV2;
+}) {
   const { t } = useI18n();
   const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
-  const bridgeClient = useMemo(
-    () => (config?.mode === 'local' ? new DesktopApiClient(config) : null),
-    [config],
-  );
   const [runtimeStatus, setRuntimeStatus] = useState<LocalRuntimeStatus | null>(null);
   const [bridgeStatus, setBridgeStatus] = useState<BrowserBridgeStatus | null>(null);
   const [optimisticEnabled, setOptimisticEnabled] = useState<boolean | null>(null);
@@ -69,166 +69,38 @@ export function BrowserIntegrationSettingsPage({ config }: { config?: DesktopRun
   const [actionError, setActionError] = useState<string | null>(null);
   const [installResult, setInstallResult] = useState<BrowserBridgeInstallResult | null>(null);
   const [uninstallResult, setUninstallResult] = useState<BrowserBridgeUninstallResult | null>(null);
-  const [originGrants, setOriginGrants] = useState<BrowserOriginGrant[] | null>(null);
-  const [originGrantsError, setOriginGrantsError] = useState<string | null>(null);
-  const [revokingGrantId, setRevokingGrantId] = useState<string | null>(null);
   const [optimisticFullCdpEnabled, setOptimisticFullCdpEnabled] = useState<boolean | null>(null);
   const [fullCdpToggleBusy, setFullCdpToggleBusy] = useState(false);
   const [fullCdpToggleError, setFullCdpToggleError] = useState<string | null>(null);
-  const [capabilityGrants, setCapabilityGrants] = useState<BrowserCapabilityGrant[] | null>(null);
-  const [capabilityGrantsError, setCapabilityGrantsError] = useState<string | null>(null);
-  const [revokingCapabilityGrantId, setRevokingCapabilityGrantId] = useState<string | null>(null);
-  const [siteCredentials, setSiteCredentials] = useState<BrowserSiteCredentialMeta[] | null>(null);
-  const [siteCredentialsError, setSiteCredentialsError] = useState<string | null>(null);
-  const [credentialOrigin, setCredentialOrigin] = useState('');
-  const [credentialUsername, setCredentialUsername] = useState('');
-  const [credentialPassword, setCredentialPassword] = useState('');
-  const [credentialSaving, setCredentialSaving] = useState(false);
-  const [deletingCredentialId, setDeletingCredentialId] = useState<string | null>(null);
-  const [auditEntries, setAuditEntries] = useState<BrowserAuditEntry[] | null>(null);
-  const [auditError, setAuditError] = useState<string | null>(null);
-  const [auditOriginFilter, setAuditOriginFilter] = useState('');
-  const [auditLoading, setAuditLoading] = useState(false);
-
-  const refreshOriginGrants = useCallback(async () => {
-    if (!bridgeClient) return;
-    try {
-      const grants = await bridgeClient.listBrowserOriginGrants();
-      setOriginGrants(grants);
-      setOriginGrantsError(null);
-    } catch (error) {
-      setOriginGrantsError(formatError(error));
-    }
-  }, [bridgeClient]);
-
-  useEffect(() => {
-    setOriginGrants(null);
-    setOriginGrantsError(null);
-    void refreshOriginGrants();
-  }, [refreshOriginGrants]);
-
-  const revokeOriginGrant = async (grantId: string) => {
-    if (!bridgeClient || revokingGrantId) return;
-    setRevokingGrantId(grantId);
-    setOriginGrantsError(null);
-    try {
-      await bridgeClient.revokeBrowserOriginGrant(grantId);
-      await refreshOriginGrants();
-    } catch (error) {
-      setOriginGrantsError(formatError(error));
-    } finally {
-      setRevokingGrantId(null);
-    }
-  };
-
-  const refreshCapabilityGrants = useCallback(async () => {
-    if (!bridgeClient) return;
-    try {
-      const grants = await bridgeClient.listBrowserCapabilityGrants();
-      setCapabilityGrants(grants);
-      setCapabilityGrantsError(null);
-    } catch (error) {
-      setCapabilityGrantsError(formatError(error));
-    }
-  }, [bridgeClient]);
-
-  useEffect(() => {
-    setCapabilityGrants(null);
-    setCapabilityGrantsError(null);
-    void refreshCapabilityGrants();
-  }, [refreshCapabilityGrants]);
-
-  const revokeCapabilityGrant = async (grantId: string) => {
-    if (!bridgeClient || revokingCapabilityGrantId) return;
-    setRevokingCapabilityGrantId(grantId);
-    setCapabilityGrantsError(null);
-    try {
-      await bridgeClient.revokeBrowserCapabilityGrant(grantId);
-      await refreshCapabilityGrants();
-    } catch (error) {
-      setCapabilityGrantsError(formatError(error));
-    } finally {
-      setRevokingCapabilityGrantId(null);
-    }
-  };
-
-  const refreshSiteCredentials = useCallback(async () => {
-    if (!bridgeClient) return;
-    try {
-      const credentials = await bridgeClient.listBrowserSiteCredentials();
-      setSiteCredentials(credentials);
-      setSiteCredentialsError(null);
-    } catch (error) {
-      setSiteCredentialsError(formatError(error));
-    }
-  }, [bridgeClient]);
-
-  useEffect(() => {
-    setSiteCredentials(null);
-    setSiteCredentialsError(null);
-    void refreshSiteCredentials();
-  }, [refreshSiteCredentials]);
-
-  const saveSiteCredential = async () => {
-    if (!bridgeClient || credentialSaving) return;
-    setCredentialSaving(true);
-    setSiteCredentialsError(null);
-    try {
-      await bridgeClient.upsertBrowserSiteCredential({
-        origin: credentialOrigin,
-        username: credentialUsername,
-        password: credentialPassword,
-      });
-      setCredentialOrigin('');
-      setCredentialUsername('');
-      setCredentialPassword('');
-      await refreshSiteCredentials();
-    } catch (error) {
-      setSiteCredentialsError(formatError(error));
-    } finally {
-      setCredentialSaving(false);
-    }
-  };
-
-  const deleteSiteCredential = async (credentialId: string) => {
-    if (!bridgeClient || deletingCredentialId) return;
-    setDeletingCredentialId(credentialId);
-    setSiteCredentialsError(null);
-    try {
-      await bridgeClient.deleteBrowserSiteCredential(credentialId);
-      await refreshSiteCredentials();
-    } catch (error) {
-      setSiteCredentialsError(formatError(error));
-    } finally {
-      setDeletingCredentialId(null);
-    }
-  };
-
-  const refreshAuditEntries = useCallback(
-    async (origin?: string) => {
-      if (!bridgeClient) return;
-      setAuditLoading(true);
-      try {
-        const entries = await bridgeClient.listBrowserAuditEntries({
-          limit: BROWSER_AUDIT_PAGE_LIMIT,
-          origin,
-        });
-        setAuditEntries(entries);
-        setAuditError(null);
-      } catch (error) {
-        setAuditError(formatError(error));
-      } finally {
-        setAuditLoading(false);
-      }
-    },
-    [bridgeClient],
-  );
-
-  useEffect(() => {
-    setAuditEntries(null);
-    setAuditError(null);
-    void refreshAuditEntries();
-  }, [refreshAuditEntries]);
+  const {
+    bridgeClient,
+    originGrants,
+    originGrantsError,
+    revokingGrantId,
+    revokeOriginGrant,
+    capabilityGrants,
+    capabilityGrantsError,
+    revokingCapabilityGrantId,
+    revokeCapabilityGrant,
+    siteCredentials,
+    siteCredentialsError,
+    credentialOrigin,
+    setCredentialOrigin,
+    credentialUsername,
+    setCredentialUsername,
+    credentialPassword,
+    setCredentialPassword,
+    credentialSaving,
+    saveSiteCredential,
+    deletingCredentialId,
+    deleteSiteCredential,
+    auditEntries,
+    auditError,
+    auditOriginFilter,
+    setAuditOriginFilter,
+    auditLoading,
+    refreshAuditEntries,
+  } = useBrowserIntegrationManagementV2(browserIntegrationClientV2, config);
 
   const refreshBridgeStatus = useCallback(async () => {
     if (!invoke) return;
@@ -314,7 +186,8 @@ export function BrowserIntegrationSettingsPage({ config }: { config?: DesktopRun
     }
   };
 
-  const runRegistration = async (action: 'install' | 'uninstall') => {    if (!invoke || actionBusy) return;
+  const runRegistration = async (action: 'install' | 'uninstall') => {
+    if (!invoke || actionBusy) return;
     setActionBusy(action);
     setActionError(null);
     try {
@@ -322,9 +195,7 @@ export function BrowserIntegrationSettingsPage({ config }: { config?: DesktopRun
         setInstallResult(await invoke<BrowserBridgeInstallResult>('browser_bridge_install'));
         setUninstallResult(null);
       } else {
-        setUninstallResult(
-          await invoke<BrowserBridgeUninstallResult>('browser_bridge_uninstall'),
-        );
+        setUninstallResult(await invoke<BrowserBridgeUninstallResult>('browser_bridge_uninstall'));
         setInstallResult(null);
       }
       void refreshBridgeStatus();
@@ -761,12 +632,7 @@ export function BrowserIntegrationSettingsPage({ config }: { config?: DesktopRun
               disabled={auditLoading}
               onChange={(event) => setAuditOriginFilter(event.currentTarget.value)}
             />
-            <Button
-              type="submit"
-              variant="soft"
-              disabled={auditLoading}
-              loading={auditLoading}
-            >
+            <Button type="submit" variant="soft" disabled={auditLoading} loading={auditLoading}>
               {t('settings.browserAuditRefresh')}
             </Button>
           </form>

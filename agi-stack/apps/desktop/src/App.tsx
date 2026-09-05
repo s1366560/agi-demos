@@ -147,6 +147,7 @@ import {
   createDesktopProjectMcpAppsOperationsV2,
   createDesktopProjectMcpAppsClientV2,
 } from './plugins/desktopProjectMcpAppsAuthorityModuleV2';
+import { createDesktopBrowserIntegrationOperationsV2 } from './plugins/desktopBrowserIntegrationAuthorityModuleV2';
 import { createDesktopProjectMcpServersOperationsV2 } from './plugins/desktopProjectMcpServersAuthorityModuleV2';
 import {
   createDesktopTenantProvidersClientV2,
@@ -1122,6 +1123,12 @@ export function App() {
       createDesktopTenantAgentDefinitionsOperationsV2(
         () => desktopPluginMarketplaceGenerationActionsRefV2.current,
       ),
+    [],
+  );
+  const desktopBrowserIntegrationOperationsV2 = useMemo(
+    () => createDesktopBrowserIntegrationOperationsV2(
+      () => desktopPluginMarketplaceGenerationActionsRefV2.current,
+    ),
     [],
   );
   const desktopProjectMcpAppsOperationsV2 = useMemo(
@@ -7815,6 +7822,7 @@ export function App() {
         tenantTemplatesOperationsV2: desktopTenantTemplatesOperationsV2,
         tenantEvolutionOperationsV2: desktopTenantEvolutionOperationsV2,
         tenantProvidersOperationsV2: desktopTenantProvidersOperationsV2,
+        browserIntegrationOperationsV2: desktopBrowserIntegrationOperationsV2,
         projectMcpServersOperationsV2: desktopProjectMcpServersOperationsV2,
         tenantSkillPackagesOperationsV2: desktopTenantSkillPackagesOperationsV2,
         tenantSkillEvolutionOperationsV2: desktopTenantSkillEvolutionOperationsV2,

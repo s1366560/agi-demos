@@ -1091,7 +1091,13 @@ export type BrowserSiteCredentialInput = {
   password: string;
 };
 
-export type BrowserAuditOutcome = 'ok' | 'consent' | 'error';
+export type BrowserAuditOutcome =
+  | 'ok'
+  | 'consent'
+  | 'error'
+  | 'denied'
+  | 'consent_required'
+  | 'declined';
 
 export type BrowserAuditEntry = {
   id: string;

@@ -1,3 +1,4 @@
+import { createDesktopBrowserIntegrationQaOperationsV2 } from './desktopBrowserIntegrationAuthorityQaV2';
 import { createDesktopProjectMcpServersQaOperationsV2 } from './desktopProjectMcpServersAuthorityQaV2';
 import { createDesktopTenantProvidersQaOperationsV2 } from './desktopTenantProvidersAuthorityQaV2';
 import { createDesktopTenantSkillDefinitionsQaOperationsV2 } from './desktopTenantSkillDefinitionsAuthorityQaV2';
@@ -39,6 +40,7 @@ declare global {
 
 const QA_API_ORIGIN = 'https://no-project.qa.memstack.invalid';
 const NOW = '2026-07-18T08:00:00.000Z';
+const browserIntegrationOperationsV2 = createDesktopBrowserIntegrationQaOperationsV2();
 const projectMcpServersOperationsV2 = createDesktopProjectMcpServersQaOperationsV2();
 const tenantProvidersOperationsV2 = createDesktopTenantProvidersQaOperationsV2();
 const tenantSkillDefinitionsOperationsV2 = createDesktopTenantSkillDefinitionsQaOperationsV2();
@@ -344,6 +346,7 @@ function NoProjectEntryQa() {
           pluginMarketplaceOperationsV2={noProjectPluginMarketplaceOperationsV2}
           tenantTemplatesOperationsV2={tenantTemplatesOperationsV2}
           tenantEvolutionOperationsV2={tenantEvolutionOperationsV2}
+          browserIntegrationOperationsV2={browserIntegrationOperationsV2}
           projectMcpServersOperationsV2={projectMcpServersOperationsV2}
           tenantProvidersOperationsV2={tenantProvidersOperationsV2}
           tenantSkillDefinitionsOperationsV2={tenantSkillDefinitionsOperationsV2}

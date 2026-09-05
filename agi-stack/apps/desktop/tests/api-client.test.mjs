@@ -1,3 +1,4 @@
+import { createBrowserIntegrationHttpClientV2Fixture } from './browserIntegrationOperationsV2Fixture.mjs';
 import { createTenantSkillHttpClientV2Fixture } from './tenantSkillOperationsV2Fixture.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -5024,7 +5025,7 @@ test('browser origin grants list and revoke follow the sidecar contract', async 
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5061,7 +5062,7 @@ test('browser origin grant responses reject malformed payloads', async () => {
       headers: { 'content-type': 'application/json' },
     });
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5113,7 +5114,7 @@ test('browser capability grants list and revoke follow the sidecar contract', as
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5153,7 +5154,7 @@ test('browser capability grant responses reject malformed payloads', async () =>
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5174,14 +5175,14 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
   const calls = [];
   const credential = {
     id: 'cred-1',
-    origin: 'https://example.com',
+    origin: 'example.com',
     username: 'agent-user',
     created_at: '2026-08-01T00:00:00Z',
   };
   globalThis.fetch = async (request, init) => {
     calls.push({ request: String(request), init, body: init?.body });
     if (calls.length === 1) {
-      return new Response(JSON.stringify({ credential }), {
+      return new Response(JSON.stringify({ success: true, credential }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -5199,7 +5200,7 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5207,9 +5208,9 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
       localApiToken: 'launch-token',
     });
     const saved = await client.upsertBrowserSiteCredential({
-      origin: 'https://example.com',
+      origin: 'example.com',
       username: 'agent-user',
-      password: 's3cret',
+      password: '  dummy-browser-password  ',
     });
     assert.deepEqual(saved, credential);
     const listed = await client.listBrowserSiteCredentials();
@@ -5224,9 +5225,9 @@ test('browser site credentials upsert, list, and delete follow the sidecar contr
     );
     assert.equal(calls[0].init.method, 'PUT');
     assert.deepEqual(JSON.parse(calls[0].body), {
-      origin: 'https://example.com',
+      origin: 'example.com',
       username: 'agent-user',
-      password: 's3cret',
+      password: '  dummy-browser-password  ',
     });
     assert.equal(
       calls[1].request,
@@ -5251,7 +5252,7 @@ test('browser site credential responses reject malformed payloads', async () => 
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5301,7 +5302,7 @@ test('browser audit entries list follows the sidecar contract with filters', asy
   };
 
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5337,7 +5338,7 @@ test('browser audit entry responses reject malformed payloads', async () => {
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
   try {
-    const client = new DesktopApiClient({
+    const client = createBrowserIntegrationHttpClientV2Fixture({
       ...DEFAULT_CONFIG,
       mode: 'local',
       apiBaseUrl: 'http://127.0.0.1:47832',
@@ -5351,4 +5352,27 @@ test('browser audit entry responses reject malformed payloads', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('browser audit numeric storage rows preserve denied outcomes without tenant scope', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ entries: ['denied', 'consent_required', 'declined'].map((outcome, index) => ({
+    id: 42 + index, run_id: null, tool_name: 'getSidePanelSession', origin: null,
+    target_summary: 'session access declined', outcome, latency_ms: 0,
+    created_at: 1785542400000,
+  })) });
+  try {
+    const client = createBrowserIntegrationHttpClientV2Fixture({
+      ...DEFAULT_CONFIG, mode: 'local', tenantId: '', projectId: '',
+      apiBaseUrl: 'http://127.0.0.1:47832', apiKey: 'local-session', localApiToken: 'launch-token',
+    });
+    const entries = await client.listBrowserAuditEntries();
+    const [entry] = entries;
+    assert.deepEqual(entries.map((item) => item.outcome), ['denied', 'consent_required', 'declined']);
+    assert.equal(entry.id, '42');
+    assert.equal(entry.outcome, 'denied');
+    assert.equal(entry.created_at, new Date(1785542400000).toISOString());
+    assert.equal(entry.run_id, '');
+    assert.equal(entry.origin, '');
+  } finally { globalThis.fetch = originalFetch; }
 });

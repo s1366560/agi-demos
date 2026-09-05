@@ -1,3 +1,7 @@
+import {
+  createDesktopBrowserIntegrationClientV2,
+  type DesktopBrowserIntegrationOperationsV2,
+} from '../../plugins/desktopBrowserIntegrationAuthorityModuleV2';
 import { createDesktopProjectMcpServersClientV2, type DesktopProjectMcpServersOperationsV2 } from '../../plugins/desktopProjectMcpServersAuthorityModuleV2';
 import { createDesktopTenantProvidersClientV2, type DesktopTenantProvidersOperationsV2 } from '../../plugins/desktopTenantProvidersAuthorityModuleV2';
 import { createDesktopTenantSkillDefinitionsClientV2, type DesktopTenantSkillDefinitionsOperationsV2 } from '../../plugins/desktopTenantSkillDefinitionsAuthorityModuleV2';
@@ -106,6 +110,7 @@ type SettingsWindowProps = {
   pluginMarketplaceOperationsV2: DesktopPluginMarketplaceOperationsV2;
   tenantTemplatesOperationsV2: DesktopTenantTemplatesOperationsV2;
   tenantEvolutionOperationsV2: DesktopTenantEvolutionOperationsV2;
+  browserIntegrationOperationsV2: DesktopBrowserIntegrationOperationsV2;
   projectMcpServersOperationsV2: DesktopProjectMcpServersOperationsV2;
   tenantProvidersOperationsV2: DesktopTenantProvidersOperationsV2;
   tenantSkillDefinitionsOperationsV2: DesktopTenantSkillDefinitionsOperationsV2;
@@ -136,6 +141,7 @@ export function SettingsWindow({
   pluginMarketplaceOperationsV2,
   tenantTemplatesOperationsV2,
   tenantEvolutionOperationsV2,
+  browserIntegrationOperationsV2,
   projectMcpServersOperationsV2,
   tenantProvidersOperationsV2,
   tenantSkillDefinitionsOperationsV2,
@@ -174,6 +180,10 @@ export function SettingsWindow({
   const resourceContextKeyRef = useRef(resourceContextKey);
   activeSectionRef.current = section;
   resourceContextKeyRef.current = resourceContextKey;
+  const browserIntegrationClientV2 = useMemo(
+    () => createDesktopBrowserIntegrationClientV2(browserIntegrationOperationsV2, config),
+    [config, browserIntegrationOperationsV2],
+  );
   const projectMcpServersClientV2 = useMemo(
     () => createDesktopProjectMcpServersClientV2(projectMcpServersOperationsV2, config),
     [config, projectMcpServersOperationsV2],
@@ -735,7 +745,12 @@ export function SettingsWindow({
                 <PreferenceSummaryPage section={section} />
               ) : null}
               {section === 'shortcuts' ? <ShortcutSettingsPage /> : null}
-              {section === 'browser' ? <BrowserIntegrationSettingsPage config={config} /> : null}
+              {section === 'browser' ? (
+                <BrowserIntegrationSettingsPage
+                  config={config}
+                  browserIntegrationClientV2={browserIntegrationClientV2}
+                />
+              ) : null}
 
               {section === 'connection' ? (
                 <SettingsPage

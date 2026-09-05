@@ -44,6 +44,17 @@ const browserSourcePaths = [
   'agi-stack/apps/desktop/sidecar/src/local_runtime/browser_bridge.rs',
   'agi-stack/apps/desktop/sidecar/src/native_host.rs',
   'agi-stack/apps/desktop/src/features/settings/BrowserIntegrationSettingsPage.tsx',
+    'agi-stack/apps/desktop/src/features/settings/useBrowserIntegrationManagementV2.ts',
+  'agi-stack/apps/desktop/src/App.tsx',
+  'agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx',
+  'agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts',
+  'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationAuthorityModuleV2.ts',
+  'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationOperationContractV2.ts',
+  'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationResponseContractV2.ts',
+  'agi-stack/apps/desktop/src/plugins/desktopBrowserIntegrationHttpProjectionV2.ts',
+  'agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs',
+  'agi-stack/apps/desktop/sidecar/src/local_runtime/session_store.rs',
+  'agi-stack/apps/desktop/sidecar/src/local_runtime/browser_run_tool_host.rs',
 ];
 
 function readJson(relativePath) {
