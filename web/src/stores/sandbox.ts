@@ -22,6 +22,7 @@ import {
 import { logger } from '../utils/logger';
 
 import { useCanvasStore } from './canvasStore';
+import { beginSandboxTerminalRequestV2, terminalRequestRetired } from './sandboxTerminalRequestV2';
 import { useLayoutModeStore } from './layoutMode';
 
 import type { ToolExecution } from '../components/agent/sandbox/SandboxOutputViewer';
@@ -598,16 +599,22 @@ export const useSandboxStore = create<SandboxState>()(
           return;
         }
 
+        const request = beginSandboxTerminalRequestV2(useSandboxStore);
         set({ isTerminalLoading: true });
 
         try {
+          if (!request.current()) throw terminalRequestRetired();
           const status = await projectSandboxService.startTerminal(activeProjectId);
+          if (!request.current()) throw terminalRequestRetired();
           set({ terminalStatus: status, isTerminalLoading: false });
           logger.info(`[SandboxStore] Terminal started for project ${activeProjectId}`);
         } catch (error) {
+          if (!request.current()) throw terminalRequestRetired();
           logger.error('[SandboxStore] Failed to start terminal:', error);
           set({ isTerminalLoading: false });
           throw error;
+        } finally {
+          request.finish();
         }
       },
 
@@ -619,10 +626,13 @@ export const useSandboxStore = create<SandboxState>()(
           return;
         }
 
+        const request = beginSandboxTerminalRequestV2(useSandboxStore);
         set({ isTerminalLoading: true });
 
         try {
+          if (!request.current()) throw terminalRequestRetired();
           await projectSandboxService.stopTerminal(activeProjectId);
+          if (!request.current()) throw terminalRequestRetired();
           set({
             terminalStatus: {
               running: false,
@@ -635,9 +645,12 @@ export const useSandboxStore = create<SandboxState>()(
           });
           logger.info(`[SandboxStore] Terminal stopped for project ${activeProjectId}`);
         } catch (error) {
+          if (!request.current()) throw terminalRequestRetired();
           logger.error('[SandboxStore] Failed to stop terminal:', error);
           set({ isTerminalLoading: false });
           throw error;
+        } finally {
+          request.finish();
         }
       },
 

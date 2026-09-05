@@ -8,14 +8,29 @@
  * to reduce initial bundle size.
  */
 
-import { lazy, Suspense, useState, useCallback } from 'react';
+import {
+  lazy,
+  Suspense,
+  useState,
+  useCallback,
+  useSyncExternalStore,
+  useLayoutEffect,
+  useRef,
+} from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 import { Alert, Button } from 'antd';
 import { RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
 
+import {
+  getWebOperationAvailabilityV2,
+  subscribeWebOperationAvailabilityV2,
+} from '@/plugins/webOperationAdmissionV2';
+
 import { Spinner } from '@/components/common/Spinner';
+
+import { terminalScopeKeyV2 } from './terminalScopeV2';
 
 // Lazy load terminal dependencies
 import '@xterm/xterm/css/xterm.css';
@@ -27,6 +42,8 @@ export interface SandboxTerminalProps {
   projectId?: string | undefined;
   /** Optional existing session ID to reconnect */
   sessionId?: string | undefined;
+  /** Explicit manual new-terminal request; automatic retries keep their current session. */
+  reconnectNonce?: number | undefined;
   /** Called when terminal connects */
   onConnect?: ((sessionId: string) => void) | undefined;
   /** Called when terminal disconnects */
@@ -44,7 +61,29 @@ type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 // Lazy loaded terminal implementation
 const TerminalImpl = lazy(() => import('./TerminalImpl'));
 
-export function SandboxTerminal({
+export function SandboxTerminal(props: SandboxTerminalProps) {
+  const availability = useSyncExternalStore(
+    subscribeWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2,
+    getWebOperationAvailabilityV2
+  );
+  const scopeKey = terminalScopeKeyV2(availability.owner, props.projectId, props.sandboxId);
+  const [binding, setBinding] = useState({ scopeKey, sessionId: props.sessionId });
+  if (binding.scopeKey !== scopeKey) setBinding({ scopeKey, sessionId: undefined });
+  if (!availability.available) return null;
+  return (
+    <TerminalSession
+      key={JSON.stringify([scopeKey, props.reconnectNonce ?? 0])}
+      {...props}
+      sessionId={
+        scopeKey === binding.scopeKey && !props.reconnectNonce ? binding.sessionId : undefined
+      }
+      owner={availability.owner}
+    />
+  );
+}
+
+function TerminalSession({
   sandboxId,
   projectId,
   sessionId: initialSessionId,
@@ -53,36 +92,55 @@ export function SandboxTerminal({
   onError,
   height = '100%',
   showToolbar = true,
-}: SandboxTerminalProps) {
+  owner,
+}: SandboxTerminalProps & { owner: object }) {
   const { t } = useTranslation();
+  const active = useRef(false);
+  const attempt = useRef(0);
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  const current = useCallback(
+    () =>
+      active.current &&
+      attempt.current === reconnectNonce &&
+      getWebOperationAvailabilityV2().available &&
+      getWebOperationAvailabilityV2().owner === owner,
+    [owner, reconnectNonce]
+  );
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  // Bump to force TerminalImpl remount (full disconnect + reconnect)
-  const [reconnectNonce, setReconnectNonce] = useState(0);
 
   const handleConnect = useCallback(
     (newSessionId: string) => {
+      if (!current()) return;
       setSessionId(newSessionId);
       setStatus('connected');
       onConnect?.(newSessionId);
     },
-    [onConnect]
+    [onConnect, current]
   );
 
   const handleDisconnect = useCallback(() => {
+    if (!current()) return;
     setStatus('disconnected');
     onDisconnect?.();
-  }, [onDisconnect]);
+  }, [onDisconnect, current]);
 
   const handleError = useCallback(
     (errorMsg: string) => {
+      if (!current()) return;
       setError(errorMsg);
       setStatus('error');
       onError?.(errorMsg);
     },
-    [onError]
+    [onError, current]
   );
 
   const reconnect = useCallback(() => {
@@ -90,7 +148,8 @@ export function SandboxTerminal({
     setStatus('connecting');
     setError(null);
     // Remount TerminalImpl so the existing socket is closed and a fresh one is opened
-    setReconnectNonce((n) => n + 1);
+    attempt.current++;
+    setReconnectNonce(attempt.current);
   }, []);
 
   const toggleFullscreen = useCallback(() => {

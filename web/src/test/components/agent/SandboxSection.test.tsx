@@ -5,6 +5,15 @@ import { SandboxSection } from '../../../components/agent/SandboxSection';
 import { projectSandboxService } from '../../../services/projectSandboxService';
 import { useSandboxStore } from '../../../stores/sandbox';
 
+vi.mock('../../../plugins/webOperationAdmissionV2', async (original) => {
+  const availability = { owner: {}, available: true };
+  return {
+    ...(await original<object>()),
+    getWebOperationAvailabilityV2: () => availability,
+    subscribeWebOperationAvailabilityV2: () => () => undefined,
+  };
+});
+
 vi.mock('../../../components/agent/sandbox/RemoteDesktopViewer', () => ({
   RemoteDesktopViewer: ({ sandboxId }: { sandboxId: string }) => (
     <div data-testid="remote-desktop">desktop {sandboxId}</div>

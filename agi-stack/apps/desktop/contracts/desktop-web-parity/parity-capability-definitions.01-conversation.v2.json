@@ -151,6 +151,30 @@
         {
           "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
           "source_entry": "web/src/stores/voiceCallStore.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/SandboxSection.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/SandboxTerminal.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/TerminalImpl.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/terminalScopeV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/terminalRetainedSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/stores/sandboxTerminalRequestV2.ts"
         }
       ],
       "api_method": "WS",
