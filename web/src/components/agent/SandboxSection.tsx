@@ -241,7 +241,7 @@ const DesktopTab: React.FC<{
     };
   }, [isFullscreen]);
 
-  if (!desktopStatus?.running) {
+  if (!desktopStatus?.running || !projectId) {
     return (
       <div className="h-full flex items-center justify-center bg-slate-900">
         <LazyEmpty

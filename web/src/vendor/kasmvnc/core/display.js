@@ -306,6 +306,7 @@ export default class Display {
     * Cleans up resources, should be called on a disconnect
     */
     dispose() {
+        this._disposed = true;
         clearInterval(this._frameStatsInterval);
         cancelAnimationFrame(this._animationFrameID);
         this.clear();
@@ -484,6 +485,7 @@ export default class Display {
     Process incoming rects into a frame buffer, assume rects are out of order due to either UDP or parallel processing of decoding
     */
     _asyncRenderQPush(rect) {
+        if (this._disposed) return;
         let frameIx = -1;
         let oldestFrameID = Number.MAX_SAFE_INTEGER;
         let newestFrameID = 0;
@@ -593,6 +595,7 @@ export default class Display {
     Push the oldest frame in the buffer to the canvas if it is marked ready
     */
     _pushAsyncFrame(force=false) {
+        if (this._disposed) return;
         if (this._asyncFrameQueue[0][3] || force) {
             let frame = this._asyncFrameQueue.shift()[2];
             if (this._asyncFrameQueue.length < this._maxAsyncFrameQueue) {
@@ -652,7 +655,7 @@ export default class Display {
         }
 
         if (!force) {
-            window.requestAnimationFrame( () => { this._pushAsyncFrame(); });
+            this._animationFrameID = window.requestAnimationFrame( () => { this._pushAsyncFrame(); });
         }
     }
 

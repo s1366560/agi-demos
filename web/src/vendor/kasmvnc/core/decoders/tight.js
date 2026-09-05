@@ -456,25 +456,42 @@ export default class TightDecoder {
         return this._scratchBuffer;
     }
 
-    async _disableQOIWorkers() {
-        if (this._workers) {
-            this._enableQOI = false;
+    dispose() {
+        if (this._disposePromise) return this._disposePromise;
+        this._disposed = true;
+        this._disableQOIWorkers();
+        this._disposePromise = Promise.allSettled(this._workerDrains).then(results => {
             this._availableWorkers = null;
-            this._sabs = null;
-            this._sabsR = null;
-            this._arrs = null;
-            this._arrsR = null;
-            this._qoiRects = null;
-            this._rectQlooping = null;
-            for await (let i of Array.from(Array(this._threads).keys())) {
-                this._workers[i].terminate();
-                delete this._workers[i];
-            }
-            this._workers = null;
-        }
+            this._sabs = this._sabsR = this._arrs = this._arrsR = this._qoiRects = null;
+            const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+            if (errors.length) throw new AggregateError(errors, 'QOI worker cleanup failed');
+        });
+        this._disposePromise.catch(() => {});
+        return this._disposePromise;
+    }
+
+    _disableQOIWorkers() {
+        if (this._workersClosing) return this._workersClosing;
+        this._enableQOI = false;
+        const workers = this._workers || [];
+        this._workers = null;
+        const pending = workers.map(worker => {
+            worker.onmessage = null;
+            try { return Promise.resolve(worker.terminate()); }
+            catch (error) { return Promise.reject(error); }
+        });
+        this._workersClosing = Promise.allSettled(pending).then(results => {
+            const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+            if (errors.length) throw new AggregateError(errors, 'QOI worker cleanup failed');
+        });
+        (this._workerDrains ||= []).push(this._workersClosing);
+        this._workersClosing.catch(() => {});
+        return this._workersClosing;
     }
 
     _enableQOIWorkers() {
+        if (this._disposed) return false;
+        this._workersClosing = null;
         const supportsSharedArrayBuffers = typeof SharedArrayBuffer !== "undefined";
         if (!supportsSharedArrayBuffers) {
             Log.Warn("Enabling QOI Failed, client not compatible.");
@@ -489,6 +506,7 @@ export default class TightDecoder {
             this._threads = 8;
         }
         this._workers = [];
+        const workers = this._workers;
         this._availableWorkers = [];
         this._sabs = [];
         this._sabsR = [];
@@ -503,6 +521,7 @@ export default class TightDecoder {
             this._arrs.push(new Uint8Array(this._sabs[i]));
             this._arrsR.push(new Uint8ClampedArray(this._sabsR[i]));
             this._workers[i].onmessage = (evt) => {
+                if (this._disposed || !this._enableQOI || this._workers !== workers) return;
                 this._availableWorkers.push(i);
                 switch(evt.data.result) {
                     case 0:

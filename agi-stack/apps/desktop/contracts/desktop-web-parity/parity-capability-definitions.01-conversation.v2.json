@@ -219,6 +219,34 @@
         {
           "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
           "source_entry": "web/src/services/projectSandboxService.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/RemoteDesktopViewer.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/components/agent/sandbox/KasmVNCViewer.tsx"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/services/kasmRetainedSessionV2.ts"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/vendor/kasmvnc/core/rfb.js"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/vendor/kasmvnc/core/display.js"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/vendor/kasmvnc/core/decoders/tight.js"
+        },
+        {
+          "routed_source_entry": "web/src/pages/tenant/AgentWorkspace.tsx",
+          "source_entry": "web/src/vendor/kasmvnc/core/input/keyboard.js"
         }
       ],
       "api_method": "WS",
