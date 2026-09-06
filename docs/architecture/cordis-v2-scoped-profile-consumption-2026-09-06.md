@@ -35,3 +35,7 @@ Validation: the combined unit/router regression passed 40 tests; isolated real
 PostgreSQL regression passed 13 tests. Protocol generation and contract completeness
 checks passed. PostgreSQL coverage uses the documented migration slice, not the full
 historical migration chain. Evidence and SHA-256 inventory: `/var/tmp/cordis-scoped-consumption-y50scnxc`.
+
+Post-commit regression at `03d260ab8`: full Desktop suite passed 4,131 tests,
+with 2 skipped and 0 failures (94.82 seconds). Four focused Web suites passed all
+26 tests. These are automated regressions, not a new native UI acceptance run.
