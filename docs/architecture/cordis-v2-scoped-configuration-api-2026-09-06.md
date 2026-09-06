@@ -33,3 +33,8 @@ exact child leases, restart recovery, V1 retirement and final native acceptance 
 outstanding; this batch does not complete Stage 6.
 
 Reproduction scripts and hashed logs: `/var/tmp/cordis-scoped-config-qb7vub50`.
+
+At feature revision `696b92e15`, the full Desktop suite passed: 4131 passed,
+2 skipped, 0 failed in 96.63 seconds. Four Web view/admission suites passed
+26 tests. Their logs are included in the evidence directory above. Protocol
+generation and the full contract-completeness checker also passed.
