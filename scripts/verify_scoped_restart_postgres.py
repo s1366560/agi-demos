@@ -36,6 +36,7 @@ TESTS = (
     "src/tests/integration/test_scoped_profile_fence_postgres.py",
     "src/tests/integration/test_root_startup_postgres.py",
     "src/tests/integration/test_marketplace_publication_postgres.py",
+    "src/tests/integration/test_marketplace_live_recovery_postgres.py",
 )
 
 
