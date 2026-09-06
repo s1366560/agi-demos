@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from src.domain.model.plugins.generated_v2 import (
@@ -16,6 +16,7 @@ from src.domain.model.plugins.generated_v2 import (
     SnapshotApplyReceiptV2,
 )
 
+from .bundle_archive import VerifiedBundleArchiveV2
 from .lifecycle_tasks import OwnedLifecycleTaskV2
 from .protocol import PLUGIN_PROFILE_TYPE_URL_V2
 from .runtime import AsyncDisposerV2, GenerationManagerV2, LoaderV2, RuntimeGenerationV2
@@ -63,12 +64,13 @@ class PlatformPluginSnapshotReconcilerV2:
         envelope: ControlPlaneEnvelopeV2,
         *,
         publication_stager: GenerationPublicationStagerV2 | None = None,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> SnapshotApplyReceiptV2:
         async with self._lock:
             envelope_error = self._validate_envelope(snapshot, envelope)
             if envelope_error is not None:
                 return envelope_error
-            active_error = self._check_active(envelope)
+            active_error = self._check_verified_active(snapshot, envelope, verified_archives)
             if active_error is not None:
                 return active_error
             active = self.manager.current
@@ -83,7 +85,11 @@ class PlatformPluginSnapshotReconcilerV2:
             staging: RuntimeGenerationV2 | None = None
             prepared: PreparedGenerationPublicationV2 | None = None
             try:
-                staging = await self.loader.stage(snapshot)
+                staging = (
+                    await self.loader.stage(snapshot)
+                    if verified_archives is None
+                    else await self.loader.stage(snapshot, verified_archives=verified_archives)
+                )
                 if publication_stager is not None:
                     prepared = await publication_stager(staging)
             except BaseException as exc:
@@ -115,6 +121,19 @@ class PlatformPluginSnapshotReconcilerV2:
             self._applied_version = envelope.version
             self._applied_digest = envelope.snapshot_digest
             return self._ack(envelope)
+
+    def _check_verified_active(
+        self,
+        snapshot: ProfileSnapshotV2,
+        envelope: ControlPlaneEnvelopeV2,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None,
+    ) -> SnapshotApplyReceiptV2 | None:
+        if verified_archives is not None and self._applied_digest == snapshot.digest:
+            try:
+                self.loader.verify_archives(snapshot, verified_archives)
+            except Exception as exc:
+                return self._nack(envelope, "artifact_verification_failed", str(exc))
+        return self._check_active(envelope)
 
     async def close(self) -> None:
         async with self._lock:

@@ -21,6 +21,7 @@ from src.domain.model.plugins.generated_v2 import (
 )
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
+from .bundle_archive import VerifiedBundleArchiveV2
 from .composer import ProfileDocumentV2, compose_profile_v2, load_profile_document_v2
 from .protocol import (
     control_envelope_v2,
@@ -125,13 +126,16 @@ class PlatformPluginRuntimeHostV2:
         envelope: ControlPlaneEnvelopeV2,
         *,
         publication_stager: GenerationPublicationStagerV2 | None = None,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> PlatformPluginPublicationV2:
         """Stage and atomically publish one snapshot, retaining last-good on NACK."""
+        archives = None if verified_archives is None else tuple(verified_archives)
         async with self._apply_lock:
             receipt = await self.reconciler.apply(
                 snapshot,
                 envelope,
                 publication_stager=publication_stager,
+                verified_archives=archives,
             )
             publication = PlatformPluginPublicationV2(
                 snapshot=snapshot,
@@ -158,6 +162,7 @@ class PlatformPluginRuntimeHostV2:
         payload: Mapping[str, object],
         *,
         publication_stager: GenerationPublicationStagerV2 | None = None,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> PlatformPluginPublicationV2:
         """Validate a complete process-safe distribution before staging it locally."""
         if set(payload) != {"descriptor", "snapshot", "envelope"}:
@@ -181,6 +186,7 @@ class PlatformPluginRuntimeHostV2:
             snapshot,
             envelope,
             publication_stager=publication_stager,
+            verified_archives=verified_archives,
         )
 
     async def bootstrap(

@@ -111,7 +111,9 @@ async def publish_configured_root_startup_v2(
     ):
         return (
             await host.apply_distribution(
-                durable_distribution, publication_stager=publication_stager
+                durable_distribution,
+                publication_stager=publication_stager,
+                verified_archives=archives,
             ),
             False,
         )
@@ -128,6 +130,7 @@ async def publish_configured_root_startup_v2(
             candidate,
             control_envelope_v2(candidate, version=version + 1),
             publication_stager=publication_stager,
+            verified_archives=archives,
         ),
         True,
     )

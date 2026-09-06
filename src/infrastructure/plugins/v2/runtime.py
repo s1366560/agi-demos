@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Protocol, cast
 
-from src.domain.model.plugins.artifact_attestation_v2 import artifact_digest_v2
 from src.domain.model.plugins.generated_v2 import (
     DataPlaneTargetV2,
     EventContractV2,
@@ -28,6 +27,7 @@ from .artifacts import (
     RepositoryPythonArtifactResolverV2,
     ResolvedPluginArtifactV2,
 )
+from .bundle_archive import VerifiedBundleArchiveV2
 from .lifecycle_tasks import OwnedLifecycleTaskV2
 from .runtime_context import (
     AsyncDisposerV2,
@@ -48,8 +48,8 @@ from .runtime_contracts import (
     generated_contract_digest_v2,
     generated_target_catalog_v2,
     preflight_entries_v2,
-    validate_contract_digests_v2,
 )
+from .verified_execution_artifacts import attest_execution_artifacts_v2
 
 type PluginApplyV2 = Callable[
     [ContextV2, Mapping[str, Any]],
@@ -336,13 +336,26 @@ class LoaderV2:
             )
         self._definitions[definition.module_ref] = definition
 
-    async def stage(self, snapshot: ProfileSnapshotV2) -> RuntimeGenerationV2:
+    def verify_archives(
+        self, snapshot: ProfileSnapshotV2, archives: Sequence[VerifiedBundleArchiveV2]
+    ) -> None:
+        rows = tuple(row for row in _module_rows_v2(snapshot) if self._target in row[2].targets)
+        _ = self._attest_artifacts(rows, verified_archives=archives)
+
+    async def stage(
+        self,
+        snapshot: ProfileSnapshotV2,
+        *,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
+    ) -> RuntimeGenerationV2:
         module_rows = _module_rows_v2(snapshot)
         modules_by_key = {
             (plugin_id, module.module_ref): module for plugin_id, _version, module in module_rows
         }
         target_rows = tuple(row for row in module_rows if self._target in row[2].targets)
-        resolved_artifacts = self._attest_artifacts(target_rows)
+        resolved_artifacts = self._attest_artifacts(
+            target_rows, verified_archives=verified_archives
+        )
         enabled = {
             entry.entry_id: entry
             for entry in project_snapshot_entries_v2(snapshot, self._target)
@@ -394,41 +407,16 @@ class LoaderV2:
     def _attest_artifacts(
         self,
         target_rows: Sequence[_PluginModuleRowV2],
+        *,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> dict[str, ResolvedPluginArtifactV2]:
-        for plugin_id, plugin_version, module in target_rows:
-            catalog_entry = self._target_catalog.get(module.module_ref)
-            if catalog_entry is None:
-                raise RuntimeV2Error(
-                    "missing_target_catalog",
-                    f"module {module.module_ref} is absent from {self._target.value} catalog",
-                )
-            validate_contract_digests_v2(
-                module,
-                catalog_entry=catalog_entry,
-                plugin_id=plugin_id,
-                plugin_version=plugin_version,
-            )
-
-        resolved_artifacts: dict[str, ResolvedPluginArtifactV2] = {}
-        for _plugin_id, _plugin_version, module in target_rows:
-            resolved = self._artifact_resolver.resolve(module)
-            if (
-                resolved.module_ref != module.module_ref
-                or resolved.entrypoint != module.entrypoint
-                or resolved.source != module.artifact.source
-            ):
-                raise RuntimeV2Error(
-                    "artifact_resolution_mismatch",
-                    f"module {module.module_ref} resolver returned different artifact metadata",
-                )
-            actual_digest = artifact_digest_v2(resolved.canonical_bytes)
-            if actual_digest != module.artifact.digest:
-                raise RuntimeV2Error(
-                    "artifact_digest_mismatch",
-                    f"module {module.module_ref} resolved bytes differ from manifest",
-                )
-            resolved_artifacts[module.module_ref] = resolved
-        return resolved_artifacts
+        return attest_execution_artifacts_v2(
+            target_rows,
+            target_catalog=self._target_catalog,
+            target=self._target,
+            resolver=self._artifact_resolver,
+            verified_archives=verified_archives,
+        )
 
     def _entry_modules(
         self,
