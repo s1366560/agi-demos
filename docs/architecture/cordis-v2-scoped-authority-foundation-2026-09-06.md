@@ -27,6 +27,12 @@ They cover full scope isolation, ancestor entries, sibling rejection, NACK reten
 publication fencing, lease draining, cancellation, multiple cleanup failures, and weak-reference
 collection after repeated retirement. Log: `/tmp/cordis-scoped-runtime-main.log`.
 
+At feature revision `371a7afb6`, the full Desktop suite passed with 4131 passed, 2 skipped and
+0 failed in 94.74 seconds; 20 Web public-view/identity/lease regressions also passed. Evidence
+files and their SHA256 inventory are retained under `/var/tmp/cordis-scope-foundation-smyvrbi0`.
+The earlier Python full run had one route-inventory fixture failure, corrected and verified by
+eight focused tests; a full rerun after that correction is not claimed here.
+
 ## Separate contract gate repair
 
 Commit `667452b4f` gives each Rust Server worker an explicit module entry and service declaration.

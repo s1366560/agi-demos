@@ -45,9 +45,9 @@ path, method, response model, tags, and status-code list were updated without we
 comparison; all three route-contribution tests and five authenticated-view tests then passed.
 The full suite has not been rerun after that fixture-only correction. Logs:
 `/tmp/cordis-web-view-python-full.log` and `/tmp/cordis-web-view-route-table-final.log`.
-The contract completeness
-scanner additionally reports three pre-existing dynamic service declarations in Rust Server's
-shared background worker module; these remain a separate gate to repair. This batch does not claim browser/native
+The initial contract completeness scan also reported three pre-existing dynamic service
+declarations in Rust Server's shared background worker module. Follow-up commit `667452b4f`
+repaired those declarations; the main-checkout completeness scan now passes. This batch does not claim browser/native
 end-to-end acceptance, tenant/project/session overlay completion, new Desktop parity acceptance,
 or final V1 retirement. Existing Desktop parity capability source references do not cover this
 new Web/backend authority chain and must not be cited as its acceptance evidence.
