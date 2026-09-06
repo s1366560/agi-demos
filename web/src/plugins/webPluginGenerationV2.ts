@@ -23,7 +23,8 @@ import { logger } from '../utils/logger';
 const POLL_INTERVAL_MS = 30_000;
 const webRendererRuntimeV2 = new RendererPluginRuntimeV2(
   'web',
-  createWebRendererDefinitionsV2(validateWebRendererContributionsV2)
+  createWebRendererDefinitionsV2(validateWebRendererContributionsV2),
+  validateWebRendererContributionsV2
 );
 const webRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(webRendererRuntimeV2);
 const webRendererStatusStoreV2 = new RendererGenerationStatusStoreV2();

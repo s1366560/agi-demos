@@ -219,6 +219,7 @@ const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
     desktopWorkspaceExecutionSnapshotAuthorityDefinitionV2,
     desktopWorkspaceMessageCatalogAuthorityDefinitionV2,
   ]),
+  validateDesktopRendererContributionsV2,
 );
 const desktopRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(
   desktopRendererRuntimeV2,

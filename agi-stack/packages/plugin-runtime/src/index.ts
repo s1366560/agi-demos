@@ -39,6 +39,7 @@ export {
   RuntimeGenerationV2,
   RuntimeV2Error,
   type AsyncDisposerV2,
+  type CandidateReadinessV2,
   type EffectResultV2,
   type GenerationPublicationDiagnosticV2,
   type GenerationPublicationResultV2,

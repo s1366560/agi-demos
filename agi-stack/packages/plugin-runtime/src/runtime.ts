@@ -41,6 +41,8 @@ export { RuntimeV2Error } from './errors';
 
 export type TargetCatalogV2 = Readonly<Record<string, PluginModuleCatalogEntryV2>>;
 
+export type CandidateReadinessV2 = (generation: RuntimeGenerationV2) => void | Promise<void>;
+
 export interface PluginDefinitionV2 {
   readonly moduleRef: string;
   readonly contractDigest: string;
@@ -168,7 +170,8 @@ export class LoaderV2 {
   constructor(
     definitions: Iterable<PluginDefinitionV2> = [],
     private readonly target: DataPlaneTargetV2 = 'web',
-    targetCatalog?: TargetCatalogV2
+    targetCatalog?: TargetCatalogV2,
+    private readonly candidateReadiness?: CandidateReadinessV2
   ) {
     this.usesGeneratedCatalog = targetCatalog === undefined;
     this.targetCatalog =
@@ -224,7 +227,18 @@ export class LoaderV2 {
       definitions.set(entry.entry_id, definition);
       modules.set(entry.entry_id, module);
     }
-    return activateGeneration(snapshot, entries, definitions, modules);
+    const generation = await activateGeneration(snapshot, entries, definitions, modules);
+    try {
+      await this.candidateReadiness?.(generation);
+      return generation;
+    } catch (error) {
+      try {
+        await generation.dispose();
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], 'Candidate readiness and cleanup failed');
+      }
+      throw error;
+    }
   }
 }
 

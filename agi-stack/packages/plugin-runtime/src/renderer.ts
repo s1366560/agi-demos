@@ -1,3 +1,5 @@
+import { createRendererCandidateReadinessV2 } from './rendererReadiness';
+import type { RendererContributionSetValidatorV2 } from './rendererContributions';
 import { parseControlPlaneDistributionV2, PluginSnapshotReconcilerV2 } from './distribution';
 import { RuntimeV2Error } from './errors';
 import type { DataPlaneTargetV2, SnapshotApplyReceiptV2 } from './generated';
@@ -19,8 +21,19 @@ export interface RendererGenerationLeaseSnapshotV2 {
 export class RendererPluginRuntimeV2 {
   private readonly reconciler: PluginSnapshotReconcilerV2;
 
-  constructor(target: RendererDataPlaneTargetV2, definitions: Iterable<PluginDefinitionV2>) {
-    this.reconciler = new PluginSnapshotReconcilerV2(new LoaderV2(definitions, target));
+  constructor(
+    target: RendererDataPlaneTargetV2,
+    definitions: Iterable<PluginDefinitionV2>,
+    validateContributions?: RendererContributionSetValidatorV2
+  ) {
+    this.reconciler = new PluginSnapshotReconcilerV2(
+      new LoaderV2(
+        definitions,
+        target,
+        undefined,
+        createRendererCandidateReadinessV2(target, validateContributions)
+      )
+    );
   }
 
   readonly subscribe = (listener: () => void): (() => void) =>
