@@ -28,6 +28,7 @@ REVISIONS = (
     "b58c04d49a92",
     "c69d15e50ba3",
     "d72e6b8f0a41",
+    "e83f7c901b52",
 )
 TESTS = (
     "src/tests/integration/test_scoped_restart_recovery_postgres.py",
@@ -38,6 +39,7 @@ TESTS = (
     "src/tests/integration/test_marketplace_publication_postgres.py",
     "src/tests/integration/test_marketplace_live_recovery_postgres.py",
     "src/tests/integration/test_marketplace_receipt_source_fence_postgres.py",
+    "src/tests/integration/test_outcome_supersession_postgres.py",
 )
 
 
@@ -66,7 +68,7 @@ async def migrate(url: str) -> None:
                         module.upgrade()
 
             await connection.run_sync(apply)
-        print("Isolated ledger migration slice applied through d72e6b8f0a41", flush=True)
+        print(f"Isolated ledger migration slice applied through {REVISIONS[-1]}", flush=True)
     finally:
         await engine.dispose()
 

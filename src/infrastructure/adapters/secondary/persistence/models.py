@@ -4884,7 +4884,8 @@ class ReflectionVerdictRecord(Base):
 
 # Register private publication-source metadata without a circular class re-export.
 from . import (  # noqa: E402
+    platform_plugin_outcome_supersession_model_v2 as _outcome_supersession_model_v2,
     platform_plugin_publication_source_model_v2 as _publication_source_model_v2,
 )
 
-del _publication_source_model_v2
+del _publication_source_model_v2, _outcome_supersession_model_v2
