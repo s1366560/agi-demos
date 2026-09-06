@@ -26,6 +26,9 @@ const { DesktopCloudAuthenticationAuthority } = load(
 const { SandboxDesktopGrantRegistry } = load(
   new URL('../electron/main/sandboxDesktopGrantRegistry.ts', import.meta.url),
 );
+const { RendererDeliveryAdmissionV2 } = load(
+  new URL('../electron/main/rendererDeliveryAdmissionV2.ts', import.meta.url),
+);
 const source = readFileSync(new URL('../electron/main/index.ts', import.meta.url), 'utf8');
 const ast = ts.createSourceFile('index.ts', source, ts.ScriptTarget.Latest, true);
 function nodes(predicate) {
@@ -103,6 +106,8 @@ async function fixture(trustedDevice) {
   });
   const bindings = {
     DesktopCloudAuthenticationAuthority,
+    rendererDeliveryAdmissionV2: new RendererDeliveryAdmissionV2(),
+    rendererDeliveryOwnersV2: new Map(),
     supervisor,
     sandboxDesktopGrants: registry,
     net: {
@@ -131,7 +136,17 @@ async function fixture(trustedDevice) {
   };
   // The actual main constructor and quit callback share these lexical bindings.
   // before-quit will set sidecarSupervisor=null exactly as it does in Electron.
+  const transition = nodes((node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === 'withDesktopAuthorityTransitionV2',
+  )[0];
+  const retireOwner = nodes((node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === 'retireRendererDeliveryOwnerV2',
+  )[0];
+  assert.ok(transition);
+  assert.ok(retireOwner);
   const code = `let sidecarSupervisor=supervisor;
+ ${transition.getText(ast)}
+ ${retireOwner.getText(ast)}
  ${capturedSupervisor.parent.parent.getText(ast)}
  let cloudAuthenticationAuthority=${constructor.getText(ast)};
  let cloudSocketBroker=null,oauthCallbackAuthority=null,iabBackend=null,iabPool=null;

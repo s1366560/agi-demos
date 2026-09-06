@@ -23,6 +23,9 @@ function load(url) {
 const { executeVaultBoundCloudRequest: execute } = load(
   new URL('../electron/main/cloudRequestPolicy.ts', import.meta.url),
 );
+const { RendererDeliveryAdmissionV2 } = load(
+  new URL('../electron/main/rendererDeliveryAdmissionV2.ts', import.meta.url),
+);
 const mainSource = readFileSync(new URL('../electron/main/index.ts', import.meta.url), 'utf8');
 const preloadSource = readFileSync(
   new URL('../electron/preload/index.ts', import.meta.url),
@@ -43,6 +46,16 @@ function fn(ast, name) {
   return nodes(ast, (node) => ts.isFunctionDeclaration(node) && node.name?.text === name)[0];
 }
 function compileFunction(source, bindings, name) {
+  if (bindings.sandboxDesktopGrants) {
+    bindings = {
+      ...bindings,
+      rendererDeliveryAdmissionV2: new RendererDeliveryAdmissionV2(),
+      rendererDeliveryOwnersV2: new Map(),
+    };
+    source = `${fn(mainAst, 'withDesktopAuthorityTransitionV2').getText(mainAst)}
+      ${fn(mainAst, 'retireRendererDeliveryOwnerV2').getText(mainAst)}
+${source}`;
+  }
   return new Function(...Object.keys(bindings), `${transpile(source)};return ${name};`)(
     ...Object.values(bindings),
   );
@@ -295,7 +308,7 @@ test('password/OAuth vault replacement and logout callbacks await revocation bef
         },
       });
       const pending = callback({ opaque: true });
-      await Promise.resolve();
+      await new Promise(setImmediate);
       assert.deepEqual(events, ['revoke']);
       gate.resolve();
       await pending;
@@ -347,7 +360,7 @@ test('actual sidecar default branch revokes before local-session replacement cle
       'invoke',
     );
     const pending = invoke(command, {});
-    await Promise.resolve();
+    await new Promise(setImmediate);
     assert.deepEqual(events, ['revoke']);
     gate.resolve();
     await pending;
