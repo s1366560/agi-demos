@@ -13,6 +13,9 @@ from src.infrastructure.adapters.secondary.common.base_repository import refresh
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2DesiredBundleSetModel,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_scope_ledger_v2 import (
+    ScopeLedgerBindingV2,
+)
 from src.infrastructure.plugins.v2.protocol import (
     PluginProtocolV2Error,
     desired_bundle_set_v2_to_payload,
@@ -63,6 +66,10 @@ class PlatformPluginDesiredBundleSetRepositoryV2:
             desired_bundle_set_v2_to_payload(desired_set)
         )
         payload = desired_bundle_set_v2_to_payload(validated_desired)
+        # Lock a stable scope row even when no desired-set revision exists yet.
+        _ = await ScopeLedgerBindingV2(canonical_scope, PlatformPluginDesiredBundleSetV2Error).lock(
+            self._session
+        )
         current = await self._current_model(canonical_scope, for_update=True)
         if current is not None and current.payload == payload:
             return self._record(current)

@@ -14,6 +14,9 @@ from src.application.schemas.platform_plugins import (
     PlatformPluginPublicationReadinessResponseV2,
     PlatformPluginRouteAuthorityReadinessResponseV2,
 )
+from src.infrastructure.adapters.primary.web.routers.platform_plugin_profile_sources_v2 import (
+    post_profile_source_v2,
+)
 from src.infrastructure.adapters.primary.web.routers.platform_plugins import (
     retired_plugin_protocol_v1_root_route,
     retired_plugin_protocol_v1_route,
@@ -91,6 +94,14 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
         ],
         ...,
     ] = (
+        (
+            f"{v2}/profile-sources",
+            ("POST",),
+            post_profile_source_v2,
+            "post_profile_source_v2",
+            dict[str, Any],
+            _PROTOCOL_V2_TAGS_V2,
+        ),
         (
             f"{v2}/desired-bundle-sets/current",
             ("PUT",),

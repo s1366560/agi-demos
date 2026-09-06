@@ -9,12 +9,23 @@ from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.plugins.generated_v2 import DesiredBundleSetV2, ProfileLayerKindV2
+from src.domain.model.plugins.generated_v2 import (
+    DesiredBundleSetV2,
+    ProfileLayerKindV2,
+    ScopeKindV2,
+    ScopeV2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
-from src.infrastructure.plugins.v2.layer_composer import desired_bundle_set_digest_v2
+from src.infrastructure.adapters.secondary.persistence.models import Tenant, User
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
+    PlatformPluginProfileSourceRepositoryV2,
+)
+from src.infrastructure.plugins.v2.layer_composer import (
+    desired_bundle_set_digest_v2,
+    profile_source_digest_v2,
+)
 from src.infrastructure.plugins.v2.protocol import desired_bundle_set_v2_to_payload
 from src.tests.unit.infrastructure.plugins.v2.layer_composer_test_support import (
     _bundle,
@@ -178,3 +189,31 @@ async def test_desired_bundle_set_management_requires_platform_admin(
     )
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.fixture(autouse=True)
+async def stored_tenant_source(db_session):
+    user = User(
+        id="plugin-v2-admin",
+        email="stored-admin@example.test",
+        hashed_password="unused",
+        is_superuser=True,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    db_session.add(Tenant(id="tenant-a", name="Tenant A", slug="tenant-a", owner_id=user.id))
+    await db_session.flush()
+    root = _scope()
+    source = _source(
+        (_layer("profile", ProfileLayerKindV2.PROFILE, entries=(_entry("consumer", scope=root),)),)
+    )
+    repository = PlatformPluginProfileSourceRepositoryV2(db_session)
+    for revision in range(1, source.revision + 1):
+        value = replace(source, revision=revision)
+        value = replace(value, digest=profile_source_digest_v2(value))
+        await repository.record_source(
+            scope=ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="tenant-a"),
+            source=value,
+            expected_revision=revision - 1 if revision > 1 else None,
+        )
+    await db_session.commit()

@@ -33,6 +33,12 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
         for definition in definitions
     ) == (
         (
+            f"{v2}/profile-sources",
+            ("POST",),
+            "post_profile_source_v2",
+            dict[str, Any],
+        ),
+        (
             f"{v2}/desired-bundle-sets/current",
             ("PUT",),
             "put_current_desired_bundle_set_v2",
@@ -130,15 +136,16 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
         ),
     )
     assert (
-        tuple(definition.tags for definition in definitions[:14])
-        == (("Platform Plugins", "Platform Plugins V2"),) * 14
+        tuple(definition.tags for definition in definitions[:15])
+        == (("Platform Plugins", "Platform Plugins V2"),) * 15
     )
-    assert tuple(definition.tags for definition in definitions[14:]) == (
+    assert tuple(definition.tags for definition in definitions[15:]) == (
         ("Platform Plugins",),
         ("Platform Plugins",),
     )
     assert all(definition.include_in_schema is False for definition in definitions[-2:])
-    assert tuple(definition.status_code for definition in definitions[:14]) == (
+    assert tuple(definition.status_code for definition in definitions[:15]) == (
+        None,
         None,
         None,
         None,

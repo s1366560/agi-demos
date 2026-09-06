@@ -31,6 +31,9 @@ from src.infrastructure.adapters.primary.web.dependencies.plugin_data_plane_auth
     PlatformPluginDataPlanePrincipalV2,
     get_plugin_data_plane_principal_v2,
 )
+from src.infrastructure.adapters.primary.web.dependencies.plugin_desired_source_auth_v2 import (
+    authorize_desired_profile_source_v2,
+)
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     plugin_publication_policy_v2_from_app,
 )
@@ -105,12 +108,24 @@ async def put_current_desired_bundle_set_v2(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformPluginDesiredBundleSetResponseV2:
-    """Append one exact desired-set revision with compare-and-swap."""
-    _require_platform_admin(current_user)
+    """Append an authorized exact desired revision; this does not apply its runtime."""
     try:
         request = _parse_desired_bundle_set_request_v2(payload)
     except PluginProtocolV2Error as exc:
         _raise_protocol_error(exc)
+    try:
+        if request.scope.kind is ScopeKindV2.ROOT:
+            _require_platform_admin(current_user)
+        else:
+            await authorize_desired_profile_source_v2(
+                db, user=current_user, scope=request.scope, desired=request.desired_set
+            )
+    except RuntimeV2Error as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=403 if exc.code == "scope_write_forbidden" else 409,
+            detail={"code": exc.code, "message": _("Scoped desired configuration is unavailable")},
+        ) from exc
     try:
         record = await PlatformPluginDesiredBundleSetRepositoryV2(db).record_desired_set(
             scope=request.scope,

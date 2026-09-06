@@ -220,49 +220,84 @@ def event_contract_catalog_v2(
     return declarations
 
 
+def resolve_entry_service_provider_v2(
+    entries: Mapping[str, ProfileEntryV2],
+    modules: Mapping[str, PluginModuleV2],
+    *,
+    entry_id: str,
+    service: str,
+    version: str,
+    scope: ScopeV2,
+    isolate: Mapping[str, str],
+) -> str:
+    """Select the exact nearest provider using runtime injection semantics."""
+    providers = [
+        provider_id
+        for provider_id, module in modules.items()
+        if any(
+            item.service == service and item.version == version
+            for item in module.contract.services.provides
+        )
+        and scope_contains_v2(entries[provider_id].scope, scope)
+        and entries[provider_id].isolate.get(service) == isolate.get(service)
+    ]
+    if not providers:
+        has_other_version = any(
+            item.service == service
+            and scope_contains_v2(entries[provider_id].scope, scope)
+            and entries[provider_id].isolate.get(service) == isolate.get(service)
+            for provider_id, module in modules.items()
+            for item in module.contract.services.provides
+        )
+        raise RuntimeV2Error(
+            "service_version_mismatch" if has_other_version else "missing_inject_provider",
+            f"entry {entry_id} injects missing service {service}@{version}",
+        )
+    providers.sort(key=lambda item: scope_rank_v2(entries[item].scope), reverse=True)
+    top_rank = scope_rank_v2(entries[providers[0]].scope)
+    nearest = [item for item in providers if scope_rank_v2(entries[item].scope) == top_rank]
+    if len(nearest) != 1:
+        raise RuntimeV2Error(
+            "ambiguous_inject_provider",
+            f"entry {entry_id} has ambiguous service {service}",
+        )
+    return nearest[0]
+
+
+def entry_dependencies_v2(
+    entries: Mapping[str, ProfileEntryV2],
+    modules: Mapping[str, PluginModuleV2],
+    *,
+    entry_ids: Iterable[str] | None = None,
+) -> dict[str, set[str]]:
+    """Resolve dependencies for all entries or an explicitly selected subset."""
+    dependencies: dict[str, set[str]] = {}
+    for entry_id in entries if entry_ids is None else entry_ids:
+        entry = entries[entry_id]
+        dependencies[entry_id] = set()
+        if entry.parent_entry_id is not None:
+            dependencies[entry_id].add(entry.parent_entry_id)
+        for requirement in modules[entry_id].contract.services.requires:
+            provider = resolve_entry_service_provider_v2(
+                entries,
+                modules,
+                entry_id=entry_id,
+                service=requirement.service,
+                version=requirement.version,
+                scope=entry.scope,
+                isolate=entry.isolate,
+            )
+            if provider != entry_id:
+                dependencies[entry_id].add(provider)
+    return dependencies
+
+
 def entry_order_v2(
     entries: Mapping[str, ProfileEntryV2],
     modules: Mapping[str, PluginModuleV2],
 ) -> tuple[str, ...]:
     declaration_rank = {entry_id: index for index, entry_id in enumerate(entries)}
-    dependencies: dict[str, set[str]] = {entry_id: set() for entry_id in entries}
-    for entry_id, entry in entries.items():
-        if entry.parent_entry_id is not None:
-            dependencies[entry_id].add(entry.parent_entry_id)
-        for requirement in modules[entry_id].contract.services.requires:
-            service = requirement.service
-            providers = [
-                provider_id
-                for provider_id, module in modules.items()
-                if any(
-                    item.service == service and item.version == requirement.version
-                    for item in module.contract.services.provides
-                )
-                and scope_contains_v2(entries[provider_id].scope, entry.scope)
-                and entries[provider_id].isolate.get(service) == entry.isolate.get(service)
-            ]
-            if not providers:
-                has_other_version = any(
-                    item.service == service
-                    and scope_contains_v2(entries[provider_id].scope, entry.scope)
-                    and entries[provider_id].isolate.get(service) == entry.isolate.get(service)
-                    for provider_id, module in modules.items()
-                    for item in module.contract.services.provides
-                )
-                raise RuntimeV2Error(
-                    "service_version_mismatch" if has_other_version else "missing_inject_provider",
-                    f"entry {entry_id} injects missing service {service}@{requirement.version}",
-                )
-            providers.sort(key=lambda item: scope_rank_v2(entries[item].scope), reverse=True)
-            top_rank = scope_rank_v2(entries[providers[0]].scope)
-            nearest = [item for item in providers if scope_rank_v2(entries[item].scope) == top_rank]
-            if len(nearest) != 1:
-                raise RuntimeV2Error(
-                    "ambiguous_inject_provider",
-                    f"entry {entry_id} has ambiguous service {service}",
-                )
-            if nearest[0] != entry_id:
-                dependencies[entry_id].add(nearest[0])
+    dependencies = entry_dependencies_v2(entries, modules)
 
     ordered: list[str] = []
     visiting: set[str] = set()
