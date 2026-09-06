@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "3ad7287d041225a827a646cb4354d0335375cb6d",
+  "source_revision": "0326735b482384ee2bad5ed8a3226579126c6108",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -3390,7 +3390,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:092cc493171373af3e2c66874989db510cf7407a0b13f5c9caba86c3f9ec8b95"
+      "sha256": "sha256:822f1c909423b96426bfacf038213d83350aab5f8cd4b7e882aa913416bedce2"
     },
     {
       "source_entry": "web/src/plugins/webRendererAppCompositionV2.ts",
