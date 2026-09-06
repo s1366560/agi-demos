@@ -186,6 +186,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
                     app.state, "plugin_marketplace_allowed_registries_v2", frozenset()
                 ),
                 publication_stager=stage_routes,
+                publication_policy=publication_policy,
             )
         else:
             publication, record_startup_publication = await _publish_startup_generation_v2(
@@ -203,6 +204,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
                 publication,
                 publication_policy=publication_policy,
                 retain_requested_as_last_good=durable_distribution,
+                requested_persisted=session_factory is not None and record_startup_publication,
             )
             failure = publication.receipt
             raise RuntimeV2Error(
@@ -222,6 +224,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
                 session_factory,
                 publication,
                 publication_policy=publication_policy,
+                requested_persisted=session_factory is not None,
             )
     except BaseException:
         await host.close()
@@ -426,6 +429,7 @@ async def _record_startup_publication_v2(
     *,
     publication_policy: PlatformPluginPublicationPolicyV2,
     retain_requested_as_last_good: Mapping[str, object] | None = None,
+    requested_persisted: bool = False,
 ) -> None:
     if session_factory is None:
         return
@@ -451,7 +455,18 @@ async def _record_startup_publication_v2(
         )
     async with session_factory() as session:
         repository = PlatformPluginRepositoryV2(session)
-        if PYTHON_API_DATA_PLANE_ID_V2 in publication_policy.required_data_plane_ids:
+        if requested_persisted:
+            if PYTHON_API_DATA_PLANE_ID_V2 in publication_policy.required_data_plane_ids:
+                _ = await repository.record_data_plane_receipt(
+                    data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
+                    nonce=publication.envelope.nonce,
+                    receipt=publication.receipt,
+                )
+            else:
+                latest = await repository.latest_publication_readiness()
+                if latest is None or latest.nonce != publication.envelope.nonce:
+                    raise RuntimeV2Error("root_publication_changed", "ROOT request was superseded")
+        elif PYTHON_API_DATA_PLANE_ID_V2 in publication_policy.required_data_plane_ids:
             _ = await repository.record_publication_and_receipt(
                 publication,
                 data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,

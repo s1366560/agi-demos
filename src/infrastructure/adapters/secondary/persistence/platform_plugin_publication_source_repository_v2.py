@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.plugins.generated_v2 import DesiredBundleSetV2, ScopeV2
+from src.domain.model.plugins.generated_v2 import DesiredBundleSetV2, ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2PublicationModel,
 )
@@ -48,7 +48,8 @@ class PlatformPluginPublicationSourceRepositoryV2:
                 "source binding requires a persisted publication",
             )
         binding.require_row(publication)
-        if publication.generation != parsed.revision:
+        # ROOT restarts/publications advance independently of configuration revisions.
+        if binding.scope.kind is not ScopeKindV2.ROOT and publication.generation != parsed.revision:
             raise PlatformPluginPublicationSourceV2Error(
                 "publication_source_revision_mismatch", "publication differs from desired revision"
             )
@@ -84,7 +85,8 @@ class PlatformPluginPublicationSourceRepositoryV2:
                 "publication_source_parent_missing", "source binding lost its publication"
             )
         binding.require_row(publication)
-        if publication.generation != parsed.revision:
+        # ROOT restarts/publications advance independently of configuration revisions.
+        if binding.scope.kind is not ScopeKindV2.ROOT and publication.generation != parsed.revision:
             raise PlatformPluginPublicationSourceV2Error(
                 "publication_source_revision_mismatch", "stored source differs from publication"
             )

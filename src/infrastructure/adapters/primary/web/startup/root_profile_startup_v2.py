@@ -10,18 +10,22 @@ from src.application.services.root_profile_initialization_service_v2 import (
 )
 from src.application.services.scoped_installed_bundle_loader_v2 import ScopedInstalledBundleLoaderV2
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.primary.web.startup.root_startup_request_v2 import (
+    prepare_root_startup_request_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
     PlatformPluginDesiredBundleSetRepositoryV2,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
     PlatformPluginProfileSourceRepositoryV2,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
+    PlatformPluginPublicationPolicyV2,
+)
 from src.infrastructure.plugins.v2.composer import compose_profile_v2
 from src.infrastructure.plugins.v2.layer_composer import compose_profile_sources_v2
 from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
 from src.infrastructure.plugins.v2.protocol import (
-    control_envelope_v2,
-    parse_control_envelope_v2,
     parse_profile_snapshot_v2,
 )
 from src.infrastructure.plugins.v2.reconciler import GenerationPublicationStagerV2
@@ -44,6 +48,7 @@ async def publish_configured_root_startup_v2(
     trusted_public_keys: tuple[str, ...],
     allowed_registries: frozenset[str],
     publication_stager: GenerationPublicationStagerV2,
+    publication_policy: PlatformPluginPublicationPolicyV2,
 ) -> tuple[PlatformPluginPublicationV2, bool]:
     sources = production_bundle_sources_v2()
     root = ScopeV2(kind=ScopeKindV2.ROOT)
@@ -117,18 +122,23 @@ async def publish_configured_root_startup_v2(
             ),
             False,
         )
-    generation, version = 0, 0
+    generation = 0
     for distribution in (durable_distribution, latest_distribution):
         if distribution is not None:
             snapshot = parse_profile_snapshot_v2(distribution.get("snapshot"))
-            envelope = parse_control_envelope_v2(distribution.get("envelope"))
             generation = max(generation, snapshot.generation)
-            version = max(version, envelope.version)
     candidate = compose_profile_v2(composition.document, manifests, generation=generation + 1)
+    candidate, envelope = await prepare_root_startup_request_v2(
+        session_factory=session_factory,
+        candidate=candidate,
+        desired=desired,
+        archives=archives,
+        policy=publication_policy,
+    )
     return (
         await host.apply(
             candidate,
-            control_envelope_v2(candidate, version=version + 1),
+            envelope,
             publication_stager=publication_stager,
             verified_archives=archives,
         ),
