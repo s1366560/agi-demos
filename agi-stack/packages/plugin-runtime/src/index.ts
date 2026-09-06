@@ -1,4 +1,9 @@
 export {
+  WebPublicViewReconcilerV2,
+  parseWebPublicViewV2,
+  type WebPublicViewV2,
+} from './webPublicView';
+export {
   DesktopRendererDeliveryReconcilerV2,
   parseDesktopRendererDeliveryV2,
   type DesktopRendererDeliveryV2,
