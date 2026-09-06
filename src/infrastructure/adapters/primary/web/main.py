@@ -221,6 +221,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
             coordinator=app.state.platform_plugin_http_route_publication_v2,
             session_factory=async_session_factory,
             policy=publication_policy,
+            trusted_public_keys=tuple(app.state.plugin_marketplace_trusted_public_keys_v2),
+            allowed_registries=frozenset(app.state.plugin_marketplace_allowed_registries_v2),
+            on_route_commit=lambda graph: setattr(
+                app.state, "platform_plugin_route_graph_v2", graph
+            ),
         )
         app.state.platform_plugin_receipt_recovery_v2 = receipt_recovery
         receipt_recovery.start()

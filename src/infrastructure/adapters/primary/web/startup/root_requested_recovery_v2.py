@@ -1,6 +1,6 @@
 """Resume an exact committed ROOT request after interruption before its first receipt."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -34,6 +34,7 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_recovery_
     PlatformPluginRecoveryRepositoryV2,
     ScopedRecoveryStateV2,
 )
+from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2
 from src.infrastructure.plugins.v2.layer_composer import compose_profile_sources_v2
 from src.infrastructure.plugins.v2.production_bundle import (
@@ -43,6 +44,7 @@ from src.infrastructure.plugins.v2.production_bundle import (
 from src.infrastructure.plugins.v2.reconciler import GenerationPublicationStagerV2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import (
+    PlatformPluginDistributionV2,
     PlatformPluginPublicationV2,
     PlatformPluginRuntimeHostV2,
 )
@@ -62,6 +64,7 @@ async def _read_pending(
     policy: PlatformPluginPublicationPolicyV2,
     *,
     expected_state: ScopedRecoveryStateV2 | None = None,
+    accepted_state: ScopedRecoveryStateV2 | None = None,
 ) -> _PendingRootV2 | None:
     root = ScopeV2(kind=ScopeKindV2.ROOT)
     async with session_factory() as session:
@@ -69,9 +72,9 @@ async def _read_pending(
             root,
             PYTHON_API_DATA_PLANE_ID_V2,
         )
-        if expected_state is not None and state != expected_state:
+        if expected_state is not None and state not in (expected_state, accepted_state):
             raise RuntimeV2Error("root_recovery_changed", "ROOT request changed during recovery")
-        if state.latest is None or state.latest_receipt is not None:
+        if state.latest is None or (state.latest_receipt is not None and accepted_state is None):
             return None
         row = (
             await session.scalars(
@@ -117,18 +120,24 @@ async def _read_pending(
         return _PendingRootV2(state, desired, source)
 
 
-async def recover_requested_root_startup_v2(
-    host: PlatformPluginRuntimeHostV2,
+@dataclass(frozen=True)
+class VerifiedRootRequestRecoveryV2:
+    distribution: PlatformPluginDistributionV2
+    archives: tuple[VerifiedBundleArchiveV2, ...]
+    check_authority: Callable[[], Awaitable[None]]
+    check_receipt_authority: Callable[[PlatformPluginPublicationV2], Awaitable[None]]
+
+
+async def load_requested_root_recovery_v2(
     *,
     session_factory: Callable[[], Any],
     latest_distribution: Mapping[str, object] | None,
     durable_distribution: Mapping[str, object] | None,
     trusted_public_keys: tuple[str, ...],
     allowed_registries: frozenset[str],
-    publication_stager: GenerationPublicationStagerV2,
     publication_policy: PlatformPluginPublicationPolicyV2,
-) -> PlatformPluginPublicationV2 | None:
-    """Apply only the bound request, without allocating or replacing its identity."""
+) -> VerifiedRootRequestRecoveryV2 | None:
+    """Load a verified candidate and a recheck bound to its exact durable authority."""
     if (
         latest_distribution is None
         or PYTHON_API_DATA_PLANE_ID_V2 not in publication_policy.required_data_plane_ids
@@ -168,23 +177,70 @@ async def recover_requested_root_startup_v2(
         raise RuntimeV2Error(
             "root_recovery_snapshot_mismatch", "ROOT request differs from its source"
         )
-    if (
-        await _read_pending(
-            session_factory, sources, publication_policy, expected_state=pending.state
+
+    async def check_authority() -> None:
+        if (
+            await _read_pending(
+                session_factory, sources, publication_policy, expected_state=pending.state
+            )
+            != pending
+        ):
+            raise RuntimeV2Error("root_recovery_changed", "ROOT request changed during recovery")
+
+    async def check_receipt_authority(publication: PlatformPluginPublicationV2) -> None:
+        if publication.snapshot != latest.snapshot or publication.envelope != latest.envelope:
+            raise RuntimeV2Error("root_recovery_changed", "ROOT recovery receipt changed")
+        receipted = ScopedRecoveryStateV2(
+            scope=pending.state.scope,
+            latest=latest,
+            last_good=latest if publication.accepted else pending.state.last_good,
+            latest_receipt=publication.receipt,
+            source=pending.desired if publication.accepted else pending.state.source,
         )
-        != pending
-    ):
-        raise RuntimeV2Error("root_recovery_changed", "ROOT request changed before staging")
-    publication = await host.apply_distribution(
-        latest.to_payload(),
-        publication_stager=publication_stager,
-        verified_archives=archives,
+        observed = await _read_pending(
+            session_factory,
+            sources,
+            publication_policy,
+            expected_state=pending.state,
+            accepted_state=receipted,
+        )
+        if (
+            observed is None
+            or observed.desired != pending.desired
+            or observed.source != pending.source
+        ):
+            raise RuntimeV2Error("root_recovery_changed", "ROOT request changed during recovery")
+
+    await check_authority()
+    return VerifiedRootRequestRecoveryV2(latest, archives, check_authority, check_receipt_authority)
+
+
+async def recover_requested_root_startup_v2(
+    host: PlatformPluginRuntimeHostV2,
+    *,
+    session_factory: Callable[[], Any],
+    latest_distribution: Mapping[str, object] | None,
+    durable_distribution: Mapping[str, object] | None,
+    trusted_public_keys: tuple[str, ...],
+    allowed_registries: frozenset[str],
+    publication_stager: GenerationPublicationStagerV2,
+    publication_policy: PlatformPluginPublicationPolicyV2,
+) -> PlatformPluginPublicationV2 | None:
+    """Apply only the bound request, without allocating or replacing its identity."""
+    prepared = await load_requested_root_recovery_v2(
+        session_factory=session_factory,
+        latest_distribution=latest_distribution,
+        durable_distribution=durable_distribution,
+        trusted_public_keys=trusted_public_keys,
+        allowed_registries=allowed_registries,
+        publication_policy=publication_policy,
     )
-    if (
-        await _read_pending(
-            session_factory, sources, publication_policy, expected_state=pending.state
-        )
-        != pending
-    ):
-        raise RuntimeV2Error("root_recovery_changed", "ROOT request changed during staging")
+    if prepared is None:
+        return None
+    publication = await host.apply_distribution(
+        prepared.distribution.to_payload(),
+        publication_stager=publication_stager,
+        verified_archives=prepared.archives,
+    )
+    await prepared.check_authority()
     return publication

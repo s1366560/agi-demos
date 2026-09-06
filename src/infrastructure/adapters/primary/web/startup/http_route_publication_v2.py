@@ -63,6 +63,9 @@ class HttpRoutePublicationCoordinatorV2:
         self._graph = initial_graph
         self._pending: HttpRouteGenerationPublicationV2 | None = None
         self._pending_on_commit: Callable[[BuiltinRouteGraphV2], None] | None = None
+        self._pending_receipt_check: (
+            Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None
+        ) = None
 
     async def publish_snapshot(
         self,
@@ -72,6 +75,8 @@ class HttpRoutePublicationCoordinatorV2:
         on_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
         verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
         receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
+        receipt_check: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
+        pre_apply_check: Callable[[], Awaitable[None]] | None = None,
     ) -> HttpRouteGenerationPublicationV2:
         """Publish routes and optionally persist receipts before allowing admission.
 
@@ -83,11 +88,14 @@ class HttpRoutePublicationCoordinatorV2:
 
         async def publish() -> None:
             async with self._lock:
+                if pre_apply_check is not None:
+                    await pre_apply_check()
                 result = await self._publish_locked(
                     snapshot,
                     envelope,
                     verified_archives=archives,
                     receipt_persister=receipt_persister,
+                    receipt_check=receipt_check,
                     on_commit=on_commit,
                 )
                 if receipt_persister is None:
@@ -168,12 +176,15 @@ class HttpRoutePublicationCoordinatorV2:
                             raise RuntimeV2Error(
                                 "route_receipt_mismatch", "pending route graph changed"
                             )
+                    if self._pending_receipt_check is not None:
+                        await self._pending_receipt_check(publication)
                     await receipt_persister(publication)
                     self._notify_commit(pending, self._pending_on_commit)
 
                 _ = await self._host.retry_pending_receipt(persist)
                 self._pending = None
                 self._pending_on_commit = None
+                self._pending_receipt_check = None
                 results.append(pending)
 
         await OwnedLifecycleTaskV2(retry, name="http-route-receipt-retry").wait()
@@ -186,6 +197,7 @@ class HttpRoutePublicationCoordinatorV2:
         *,
         verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
         receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
+        receipt_check: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
         on_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
     ) -> HttpRouteGenerationPublicationV2:
         async def stage_routes(
@@ -219,8 +231,11 @@ class HttpRoutePublicationCoordinatorV2:
             result = self._route_result(publication)
             self._pending = result
             self._pending_on_commit = on_commit
+            self._pending_receipt_check = receipt_check
             if receipt_persister is None:
                 raise RuntimeError("route receipt persister is unavailable")
+            if receipt_check is not None:
+                await receipt_check(publication)
             await receipt_persister(publication)
             self._notify_commit(result, on_commit)
 
@@ -234,6 +249,7 @@ class HttpRoutePublicationCoordinatorV2:
         result = self._route_result(publication)
         self._pending = None
         self._pending_on_commit = None
+        self._pending_receipt_check = None
         return result
 
 

@@ -1,4 +1,4 @@
-"""Recover real pending market receipts outside the HTTP admission boundary."""
+"""Recover committed market requests and receipts outside HTTP admission."""
 
 from __future__ import annotations
 
@@ -16,17 +16,19 @@ from src.infrastructure.adapters.primary.web.startup.http_route_publication_v2 i
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PlatformPluginPublicationPolicyV2,
 )
+from src.infrastructure.plugins.v2.builtin_http_routes import BuiltinRouteGraphV2
 from src.infrastructure.plugins.v2.lifecycle_tasks import OwnedLifecycleTaskV2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 
 from .marketplace_publication_receipt_v2 import persist_marketplace_receipt_v2
+from .marketplace_requested_recovery_v2 import recover_live_requested_root_v2
 
 logger = logging.getLogger(__name__)
 
 
 class MarketplaceReceiptRecoveryV2:
-    """Retry retained outcomes using fresh SQL sessions; never reapply or invent receipts."""
+    """Resume exact requests or retry retained outcomes using fresh SQL sessions."""
 
     def __init__(  # pyright: ignore[reportMissingSuperCall]
         self,
@@ -36,6 +38,9 @@ class MarketplaceReceiptRecoveryV2:
         session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
         policy: PlatformPluginPublicationPolicyV2,
         poll_interval_seconds: float = 5.0,
+        trusted_public_keys: tuple[str, ...] = (),
+        allowed_registries: frozenset[str] = frozenset(),
+        on_route_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
     ) -> None:
         if not math.isfinite(poll_interval_seconds) or poll_interval_seconds <= 0:
             raise ValueError("receipt recovery interval must be finite and positive")
@@ -43,6 +48,9 @@ class MarketplaceReceiptRecoveryV2:
         self._coordinator = coordinator
         self._session_factory = session_factory
         self._policy = policy
+        self._trusted_public_keys = tuple(trusted_public_keys)
+        self._allowed_registries = frozenset(allowed_registries)
+        self._on_route_commit = on_route_commit
         self._interval = poll_interval_seconds
         self._stop_event = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
@@ -79,9 +87,16 @@ class MarketplaceReceiptRecoveryV2:
         await self._stop_task.wait()
 
     async def run_once(self) -> bool:
-        """Persist one retained outcome; a superseded receipt remains blocked."""
+        """Recover a retained receipt or apply the exact committed unapplied request."""
         if self._host.pending_receipt is None:
-            return False
+            return await recover_live_requested_root_v2(
+                coordinator=self._coordinator,
+                session_factory=self._session_factory,
+                policy=self._policy,
+                trusted_public_keys=self._trusted_public_keys,
+                allowed_registries=self._allowed_registries,
+                on_route_commit=self._on_route_commit,
+            )
         try:
             _ = await self._coordinator.retry_pending_receipt(
                 lambda publication: persist_marketplace_receipt_v2(
@@ -106,11 +121,11 @@ class MarketplaceReceiptRecoveryV2:
                 if current is not None and current.cancelling():
                     raise
                 logger.warning(
-                    "Marketplace receipt persistence cancelled; admission remains fenced"
+                    "Marketplace recovery attempt cancelled; retained authority is unchanged"
                 )
             except Exception as error:
                 logger.warning(
-                    "Marketplace receipt recovery failed (%s); admission remains fenced",
+                    "Marketplace recovery deferred (%s)",
                     type(error).__name__,
                 )
             try:
