@@ -11,12 +11,28 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.artifact_attestation_v2 import artifact_digest_v2
-from src.domain.model.plugins.generated_v2 import DataPlaneTargetV2, ScopeKindV2, ScopeV2
+from src.domain.model.plugins.generated_v2 import (
+    DataPlaneTargetV2,
+    ProfileLayerKindV2,
+    ProfileLayerV2,
+    ScopeKindV2,
+    ScopeV2,
+)
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     initialize_plugin_runtime_v2,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
+    PlatformPluginDesiredBundleSetRepositoryV2,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_model_v2 import (
+    PlatformPluginV2ProfileSourceModel,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
+    PlatformPluginProfileSourceRepositoryV2,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginRepositoryV2,
@@ -31,7 +47,6 @@ from src.infrastructure.plugins.v2.agent_pool_profile import (
     AGENT_POOL_HTTP_ROUTES_ENTRY_ID_V2,
     AGENT_POOL_HTTP_ROUTES_MODULE_V2,
     AGENT_POOL_RUNTIME_ENTRY_ID_V2,
-    agent_pool_profile_matches_v2,
     agent_pool_runtime_matches_v2,
     project_agent_pool_runtime_v2,
 )
@@ -46,6 +61,10 @@ from src.infrastructure.plugins.v2.composer import (
     ProfileDocumentV2,
     compose_profile_v2,
     load_profile_document_v2,
+)
+from src.infrastructure.plugins.v2.layer_composer import (
+    desired_bundle_set_digest_v2,
+    profile_source_digest_v2,
 )
 from src.infrastructure.plugins.v2.protocol import (
     control_envelope_v2,
@@ -284,6 +303,57 @@ async def test_restart_republishes_durable_snapshot_for_explicit_pool_desired_st
     )
     await first.close()
 
+    desired_repository = PlatformPluginDesiredBundleSetRepositoryV2(db_session)
+    desired = (await desired_repository.current_desired_set(_ROOT_SCOPE)).desired_set
+    reference = desired.profile_source
+    source_repository = PlatformPluginProfileSourceRepositoryV2(db_session)
+    source = await source_repository.read_exact(
+        scope=_ROOT_SCOPE,
+        source_id=reference.source_id,
+        revision=reference.revision,
+        digest=reference.digest,
+    )
+    assert source is not None
+    pool_entry = next(
+        entry
+        for entry in first_distribution.snapshot.entries
+        if entry.entry_id == AGENT_POOL_RUNTIME_ENTRY_ID_V2
+    )
+    updated_source = replace(
+        source,
+        revision=source.revision + 1,
+        layers=(
+            *source.layers,
+            ProfileLayerV2(
+                layer_id="explicit-enable-pool",
+                kind=ProfileLayerKindV2.PROFILE,
+                scope=_ROOT_SCOPE,
+                entries=(),
+                replacements=(replace(pool_entry, enabled=True, config=dict(_CONFIG)),),
+                disabled_entry_ids=(),
+            ),
+        ),
+    )
+    updated_source = replace(updated_source, digest=profile_source_digest_v2(updated_source))
+    await source_repository.record_source(
+        scope=_ROOT_SCOPE, source=updated_source, expected_revision=source.revision
+    )
+    updated_desired = replace(
+        desired,
+        revision=desired.revision + 1,
+        profile_source=replace(
+            reference, revision=updated_source.revision, digest=updated_source.digest
+        ),
+    )
+    updated_desired = replace(updated_desired, digest=desired_bundle_set_digest_v2(updated_desired))
+    await desired_repository.record_desired_set(
+        scope=_ROOT_SCOPE,
+        desired_set=updated_desired,
+        expected_revision=desired.revision,
+        actor_id="explicit-pool-config",
+    )
+    await db_session.commit()
+
     events: list[str] = []
 
     async def factory(_config) -> AgentPoolRuntimeServiceV2:
@@ -293,7 +363,7 @@ async def test_restart_republishes_durable_snapshot_for_explicit_pool_desired_st
     restarted = await initialize_plugin_runtime_v2(
         restarted_app,
         session_factory=session_factory,
-        agent_pool_runtime_enabled=True,
+        agent_pool_runtime_enabled=False,
         agent_pool_runtime_config=_CONFIG,
         agent_pool_runtime_factory=factory,
     )
@@ -320,6 +390,8 @@ async def test_restart_republishes_durable_snapshot_for_explicit_pool_desired_st
 async def test_restart_upgrades_snapshot_that_predates_agent_pool_modules(
     db_session: AsyncSession,
 ) -> None:
+    """Historical auto-upgrade fixture now requires explicit ROOT configuration migration."""
+
     @asynccontextmanager
     async def session_factory():
         yield db_session
@@ -359,18 +431,25 @@ async def test_restart_upgrades_snapshot_that_predates_agent_pool_modules(
     await db_session.commit()
     await legacy_host.close()
 
-    restarted = await initialize_plugin_runtime_v2(
-        FastAPI(),
-        session_factory=session_factory,
+    repository = PlatformPluginRepositoryV2(db_session)
+    before_last_good = await repository.last_good_distribution("python-api-v2")
+    before_requested = await repository.latest_requested_distribution()
+    app = FastAPI()
+    with pytest.raises(RuntimeV2Error) as caught:
+        await initialize_plugin_runtime_v2(app, session_factory=session_factory)
+    assert caught.value.code == "root_profile_migration_required"
+    assert getattr(app.state, "platform_plugin_runtime_v2", None) is None
+    assert (
+        await PlatformPluginDesiredBundleSetRepositoryV2(db_session).current_desired_set(
+            _ROOT_SCOPE
+        )
+        is None
     )
-    distribution = restarted.current_distribution
-
-    assert distribution is not None
-    assert distribution.snapshot.generation == 8
-    assert distribution.envelope.version == 12
-    assert agent_pool_profile_matches_v2(
-        distribution.snapshot,
-        enabled=False,
-        config=_CONFIG,
+    assert (
+        await db_session.scalar(
+            select(func.count()).select_from(PlatformPluginV2ProfileSourceModel)
+        )
+        == 0
     )
-    await restarted.close()
+    assert await repository.last_good_distribution("python-api-v2") == before_last_good
+    assert await repository.latest_requested_distribution() == before_requested
