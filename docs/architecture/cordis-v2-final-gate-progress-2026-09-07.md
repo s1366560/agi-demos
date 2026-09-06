@@ -88,12 +88,14 @@ reference. Native accessibility and screenshots are stored privately in
 `/var/tmp/cordis-final-native-7TENNl`.
 
 This establishes the provider lifecycle, actual model/tool operation and restart
-persistence. A separate completed-conversation composer remained on its authority
-loading message. Source review found a synchronous exception could bypass the
-loading promise catch and lacked a runtime-readiness retry. That lifecycle is
-being repaired before the final UI gate; the successful model operation does not
-conceal that remaining issue. The run summary's file counts reflect repository
-state and are not evidence that this read-only arithmetic task edited files.
+persistence. The accessibility tree retained a stale loading placeholder for the
+completed conversation. Direct inspection of both the original post-restart
+screenshot and a later native screenshot showed the correct completed-run input
+restriction. Temporary phase-only diagnostics also observed the request returning
+in approximately 87 milliseconds and authority becoming ready. A proposed loading
+lifecycle change was therefore withdrawn before commit; it is not counted as a
+necessary native fix. The run summary's file counts reflect repository state and
+are not evidence that this read-only arithmetic task edited files.
 
 The separate historical database recovery document records a verified real backup,
 restore and full upgrade of an isolated copy. The original database remains at its
