@@ -98,7 +98,7 @@ test('Electron consumes the workload grant before spawn and imports it only afte
     'utf8',
   );
   const bootstrap = mainSource.slice(mainSource.indexOf('async function bootstrapApplication'));
-  const consume = bootstrap.indexOf('takePlatformPluginDataPlaneCredentialEnvironmentV2');
+  const consume = bootstrap.indexOf('takePlatformPluginCredentialEnvironmentsV2');
   const create = bootstrap.indexOf('createSidecarSupervisor()');
   const start = bootstrap.indexOf('await sidecarSupervisor.start()');
   const importCredential = bootstrap.indexOf("invoke('plugin_data_plane_credential_import_v2'");

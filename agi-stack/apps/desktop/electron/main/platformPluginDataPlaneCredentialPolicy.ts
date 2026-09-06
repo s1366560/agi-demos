@@ -68,3 +68,58 @@ function validateControlPlaneBaseUrlV2(value: string): void {
     throw new Error('plugin data-plane credential environment is invalid');
   }
 }
+
+export const PLUGIN_RENDERER_DATA_PLANE_CREDENTIAL_ENV_V2 =
+  'AGISTACK_PLUGIN_RENDERER_DATA_PLANE_CREDENTIAL_V2';
+export const PLUGIN_RENDERER_DATA_PLANE_API_BASE_URL_ENV_V2 =
+  'AGISTACK_PLUGIN_RENDERER_DATA_PLANE_API_BASE_URL_V2';
+export const PLUGIN_RENDERER_DATA_PLANE_ACK_PARTICIPATION_ENV_V2 =
+  'AGISTACK_PLUGIN_RENDERER_DATA_PLANE_ACK_PARTICIPATION_V2';
+
+export type PlatformPluginRendererCredentialRecordV2 = Readonly<
+  Omit<PlatformPluginDataPlaneCredentialRecordV2, 'data_plane_id'> & {
+    data_plane_id: 'desktop-renderer-v2';
+  }
+>;
+
+export function takePlatformPluginCredentialEnvironmentsV2(
+  environment: Record<string, string | undefined>,
+): Readonly<{
+  sidecar: PlatformPluginDataPlaneCredentialRecordV2 | null;
+  renderer: PlatformPluginRendererCredentialRecordV2 | null;
+}> {
+  const take = (names: readonly string[]): Record<string, string | undefined> => {
+    const values: Record<string, string | undefined> = {};
+    for (const name of names) {
+      values[name] = environment[name];
+      delete environment[name];
+    }
+    return values;
+  };
+  // Consume both grants before validating either so startup failures leave no grant behind.
+  const sidecarEnvironment = take([
+    PLUGIN_DATA_PLANE_CREDENTIAL_ENV_V2,
+    PLUGIN_DATA_PLANE_API_BASE_URL_ENV_V2,
+    PLUGIN_DATA_PLANE_ACK_PARTICIPATION_ENV_V2,
+  ]);
+  const rendererEnvironment = take([
+    PLUGIN_RENDERER_DATA_PLANE_CREDENTIAL_ENV_V2,
+    PLUGIN_RENDERER_DATA_PLANE_API_BASE_URL_ENV_V2,
+    PLUGIN_RENDERER_DATA_PLANE_ACK_PARTICIPATION_ENV_V2,
+  ]);
+  const sidecar = takePlatformPluginDataPlaneCredentialEnvironmentV2(sidecarEnvironment);
+  const rendererGrant = takePlatformPluginDataPlaneCredentialEnvironmentV2({
+    [PLUGIN_DATA_PLANE_CREDENTIAL_ENV_V2]:
+      rendererEnvironment[PLUGIN_RENDERER_DATA_PLANE_CREDENTIAL_ENV_V2],
+    [PLUGIN_DATA_PLANE_API_BASE_URL_ENV_V2]:
+      rendererEnvironment[PLUGIN_RENDERER_DATA_PLANE_API_BASE_URL_ENV_V2],
+    [PLUGIN_DATA_PLANE_ACK_PARTICIPATION_ENV_V2]:
+      rendererEnvironment[PLUGIN_RENDERER_DATA_PLANE_ACK_PARTICIPATION_ENV_V2],
+  });
+  return Object.freeze({
+    sidecar,
+    renderer: rendererGrant === null
+      ? null
+      : Object.freeze({ ...rendererGrant, data_plane_id: 'desktop-renderer-v2' as const }),
+  });
+}

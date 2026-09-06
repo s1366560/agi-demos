@@ -77,7 +77,7 @@ import {
   type NativeFileDialogFilter,
 } from './nativeFileDialogPolicy';
 import {
-  takePlatformPluginDataPlaneCredentialEnvironmentV2,
+  takePlatformPluginCredentialEnvironmentsV2,
 } from './platformPluginDataPlaneCredentialPolicy';
 import { configureQaProfile, resolveSidecarLegacyDataDirectories } from './qaProfilePolicy';
 import { SidecarSupervisor, sidecarRendererEnvironment } from './sidecarSupervisor';
@@ -1191,14 +1191,19 @@ function handleFatalStartup(error: unknown): void {
 async function bootstrapApplication(): Promise<void> {
   installRendererProtocol();
   installMediaPermissionPolicy();
-  const pluginDataPlaneCredentialV2 =
-    takePlatformPluginDataPlaneCredentialEnvironmentV2(process.env);
+  const pluginDataPlaneCredentialsV2 =
+    takePlatformPluginCredentialEnvironmentsV2(process.env);
   sidecarSupervisor = createSidecarSupervisor();
   await sidecarSupervisor.start();
   const applicationSupervisor = sidecarSupervisor;
-  if (pluginDataPlaneCredentialV2) {
+  if (pluginDataPlaneCredentialsV2.sidecar) {
     await sidecarSupervisor.invoke('plugin_data_plane_credential_import_v2', {
-      input: pluginDataPlaneCredentialV2,
+      input: pluginDataPlaneCredentialsV2.sidecar,
+    });
+  }
+  if (pluginDataPlaneCredentialsV2.renderer) {
+    await sidecarSupervisor.invoke('plugin_renderer_data_plane_credential_import_v2', {
+      input: pluginDataPlaneCredentialsV2.renderer,
     });
   }
   sandboxDesktopGrants = new SandboxDesktopGrantRegistry({

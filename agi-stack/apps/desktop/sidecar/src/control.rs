@@ -101,6 +101,7 @@ struct ControlState {
     runtime: LocalRuntimeService,
     oauth_pending_attempts: OAuthPendingAttemptBroker,
     plugin_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
+    plugin_renderer_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     trusted_sessions: TrustedSessionBroker,
     workspace_core: WorkspaceCoreSupervisor,
     plugin_control_plane_v2: PlatformPluginControlPlaneReconcilerV2,
@@ -134,6 +135,8 @@ pub(crate) async fn run() -> Result<(), String> {
     let oauth_pending_attempts = OAuthPendingAttemptBroker::new(credential_vault.clone());
     let plugin_data_plane_credentials_v2 =
         PluginDataPlaneCredentialBrokerV2::native(credential_vault.clone());
+    let plugin_renderer_data_plane_credentials_v2 =
+        PluginDataPlaneCredentialBrokerV2::native_renderer(credential_vault.clone());
     let trusted_sessions = TrustedSessionBroker::native(credential_vault);
     let plugin_control_plane_v2 = match runtime
         .start_platform_plugin_control_plane_v2(
@@ -177,6 +180,7 @@ pub(crate) async fn run() -> Result<(), String> {
         runtime,
         oauth_pending_attempts,
         plugin_data_plane_credentials_v2,
+        plugin_renderer_data_plane_credentials_v2,
         trusted_sessions,
         workspace_core,
         plugin_control_plane_v2,
@@ -344,6 +348,23 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                     .map(|()| Value::Null),
                 Err(error) => Err(error),
             }
+        }
+        "plugin_renderer_data_plane_credential_import_v2" => {
+            let broker = state.plugin_renderer_data_plane_credentials_v2.clone();
+            parse_arg::<PluginDataPlaneCredentialRecordV2>(request.args.as_ref(), "input")
+                .and_then(|record| {
+                    task::block_in_place(|| broker.save(&record)).map_err(|error| error.to_string())
+                })
+                .map(|()| Value::Null)
+        }
+        "plugin_renderer_data_plane_credential_clear_v2" if request.args.is_none() => {
+            let broker = state.plugin_renderer_data_plane_credentials_v2.clone();
+            task::block_in_place(|| broker.clear())
+                .map(|()| Value::Null)
+                .map_err(|error| error.to_string())
+        }
+        "plugin_renderer_data_plane_credential_clear_v2" => {
+            Err("desktop command arguments are invalid".to_string())
         }
         "trusted_session_save" => {
             let broker = state.trusted_sessions.clone();

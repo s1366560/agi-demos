@@ -12,6 +12,8 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::application_vault::ApplicationCredentialVault;
 
 pub(crate) const DESKTOP_PLUGIN_DATA_PLANE_ID_V2: &str = "desktop-sidecar-v2";
+pub(crate) const DESKTOP_RENDERER_DATA_PLANE_ID_V2: &str = "desktop-renderer-v2";
+const RENDERER_VAULT_KEY_V2: &str = "plugin-data-plane.desktop-renderer-v2.v2";
 const RECORD_VERSION_V2: u16 = 2;
 const VAULT_KEY_V2: &str = "plugin-data-plane.desktop-sidecar-v2.v2";
 const CREDENTIAL_PREFIX_V2: &str = "ms_dp_";
@@ -84,10 +86,49 @@ impl fmt::Display for PluginDataPlaneCredentialBrokerErrorV2 {
     }
 }
 
+// The trusted constructor chooses the plane; imported records cannot change it.
+#[derive(Clone, Copy)]
+enum CredentialPlaneV2 {
+    Sidecar,
+    Renderer,
+}
+
+impl CredentialPlaneV2 {
+    fn id(self) -> &'static str {
+        match self {
+            Self::Sidecar => DESKTOP_PLUGIN_DATA_PLANE_ID_V2,
+            Self::Renderer => DESKTOP_RENDERER_DATA_PLANE_ID_V2,
+        }
+    }
+}
+
+struct RendererCredentialVaultStoreV2(ApplicationCredentialVault);
+
+impl PluginDataPlaneCredentialStoreV2 for RendererCredentialVaultStoreV2 {
+    fn save_raw(&self, value: &str) -> Result<(), PluginDataPlaneCredentialStoreErrorV2> {
+        self.0
+            .put(RENDERER_VAULT_KEY_V2, value)
+            .map_err(|_| PluginDataPlaneCredentialStoreErrorV2::Unavailable)
+    }
+
+    fn load_raw(&self) -> Result<Option<String>, PluginDataPlaneCredentialStoreErrorV2> {
+        self.0
+            .get(RENDERER_VAULT_KEY_V2)
+            .map_err(|_| PluginDataPlaneCredentialStoreErrorV2::Unavailable)
+    }
+
+    fn clear_raw(&self) -> Result<(), PluginDataPlaneCredentialStoreErrorV2> {
+        self.0
+            .clear(RENDERER_VAULT_KEY_V2)
+            .map_err(|_| PluginDataPlaneCredentialStoreErrorV2::Unavailable)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct PluginDataPlaneCredentialBrokerV2 {
     store: Arc<dyn PluginDataPlaneCredentialStoreV2>,
     operations: Arc<Mutex<()>>,
+    plane: CredentialPlaneV2,
 }
 
 impl PluginDataPlaneCredentialBrokerV2 {
@@ -95,6 +136,7 @@ impl PluginDataPlaneCredentialBrokerV2 {
         Self {
             store,
             operations: Arc::new(Mutex::new(())),
+            plane: CredentialPlaneV2::Sidecar,
         }
     }
 
@@ -102,12 +144,20 @@ impl PluginDataPlaneCredentialBrokerV2 {
         Self::new(Arc::new(vault))
     }
 
+    pub(crate) fn native_renderer(vault: ApplicationCredentialVault) -> Self {
+        Self {
+            store: Arc::new(RendererCredentialVaultStoreV2(vault)),
+            operations: Arc::new(Mutex::new(())),
+            plane: CredentialPlaneV2::Renderer,
+        }
+    }
+
     pub(crate) fn save(
         &self,
         record: &PluginDataPlaneCredentialRecordV2,
     ) -> Result<(), PluginDataPlaneCredentialBrokerErrorV2> {
         let _operation = self.lock_operations()?;
-        validate_record_v2(record)?;
+        validate_record_v2(record, self.plane)?;
         let serialized = Zeroizing::new(
             serde_json::to_string(record)
                 .map_err(|_| PluginDataPlaneCredentialBrokerErrorV2::InvalidRecord)?,
@@ -134,7 +184,7 @@ impl PluginDataPlaneCredentialBrokerV2 {
                         .discard_invalid(PluginDataPlaneCredentialBrokerErrorV2::CorruptRecord)
                 }
             };
-        if let Err(error) = validate_record_v2(&record) {
+        if let Err(error) = validate_record_v2(&record, self.plane) {
             return self.discard_invalid(error);
         }
         Ok(Some(record))
@@ -164,11 +214,12 @@ impl PluginDataPlaneCredentialBrokerV2 {
 
 fn validate_record_v2(
     record: &PluginDataPlaneCredentialRecordV2,
+    plane: CredentialPlaneV2,
 ) -> Result<(), PluginDataPlaneCredentialBrokerErrorV2> {
     if record.version != RECORD_VERSION_V2 {
         return Err(PluginDataPlaneCredentialBrokerErrorV2::UnsupportedVersion);
     }
-    if record.data_plane_id != DESKTOP_PLUGIN_DATA_PLANE_ID_V2
+    if record.data_plane_id != plane.id()
         || !credential_is_valid_v2(&record.credential)
         || validate_base_url_v2(&record.api_base_url).is_err()
     {
@@ -371,5 +422,127 @@ mod tests {
         assert_eq!(broker.load().expect("load credential"), Some(input));
         broker.clear().expect("clear credential");
         assert!(broker.load().expect("cleared credential").is_none());
+    }
+
+    fn renderer_record(fill: char) -> PluginDataPlaneCredentialRecordV2 {
+        let mut input = record(&credential(fill));
+        input.data_plane_id = DESKTOP_RENDERER_DATA_PLANE_ID_V2.to_owned();
+        input
+    }
+
+    #[test]
+    fn native_renderer_and_sidecar_credentials_persist_rotate_and_clear_independently() {
+        let directory = TestDirectory::new();
+        let sidecar_input = record(&credential('a'));
+        let renderer_input = renderer_record('b');
+        {
+            let vault = ApplicationCredentialVault::open(&directory.0).expect("open vault");
+            PluginDataPlaneCredentialBrokerV2::native(vault.clone())
+                .save(&sidecar_input)
+                .expect("save sidecar");
+            PluginDataPlaneCredentialBrokerV2::native_renderer(vault)
+                .save(&renderer_input)
+                .expect("save renderer");
+        }
+        let vault = ApplicationCredentialVault::open(&directory.0).expect("reopen vault");
+        let sidecar = PluginDataPlaneCredentialBrokerV2::native(vault.clone());
+        let renderer = PluginDataPlaneCredentialBrokerV2::native_renderer(vault);
+        assert_eq!(sidecar.load().expect("sidecar"), Some(sidecar_input));
+        assert_eq!(renderer.load().expect("renderer"), Some(renderer_input));
+        let rotated = renderer_record('c');
+        renderer.save(&rotated).expect("rotate renderer");
+        assert_eq!(
+            sidecar.load().expect("unchanged sidecar"),
+            Some(record(&credential('a')))
+        );
+        sidecar.clear().expect("clear sidecar");
+        assert_eq!(renderer.load().expect("retained renderer"), Some(rotated));
+        assert!(sidecar.load().expect("sidecar cleared").is_none());
+        sidecar
+            .save(&record(&credential('d')))
+            .expect("restore sidecar");
+        renderer.clear().expect("clear renderer");
+        assert!(renderer.load().expect("renderer cleared").is_none());
+        assert_eq!(
+            sidecar.load().expect("retained sidecar"),
+            Some(record(&credential('d')))
+        );
+    }
+
+    #[test]
+    fn renderer_broker_rejects_cross_plane_and_corruption_without_clearing_sidecar() {
+        let directory = TestDirectory::new();
+        let vault = ApplicationCredentialVault::open(&directory.0).expect("open vault");
+        let sidecar = PluginDataPlaneCredentialBrokerV2::native(vault.clone());
+        let renderer = PluginDataPlaneCredentialBrokerV2::native_renderer(vault.clone());
+        sidecar
+            .save(&record(&credential('a')))
+            .expect("save sidecar");
+        renderer.save(&renderer_record('b')).expect("save renderer");
+        assert_eq!(
+            renderer.save(&record(&credential('c'))),
+            Err(PluginDataPlaneCredentialBrokerErrorV2::InvalidRecord)
+        );
+        assert_eq!(
+            sidecar.save(&renderer_record('c')),
+            Err(PluginDataPlaneCredentialBrokerErrorV2::InvalidRecord)
+        );
+        assert_eq!(
+            renderer.load().expect("prior renderer"),
+            Some(renderer_record('b'))
+        );
+        vault
+            .put(RENDERER_VAULT_KEY_V2, "{invalid")
+            .expect("corrupt renderer slot");
+        assert_eq!(
+            renderer.load(),
+            Err(PluginDataPlaneCredentialBrokerErrorV2::CorruptRecord)
+        );
+        assert!(renderer.load().expect("discarded renderer").is_none());
+        assert_eq!(
+            sidecar.load().expect("sidecar survives"),
+            Some(record(&credential('a')))
+        );
+        let wrong_plane =
+            serde_json::to_string(&record(&credential('e'))).expect("serialize wrong plane");
+        vault
+            .put(RENDERER_VAULT_KEY_V2, &wrong_plane)
+            .expect("wrong stored plane");
+        assert_eq!(
+            renderer.load(),
+            Err(PluginDataPlaneCredentialBrokerErrorV2::InvalidRecord)
+        );
+        assert!(renderer.load().expect("wrong plane discarded").is_none());
+        assert_eq!(
+            sidecar.load().expect("sidecar survives"),
+            Some(record(&credential('a')))
+        );
+    }
+
+    #[test]
+    fn renderer_broker_rejects_invalid_origin_version_and_redacts_diagnostics() {
+        let directory = TestDirectory::new();
+        let vault = ApplicationCredentialVault::open(&directory.0).expect("open vault");
+        let renderer = PluginDataPlaneCredentialBrokerV2::native_renderer(vault.clone());
+        let mut input = renderer_record('f');
+        let secret = input.credential.clone();
+        let debug = format!("{input:?}");
+        assert!(!debug.contains(&secret));
+        assert!(!debug.contains("plugins.example.test"));
+        input.version = 1;
+        assert_eq!(
+            renderer.save(&input),
+            Err(PluginDataPlaneCredentialBrokerErrorV2::UnsupportedVersion)
+        );
+        input.version = 2;
+        input.api_base_url = "http://plugins.example.test/control".to_owned();
+        let stored = serde_json::to_string(&input).expect("serialize unsafe origin");
+        vault
+            .put(RENDERER_VAULT_KEY_V2, &stored)
+            .expect("write unsafe origin");
+        let error = renderer.load().expect_err("unsafe origin rejected");
+        assert_eq!(error, PluginDataPlaneCredentialBrokerErrorV2::InvalidRecord);
+        assert!(!error.to_string().contains(&secret));
+        assert!(renderer.load().expect("unsafe origin discarded").is_none());
     }
 }
