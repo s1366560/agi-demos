@@ -544,7 +544,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantProvidersHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantProvidersOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantProvidersResponseContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -573,7 +574,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantProvidersHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantProvidersOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantProvidersResponseContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "judgment_rationale": "Web owns the provider list-backed CRUD controls, assignments, system resilience, model catalog and environment detection exposed by ProviderList and its production component closure. ProviderConfigModal binds listTypes across Web, Cloud Desktop and Local Desktop, while model search filters the fetched catalog client-side; uncalled get-by-id, tenant-provider and server-search service methods are not surface authority. Provider usage requires tenant membership for regular users, while global admins may inspect usage without tenant scoping. Cloud provider records are global and may omit tenant ownership. Desktop Provider settings, runtime routing, the canonical Provider route and workbench observations now require Tenant Providers V2 operations and acquire tenant service leases; the previous static client methods, default route clients and workbench overrides are retired. The Provider authority, input and response contracts, and HTTP projection preserve the twelve existing management and routing methods, local optimistic revisions, request idempotency, transient credentials and application-vault storage. WorkspaceAgentPolicy V2 belongs to the adjacent new-thread policy UI, while this Provider route retains its reviewed routing-policy contract through Tenant Providers V2. These source and Loader changes are software evidence only: the existing capability_authority_revision_unavailable state remains for both Desktop modes, and no native probe, tenant-assignment, system-action, OAuth or release acceptance is inferred. Existing surface action declarations remain conservative pending current-revision runtime evidence."
     },
@@ -774,7 +776,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantWebhooksAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantWebhooksHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantWebhooksOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",

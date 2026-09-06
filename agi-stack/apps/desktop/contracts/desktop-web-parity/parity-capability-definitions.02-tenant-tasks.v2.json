@@ -189,7 +189,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantTasksContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantTasksHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantTasksOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -213,6 +214,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantTasksHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantTasksOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
       ],
       "judgment_rationale": "Desktop now routes Tenant Tasks through one generation-backed V2 Provider. Cloud reads the tenant-wide stats, queue and recent projections and keeps retry, stop and retry-pending behind a tenant lease and vault-bound transport; Local reads only the selected project's My Work projection behind a project lease and rejects Cloud mutations before acquisition. Both transports are observed rather than renderer-declared, but neither response supplies a snapshot-wide authority revision. Snapshot v4 therefore intentionally closes both surfaces to capability_authority_revision_unavailable and promotes no action until Cloud provides one tenant/principal-scoped coherent snapshot revision and the sidecar provides one project-scoped My Work snapshot revision."

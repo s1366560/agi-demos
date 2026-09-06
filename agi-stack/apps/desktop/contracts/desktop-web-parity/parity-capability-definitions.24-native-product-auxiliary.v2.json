@@ -46,6 +46,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopBackendStoresHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopBackendStoresOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/desktopWorkbenchCapabilityClientProviderV2.ts",
         "agi-stack/apps/desktop/src/features/runtime/workbenchCapabilityClient.ts"
       ],
@@ -355,7 +356,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectSupportAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSupportHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSupportOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
@@ -523,7 +525,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectPlaybooksEventsSocketProjectionV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",

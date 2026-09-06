@@ -150,7 +150,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantTrustAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantTrustHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantTrustOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
@@ -304,7 +305,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantDecisionRecordsOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
@@ -454,7 +456,8 @@
     "agi-stack/apps/desktop/src/plugins/desktopTenantBillingAuthorityModuleV2.ts",
     "agi-stack/apps/desktop/src/plugins/desktopTenantBillingHttpProjectionV2.ts",
     "agi-stack/apps/desktop/src/plugins/desktopTenantBillingOperationContractV2.ts",
-    "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+    "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",

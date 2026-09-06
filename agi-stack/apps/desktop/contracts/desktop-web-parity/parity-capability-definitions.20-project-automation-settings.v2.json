@@ -500,7 +500,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectSettingsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSettingsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSettingsOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -526,7 +527,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectSettingsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSettingsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSettingsOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_deviation": "Local project settings may configure bounded workspace and sandbox resources, but secrets and arbitrary host paths must remain outside renderer state and outside the page contract.",
       "judgment_rationale": "Accepted after reviewing the Project Settings V2 authority module, service contract, strict project-operation boundary, Cloud HTTP projection, App and route wiring, required workbench injection, and focused tests at 26a05a868. The production Desktop read path now acquires one project-scoped generation lease and validates the project, sandbox, and sandbox-stats records under the same generation; Local rejects before transport because no sidecar Project Settings authority exists. Cloud remains partial/degraded with view only because the generic ProjectAdministrationPage does not expose update, delete, sandbox inspection, restart, or terminate actions. Those Web-only actions are not Desktop capabilities. The old Desktop static factory and its latent mutation methods were removed, so the previous PATCH-versus-PUT mismatch rationale is no longer applicable. Source, contract, build, and unit evidence does not establish native Electron QA, globally-ready publication, ACK or release readiness, or V1 retirement."

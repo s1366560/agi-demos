@@ -200,7 +200,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantGovernanceAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantGovernanceHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantGovernanceOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",
@@ -358,6 +359,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantAuditHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantAuditOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/electron/main/cloudProductEndpointPolicy.ts"
       ],
       "local_status": "not_applicable",
@@ -484,7 +486,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantEventsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantEventsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantEventsOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -509,6 +512,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantEventsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantEventsOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
       "local_deviation": "A Local event ledger should contain only sidecar-owned lifecycle events with stable provenance; it must not merge renderer logs or infer Cloud tenant events.",
@@ -747,7 +751,8 @@
     "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueAuthorityModuleV2.ts",
     "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueHttpProjectionV2.ts",
     "agi-stack/apps/desktop/src/plugins/desktopDeadLetterQueueOperationContractV2.ts",
-    "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+    "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+    "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",

@@ -459,7 +459,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -484,6 +485,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantPatternsOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],
       "judgment_rationale": "WorkflowPatterns lists and inspects patterns, but it unconditionally supplies the delete callback to tenant members while the DELETE authority requires tenant administration; Web therefore remains partial until that affordance is role-gated. Desktop now resolves route and workbench reads plus role-gated delete through one Tenant Patterns V2 Provider, with each operation pinned to a tenant generation. The Cloud projection preserves stable before-and-after scope observation without treating the scope revision as a resource version. Local uses the same generation authority but reaches only the authenticated private sidecar and returns local_workflow_patterns_authority_unavailable instead of fabricating a pattern store."

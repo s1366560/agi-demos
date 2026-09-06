@@ -286,6 +286,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectMcpServersResponseContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMcpServersHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/src/features/settings/useMCPServerManagement.ts",
         "agi-stack/apps/desktop/src/features/settings/mcpMutationAttemptModel.ts",
         "agi-stack/apps/desktop/src/api/cloudRequestBroker.ts",
@@ -325,6 +326,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectMcpServersResponseContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMcpServersHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/src/features/settings/useMCPServerManagement.ts",
         "agi-stack/apps/desktop/src/features/settings/mcpMutationAttemptModel.ts",
         "agi-stack/apps/desktop/src/api/cloudRequestBroker.ts",
@@ -522,7 +524,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantAcpAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantAcpHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantAcpOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",

@@ -209,6 +209,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesClient.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesController.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesRouteModule.tsx",
@@ -233,6 +234,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesClient.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesController.ts",
         "agi-stack/apps/desktop/src/features/unified-runtimes/unifiedRuntimesRouteModule.tsx",
@@ -432,7 +434,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimePoolOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",

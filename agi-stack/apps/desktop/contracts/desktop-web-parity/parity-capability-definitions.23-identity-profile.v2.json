@@ -148,7 +148,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantCreationAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantCreationHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantCreationOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",

@@ -405,7 +405,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_entries": [
         "agi-stack/apps/desktop/src/App.tsx",
@@ -423,6 +424,7 @@
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeInstancesOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/sidecar/src/control.rs"
       ],
       "cloud_reason_code": "capability_authority_revision_unavailable"

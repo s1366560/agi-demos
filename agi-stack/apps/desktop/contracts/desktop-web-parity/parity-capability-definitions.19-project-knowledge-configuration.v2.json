@@ -189,7 +189,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -215,7 +216,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectSchemaOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "judgment_rationale": "Accepted after reviewing the checked-in Project Schema definition, generation-backed authority module, strict operation boundary, HTTP projection, App composition, route injection, required workbench injection, and focused tests at 42b60c723. The migration replaces the production read path with one project-scoped generation lease. The canonical Web surface retains client-side JSON copy and download export, while Desktop does not add schema mutations, edge/mapping management, copy, or export UI. Cloud therefore remains partial/degraded with only view and the entity-type list action (list-entity-types) under cloud_service authority. Local rejects before transport because no sidecar schema authority exists and remains unavailable with no actions. Source, contract, build, and unit evidence does not establish native Electron QA, globally-ready publication, ACK or release readiness, or V1 retirement."
     },
@@ -643,7 +645,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -669,7 +672,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMaintenanceOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "judgment_rationale": "Accepted after reviewing the Project Maintenance V2 authority module, service contract, strict project-operation boundary, Cloud HTTP projection, App and route wiring, required workbench injection, and focused tests at c4fbfb9ee. The production Desktop read path now acquires one project-scoped generation lease and validates maintenance status, data statistics, and embedding status under the same generation; Local rejects before transport because no sidecar maintenance authority exists. Cloud remains partial/degraded with view only because the generic ProjectAdministrationPage does not render maintenance actions or export. The canonical Web surface alone continues to call /maintenance/refresh/incremental and /graph/communities/rebuild and to export downloaded graph data; those Web-only mutations and export are not Desktop capabilities. The old Desktop static factory and its latent mutation methods have been removed, so the previous rationale about Desktop calling mismatched mutation endpoints is no longer applicable. Source, contract, build, and unit evidence does not establish native Electron QA, globally-ready publication, ACK or release readiness, or V1 retirement."
     }

@@ -520,7 +520,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantSettingsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantSettingsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopTenantSettingsOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "not_applicable",
       "local_policy": "cloud_only",

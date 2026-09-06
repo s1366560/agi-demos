@@ -175,7 +175,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectTeamAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectTeamHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectTeamOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -201,7 +202,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectTeamAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectTeamHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectTeamOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_deviation": "A Local implementation may manage local agent teammates; human invitation and organization membership actions must remain structurally unavailable when no cloud membership authority exists.",
       "judgment_rationale": "The Web Team page combines project human membership with project-scoped agent teammates. Its UserManager lists, updates and removes project members, but the visible invitation form sends POST /tenants/{tenant_id}/invitations through invitationService rather than adding a project member. Invitation therefore requires tenant-admin authority, while role changes and removal retain project-admin authority. At bb487b613, production Desktop route and workbench consumers resolve `service:desktop-renderer.project-team-authority@1.0.0` through project-scoped generation leases. Each load freezes config, scope and signal before admission; keeps workspace-context, current-user, member and agent reads within one pinned generation; validates exact service, authority, scope and result shapes; rejects duplicate member or agent IDs; revokes escaped authorities after release; and preserves a primary operation failure over disposer failure. Cloud transport remains vault-bound through desktopApiFetch and is explicitly degraded to view, list-members and list-agent-teammates because the Desktop surface exposes no invitation, role, removal or start-chat control. Local has no sidecar Team authority and fails closed before transport with local_project_team_authority_unavailable and no actions. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement."
@@ -393,7 +395,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -419,7 +422,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectMemoriesOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "judgment_rationale": "Memory list, creation, detail, client-side JSON export, copy-link and reprocessing are one canonical project knowledge capability. The visible detail-page control uses navigator.clipboard to copy window.location.href; the routed production pages do not call the memory-share APIs, so no server sharing authority is claimed. Project viewers can read but cannot create memories; creation requires a project contributor. The production Web page has no memory-import action. At 63c7c25fc, production Desktop route and workbench consumers resolve `service:desktop-renderer.project-memories-authority@1.0.0` through project-scoped generation leases. Each load operation freezes config, scope and signal before admission, keeps workspace-context observation and the memory-page read within one pinned generation, validates exact scope and response contracts, rejects duplicate memory IDs, revokes escaped authorities after release, and preserves the primary operation error if release fails. Cloud transport remains vault-bound through desktopApiFetch and stays partial with view and list only because ProjectKnowledgePage exposes none of the create, update, delete, reprocess, export or copy-link controls. Local has no sidecar Memories authority and fails closed before transport as unavailable with no actions. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement."
     },
@@ -552,7 +556,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "unavailable",
       "local_policy": "native_equivalent",
@@ -578,7 +583,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProjectEntitiesOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "judgment_rationale": "The Web Entities page is a distinct project-scoped graph projection. It lists entities and types, uses the selected list record for detail presentation, and loads that record's relationships without calling the standalone entity detail service method. At 7b24548f7, production Desktop route and workbench consumers resolve `service:desktop-renderer.project-entities-authority@1.0.0` through project-scoped generation leases. A list load freezes config, scope, and signal before admission and keeps workspace-context observation, entity-page retrieval, and entity-type retrieval within one pinned generation; relationship reads use their own lease and canonical entity identity. The operation boundary validates exact tenant/project scope plus entity, type, and relationship contracts, revokes escaped authorities after release, and preserves the primary error if disposal fails. Cloud remains partial with view and list only because the production page exposes neither filtering nor relationship inspection; the typed relationship operation is not advertised as a Desktop surface action without a production UI consumer. Local has no sidecar Entities authority and fails closed before transport as unavailable with no actions. These facts establish renderer authority wiring only and do not constitute native Electron QA, a globally-ready publication, ACK or release readiness, or V1 retirement."
     }

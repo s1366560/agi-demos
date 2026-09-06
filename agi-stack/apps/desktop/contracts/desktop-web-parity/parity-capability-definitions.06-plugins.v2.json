@@ -225,7 +225,8 @@
         "agi-stack/apps/desktop/src/features/settings/managedResourceModel.ts",
         "agi-stack/apps/desktop/src/features/settings/usePluginManagement.ts",
         "agi-stack/apps/desktop/src/plugins/DesktopRendererGenerationHostV2.tsx",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "local_status": "implemented",
       "local_policy": "native_equivalent",
@@ -250,6 +251,7 @@
         "agi-stack/apps/desktop/src/features/settings/usePluginManagement.ts",
         "agi-stack/apps/desktop/src/plugins/DesktopRendererGenerationHostV2.tsx",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs",
         "agi-stack/apps/desktop/sidecar/src/local_runtime/parity_routes.rs"
       ],

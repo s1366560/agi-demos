@@ -162,7 +162,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeClustersOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "cloud_reason_code": "capability_authority_revision_unavailable"
     },
@@ -334,7 +335,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopRuntimeDeploymentsOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "cloud_reason_code": "capability_authority_revision_unavailable"
     },
@@ -546,7 +548,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ],
       "cloud_reason_code": "capability_authority_revision_unavailable",
       "local_actions": [],
@@ -564,7 +567,8 @@
         "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesAuthorityModuleV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesHttpProjectionV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopInstanceTemplatesOperationContractV2.ts",
-        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts"
+        "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
+        "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts"
       ]
     }
   ],
