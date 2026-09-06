@@ -49,6 +49,7 @@ async def create_native_graph_adapter(
 
     settings = get_settings()
 
+    owns_client = neo4j_client is None
     # Use the provided client, or build one from resolved graph-store config.
     if neo4j_client is None:
         # Create Neo4j client (use resolved graph-store config; falls back to NEO4J_*)
@@ -58,87 +59,102 @@ async def create_native_graph_adapter(
             password=settings.effective_graph_store_password,
         )
 
-    # Initialize Neo4j indices
-    await neo4j_client.build_indices()
+    try:
+        # Initialize Neo4j indices
+        await neo4j_client.build_indices()
 
-    # Get LLM client for entity extraction
-    llm_client = await create_llm_client(tenant_id)
+        # Get LLM client for entity extraction
+        llm_client = await create_llm_client(tenant_id)
 
-    # Create embedding service via factory
-    factory = get_ai_service_factory()
-    # For embedding, we need the provider config first
-    provider_config = await factory.resolve_provider(
-        tenant_id=tenant_id,
-        operation_type=OperationType.EMBEDDING,
-    )
-    embedder = factory.create_embedder(provider_config)
+        # Create embedding service via factory
+        factory = get_ai_service_factory()
+        # For embedding, we need the provider config first
+        provider_config = await factory.resolve_provider(
+            tenant_id=tenant_id,
+            operation_type=OperationType.EMBEDDING,
+        )
+        embedder = factory.create_embedder(provider_config)
 
-    # Wrap in EmbeddingService if needed, but NativeGraphAdapter expects EmbeddingService
-    # and LiteLLMEmbedder is likely compatible or wrapped inside EmbeddingService
-    # Let's check if LiteLLMEmbedder is an EmbeddingService or needs wrapping.
-    # Looking at provider_factory.py, create_embedder returns LiteLLMEmbedder.
-    # Looking at old code, it wrapped it: embedding_service = EmbeddingService(embedder=embedder)
-    from src.infrastructure.graph.embedding.embedding_service import (
-        EmbedderProtocol,
-        EmbeddingService,
-    )
+        # Wrap in EmbeddingService if needed, but NativeGraphAdapter expects EmbeddingService
+        # and LiteLLMEmbedder is likely compatible or wrapped inside EmbeddingService
+        # Let's check if LiteLLMEmbedder is an EmbeddingService or needs wrapping.
+        # Looking at provider_factory.py, create_embedder returns LiteLLMEmbedder.
+        # Looking at old code, it wrapped it: embedding_service = EmbeddingService(embedder=embedder)
+        from src.infrastructure.graph.embedding.embedding_service import (
+            EmbedderProtocol,
+            EmbeddingService,
+        )
 
-    embedding_service = EmbeddingService(embedder=cast(EmbedderProtocol, embedder))
+        embedding_service = EmbeddingService(embedder=cast(EmbedderProtocol, embedder))
 
-    # Reranker composition belongs to the explicit graph-runtime V2 module.
-    # The builtin graph runtime keeps the historical fused-score ordering.
-    reranker = None
+        # Reranker composition belongs to the explicit graph-runtime V2 module.
+        # The builtin graph runtime keeps the historical fused-score ordering.
+        reranker = None
 
-    # Determine embedding dimension: use config override or auto-detect
-    auto_detected_dim = embedding_service.embedding_dim
-    embedding_dim = settings.embedding_dimension or auto_detected_dim
+        # Determine embedding dimension: use config override or auto-detect
+        auto_detected_dim = embedding_service.embedding_dim
+        embedding_dim = settings.embedding_dimension or auto_detected_dim
 
-    if settings.embedding_dimension:
-        logger.info(f"Using configured embedding dimension: {embedding_dim}D")
-    else:
-        logger.info(f"Auto-detected embedding dimension: {embedding_dim}D")
+        if settings.embedding_dimension:
+            logger.info(f"Using configured embedding dimension: {embedding_dim}D")
+        else:
+            logger.info(f"Auto-detected embedding dimension: {embedding_dim}D")
 
-    # Create vector index for entity name embeddings
-    # Use dimension-specific index name to support multiple embedding models
-    index_name = f"entity_name_vector_{embedding_dim}D"
-    await neo4j_client.create_vector_index(
-        index_name=index_name,
-        label="Entity",
-        property_name="name_embedding",
-        dimensions=embedding_dim,
-        similarity_function="cosine",
-    )
-    logger.info(f"Created vector index {index_name} with dimensions={embedding_dim}")
+        # Create vector index for entity name embeddings
+        # Use dimension-specific index name to support multiple embedding models
+        index_name = f"entity_name_vector_{embedding_dim}D"
+        await neo4j_client.create_vector_index(
+            index_name=index_name,
+            label="Entity",
+            property_name="name_embedding",
+            dimensions=embedding_dim,
+            similarity_function="cosine",
+        )
+        logger.info(f"Created vector index {index_name} with dimensions={embedding_dim}")
 
-    # Also ensure the default index exists for backward compatibility
-    # This allows searches using the default index name to work
-    if index_name != "entity_name_vector":
-        try:
-            await neo4j_client.create_vector_index(
-                index_name="entity_name_vector",
-                label="Entity",
-                property_name="name_embedding",
-                dimensions=embedding_dim,
-                similarity_function="cosine",
-            )
-            logger.info(f"Created default entity_name_vector index with dimensions={embedding_dim}")
-        except Exception as e:
-            # Log warning but don't fail - the dimension-specific index is the primary one
-            logger.warning(f"Could not create default index: {e}")
+        # Also ensure the default index exists for backward compatibility
+        # This allows searches using the default index name to work
+        if index_name != "entity_name_vector":
+            try:
+                await neo4j_client.create_vector_index(
+                    index_name="entity_name_vector",
+                    label="Entity",
+                    property_name="name_embedding",
+                    dimensions=embedding_dim,
+                    similarity_function="cosine",
+                )
+                logger.info(
+                    f"Created default entity_name_vector index with dimensions={embedding_dim}"
+                )
+            except Exception as e:
+                # Log warning but don't fail - the dimension-specific index is the primary one
+                logger.warning(f"Could not create default index: {e}")
 
-    # Create NativeGraphAdapter
-    adapter = NativeGraphAdapter(
-        neo4j_client=neo4j_client,
-        llm_client=llm_client,
-        embedding_service=embedding_service,
-        enable_reflexion=settings.graph_reflexion_enabled,
-        reflexion_max_iterations=settings.graph_reflexion_max_iterations,
-        auto_clear_embeddings=settings.auto_clear_mismatched_embeddings,
-        reranker=reranker,
-    )
+        # Create NativeGraphAdapter
+        adapter = NativeGraphAdapter(
+            neo4j_client=neo4j_client,
+            llm_client=llm_client,
+            embedding_service=embedding_service,
+            enable_reflexion=settings.graph_reflexion_enabled,
+            reflexion_max_iterations=settings.graph_reflexion_max_iterations,
+            auto_clear_embeddings=settings.auto_clear_mismatched_embeddings,
+            reranker=reranker,
+        )
 
-    logger.info("NativeGraphAdapter created successfully")
-    return adapter
+        logger.info("NativeGraphAdapter created successfully")
+        return adapter
+    except BaseException as construction_error:
+        if owns_client:
+            try:
+                await neo4j_client.close()
+            except BaseException as cleanup_error:
+                raise BaseExceptionGroup(
+                    "Graph construction and owned client cleanup failed",
+                    [construction_error, cleanup_error],
+                ) from None
+        raise
+
+
 async def create_llm_client(tenant_id: str | None = None) -> LLMClient:
     """Create a pooled LLM client for the tenant.
 

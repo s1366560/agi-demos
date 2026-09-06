@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 
@@ -128,8 +128,12 @@ class ScopedRuntimeRegistryV2:
         *,
         target_catalog: Mapping[str, ModuleCatalogEntryV2] | None = None,
         artifact_resolver: PluginArtifactResolverV2 | None = None,
+        definitions_factory: Callable[[ScopeV2], Sequence[PluginDefinitionV2]] | None = None,
     ) -> None:
+        if definitions and definitions_factory is not None:
+            raise ValueError("scoped definitions require either fixed definitions or a factory")
         self._definitions = tuple(definitions)
+        self._definitions_factory = definitions_factory
         self._catalog = None if target_catalog is None else dict(target_catalog)
         self._resolver = artifact_resolver
         self._slots: dict[str, _ScopeSlot] = {}
@@ -150,10 +154,15 @@ class ScopedRuntimeRegistryV2:
         key = scope_key_v2(canonical)
         slot = self._slots.get(key)
         if slot is None:
+            definitions = (
+                self._definitions
+                if self._definitions_factory is None
+                else tuple(self._definitions_factory(canonical))
+            )
             slot = _ScopeSlot(
                 PlatformPluginRuntimeHostV2(
                     loader=LoaderV2(
-                        self._definitions,
+                        definitions,
                         target=DataPlaneTargetV2.PYTHON,
                         target_catalog=self._catalog,
                         artifact_resolver=self._resolver,
