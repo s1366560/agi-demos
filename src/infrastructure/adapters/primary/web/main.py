@@ -117,6 +117,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     logger.info("Starting MemStack (Hexagonal) application...")
 
     from .startup.plugin_trust_v2 import configure_plugin_trust_v2
+    from .startup.scoped_profile_runtime_v2 import (
+        initialize_scoped_profile_runtime_v2,
+    )
 
     configure_plugin_trust_v2(
         app,
@@ -197,6 +200,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
         publication_policy=publication_policy,
     )
     try:
+        _ = initialize_scoped_profile_runtime_v2(
+            app, session_factory=async_session_factory, redis_client=redis_client
+        )
         # Initialize DI Container
         container = initialize_container(redis_client=redis_client)
 
@@ -206,27 +212,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
         )
         app.state.platform_plugin_deadline_reconciler_v2 = deadline_reconciler
         deadline_reconciler.start()
-    except Exception:
-        await shutdown_plugin_runtime_v2(app)
+    except BaseException:
+        await _shutdown_application_plugins_v2(app)
         raise
 
     # Workspace autonomy and WTP fan-in are owned by Avernet Workspace Core.
     app.state.workspace_supervisor = None
 
-    yield
+    try:
+        yield
+    finally:
+        await _shutdown_application_plugins_v2(app)
 
-    # Remove plugin-owned routes before application state services unwind.
-    http_routes = getattr(app.state, "platform_plugin_http_routes", None)
-    if http_routes is not None:
-        http_routes.dispose()
-        app.state.platform_plugin_http_routes = None
 
-    # Shutdown
-    logger.info("Shutting down...")
+async def _shutdown_application_plugins_v2(app: FastAPI) -> None:
+    from .startup.scoped_profile_runtime_v2 import shutdown_scoped_profile_runtime_v2
 
-    # Retire all V2 Fibers. Graph cleanup remains an effect and runs after all
-    # request, session, and background workflow leases have drained.
-    await shutdown_plugin_runtime_v2(app)
+    try:
+        await shutdown_scoped_profile_runtime_v2(app)
+    finally:
+        http_routes = getattr(app.state, "platform_plugin_http_routes", None)
+        try:
+            if http_routes is not None:
+                http_routes.dispose()
+                app.state.platform_plugin_http_routes = None
+        finally:
+            logger.info("Shutting down...")
+            await shutdown_plugin_runtime_v2(app)
 
 
 def create_app(
