@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "2f524cc10e36fa6f3cb14df08d9bd7d6ffbcde48",
+  "source_revision": "5959268ef1cf6022f0270128b86d53be2afa8b55",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 721,
+    "audited_sources": 722,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
     "production_dependency_edges": 1961,
-    "production_dependency_ownership": 720,
-    "production_dependency_sources": 720,
+    "production_dependency_ownership": 721,
+    "production_dependency_sources": 721,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 5
@@ -3390,7 +3390,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:823497e22229754ee4079f33487557dbab08dc44cc312c66c8e001c500c4b4b8"
+      "sha256": "sha256:23a7a6c803c428ba5d93439f3e56af6f97aedfabfed45f0037d3cc3eaeb05124"
+    },
+    {
+      "source_entry": "web/src/plugins/webPublicViewIdentityV2.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:39d7282dd9e0067a48f70c0c0cfa42cec5dca2322d1b5f57014e80c14be4bd59"
     },
     {
       "source_entry": "web/src/plugins/webRendererAppCompositionV2.ts",
@@ -16828,12 +16835,12 @@
     {
       "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/routes/v2/webRendererArtifactCatalogV2.ts"
+      "to_source_entry": "web/src/plugins/webPublicViewIdentityV2.ts"
     },
     {
       "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
       "relationship": "static_import",
-      "to_source_entry": "web/src/services/client/ApiError.ts"
+      "to_source_entry": "web/src/routes/v2/webRendererArtifactCatalogV2.ts"
     },
     {
       "from_source_entry": "web/src/plugins/webPluginGenerationV2.ts",
@@ -24388,6 +24395,14 @@
         "web/index.html"
       ],
       "reason_code": "production_entry_shared_runtime",
+      "source_entry": "web/src/plugins/webPublicViewIdentityV2.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/index.html"
+      ],
+      "reason_code": "production_entry_shared_runtime",
       "source_entry": "web/src/plugins/webRendererAppCompositionV2.ts"
     },
     {
@@ -27921,6 +27936,7 @@
     "web/src/plugins/WebRendererAuthenticatedShellV2.tsx",
     "web/src/plugins/webOperationAdmissionV2.ts",
     "web/src/plugins/webPluginGenerationV2.ts",
+    "web/src/plugins/webPublicViewIdentityV2.ts",
     "web/src/plugins/webRendererAppCompositionV2.ts",
     "web/src/plugins/webRendererCompositionPortV2.ts",
     "web/src/routes/v2/WebNavigationAuthorityV2.tsx",
