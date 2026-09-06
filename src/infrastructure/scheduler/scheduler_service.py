@@ -10,11 +10,13 @@ Provides a thin wrapper around ``AsyncScheduler`` that:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from src.configuration.config import get_settings
+from src.infrastructure.scheduler.scheduler_owner import SchedulerOwner
 
 if TYPE_CHECKING:
     from apscheduler import AsyncScheduler
@@ -26,6 +28,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _scheduler: AsyncScheduler | None = None
+_scheduler_owner: SchedulerOwner | None = None
+_scheduler_lock = asyncio.Lock()
 
 
 def get_scheduler() -> AsyncScheduler:
@@ -46,57 +50,73 @@ async def start_scheduler() -> AsyncScheduler:
     The scheduler is stored as a module-level singleton so that routers and
     the job executor can access it via ``get_scheduler()``.
     """
-    global _scheduler
+    global _scheduler, _scheduler_owner
 
-    if _scheduler is not None:
-        logger.warning("Scheduler already running -- skipping start")
+    async with _scheduler_lock:
+        if _scheduler is not None:
+            return _scheduler
+        if _scheduler_owner is not None:
+            previous_owner = _scheduler_owner
+            try:
+                await previous_owner.close()
+            finally:
+                if previous_owner.finished and _scheduler_owner is previous_owner:
+                    _scheduler_owner = None
+        # Lazy imports so the module can be loaded without APScheduler installed.
+        from apscheduler import AsyncScheduler
+        from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
+        from apscheduler.eventbrokers.redis import RedisEventBroker
+
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            engine,
+        )
+
+        settings = get_settings()
+
+        # --- Data store (reuses the existing async engine) ---------------------
+        data_store = SQLAlchemyDataStore(engine)
+
+        # --- Event broker (Redis) ---------------------------------------------
+        event_broker = RedisEventBroker(settings.redis_url)
+
+        # --- Build scheduler ---------------------------------------------------
+        scheduler = AsyncScheduler(
+            data_store=data_store,
+            event_broker=event_broker,
+        )
+
+        owner = SchedulerOwner(scheduler)
+        _scheduler_owner = owner
+        try:
+            _scheduler = await owner.start()
+        except BaseException:
+            # Startup cancellation still drains resources in the task that entered them.
+            try:
+                await owner.close()
+            finally:
+                if owner.finished and _scheduler_owner is owner:
+                    _scheduler_owner = None
+            raise
+        logger.info("APScheduler started (PostgreSQL + Redis)")
         return _scheduler
-
-    # Lazy imports so the module can be loaded without APScheduler installed.
-    from apscheduler import AsyncScheduler
-    from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
-    from apscheduler.eventbrokers.redis import RedisEventBroker
-
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        engine,
-    )
-
-    settings = get_settings()
-
-    # --- Data store (reuses the existing async engine) ---------------------
-    data_store = SQLAlchemyDataStore(engine)
-
-    # --- Event broker (Redis) ---------------------------------------------
-    event_broker = RedisEventBroker(settings.redis_url)
-
-    # --- Build scheduler ---------------------------------------------------
-    scheduler = AsyncScheduler(
-        data_store=data_store,
-        event_broker=event_broker,
-    )
-
-    _ = await scheduler.__aenter__()
-    await scheduler.start_in_background()
-    _scheduler = scheduler
-
-    logger.info("APScheduler started (PostgreSQL + Redis)")
-    return scheduler
 
 
 async def stop_scheduler() -> None:
     """Gracefully shut down the scheduler."""
-    global _scheduler
+    global _scheduler, _scheduler_owner
 
-    if _scheduler is None:
-        return
-
-    try:
-        await _scheduler.__aexit__(None, None, None)
-        logger.info("APScheduler stopped")
-    except Exception:
-        logger.exception("Error stopping APScheduler")
-    finally:
+    async with _scheduler_lock:
+        owner = _scheduler_owner
+        if owner is None:
+            return
+        # Revoke use immediately; a cancelled waiter must not expose a draining scheduler.
         _scheduler = None
+        try:
+            await owner.close()
+        finally:
+            if owner.finished and _scheduler_owner is owner:
+                _scheduler_owner = None
+        logger.info("APScheduler stopped")
 
 
 # ---------------------------------------------------------------------------
