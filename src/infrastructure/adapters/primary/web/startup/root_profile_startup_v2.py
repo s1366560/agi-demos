@@ -10,6 +10,9 @@ from src.application.services.root_profile_initialization_service_v2 import (
 )
 from src.application.services.scoped_installed_bundle_loader_v2 import ScopedInstalledBundleLoaderV2
 from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.infrastructure.adapters.primary.web.startup.root_requested_recovery_v2 import (
+    recover_requested_root_startup_v2,
+)
 from src.infrastructure.adapters.primary.web.startup.root_startup_request_v2 import (
     prepare_root_startup_request_v2,
 )
@@ -53,6 +56,18 @@ async def publish_configured_root_startup_v2(
     publication_stager: GenerationPublicationStagerV2,
     publication_policy: PlatformPluginPublicationPolicyV2,
 ) -> tuple[PlatformPluginPublicationV2, bool]:
+    recovered = await recover_requested_root_startup_v2(
+        host,
+        session_factory=session_factory,
+        latest_distribution=latest_distribution,
+        durable_distribution=durable_distribution,
+        trusted_public_keys=trusted_public_keys,
+        allowed_registries=allowed_registries,
+        publication_stager=publication_stager,
+        publication_policy=publication_policy,
+    )
+    if recovered is not None:
+        return recovered, True
     sources = production_bundle_sources_v2()
     root = ScopeV2(kind=ScopeKindV2.ROOT)
     if durable_distribution is not None:
