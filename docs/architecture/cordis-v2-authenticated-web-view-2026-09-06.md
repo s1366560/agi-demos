@@ -30,6 +30,13 @@ of arbitrary module work. Retired operations may still drain while a replacement
 - Full Web suite: 391 files and 3623 tests passed in 145.30 seconds; log:
   `/tmp/cordis-web-public-view-web-full.log`.
 - `generate_plugin_protocol_v2.py --check` passed.
+- Existing platform-plugin router regression: 51 passed, 23 warnings; log:
+  `/tmp/cordis-web-view-router-regression.log`.
+- After parity binding commit `5beef10e6`, the full Desktop suite passed: 4131 passed,
+  2 skipped, 0 failed in 98.89 seconds; log: `/tmp/cordis-web-public-view-desktop-full.log`.
+- Parity audit: `/var/tmp/cordis-web-public-view-parity-x4n4i5lk`; V2 has 66 accepted
+  capabilities with 876 matching source hashes, V4 has 1 with 25 matching hashes. All existing
+  states are unchanged. This verifies the existing declared scope only.
 - Independent code review found no blocking issue within this boundary.
 
 The Python V2 full suite is still running and is not counted as passed. The contract completeness
