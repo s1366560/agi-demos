@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.generated_v2 import (
     BundleReferenceV2,
@@ -22,8 +25,10 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_governanc
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
     PlatformPluginProfileSourceRepositoryV2,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_source_repository_v2 import (
+    PlatformPluginPublicationSourceRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
-    PYTHON_API_DATA_PLANE_ID_V2,
     PlatformPluginPublicationPolicyV2,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
@@ -50,6 +55,7 @@ from .installed_verified_bundle_loader_v2 import (
     InstalledVerifiedBundleLoaderV2,
     MarketplacePublicationV2Error as MarketplacePublicationV2Error,
 )
+from .marketplace_publication_receipt_v2 import persist_marketplace_receipt_v2
 from .plugin_marketplace_install_service import MarketplaceArtifactClient
 
 
@@ -64,9 +70,11 @@ class MarketplacePublicationResultV2:
 class PluginMarketplacePublicationServiceV2:
     """Resolve exact Bundle bytes, compose one candidate, and publish through v2 only."""
 
-    def __init__(  # pyright: ignore[reportMissingSuperCall]
+    def __init__(  # noqa: PLR0913  # pyright: ignore[reportMissingSuperCall]
         self,
         *,
+        mutation_session: AsyncSession,
+        receipt_session_factory: Callable[[], Any],
         desired_repository: PlatformPluginDesiredBundleSetRepositoryV2,
         source_repository: PlatformPluginProfileSourceRepositoryV2,
         governance_repository: PlatformPluginGovernanceRepository,
@@ -80,6 +88,8 @@ class PluginMarketplacePublicationServiceV2:
         on_route_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
         allowed_registries: frozenset[str] | None = None,
     ) -> None:
+        self._mutation_session = mutation_session
+        self._receipt_session_factory = receipt_session_factory
         self._desired_repository = desired_repository
         self._source_repository = source_repository
         self._publication_repository = publication_repository
@@ -138,24 +148,50 @@ class PluginMarketplacePublicationServiceV2:
             {manifest.plugin_id: manifest for manifest in composition.manifests},
             generation=generation,
         )
+        current_desired = await self._desired_repository.current_desired_set(scope)
+        if current_desired is None or current_desired.desired_set != desired_record.desired_set:
+            raise MarketplacePublicationV2Error("root_desired_changed", "ROOT source changed")
+        references = {
+            (ref.bundle_id, ref.version, ref.digest) for ref in desired_record.desired_set.bundles
+        }
+        verified = {
+            (item.manifest.bundle_id, item.manifest.version, item.manifest.digest)
+            for item in archives
+        }
+        if references != verified:
+            raise MarketplacePublicationV2Error(
+                "root_bundle_reference_mismatch", "ROOT archives differ from desired"
+            )
+        envelope = control_envelope_v2(snapshot, version=version)
+        requested = await self._publication_repository.record_requested_distribution(
+            snapshot,
+            envelope,
+            policy=self._publication_policy,
+        )
+        _ = await PlatformPluginPublicationSourceRepositoryV2(self._mutation_session).record(
+            scope=scope,
+            publication_id=requested.id,
+            desired_set=desired_record.desired_set,
+        )
+        # Commit the caller's marketplace mutation together with its exact request/source.
+        # No candidate has been staged if this transaction raises or is cancelled.
+        await self._mutation_session.commit()
+
+        async def persist(publication: PlatformPluginPublicationV2) -> None:
+            await persist_marketplace_receipt_v2(
+                self._receipt_session_factory,
+                publication,
+                policy=self._publication_policy,
+            )
+
         result = await self._route_coordinator.publish_snapshot(
             snapshot,
-            control_envelope_v2(snapshot, version=version),
+            envelope,
             on_commit=self._on_route_commit,
             verified_archives=archives,
+            receipt_persister=persist,
         )
         publication = result.plugin_publication
-        if PYTHON_API_DATA_PLANE_ID_V2 in self._publication_policy.required_data_plane_ids:
-            _ = await self._publication_repository.record_publication_and_receipt(
-                publication,
-                data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
-                policy=self._publication_policy,
-            )
-        else:
-            _ = await self._publication_repository.record_publication(
-                publication,
-                policy=self._publication_policy,
-            )
         return MarketplacePublicationResultV2(
             desired_revision=desired_record.desired_set.revision,
             publication=publication,
@@ -171,6 +207,7 @@ class PluginMarketplacePublicationServiceV2:
                 "plugin_runtime_uninitialized",
                 "protocol v2 runtime has no active generation",
             )
+        allocated = await self._publication_repository.allocate_publication_version()
         generation = current.snapshot.generation
         version = current.envelope.version
         latest = await self._publication_repository.latest_requested_distribution()
@@ -179,7 +216,7 @@ class PluginMarketplacePublicationServiceV2:
             latest_envelope = parse_control_envelope_v2(latest.get("envelope"))
             generation = max(generation, latest_snapshot.generation)
             version = max(version, latest_envelope.version)
-        return generation + 1, version + 1
+        return generation + 1, max(allocated, version + 1)
 
 
 __all__ = [

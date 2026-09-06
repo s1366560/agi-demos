@@ -9,7 +9,7 @@ from typing import cast
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from src.application.schemas.plugin_marketplace import (
     MarketplacePackageApprovalRequest,
@@ -96,8 +96,13 @@ async def _republish_after_mutation(
     def commit_route_graph(graph: BuiltinRouteGraphV2) -> None:
         request.app.state.platform_plugin_route_graph_v2 = graph
 
+    if not isinstance(db.bind, AsyncEngine):
+        raise RuntimeError("marketplace receipt persistence requires an independent session engine")
+    receipt_session_factory = async_sessionmaker(db.bind, expire_on_commit=False)
     async with httpx.AsyncClient(timeout=15.0) as client:
         service = PluginMarketplacePublicationServiceV2(
+            mutation_session=db,
+            receipt_session_factory=receipt_session_factory,
             desired_repository=PlatformPluginDesiredBundleSetRepositoryV2(db),
             source_repository=PlatformPluginProfileSourceRepositoryV2(db),
             governance_repository=PlatformPluginGovernanceRepository(db),

@@ -14,7 +14,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.schemas.plugin_marketplace import (
     MarketplaceArtifactSource,
@@ -490,6 +490,8 @@ async def test_marketplace_desired_revision_publishes_a_real_v2_generation(
     host = await initialize_plugin_runtime_v2(app)
     try:
         publisher = PluginMarketplacePublicationServiceV2(
+            mutation_session=db_session,
+            receipt_session_factory=async_sessionmaker(db_session.bind, expire_on_commit=False),
             desired_repository=PlatformPluginDesiredBundleSetRepositoryV2(db_session),
             source_repository=PlatformPluginProfileSourceRepositoryV2(db_session),
             governance_repository=PlatformPluginGovernanceRepository(db_session),

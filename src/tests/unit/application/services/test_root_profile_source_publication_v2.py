@@ -4,6 +4,7 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from src.application.services.plugin_marketplace_publication_service_v2 import (
     PluginMarketplacePublicationServiceV2,
@@ -55,6 +56,8 @@ async def test_unresolved_root_source_rejects_before_load_or_publish(db_session,
     )
     coordinator = MagicMock()
     publisher = PluginMarketplacePublicationServiceV2(
+        mutation_session=db_session,
+        receipt_session_factory=async_sessionmaker(db_session.bind, expire_on_commit=False),
         desired_repository=desired_repo,
         source_repository=repository,
         governance_repository=MagicMock(),

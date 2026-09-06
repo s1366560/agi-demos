@@ -54,6 +54,8 @@ async def test_marketplace_archive_tamper_nacks_without_route_commit_and_next_ca
         async with factory() as session:
             repository = PlatformPluginRepositoryV2(session)
             service = PluginMarketplacePublicationServiceV2(
+                mutation_session=session,
+                receipt_session_factory=factory,
                 desired_repository=PlatformPluginDesiredBundleSetRepositoryV2(session),
                 source_repository=PlatformPluginProfileSourceRepositoryV2(session),
                 governance_repository=PlatformPluginGovernanceRepository(session),
