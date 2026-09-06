@@ -1,5 +1,10 @@
 # Cordis V2 final gate progress
 
+Historical checkpoint: completed final results are recorded in
+[final acceptance and V1 retirement](cordis-v2-final-acceptance-2026-09-07.md).
+The original observations are retained to distinguish intermediate results from
+the final operational acceptance.
+
 This records completed test runs and unresolved acceptance gates. It does not mark
 the eight-stage plan complete or authorize treating V1 retirement as finished.
 

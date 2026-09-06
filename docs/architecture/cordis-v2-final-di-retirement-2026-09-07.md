@@ -49,5 +49,6 @@ manual call-site inspection and real lifecycle tests supplement the graph eviden
 
 The deployment reuses the already-admitted generation-2 bundle because this change
 modifies the transport boundary and removes dead code, without modifying a
-manifest-bound module. A final real startup/shutdown check and exact persisted
-publication preservation check are required after the source commit.
+manifest-bound module. The real startup/shutdown and exact persisted publication preservation checks
+subsequently passed on source commit `2b6424699`; see the completed
+[final acceptance](cordis-v2-final-acceptance-2026-09-07.md) for the runtime evidence.
