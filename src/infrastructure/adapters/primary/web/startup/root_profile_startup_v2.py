@@ -13,6 +13,9 @@ from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
 from src.infrastructure.adapters.primary.web.startup.root_startup_request_v2 import (
     prepare_root_startup_request_v2,
 )
+from src.infrastructure.adapters.primary.web.startup.root_startup_restore_v2 import (
+    restore_root_startup_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
     PlatformPluginDesiredBundleSetRepositoryV2,
 )
@@ -114,14 +117,16 @@ async def publish_configured_root_startup_v2(
         and previous is not None
         and candidate.digest == previous.digest
     ):
-        return (
-            await host.apply_distribution(
-                durable_distribution,
-                publication_stager=publication_stager,
-                verified_archives=archives,
-            ),
-            False,
+        restored = await restore_root_startup_v2(
+            host,
+            session_factory=session_factory,
+            durable_distribution=durable_distribution,
+            desired=desired,
+            archives=archives,
+            publication_stager=publication_stager,
         )
+        if restored is not None:
+            return restored, False
     generation = 0
     for distribution in (durable_distribution, latest_distribution):
         if distribution is not None:
