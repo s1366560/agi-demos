@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:e3abae7ccb2305608264ddcf962d47518fef22ebb76a2ec7f411ca3e65',
-  '55dcdb","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:a238c51c7fc01bb13856f01bf13b443799e04778de0100ab083a91f9e0',
+  '55834e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -1402,7 +1402,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ugins.v2.sandbox_operation_services:sandbox_operation_application_definition_v2","mo',
   'dule_ref":"builtin://memstack/application/sandbox-operation-services","plugin_id":"m',
   'emstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_di',
-  'gest":"sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820","art',
+  'gest":"sha256:636ff0dc4cb5923146933e0100dbee010bfedc85d7dc0d6914ac03392179f93d","art',
   'ifact_source":"repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py","cont',
   'ract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","ad',
   'ditionalProperties":false,"properties":{"strategy":{"const":"generation-runtime","ty',
@@ -4593,7 +4593,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '.plugins.v2.sandbox_http_service_registry:sandbox_http_service_registry_definition_v',
   '2","module_ref":"builtin://memstack/sandbox/http-service-registry","plugin_id":"mems',
   'tack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_diges',
-  't":"sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d8c34c8dd820","artifa',
+  't":"sha256:636ff0dc4cb5923146933e0100dbee010bfedc85d7dc0d6914ac03392179f93d","artifa',
   'ct_source":"repo+python://src/infrastructure/plugins/v2/sandbox_runtime.py","contrac',
   't":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","addit',
   'ionalProperties":false,"properties":{"required":{"type":"boolean"},"strategy":{"cons',
@@ -4759,4 +4759,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:e3abae7ccb2305608264ddcf962d47518fef22ebb76a2ec7f411ca3e6555dcdb' as const;
+  'sha256:a238c51c7fc01bb13856f01bf13b443799e04778de0100ab083a91f9e055834e' as const;

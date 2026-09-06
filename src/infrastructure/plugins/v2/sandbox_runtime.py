@@ -116,12 +116,37 @@ class SandboxApplicationResolverV2:
         return self.runtime.require()
 
 
+def _validate_projected_runtime_v2(
+    runtime: object,
+    factory: SandboxRuntimeFactoryV2 | None,
+    *,
+    required: bool,
+) -> SandboxRuntimeServiceV2:
+    if factory is not None:
+        raise RuntimeV2Error(
+            "sandbox_runtime_source_conflict",
+            "sandbox runtime accepts either a factory or a projected runtime",
+        )
+    if not isinstance(runtime, SandboxRuntimeServiceV2) or (
+        runtime.services is not None
+        and not isinstance(cast(object, runtime.services), SandboxApplicationServicesV2)
+    ):
+        raise RuntimeV2Error(
+            "invalid_sandbox_runtime_projection",
+            "projected sandbox runtime has an invalid implementation",
+        )
+    if required:
+        _ = runtime.require()
+    return runtime
+
+
 def sandbox_runtime_definition_v2(
     sandbox_runtime_factory: SandboxRuntimeFactoryV2 | None = None,
     *,
     redis_client: object | None = None,
+    projected_runtime: SandboxRuntimeServiceV2 | None = None,
 ) -> PluginDefinitionV2:
-    """Build the sandbox Provider definition for one Python data plane."""
+    """Own a factory resource or borrow one held alive by the caller's generation lease."""
 
     async def apply_runtime(
         context: ContextV2,
@@ -133,6 +158,15 @@ def sandbox_runtime_definition_v2(
             raise ValueError("sandbox runtime requires strategy mcp-docker")
         if not isinstance(required, bool):
             raise ValueError("sandbox runtime requires an explicit boolean required setting")
+
+        if projected_runtime is not None:
+            runtime_value = _validate_projected_runtime_v2(
+                projected_runtime, sandbox_runtime_factory, required=required
+            )
+            # The caller holds the owner generation lease. This projection neither
+            # initializes maintenance nor takes physical ownership or scope authority.
+            _provide_sandbox_runtime_v2(context, runtime_value)
+            return None
 
         if sandbox_runtime_factory is None:
             _provide_sandbox_runtime_v2(

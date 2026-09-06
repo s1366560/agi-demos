@@ -8,7 +8,10 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.domain.model.plugins.generated_v2 import ProfileSnapshotV2, ScopeV2
+from src.domain.model.plugins.generated_v2 import DesiredBundleSetV2, ProfileSnapshotV2, ScopeV2
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
+    PlatformPluginDesiredBundleSetRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PYTHON_API_DATA_PLANE_ID_V2,
     PlatformPluginPublicationPolicyV2,
@@ -72,10 +75,15 @@ class ScopedPublicationCoordinatorV2:
         return self._slots.setdefault(scope_key_v2(scope), _PublicationSlot())
 
     async def publish(
-        self, scope: ScopeV2, snapshot: ProfileSnapshotV2
+        self,
+        scope: ScopeV2,
+        snapshot: ProfileSnapshotV2,
+        *,
+        expected_desired: DesiredBundleSetV2 | None = None,
     ) -> PlatformPluginPublicationV2:
         canonical = validate_scope_v2(scope)
         frozen = parse_profile_snapshot_v2(deepcopy(profile_snapshot_v2_to_payload(snapshot)))
+        desired_fence = deepcopy(expected_desired)
         slot = self._slot(canonical)
         result: list[PlatformPluginPublicationV2] = []
 
@@ -87,6 +95,14 @@ class ScopedPublicationCoordinatorV2:
                 async with self._sessions() as session:
                     repository = PlatformPluginRepositoryV2(session, scope=canonical)
                     version = await repository.allocate_publication_version()
+                    if desired_fence is not None:
+                        current = await PlatformPluginDesiredBundleSetRepositoryV2(
+                            session
+                        ).current_desired_set(canonical)
+                        if current is None or current.desired_set != desired_fence:
+                            raise RuntimeV2Error(
+                                "scope_desired_changed", "desired source changed before publication"
+                            )
                     envelope = control_envelope_v2(frozen, version=version)
                     _ = await repository.record_requested_distribution(
                         frozen, envelope, policy=self._policy

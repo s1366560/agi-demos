@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:e3abae7ccb2305608264ddcf962d47518fef22ebb76a2ec7f411ca3e6555dc'
-    'db","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:a238c51c7fc01bb13856f01bf13b443799e04778de0100ab083a91f9e05583'
+    '4e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1322,8 +1322,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '124","entrypoint":"src.infrastructure.plugins.v2.sandbox_operation_services:sandbox_oper'
     'ation_application_definition_v2","module_ref":"builtin://memstack/application/sandbox-op'
     'eration-services","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","target'
-    's":["python"]},{"artifact_digest":"sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91c'
-    'db3fc5d8c34c8dd820","artifact_source":"repo+python://src/infrastructure/plugins/v2/sandb'
+    's":["python"]},{"artifact_digest":"sha256:636ff0dc4cb5923146933e0100dbee010bfedc85d7dc0d'
+    '6914ac03392179f93d","artifact_source":"repo+python://src/infrastructure/plugins/v2/sandb'
     'ox_runtime.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/202'
     '0-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"generation-'
     'runtime","type":"string"}},"required":["strategy"],"type":"object"},"events":{"emits":[]'
@@ -4368,8 +4368,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '55","entrypoint":"src.infrastructure.plugins.v2.sandbox_http_service_registry:sandbox_ht'
     'tp_service_registry_definition_v2","module_ref":"builtin://memstack/sandbox/http-service'
     '-registry","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["py'
-    'thon"]},{"artifact_digest":"sha256:def2c5dd9dfa6d5e1ab54b232698c1b4eb067f8141a91cdb3fc5d'
-    '8c34c8dd820","artifact_source":"repo+python://src/infrastructure/plugins/v2/sandbox_runt'
+    'thon"]},{"artifact_digest":"sha256:636ff0dc4cb5923146933e0100dbee010bfedc85d7dc0d6914ac0'
+    '3392179f93d","artifact_source":"repo+python://src/infrastructure/plugins/v2/sandbox_runt'
     'ime.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/sc'
     'hema","additionalProperties":false,"properties":{"required":{"type":"boolean"},"strategy'
     '":{"const":"mcp-docker","type":"string"}},"required":["required","strategy"],"type":"obj'
@@ -4522,7 +4522,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'n_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:e3abae7ccb2305608264ddcf962d47518fef22ebb76a2ec7f411ca3e6555dcdb"
+    "sha256:a238c51c7fc01bb13856f01bf13b443799e04778de0100ab083a91f9e055834e"
 )
 # fmt: on
 
