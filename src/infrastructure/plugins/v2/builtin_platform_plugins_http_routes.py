@@ -24,6 +24,7 @@ from src.infrastructure.adapters.primary.web.routers.platform_plugins_v2 import 
     get_latest_publication_readiness_v2,
     get_publication_readiness_v2,
     get_route_authority_readiness_v2,
+    get_web_public_view_v2,
     issue_data_plane_credential_v2,
     list_data_plane_credentials_v2,
     list_desired_bundle_set_history_v2,
@@ -144,6 +145,14 @@ def platform_plugins_route_definitions_v2() -> tuple[RouteDefinitionV2, ...]:
             revoke_data_plane_credential_v2,
             "revoke_data_plane_credential_v2",
             PlatformPluginDataPlaneCredentialResponseV2,
+            _PROTOCOL_V2_TAGS_V2,
+        ),
+        (
+            f"{v2}/web-view",
+            ("GET",),
+            get_web_public_view_v2,
+            "get_web_public_view_v2",
+            dict[str, Any],
             _PROTOCOL_V2_TAGS_V2,
         ),
         (

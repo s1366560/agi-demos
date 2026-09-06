@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, NoReturn, cast
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.platform_plugins import (
@@ -74,8 +74,10 @@ from src.infrastructure.plugins.v2.route_authority import (
     verify_bundle_route_authority_v2,
 )
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
+from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.scope import parse_scope_v2, scope_v2_to_payload
+from src.infrastructure.plugins.v2.web_public_view import project_web_public_view_v2
 
 router = APIRouter(prefix="/v2", tags=["Platform Plugins V2"])
 
@@ -273,6 +275,29 @@ async def revoke_data_plane_credential_v2(
         _raise_data_plane_credential_error(exc)
     await db.commit()
     return _data_plane_credential_response_v2(credential)
+
+
+@router.get("/web-view", response_model=dict[str, Any])
+async def get_web_public_view_v2(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Return only declared public root Web configuration; never a workload receipt identity."""
+    response.headers["Cache-Control"] = "private, no-store"
+    distribution = await PlatformPluginRepositoryV2(db).latest_requested_distribution()
+    if distribution is None:
+        raise HTTPException(status_code=404, detail=_("No public Web plugin view is available"))
+    try:
+        return project_web_public_view_v2(distribution["snapshot"], authority_id=current_user.id)
+    except RuntimeV2Error:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "web_public_view_unavailable",
+                "message": _("Public Web plugin view is unavailable"),
+            },
+        ) from None
 
 
 @router.get("/distribution", response_model=PlatformPluginDistributionResponseV2)

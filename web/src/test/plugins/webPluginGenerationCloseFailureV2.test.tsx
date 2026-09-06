@@ -38,12 +38,17 @@ vi.mock('@agistack/plugin-runtime', async (importOriginal) => {
   };
 });
 
-import { RendererGenerationStatusStoreV2 } from '@agistack/plugin-runtime';
+import {
+  RendererGenerationStatusStoreV2,
+  webRendererDefinitionsV2,
+  digestV2,
+} from '@agistack/plugin-runtime';
 import {
   activateWebPluginGenerationRootV2,
   deactivateWebPluginGenerationRootV2,
   useWebPluginGenerationV2,
 } from '../../plugins/webPluginGenerationV2';
+import { useAuthStore } from '../../stores/auth';
 import bootstrapProfile from '../../../../shared/profiles/memstack-default-bootstrap.v2.json';
 
 function containsError(value: unknown): boolean {
@@ -53,20 +58,24 @@ function containsError(value: unknown): boolean {
 }
 
 it('observes scheduled real generation cleanup failure and records it in the status store', async () => {
+  useAuthStore.setState({ isAuthenticated: true, token: 'close-owner' });
+  const refs = new Set(webRendererDefinitionsV2.map((definition) => definition.moduleRef));
+  const snapshot = structuredClone(bootstrapProfile);
+  snapshot.profile_id = 'web-public-view-v2';
+  snapshot.entries = snapshot.entries.filter((entry) => refs.has(entry.module_ref));
+  snapshot.manifests = snapshot.manifests
+    .map((manifest) => ({
+      ...manifest,
+      modules: manifest.modules.filter((module) => refs.has(module.module_ref)),
+    }))
+    .filter((manifest) => manifest.modules.length);
+  const { digest: _digest, ...unsigned } = snapshot;
+  snapshot.digest = await digestV2(unsigned);
   getDistribution.mockResolvedValue({
     schema_version: 2,
-    descriptor: {
-      profile_id: bootstrapProfile.profile_id,
-      generation: bootstrapProfile.generation,
-      digest: bootstrapProfile.digest,
-    },
-    snapshot: bootstrapProfile,
-    envelope: {
-      version: 1,
-      nonce: 'web-close-failure',
-      snapshot_digest: bootstrapProfile.digest,
-      type_url: 'types.memstack.ai/plugin.profile.v2',
-    },
+    target: 'web',
+    view_id: 'close-public',
+    snapshot,
   });
   const fail = vi.spyOn(RendererGenerationStatusStoreV2.prototype, 'fail');
   activateWebPluginGenerationRootV2();

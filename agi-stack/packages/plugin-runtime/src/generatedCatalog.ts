@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:828dae55b08195a724e8ce9a0737c7218edbe080aec31d0c21fb2daa9d',
-  '1b3b21","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:776899e6774f73c628cb598c6b8ed676152a5612d2627bfee83472e1c9',
+  '2407ad","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -3286,7 +3286,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ins.v2.builtin_observability_http_routes:builtin_observability_http_routes_definitio',
   'n_v2","module_ref":"builtin://memstack/http/observability-routes","plugin_id":"memst',
   'ack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_digest',
-  '":"sha256:7e94baef9ca405e8c28fb331d297f9108a3c3978954a68b30fd0c7ccb0ef1e3e","artifac',
+  '":"sha256:2a0138685808b5f519518534f3b8ee2810af7964304d8e53aff43d54e711491a","artifac',
   't_source":"repo+python://src/infrastructure/plugins/v2/builtin_platform_plugins_http',
   '_routes.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/20',
   '20-12/schema","additionalProperties":false,"properties":{},"type":"object"},"events"',
@@ -4759,4 +4759,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:828dae55b08195a724e8ce9a0737c7218edbe080aec31d0c21fb2daa9d1b3b21' as const;
+  'sha256:776899e6774f73c628cb598c6b8ed676152a5612d2627bfee83472e1c92407ad' as const;
