@@ -24,7 +24,8 @@ it('admits a real workspace service lease only after the complete native baselin
     deliver = resolve;
   });
   const invoke = vi.fn((command: string) => {
-    expect(command).toBe('platform_plugin_renderer_distribution_current_v2');
+    if (command === 'platform_plugin_renderer_owner_retire_v2') return Promise.resolve();
+    expect(command).toBe('platform_plugin_renderer_delivery_current_v2');
     return pendingDistribution;
   });
   const originalBridge = Object.getOwnPropertyDescriptor(window, '__MEMSTACK_DESKTOP__');

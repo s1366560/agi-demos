@@ -52,3 +52,19 @@ test('device authorization remains an Electron-owned validated external action',
   assert.match(electronMainSource, /shell\.openExternal/u);
   assert.doesNotMatch(controlSource, /shell\.openExternal/u);
 });
+
+test('renderer deliveries bind main-owned sessions and retire on document or identity changes', () => {
+  const branch = electronMainSource.slice(
+    electronMainSource.indexOf("case 'platform_plugin_renderer_delivery_current_v2':"),
+    electronMainSource.indexOf("case 'platform_plugin_renderer_distribution_current_v2':"),
+  );
+  assert.match(branch, /authorizedCloudRequestOwner\(event\)/u);
+  assert.match(branch, /owner = randomUUID\(\)/u);
+  assert.match(branch, /owner_id: owner, delivery_token: args\?\.delivery_token, receipt: args\?\.receipt/u);
+  assert.doesNotMatch(branch, /args\?\.(?:owner_id|api_base_url|credential|nonce|data_plane_id)/u);
+  assert.match(branch, /rendererDeliveryOwnersV2\.get\(ownerId\) !== owner/u);
+  assert.match(electronMainSource, /did-start-navigation[\s\S]*retireRendererDeliveryOwnerV2/u);
+  assert.match(electronMainSource, /render-process-gone[\s\S]*retireRendererDeliveryOwnerV2/u);
+  assert.match(electronPreloadSource, /platform_plugin_renderer_receipt_submit_v2/u);
+  assert.doesNotMatch(electronPreloadSource, /plugin_renderer_data_plane_credential_(?:import|clear)_v2/u);
+});

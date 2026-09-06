@@ -1,3 +1,9 @@
+export {
+  DesktopRendererDeliveryReconcilerV2,
+  parseDesktopRendererDeliveryV2,
+  type DesktopRendererDeliveryV2,
+  type SubmitDesktopRendererReceiptV2,
+} from './desktopRendererDelivery';
 export { canonicalJsonV2, digestV2 } from './canonical';
 export {
   DesktopRendererDistributionReconcilerV2,

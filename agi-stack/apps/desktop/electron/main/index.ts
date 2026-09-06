@@ -1,3 +1,4 @@
+import { RendererDeliveryAdmissionV2 } from './rendererDeliveryAdmissionV2';
 import {
   app,
   BrowserWindow,
@@ -135,6 +136,8 @@ const webControlPlaneConfiguration = resolveWebControlPlaneConfiguration({
 type DesktopCommandArgs = Record<string, unknown> | undefined;
 
 let mainWindow: BrowserWindow | null = null;
+const rendererDeliveryOwnersV2 = new Map<number, string>();
+const rendererDeliveryAdmissionV2 = new RendererDeliveryAdmissionV2();
 let sandboxDesktopGrants: SandboxDesktopGrantRegistry | null = null;
 const resolveSandboxDesktopOwner = (ownerId: number) => {
   const contents = mainWindow?.webContents;
@@ -660,7 +663,7 @@ async function executeDesktopCommand(
           signal: lease.signal,
           withContextSwitch: (operation) => {
             if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
-            return sandboxDesktopGrants.withAuthorityTransition(operation);
+            return withDesktopAuthorityTransitionV2(operation);
           },
         });
       } finally {
@@ -756,6 +759,27 @@ async function executeDesktopCommand(
         cancelled: cloudRequestExecutions.cancel(ownerId, args?.requestId),
       });
     }
+    case 'platform_plugin_renderer_delivery_current_v2':
+    case 'platform_plugin_renderer_receipt_submit_v2': {
+      rendererDeliveryAdmissionV2.assertAdmitted();
+      const ownerId = authorizedCloudRequestOwner(event);
+      if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
+      let owner = rendererDeliveryOwnersV2.get(ownerId);
+      if (owner === undefined) {
+        owner = randomUUID();
+        rendererDeliveryOwnersV2.set(ownerId, owner);
+      }
+      const payload = command === 'platform_plugin_renderer_delivery_current_v2'
+        ? { owner_id: owner }
+        : { owner_id: owner, delivery_token: args?.delivery_token, receipt: args?.receipt };
+      const result = await sidecarSupervisor.invoke(command, payload);
+      if (rendererDeliveryOwnersV2.get(ownerId) !== owner) {
+        throw new Error('desktop_renderer_delivery_owner_retired');
+      }
+      return result;
+    }
+    case 'platform_plugin_renderer_owner_retire_v2':
+      return retireRendererDeliveryOwnerV2(authorizedCloudRequestOwner(event));
     case 'platform_plugin_renderer_distribution_current_v2':
       void authorizedCloudRequestOwner(event);
       if (!sidecarSupervisor) throw new Error('desktop sidecar is unavailable');
@@ -796,7 +820,7 @@ async function executeDesktopCommand(
         ].includes(command)) {
           const supervisor = sidecarSupervisor;
           if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
-          return sandboxDesktopGrants.withAuthorityTransition(
+          return withDesktopAuthorityTransitionV2(
             () => supervisor.invoke(command, args),
           );
         }
@@ -1094,7 +1118,13 @@ async function createMainWindow(): Promise<void> {
   installNavigationPolicy(window, developmentUrl);
   iabPool?.setHostWindow(window);
   window.once('ready-to-show', () => window.show());
+  window.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) {
+      void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
+    }
+  });
   window.on('closed', () => {
+    void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
       console.warn('Sandbox desktop owner cleanup failed');
     });
@@ -1104,6 +1134,7 @@ async function createMainWindow(): Promise<void> {
     if (mainWindow === window) mainWindow = null;
   });
   window.webContents.on('render-process-gone', () => {
+    void retireRendererDeliveryOwnerV2(cloudRequestOwnerId).catch(() => undefined);
     void sandboxDesktopGrants?.revokeOwner(cloudRequestOwnerId).catch(() => {
       console.warn('Sandbox desktop owner cleanup failed');
     });
@@ -1115,6 +1146,22 @@ async function createMainWindow(): Promise<void> {
   } else {
     await window.loadURL(RENDERER_ENTRY_URL);
   }
+}
+
+async function withDesktopAuthorityTransitionV2<T>(operation: () => Promise<T>): Promise<T> {
+  const grants = sandboxDesktopGrants;
+  if (!grants) throw new Error('sandbox desktop grants unavailable');
+  return rendererDeliveryAdmissionV2.transition(
+    () => Promise.all([...rendererDeliveryOwnersV2.keys()].map(retireRendererDeliveryOwnerV2)),
+    () => grants.withAuthorityTransition(operation),
+  );
+}
+
+async function retireRendererDeliveryOwnerV2(ownerId: number): Promise<void> {
+  const owner = rendererDeliveryOwnersV2.get(ownerId);
+  rendererDeliveryOwnersV2.delete(ownerId);
+  if (owner === undefined || !sidecarSupervisor) return;
+  await sidecarSupervisor.invoke('platform_plugin_renderer_owner_retire_v2', { owner_id: owner });
 }
 
 function sendOAuthSessionChanged(payload: unknown): void {
@@ -1234,13 +1281,13 @@ async function bootstrapApplication(): Promise<void> {
     loadTrustedSession: () => sidecarSupervisor!.invoke('trusted_session_load'),
     saveTrustedSession: async (input) => {
       if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
-      return sandboxDesktopGrants.withAuthorityTransition(
+      return withDesktopAuthorityTransitionV2(
         () => applicationSupervisor.invoke('trusted_session_save', input),
       );
     },
     clearTrustedSession: async () => {
       if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
-      return sandboxDesktopGrants.withAuthorityTransition(
+      return withDesktopAuthorityTransitionV2(
         () => applicationSupervisor.invoke('trusted_session_clear'),
       );
     },
@@ -1251,7 +1298,7 @@ async function bootstrapApplication(): Promise<void> {
     openExternal: async (url) => shell.openExternal(url, { activate: true }),
     saveTrustedSession: async (input) => {
       if (!sandboxDesktopGrants) throw new Error('sandbox desktop grants unavailable');
-      return sandboxDesktopGrants.withAuthorityTransition(
+      return withDesktopAuthorityTransitionV2(
         () => applicationSupervisor.invoke('trusted_session_save', input),
       );
     },

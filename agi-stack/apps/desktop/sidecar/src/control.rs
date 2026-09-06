@@ -97,8 +97,15 @@ struct ControlResponse {
     error: Option<String>,
 }
 
+#[path = "renderer_receipt_service_v2.rs"]
+mod renderer_receipt_service_v2;
+use renderer_receipt_service_v2::{
+    DesktopRendererReceiptServiceV2, RendererOwnerV2, RendererReceiptSubmissionV2,
+};
+
 struct ControlState {
     runtime: LocalRuntimeService,
+    renderer_receipts_v2: DesktopRendererReceiptServiceV2,
     oauth_pending_attempts: OAuthPendingAttemptBroker,
     plugin_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
     plugin_renderer_data_plane_credentials_v2: PluginDataPlaneCredentialBrokerV2,
@@ -176,8 +183,11 @@ pub(crate) async fn run() -> Result<(), String> {
     secret.zeroize();
     write_json_line(&mut output, &ready).await?;
 
+    let renderer_receipts_v2 =
+        DesktopRendererReceiptServiceV2::new(plugin_renderer_data_plane_credentials_v2.clone())?;
     let state = ControlState {
         runtime,
+        renderer_receipts_v2,
         oauth_pending_attempts,
         plugin_data_plane_credentials_v2,
         plugin_renderer_data_plane_credentials_v2,
@@ -314,6 +324,78 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 Err(error) => Err(error),
             }
         }
+        "platform_plugin_renderer_delivery_current_v2" => {
+            match request
+                .args
+                .clone()
+                .ok_or("renderer_owner_required".to_string())
+                .and_then(|args| {
+                    serde_json::from_value::<RendererOwnerV2>(args)
+                        .map_err(|_| "renderer_owner_invalid".to_string())
+                }) {
+                Ok(owner) => match state.plugin_control_plane_v2.selection_snapshot() {
+                    Ok((PlatformPluginAuthorityModeV2::Local, epoch)) => {
+                        if let Err(error) = state.renderer_receipts_v2.retire_owner(&owner.owner_id)
+                        {
+                            return failure(id, &error);
+                        }
+                        let distribution = serde_json::to_value(
+                            state.runtime.renderer_distribution_current_v2().await,
+                        )
+                        .map_err(|_| "renderer_distribution_invalid".to_string());
+                        distribution.and_then(|value| {
+                            if state.plugin_control_plane_v2.selection_snapshot()?
+                                != (PlatformPluginAuthorityModeV2::Local, epoch)
+                            {
+                                return Err("renderer_delivery_superseded".to_string());
+                            }
+                            if !value.is_null() && value["source"] != "local" {
+                                return Err("renderer_local_distribution_unavailable".to_string());
+                            }
+                            Ok(value)
+                        })
+                    }
+                    Ok(_) => state
+                        .renderer_receipts_v2
+                        .fetch(&owner.owner_id, || {
+                            state.plugin_control_plane_v2.selection_snapshot()
+                        })
+                        .await
+                        .map(|value| value.unwrap_or(Value::Null)),
+                    Err(error) => Err(error),
+                },
+                Err(error) => Err(error),
+            }
+        }
+        "platform_plugin_renderer_receipt_submit_v2" => {
+            match request
+                .args
+                .clone()
+                .ok_or("renderer_receipt_required".to_string())
+                .and_then(|args| {
+                    serde_json::from_value::<RendererReceiptSubmissionV2>(args)
+                        .map_err(|_| "renderer_receipt_invalid".to_string())
+                }) {
+                Ok(submission) => state
+                    .renderer_receipts_v2
+                    .submit(submission, || {
+                        state.plugin_control_plane_v2.selection_snapshot()
+                    })
+                    .await
+                    .map(|()| Value::Null),
+                Err(error) => Err(error),
+            }
+        }
+        "platform_plugin_renderer_owner_retire_v2" => request
+            .args
+            .clone()
+            .ok_or("renderer_owner_required".to_string())
+            .and_then(|args| {
+                serde_json::from_value::<RendererOwnerV2>(args)
+                    .map_err(|_| "renderer_owner_invalid".to_string())
+            })
+            .and_then(|owner| state.renderer_receipts_v2.retire_owner(&owner.owner_id))
+            .map(|()| Value::Null),
         "platform_plugin_renderer_distribution_current_v2" if request.args.is_none() => {
             serde_json::to_value(state.runtime.renderer_distribution_current_v2().await)
                 .map_err(|error| error.to_string())
@@ -350,6 +432,9 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
             }
         }
         "plugin_renderer_data_plane_credential_import_v2" => {
+            if let Err(error) = state.renderer_receipts_v2.invalidate() {
+                return failure(id, &error);
+            }
             let broker = state.plugin_renderer_data_plane_credentials_v2.clone();
             parse_arg::<PluginDataPlaneCredentialRecordV2>(request.args.as_ref(), "input")
                 .and_then(|record| {
@@ -358,6 +443,9 @@ async fn execute_request(state: &ControlState, request: ControlRequest) -> Contr
                 .map(|()| Value::Null)
         }
         "plugin_renderer_data_plane_credential_clear_v2" if request.args.is_none() => {
+            if let Err(error) = state.renderer_receipts_v2.invalidate() {
+                return failure(id, &error);
+            }
             let broker = state.plugin_renderer_data_plane_credentials_v2.clone();
             task::block_in_place(|| broker.clear())
                 .map(|()| Value::Null)

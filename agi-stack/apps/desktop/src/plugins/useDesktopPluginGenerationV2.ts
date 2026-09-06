@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 
 import {
   createDesktopRendererDefinitionsV2,
-  DesktopRendererDistributionReconcilerV2,
+  DesktopRendererDeliveryReconcilerV2,
   RendererGenerationLeaseStoreV2,
   RendererGenerationStatusStoreV2,
   RendererPluginRuntimeV2,
@@ -115,7 +115,7 @@ import { desktopWorkspaceConversationCatalogAuthorityDefinitionV2 } from './desk
 import { desktopWorkspaceMessageCatalogAuthorityDefinitionV2 } from './desktopWorkspaceMessageCatalogAuthorityModuleV2';
 
 const RENDERER_DISTRIBUTION_COMMAND_V2 =
-  'platform_plugin_renderer_distribution_current_v2';
+  'platform_plugin_renderer_delivery_current_v2';
 const POLL_INTERVAL_MS = 30_000;
 const desktopRendererRuntimeV2 = new RendererPluginRuntimeV2(
   'desktop-renderer',
@@ -226,7 +226,17 @@ const desktopRendererLeaseStoreV2 = new RendererGenerationLeaseStoreV2(
 );
 const desktopRendererStatusStoreV2 = new RendererGenerationStatusStoreV2();
 const desktopRendererDistributionReconcilerV2 =
-  new DesktopRendererDistributionReconcilerV2(desktopRendererRuntimeV2);
+  new DesktopRendererDeliveryReconcilerV2(
+    desktopRendererRuntimeV2,
+    async (delivery_token, receipt) => {
+      const invoke = window.__MEMSTACK_DESKTOP__?.core?.invoke;
+      if (!invoke) throw new Error('desktop_renderer_receipt_ipc_unavailable');
+      await invoke('platform_plugin_renderer_receipt_submit_v2', { delivery_token, receipt });
+    },
+    async () => {
+      await window.__MEMSTACK_DESKTOP__?.core?.invoke?.('platform_plugin_renderer_owner_retire_v2');
+    },
+  );
 let pendingClose: ReturnType<typeof setTimeout> | null = null;
 
 export function activateDesktopPluginGenerationRootV2(): void {

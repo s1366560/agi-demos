@@ -167,6 +167,13 @@ impl PlatformPluginControlPlaneReconcilerV2 {
         })
     }
 
+    pub(crate) fn selection_snapshot(
+        &self,
+    ) -> Result<(PlatformPluginAuthorityModeV2, u64), String> {
+        let selected = lock_selection(&self.selection)?;
+        Ok((selected.mode, selected.epoch))
+    }
+
     pub(crate) async fn select(&self, mode: PlatformPluginAuthorityModeV2) -> Result<(), String> {
         let selection = self.advance_selection(mode)?;
         match self.reconcile_selection(selection).await? {

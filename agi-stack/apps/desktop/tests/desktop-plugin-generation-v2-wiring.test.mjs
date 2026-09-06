@@ -43,8 +43,8 @@ test('desktop renderer owns a protocol-v2 generation host through the trusted si
   assert.match(hook, /return state/u);
   assert.match(hook, /if \(!enabled\) \{\s*scheduleClose\(\);\s*return;\s*\}/u);
   assert.doesNotMatch(hook, /if \(!enabled\) return \(\) => scheduleClose\(\)/u);
-  assert.match(hook, /DesktopRendererDistributionReconcilerV2/u);
-  assert.match(hook, /platform_plugin_renderer_distribution_current_v2/u);
+  assert.match(hook, /DesktopRendererDeliveryReconcilerV2/u);
+  assert.match(hook, /platform_plugin_renderer_delivery_current_v2/u);
   assert.match(hook, /window\.__MEMSTACK_DESKTOP__\?\.core\?\.invoke/u);
   assert.doesNotMatch(
     hook,
