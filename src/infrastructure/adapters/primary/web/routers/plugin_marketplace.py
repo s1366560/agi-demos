@@ -55,6 +55,9 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_b
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
+    PlatformPluginProfileSourceRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginRepositoryV2,
 )
@@ -96,6 +99,7 @@ async def _republish_after_mutation(
     async with httpx.AsyncClient(timeout=15.0) as client:
         service = PluginMarketplacePublicationServiceV2(
             desired_repository=PlatformPluginDesiredBundleSetRepositoryV2(db),
+            source_repository=PlatformPluginProfileSourceRepositoryV2(db),
             governance_repository=PlatformPluginGovernanceRepository(db),
             publication_repository=PlatformPluginRepositoryV2(db),
             artifact_client=OciPluginArtifactClient(client),

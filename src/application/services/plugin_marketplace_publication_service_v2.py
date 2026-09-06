@@ -20,6 +20,9 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_b
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
+    PlatformPluginProfileSourceRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PYTHON_API_DATA_PLANE_ID_V2,
     PlatformPluginPublicationPolicyV2,
@@ -65,6 +68,7 @@ class PluginMarketplacePublicationServiceV2:
         self,
         *,
         desired_repository: PlatformPluginDesiredBundleSetRepositoryV2,
+        source_repository: PlatformPluginProfileSourceRepositoryV2,
         governance_repository: PlatformPluginGovernanceRepository,
         publication_repository: PlatformPluginRepositoryV2,
         artifact_client: MarketplaceArtifactClient,
@@ -77,6 +81,7 @@ class PluginMarketplacePublicationServiceV2:
         allowed_registries: frozenset[str] | None = None,
     ) -> None:
         self._desired_repository = desired_repository
+        self._source_repository = source_repository
         self._publication_repository = publication_repository
         self._production_sources = production_sources
         self._bundle_loader = InstalledVerifiedBundleLoaderV2(
@@ -100,13 +105,31 @@ class PluginMarketplacePublicationServiceV2:
                 "desired_bundle_set_missing",
                 "protocol v2 marketplace desired Bundle set is not initialized",
             )
+        reference = desired_record.desired_set.profile_source
+        source = await self._source_repository.read_exact(
+            scope=scope,
+            source_id=reference.source_id,
+            revision=reference.revision,
+            digest=reference.digest,
+        )
+        if source is None:
+            baseline = self._production_sources.profile_source
+            if (reference.source_id, reference.revision, reference.digest) != (
+                baseline.source_id,
+                baseline.revision,
+                baseline.digest,
+            ):
+                raise MarketplacePublicationV2Error(
+                    "profile_source_missing", "exact ROOT profile source is missing"
+                )
+            source = baseline
         bundles = tuple(
             [await self._load_bundle(reference) for reference in desired_record.desired_set.bundles]
         )
         composition = compose_profile_sources_v2(
             desired_set=desired_record.desired_set,
             bundles=bundles,
-            profile_source=self._production_sources.profile_source,
+            profile_source=source,
             scope=scope,
         )
         generation, version = await self._next_publication_counters()

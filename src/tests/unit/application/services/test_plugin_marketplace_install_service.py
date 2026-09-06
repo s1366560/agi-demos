@@ -60,6 +60,9 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_b
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
+    PlatformPluginProfileSourceRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PlatformPluginPublicationPolicyV2,
 )
@@ -431,11 +434,56 @@ async def test_marketplace_catalog_approval_revocation_and_uninstall_use_v2_desi
     )
 
 
+@pytest.mark.parametrize("stored_source", [False, True])
 async def test_marketplace_desired_revision_publishes_a_real_v2_generation(
     db_session: AsyncSession,
+    stored_source: bool,
 ) -> None:
     decision, _bundle, archive, public_key = await _install(db_session)
     assert decision.status == "approved"
+    if stored_source:
+        from src.infrastructure.plugins.v2.layer_composer import (
+            desired_bundle_set_digest_v2,
+            profile_source_digest_v2,
+        )
+
+        scope = ScopeV2(kind=ScopeKindV2.ROOT)
+        source = production_bundle_sources_v2().profile_source
+        source = replace(
+            source,
+            source_id="explicit-root",
+            layers=(
+                *source.layers[:-1],
+                replace(
+                    source.layers[-1],
+                    disabled_entry_ids=(
+                        *source.layers[-1].disabled_entry_ids,
+                        "builtin-agent-canvas-tools",
+                    ),
+                ),
+            ),
+        )
+        source = replace(source, digest=profile_source_digest_v2(source))
+        await PlatformPluginProfileSourceRepositoryV2(db_session).record_source(
+            scope=scope, source=source, expected_revision=None
+        )
+        repository = PlatformPluginDesiredBundleSetRepositoryV2(db_session)
+        previous = await repository.current_desired_set(scope)
+        assert previous is not None
+        desired = replace(
+            previous.desired_set,
+            revision=3,
+            profile_source=replace(
+                previous.desired_set.profile_source,
+                source_id=source.source_id,
+                revision=source.revision,
+                digest=source.digest,
+            ),
+        )
+        desired = replace(desired, digest=desired_bundle_set_digest_v2(desired))
+        await repository.record_desired_set(
+            scope=scope, desired_set=desired, expected_revision=2, actor_id="admin"
+        )
     from fastapi import FastAPI
 
     app = FastAPI()
@@ -443,6 +491,7 @@ async def test_marketplace_desired_revision_publishes_a_real_v2_generation(
     try:
         publisher = PluginMarketplacePublicationServiceV2(
             desired_repository=PlatformPluginDesiredBundleSetRepositoryV2(db_session),
+            source_repository=PlatformPluginProfileSourceRepositoryV2(db_session),
             governance_repository=PlatformPluginGovernanceRepository(db_session),
             publication_repository=PlatformPluginRepositoryV2(db_session),
             artifact_client=FakeArtifactClient(archive),
@@ -461,7 +510,13 @@ async def test_marketplace_desired_revision_publishes_a_real_v2_generation(
         result = await publisher.publish_current()
         readiness = await PlatformPluginRepositoryV2(db_session).latest_publication_readiness()
 
-        assert result.desired_revision == 2
+        assert result.desired_revision == (3 if stored_source else 2)
+        canvas = next(
+            entry
+            for entry in result.publication.snapshot.entries
+            if entry.entry_id == "builtin-agent-canvas-tools"
+        )
+        assert canvas.enabled is not stored_source
         assert result.publication.accepted is True
         assert result.publication.snapshot.generation == 2
         assert any(
