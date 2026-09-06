@@ -259,9 +259,38 @@ fn is_desktop_route_source_file(file_name: &str) -> bool {
         || file_name.ends_with("client.ts")
         || file_name.ends_with("Contract.ts")
         || file_name.ends_with("AuthorityModuleV2.ts")
+        || file_name.ends_with("HttpProjectionV2.ts")
+        || file_name.ends_with("OperationContractV2.ts")
 }
 
-fn source_path_suffix(source: &str) -> Option<&'static str> {
+#[test]
+fn route_source_discovery_includes_v2_transports_and_keeps_explicit_module_binding() {
+    assert!(is_desktop_route_source_file(
+        "desktopTenantProvidersHttpProjectionV2.ts"
+    ));
+    assert!(is_desktop_route_source_file(
+        "desktopTenantProvidersOperationContractV2.ts"
+    ));
+    assert!(!is_desktop_route_source_file(
+        "desktopTenantProvidersHttpProjectionV2.test.ts"
+    ));
+    let sources = vec![DesktopRouteSource {
+        relative_path: "plugins/desktopTenantProvidersHttpProjectionV2.ts".to_owned(),
+        content: "/api/v1/llm-providers/".to_owned(),
+    }];
+    assert!(source_contains_marker(
+        &sources,
+        "plugins/desktopTenantProvidersHttpProjectionV2.ts",
+        "/api/v1/llm-providers/",
+    ));
+    assert!(!source_contains_marker(
+        &sources,
+        "plugins/desktopTenantSkillDefinitionsHttpProjectionV2.ts",
+        "/api/v1/llm-providers/",
+    ));
+}
+
+fn source_path_suffix(source: &str) -> Option<&str> {
     match source {
         "client" => None,
         "artifact" => Some("features/chat/desktopArtifactClient.ts"),
@@ -272,6 +301,8 @@ fn source_path_suffix(source: &str) -> Option<&'static str> {
         "sandbox_surface" => Some("features/sandbox/sandboxRuntimeSurfaceClient.ts"),
         "tenant_overview" => Some("plugins/desktopTenantOverviewAuthorityModuleV2.ts"),
         "tenant_projects" => Some("plugins/desktopTenantProjectsAuthorityModuleV2.ts"),
+        // V2 projections are declared explicitly by path, never matched against an unrelated module.
+        path if path.starts_with("plugins/") && path.ends_with(".ts") => Some(path),
         other => panic!("unsupported route source {other}"),
     }
 }
@@ -503,7 +534,11 @@ fn native_equivalent_desktop_client_inventory_is_covered_by_executable_local_rou
         .filter(|source| source.content.contains(NATIVE_EQUIVALENT_REQUEST_MARKER))
         .filter(|source| {
             !contract.routes.iter().any(|route| {
-                route.source == "client" && source.content.contains(&route.source_marker)
+                source_contains_marker(
+                    std::slice::from_ref(*source),
+                    &route.source,
+                    &route.source_marker,
+                )
             })
         })
         .map(|source| source.relative_path.clone())

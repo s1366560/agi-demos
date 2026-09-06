@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
-    io::{Read, Write},
     path::{Path as FsPath, PathBuf},
     sync::{
         atomic::{AtomicU64, AtomicU8, Ordering},
@@ -40,14 +39,10 @@ use axum::{
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use futures_util::{SinkExt, StreamExt};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use tokio::{
-    net::TcpListener,
-    sync::{broadcast, mpsc},
-};
+use tokio::{net::TcpListener, sync::broadcast};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use url::{Host, Url};
 use uuid::Uuid;
@@ -119,6 +114,9 @@ mod subagent_agent_tool_host;
 mod subagent_runtime;
 mod subagent_scope;
 mod task_session;
+#[cfg(test)]
+mod terminal_generation_v2_tests;
+mod terminal_pty_v2;
 mod timeline_presentation;
 mod tool_authority;
 mod workspace_core_bridge;
@@ -9010,6 +9008,7 @@ struct TerminalSocketQuery {
 async fn terminal_ws(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    plugin_generation: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(project_id): Path<String>,
     Query(query): Query<TerminalSocketQuery>,
     ws: WebSocketUpgrade,
@@ -9032,6 +9031,7 @@ async fn terminal_ws(
     let authenticated_for_socket = authenticated.clone();
     let project_for_socket = project_id.clone();
     let lease_for_socket = lease.clone();
+    let plugin_generation = plugin_generation.map(|Extension(generation)| generation);
     ws.protocols(["memstack.auth"])
         .on_upgrade(move |socket| {
             terminal_socket_loop(
@@ -9042,6 +9042,7 @@ async fn terminal_ws(
                 authenticated_for_socket,
                 project_for_socket,
                 lease_for_socket,
+                plugin_generation,
             )
         })
         .into_response()
@@ -9136,84 +9137,52 @@ async fn terminal_socket_loop(
     authenticated: AuthenticatedContext,
     project_id: String,
     lease: TerminalSessionLease,
+    plugin_generation: Option<Arc<ActivePlatformPluginGenerationLeaseV2>>,
 ) {
     let (mut sender, mut receiver) = socket.split();
-    let pty_system = native_pty_system();
-    let pair = match pty_system.openpty(PtySize {
-        rows: 32,
-        cols: 120,
-        pixel_width: 0,
-        pixel_height: 0,
-    }) {
-        Ok(pair) => pair,
+    // The PTY owner retains admission through process and reader drain, including
+    // cancellation of this upgraded WebSocket task.
+    let mut terminal = match terminal_pty_v2::TerminalPtyV2::start(cwd, plugin_generation.clone()) {
+        Ok(terminal) => terminal,
         Err(error) => {
             let _ = sender
                 .send(Message::Text(
-                    json!({ "type": "error", "message": error.to_string() }).to_string(),
+                    json!({ "type": "error", "message": error }).to_string(),
                 ))
                 .await;
             return;
         }
     };
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let mut command = CommandBuilder::new(shell);
-    command.cwd(cwd);
-    let mut child = match pair.slave.spawn_command(command) {
-        Ok(child) => child,
-        Err(error) => {
-            let _ = sender
-                .send(Message::Text(
-                    json!({ "type": "error", "message": error.to_string() }).to_string(),
-                ))
-                .await;
-            return;
+    if let Err(error) = terminal.ready().await {
+        terminal.shutdown();
+        if let Err(cleanup_error) = terminal.drain().await {
+            tracing::error!(%cleanup_error, "terminal initialization cleanup failed");
         }
-    };
-    drop(pair.slave);
-    let mut reader = match pair.master.try_clone_reader() {
-        Ok(reader) => reader,
-        Err(error) => {
-            let _ = sender
-                .send(Message::Text(
-                    json!({ "type": "error", "message": error.to_string() }).to_string(),
-                ))
-                .await;
-            let _ = child.kill();
-            return;
+        let _ = sender
+            .send(Message::Text(
+                json!({ "type": "error", "message": error }).to_string(),
+            ))
+            .await;
+        return;
+    }
+    if !terminal_session_authority_is_current(&state, &authenticated, &project_id, &lease) {
+        terminal.shutdown();
+        if let Err(error) = terminal.drain().await {
+            tracing::error!(%error, "revoked terminal initialization cleanup failed");
         }
-    };
-    let mut writer = match pair.master.take_writer() {
-        Ok(writer) => writer,
-        Err(error) => {
-            let _ = sender
-                .send(Message::Text(
-                    json!({ "type": "error", "message": error.to_string() }).to_string(),
-                ))
-                .await;
-            let _ = child.kill();
-            return;
-        }
-    };
-    let (output_tx, mut output_rx) = mpsc::channel::<String>(32);
-    std::thread::spawn(move || {
-        let mut buffer = [0_u8; 4096];
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(size) => {
-                    let text = String::from_utf8_lossy(&buffer[..size]).to_string();
-                    if output_tx.blocking_send(text).is_err() {
-                        break;
-                    }
-                }
-                Err(error) => {
-                    let _ = output_tx.blocking_send(format!("[terminal read error] {error}\n"));
-                    break;
-                }
-            }
-        }
-    });
-    let _ = sender
+        let _ = sender
+            .send(Message::Text(
+                json!({
+                    "type": "authority_revoked",
+                    "code": "terminal_authority_revoked",
+                    "message": "terminal authority is no longer current",
+                })
+                .to_string(),
+            ))
+            .await;
+        return;
+    }
+    if sender
         .send(Message::Text(
             json!({
                 "type": "connected",
@@ -9227,7 +9196,15 @@ async fn terminal_socket_loop(
             })
             .to_string(),
         ))
-        .await;
+        .await
+        .is_err()
+    {
+        terminal.shutdown();
+        if let Err(error) = terminal.drain().await {
+            tracing::error!(%error, "terminal connection cleanup failed");
+        }
+        return;
+    }
     let mut authority_check = tokio::time::interval(std::time::Duration::from_secs(1));
     loop {
         tokio::select! {
@@ -9259,19 +9236,16 @@ async fn terminal_socket_loop(
                 match value["type"].as_str() {
                     Some("input") => {
                         let data = value["data"].as_str().unwrap_or_default();
-                        if writer.write_all(data.as_bytes()).is_err() || writer.flush().is_err() {
+                        if terminal.try_input(data.as_bytes().to_vec()).is_err() {
                             break;
                         }
                     }
                     Some("resize") => {
                         let cols = value["cols"].as_u64().unwrap_or(120).clamp(1, 400) as u16;
                         let rows = value["rows"].as_u64().unwrap_or(32).clamp(1, 200) as u16;
-                        let _ = pair.master.resize(PtySize {
-                            rows,
-                            cols,
-                            pixel_width: 0,
-                            pixel_height: 0,
-                        });
+                        if terminal.try_resize(cols, rows).is_err() {
+                            break;
+                        }
                     }
                     _ => {}
                 }
@@ -9296,7 +9270,7 @@ async fn terminal_socket_loop(
                     break;
                 }
             }
-            output = output_rx.recv() => {
+            output = terminal.output() => {
                 let Some(output) = output else {
                     break;
                 };
@@ -9310,7 +9284,13 @@ async fn terminal_socket_loop(
             }
         }
     }
-    let _ = child.kill();
+    terminal.shutdown();
+    if let Err(error) = terminal.drain().await {
+        tracing::error!(%error, "terminal PTY cleanup failed");
+    }
+    drop(sender);
+    drop(receiver);
+    drop(plugin_generation);
 }
 
 async fn sandbox_execute(
