@@ -101,6 +101,9 @@ async def _republish_after_mutation(
             artifact_client=OciPluginArtifactClient(client),
             production_sources=production_bundle_sources_v2(),
             trusted_public_keys=_trusted_public_keys(request),
+            allowed_registries=getattr(
+                request.app.state, "plugin_marketplace_allowed_registries_v2", None
+            ),
             host=host,
             route_coordinator=coordinator,
             publication_policy=plugin_publication_policy_v2_from_app(request.app),

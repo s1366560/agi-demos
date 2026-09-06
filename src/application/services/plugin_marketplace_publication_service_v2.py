@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -28,17 +27,13 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_publicati
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginRepositoryV2,
 )
-from src.infrastructure.plugins.package_registry import RegistryPluginArtifact
 from src.infrastructure.plugins.v2.builtin_http_routes import BuiltinRouteGraphV2
-from src.infrastructure.plugins.v2.bundle_archive import parse_bundle_archive_v2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2
 from src.infrastructure.plugins.v2.layer_composer import compose_profile_sources_v2
 from src.infrastructure.plugins.v2.production_bundle import (
-    PRODUCTION_BASE_BUNDLE_SOURCE_V2,
     ProductionBundleSourcesV2,
 )
 from src.infrastructure.plugins.v2.protocol import (
-    bundle_manifest_v2_to_payload,
     control_envelope_v2,
     parse_control_envelope_v2,
     parse_profile_snapshot_v2,
@@ -48,15 +43,11 @@ from src.infrastructure.plugins.v2.runtime_host import (
     PlatformPluginRuntimeHostV2,
 )
 
+from .installed_verified_bundle_loader_v2 import (
+    InstalledVerifiedBundleLoaderV2,
+    MarketplacePublicationV2Error as MarketplacePublicationV2Error,
+)
 from .plugin_marketplace_install_service import MarketplaceArtifactClient
-
-
-class MarketplacePublicationV2Error(ValueError):
-    """Stable failure to resolve or publish one complete marketplace generation."""
-
-    def __init__(self, code: str, message: str) -> None:
-        self.code = code
-        super().__init__(message)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -83,13 +74,18 @@ class PluginMarketplacePublicationServiceV2:
         route_coordinator: HttpRoutePublicationCoordinatorV2,
         publication_policy: PlatformPluginPublicationPolicyV2,
         on_route_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
+        allowed_registries: frozenset[str] | None = None,
     ) -> None:
         self._desired_repository = desired_repository
-        self._governance_repository = governance_repository
         self._publication_repository = publication_repository
-        self._artifact_client = artifact_client
         self._production_sources = production_sources
-        self._trusted_public_keys = trusted_public_keys
+        self._bundle_loader = InstalledVerifiedBundleLoaderV2(
+            governance_repository=governance_repository,
+            artifact_client=artifact_client,
+            production_sources=production_sources,
+            trusted_public_keys=trusted_public_keys,
+            allowed_registries=allowed_registries,
+        )
         self._host = host
         self._route_coordinator = route_coordinator
         self._publication_policy = publication_policy
@@ -142,74 +138,7 @@ class PluginMarketplacePublicationServiceV2:
         )
 
     async def _load_bundle(self, reference: BundleReferenceV2) -> BundleManifestV2:
-        if reference.source == PRODUCTION_BASE_BUNDLE_SOURCE_V2:
-            bundle = self._production_sources.bundle
-            approved = frozenset(
-                permission for manifest in bundle.manifests for permission in manifest.permissions
-            )
-            return parse_bundle_archive_v2(
-                self._production_sources.bundle_archive,
-                source=reference.source,
-                approved_permissions=approved,
-                require_signature=False,
-                require_provenance=True,
-            ).manifest
-
-        expected_source = _marketplace_bundle_source(reference.bundle_id, reference.version)
-        if reference.source != expected_source:
-            raise MarketplacePublicationV2Error(
-                "marketplace_bundle_source_invalid",
-                f"Bundle {reference.bundle_id} has an invalid marketplace source",
-            )
-        package = await self._governance_repository.get_package_version(
-            reference.bundle_id,
-            reference.version,
-        )
-        if package is None or package.install_status != "installed" or package.revoked:
-            raise MarketplacePublicationV2Error(
-                "marketplace_bundle_unavailable",
-                f"Bundle {reference.bundle_id}@{reference.version} is not installed",
-            )
-        artifact = await self._artifact_client.fetch(
-            registry=package.artifact_registry,
-            repository=package.artifact_repository,
-            manifest_digest=package.oci_manifest_digest,
-        )
-        self._validate_artifact(package.artifact_digest, package.oci_manifest_digest, artifact)
-        permissions = await self._governance_repository.list_active_permissions_for_plugin(
-            reference.bundle_id
-        )
-        verified = parse_bundle_archive_v2(
-            artifact.archive,
-            source=reference.source,
-            trusted_public_keys=self._trusted_public_keys,
-            approved_permissions=frozenset(row.permission for row in permissions),
-            require_signature=True,
-            require_provenance=True,
-        )
-        if bundle_manifest_v2_to_payload(verified.manifest) != package.manifest:
-            raise MarketplacePublicationV2Error(
-                "marketplace_bundle_manifest_changed",
-                f"Bundle {reference.bundle_id}@{reference.version} differs from its trust record",
-            )
-        return verified.manifest
-
-    @staticmethod
-    def _validate_artifact(
-        expected_layer_digest: str,
-        expected_manifest_digest: str,
-        artifact: RegistryPluginArtifact,
-    ) -> None:
-        actual_layer_digest = hashlib.sha256(artifact.archive).hexdigest()
-        if (
-            artifact.layer_digest != expected_layer_digest
-            or actual_layer_digest != expected_layer_digest
-            or artifact.manifest_digest != expected_manifest_digest
-        ):
-            raise MarketplacePublicationV2Error(
-                "marketplace_artifact_changed",
-                "marketplace OCI artifact differs from its immutable trust record",
-            )
+        return (await self._bundle_loader.load(reference)).manifest
 
     async def _next_publication_counters(self) -> tuple[int, int]:
         current = self._host.current_distribution
@@ -227,10 +156,6 @@ class PluginMarketplacePublicationServiceV2:
             generation = max(generation, latest_snapshot.generation)
             version = max(version, latest_envelope.version)
         return generation + 1, version + 1
-
-
-def _marketplace_bundle_source(bundle_id: str, version: str) -> str:
-    return f"marketplace://{bundle_id}/{version}"
 
 
 __all__ = [

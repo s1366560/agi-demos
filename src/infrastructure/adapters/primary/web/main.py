@@ -116,6 +116,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
 
+    from .startup.plugin_trust_v2 import configure_plugin_trust_v2
+
+    configure_plugin_trust_v2(
+        app,
+        key_files=settings.plugin_marketplace_trusted_key_files,
+        allowed_registries=settings.plugin_marketplace_allowed_registries,
+    )
+
     # Initialize Database Schema and Default Credentials
     await initialize_database_schema()
     # Initialize Default LLM Provider from environment

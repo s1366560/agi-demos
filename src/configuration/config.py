@@ -590,6 +590,12 @@ class Settings(BaseSettings):
     # OpenTelemetry Settings
     service_name: str = Field(default="memstack", alias="SERVICE_NAME")
     environment: str = Field(default="development", alias="ENVIRONMENT")
+    plugin_marketplace_trusted_key_files: tuple[Path, ...] = Field(
+        default=(), alias="PLUGIN_MARKETPLACE_TRUSTED_KEY_FILES"
+    )
+    plugin_marketplace_allowed_registries: tuple[str, ...] = Field(
+        default=(), alias="PLUGIN_MARKETPLACE_ALLOWED_REGISTRIES"
+    )
     plugin_v2_required_data_plane_ids: str = Field(
         default="",
         alias="PLUGIN_V2_REQUIRED_DATA_PLANE_IDS",
