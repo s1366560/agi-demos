@@ -13,17 +13,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.plugins.generated_v2 import (
     ApplyStatusV2,
+    ControlPlaneEnvelopeV2,
+    ProfileSnapshotV2,
     PublicationStatusV2,
     ScopeKindV2,
     ScopeV2,
     SnapshotApplyReceiptV2,
 )
-from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2ApplyStateEventModel,
     PlatformPluginV2ApplyStateModel,
     PlatformPluginV2PublicationModel,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_ledger_validation_v2 import (
+    requested_distribution_v2,
+    validate_publication_receipt_v2 as _validate_receipt,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PYTHON_API_DATA_PLANE_ID_V2,
@@ -36,7 +41,6 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_scope_led
     ScopeLedgerBindingV2,
 )
 from src.infrastructure.plugins.v2.runtime_host import (
-    PlatformPluginDistributionV2,
     PlatformPluginPublicationV2,
 )
 
@@ -83,12 +87,27 @@ class PlatformPluginRepositoryV2:
         policy: PlatformPluginPublicationPolicyV2 | None = None,
         now: datetime | None = None,
     ) -> PlatformPluginV2PublicationModel:
-        """Append one complete requested distribution, deduping only its nonce."""
-        head = await self._scope.lock(self._session)
+        """Validate an observed local receipt, then persist its requested distribution."""
         _validate_receipt(publication)
+        return await self.record_requested_distribution(
+            publication.snapshot, publication.envelope, policy=policy, now=now
+        )
+
+    async def record_requested_distribution(
+        self,
+        snapshot: ProfileSnapshotV2,
+        envelope: ControlPlaneEnvelopeV2,
+        *,
+        policy: PlatformPluginPublicationPolicyV2 | None = None,
+        now: datetime | None = None,
+    ) -> PlatformPluginV2PublicationModel:
+        """Persist a complete request without asserting that any data plane has applied it."""
+        requested = requested_distribution_v2(snapshot, envelope)
+        snapshot, envelope = requested.snapshot, requested.envelope
+        distribution = requested.to_payload()
+        head = await self._scope.lock(self._session)
         resolved_policy = policy or PlatformPluginPublicationPolicyV2.local_default()
         requested_at = _utc_now_v2(now)
-        envelope = publication.envelope
         nonce_scope = await self._session.scalar(
             select(PlatformPluginV2PublicationModel.scope_key).where(
                 PlatformPluginV2PublicationModel.nonce == envelope.nonce
@@ -106,15 +125,6 @@ class PlatformPluginRepositoryV2:
             )
         )
         existing = result.scalar_one_or_none()
-        distribution = PlatformPluginDistributionV2(
-            descriptor=PluginGenerationDescriptorV2(
-                profile_id=publication.snapshot.profile_id,
-                generation=publication.snapshot.generation,
-                digest=publication.snapshot.digest,
-            ),
-            snapshot=publication.snapshot,
-            envelope=envelope,
-        ).to_payload()
         if existing is not None:
             self._require_scope(existing)
             if existing.distribution != distribution:
@@ -124,9 +134,9 @@ class PlatformPluginRepositoryV2:
         model = PlatformPluginV2PublicationModel(
             id=PlatformPluginV2PublicationModel.generate_id(),
             **self._scope.fields,
-            profile_id=publication.snapshot.profile_id,
-            generation=publication.snapshot.generation,
-            snapshot_digest=publication.snapshot.digest,
+            profile_id=snapshot.profile_id,
+            generation=snapshot.generation,
+            snapshot_digest=snapshot.digest,
             requested_version=envelope.version,
             nonce=envelope.nonce,
             type_url=envelope.type_url,
@@ -700,27 +710,6 @@ def _validate_nonce_v2(nonce: str) -> None:
             "publication_nonce_invalid",
             "plugin v2 publication nonce must be between 1 and 128 characters",
         )
-
-
-def _validate_receipt(publication: PlatformPluginPublicationV2) -> None:
-    receipt = publication.receipt
-    envelope = publication.envelope
-    if (
-        receipt.requested_version != envelope.version
-        or receipt.requested_digest != publication.snapshot.digest
-        or envelope.snapshot_digest != publication.snapshot.digest
-    ):
-        raise ValueError("plugin v2 receipt does not match publication")
-    if receipt.status is ApplyStatusV2.ACK:
-        if (
-            receipt.applied_version != receipt.requested_version
-            or receipt.applied_digest != receipt.requested_digest
-            or receipt.error_code is not None
-            or receipt.error_message is not None
-        ):
-            raise ValueError("plugin v2 ACK receipt is inconsistent")
-    elif not receipt.error_code or not receipt.error_message:
-        raise ValueError("plugin v2 NACK receipt requires an error code and message")
 
 
 def _validate_external_receipt(
