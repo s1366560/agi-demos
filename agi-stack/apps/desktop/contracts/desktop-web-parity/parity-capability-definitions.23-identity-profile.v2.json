@@ -297,7 +297,17 @@
         "agi-stack/apps/desktop/src/features/settings-routes/profileRoutePresentationModel.ts",
         "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchCapabilityClient.ts",
         "agi-stack/apps/desktop/src/features/settings-routes/p2ThirdBatchRouteRuntime.ts",
-        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/plan_tool_contract.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/llm_tool_contracts.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/authorized_tool_host.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/execution_profile.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/fan_out_tool_host.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/automation_executor.rs",
+        "agi-stack/crates/core/src/tool_definition.rs",
+        "agi-stack/crates/core/src/ports.rs",
+        "agi-stack/crates/core/src/agent/react.rs",
+        "agi-stack/crates/adapters-http-llm/src/openai.rs"
       ],
       "api_contracts": [
         {

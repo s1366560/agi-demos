@@ -215,7 +215,17 @@
         "agi-stack/apps/desktop/src/plugins/desktopTenantTasksOperationContractV2.ts",
         "agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts",
         "agi-stack/apps/desktop/src/plugins/desktopProductionRendererRuntimeV2.ts",
-        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/plan_tool_contract.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/llm_tool_contracts.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/authorized_tool_host.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/execution_profile.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/fan_out_tool_host.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/automation_executor.rs",
+        "agi-stack/crates/core/src/tool_definition.rs",
+        "agi-stack/crates/core/src/ports.rs",
+        "agi-stack/crates/core/src/agent/react.rs",
+        "agi-stack/crates/adapters-http-llm/src/openai.rs"
       ],
       "judgment_rationale": "Desktop now routes Tenant Tasks through one generation-backed V2 Provider. Cloud reads the tenant-wide stats, queue and recent projections and keeps retry, stop and retry-pending behind a tenant lease and vault-bound transport; Local reads only the selected project's My Work projection behind a project lease and rejects Cloud mutations before acquisition. Both transports are observed rather than renderer-declared, but neither response supplies a snapshot-wide authority revision. Snapshot v4 therefore intentionally closes both surfaces to capability_authority_revision_unavailable and promotes no action until Cloud provides one tenant/principal-scoped coherent snapshot revision and the sidecar provides one project-scoped My Work snapshot revision."
     },

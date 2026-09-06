@@ -555,7 +555,17 @@
         "agi-stack/apps/desktop/src/features/tenant/tenantWorkspacesV2Client.ts",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceDock.tsx",
         "agi-stack/apps/desktop/src/features/workspace/WorkspaceCreateDialog.tsx",
-        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs"
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/mod.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/plan_tool_contract.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/llm_tool_contracts.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/authorized_tool_host.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/execution_profile.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/fan_out_tool_host.rs",
+        "agi-stack/apps/desktop/sidecar/src/local_runtime/automation_executor.rs",
+        "agi-stack/crates/core/src/tool_definition.rs",
+        "agi-stack/crates/core/src/ports.rs",
+        "agi-stack/crates/core/src/agent/react.rs",
+        "agi-stack/crates/adapters-http-llm/src/openai.rs"
       ],
       "judgment_rationale": "Web workspace summary inspection reads objectives, then a plan snapshot, then tasks as its fallback before Blackboard navigation. Desktop has a real native Tenant Workspaces loader, App binding, typed Cloud and Local clients and production settings surfaces, but workbenchCapabilityClient still wraps both active capability helpers with declared renderer provenance. Snapshot v4 therefore closes both modes to renderer_capability_authority_unobserved and promotes no action despite the auditable source, API and sidecar contracts."
     }
