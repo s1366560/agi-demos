@@ -37,6 +37,8 @@ async def test_real_lifespan_closes_scoped_before_root_even_on_failure(monkeypat
 
     async def root_start(*args, **kwargs):
         events.append("root-start")
+        app.state.platform_plugin_runtime_v2 = object()
+        app.state.platform_plugin_http_route_publication_v2 = object()
 
     async def root_close(*args):
         events.append("root-close")
@@ -62,12 +64,17 @@ async def test_real_lifespan_closes_scoped_before_root_even_on_failure(monkeypat
         "PlatformPluginDeadlineReconcilerV2",
         lambda **kwargs: SimpleNamespace(start=lambda: None),
     )
+    monkeypatch.setattr(
+        main,
+        "MarketplaceReceiptRecoveryV2",
+        lambda **kwargs: SimpleNamespace(start=lambda: events.append("receipt-start")),
+    )
     monkeypatch.setattr(scoped, "initialize_scoped_profile_runtime_v2", scope_start)
     monkeypatch.setattr(scoped, "shutdown_scoped_profile_runtime_v2", scope_close)
 
     async def run():
         async with main.lifespan(app):
-            assert events == ["root-start", "scope-start"]
+            assert events == ["root-start", "scope-start", "receipt-start"]
             if failure == "body":
                 raise RuntimeError("body failed")
             if failure == "cancel":
@@ -78,4 +85,5 @@ async def test_real_lifespan_closes_scoped_before_root_even_on_failure(monkeypat
     else:
         with pytest.raises(asyncio.CancelledError if failure == "cancel" else RuntimeError):
             await run()
-    assert events == ["root-start", "scope-start", "scope-close", "root-close"]
+    receipt_events = [] if failure == "container" else ["receipt-start"]
+    assert events == ["root-start", "scope-start", *receipt_events, "scope-close", "root-close"]

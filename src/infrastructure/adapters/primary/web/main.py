@@ -27,6 +27,7 @@ from redis.asyncio import Redis
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from src.application.services.marketplace_receipt_recovery_v2 import MarketplaceReceiptRecoveryV2
 from src.configuration.config import get_settings
 from src.configuration.factories import create_native_graph_adapter
 from src.configuration.workspace_core import WorkspaceCoreSettings, get_workspace_core_settings
@@ -215,6 +216,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
         )
         app.state.platform_plugin_deadline_reconciler_v2 = deadline_reconciler
         deadline_reconciler.start()
+        receipt_recovery = MarketplaceReceiptRecoveryV2(
+            host=app.state.platform_plugin_runtime_v2,
+            coordinator=app.state.platform_plugin_http_route_publication_v2,
+            session_factory=async_session_factory,
+            policy=publication_policy,
+        )
+        app.state.platform_plugin_receipt_recovery_v2 = receipt_recovery
+        receipt_recovery.start()
     except BaseException:
         await _shutdown_application_plugins_v2(app)
         raise

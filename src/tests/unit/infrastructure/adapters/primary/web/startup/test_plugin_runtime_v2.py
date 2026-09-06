@@ -435,6 +435,7 @@ async def test_restart_nack_is_durable_and_retains_last_good(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A local restore NACK must not overwrite the preceding durable ACK or its history."""
     @asynccontextmanager
     async def session_factory():
         yield db_session
@@ -453,12 +454,18 @@ async def test_restart_nack_is_durable_and_retains_last_good(
         reject_route_graph,
     )
 
+    failed_app = FastAPI()
     with pytest.raises(RuntimeV2Error, match="route graph rejected during restart"):
-        await initialize_plugin_runtime_v2(FastAPI(), session_factory=session_factory)
+        await initialize_plugin_runtime_v2(failed_app, session_factory=session_factory)
+    assert getattr(failed_app.state, "platform_plugin_runtime_v2", None) is None
+    assert (
+        await PlatformPluginRepositoryV2(db_session).latest_requested_distribution()
+        == first_distribution.to_payload()
+    )
 
     state = await db_session.scalar(select(PlatformPluginV2ApplyStateModel))
     assert state is not None
-    assert state.status == "nack"
+    assert state.status == "ack"
     assert state.requested_version == 1
     assert state.applied_version == 1
     assert state.applied_digest == first_distribution.descriptor.digest
@@ -469,4 +476,4 @@ async def test_restart_nack_is_durable_and_retains_last_good(
     event_count = await db_session.scalar(
         select(func.count()).select_from(PlatformPluginV2ApplyStateEventModel)
     )
-    assert event_count == 2
+    assert event_count == 1

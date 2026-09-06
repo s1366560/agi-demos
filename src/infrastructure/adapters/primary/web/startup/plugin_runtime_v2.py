@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import FastAPI
 from starlette.types import Scope
 
+from src.application.services.marketplace_receipt_recovery_v2 import MarketplaceReceiptRecoveryV2
 from src.domain.model.plugins.generated_v2 import (
     ControlPlaneEnvelopeV2,
     ProfileSnapshotV2,
@@ -483,6 +484,10 @@ async def _record_startup_publication_v2(
 
 async def shutdown_plugin_runtime_v2(app: FastAPI) -> None:
     """Retire the current v2 generation and wait for Fiber disposal."""
+    receipt_recovery = getattr(app.state, "platform_plugin_receipt_recovery_v2", None)
+    if isinstance(receipt_recovery, MarketplaceReceiptRecoveryV2):
+        await receipt_recovery.stop()
+        app.state.platform_plugin_receipt_recovery_v2 = None
     deadline_reconciler = getattr(
         app.state,
         "platform_plugin_deadline_reconciler_v2",
