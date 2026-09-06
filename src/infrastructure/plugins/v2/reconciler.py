@@ -16,6 +16,7 @@ from src.domain.model.plugins.generated_v2 import (
     SnapshotApplyReceiptV2,
 )
 
+from .lifecycle_tasks import OwnedLifecycleTaskV2
 from .protocol import PLUGIN_PROFILE_TYPE_URL_V2
 from .runtime import AsyncDisposerV2, GenerationManagerV2, LoaderV2, RuntimeGenerationV2
 
@@ -85,9 +86,10 @@ class PlatformPluginSnapshotReconcilerV2:
                 staging = await self.loader.stage(snapshot)
                 if publication_stager is not None:
                     prepared = await publication_stager(staging)
-            except Exception as exc:
-                if staging is not None:
-                    await staging.dispose()
+            except BaseException as exc:
+                await _cleanup_failed_publication(staging, prepared, exc)
+                if not isinstance(exc, Exception):
+                    raise
                 code = "staging_failed" if staging is None else "publication_staging_failed"
                 stage = "snapshot" if staging is None else "companion publication"
                 return self._nack(
@@ -99,11 +101,12 @@ class PlatformPluginSnapshotReconcilerV2:
                 _ = await self.manager.publish(
                     staging,
                     commit=None if prepared is None else prepared.commit,
+                    defer_retirement=True,
                 )
-            except Exception as exc:
-                if prepared is not None:
-                    await _invoke_disposer(prepared.rollback)
-                await staging.dispose()
+            except BaseException as exc:
+                await _cleanup_failed_publication(staging, prepared, exc)
+                if not isinstance(exc, Exception):
+                    raise
                 return self._nack(
                     envelope,
                     "publication_commit_failed",
@@ -115,9 +118,11 @@ class PlatformPluginSnapshotReconcilerV2:
 
     async def close(self) -> None:
         async with self._lock:
-            await self.manager.close()
-            self._applied_version = None
-            self._applied_digest = None
+            try:
+                await self.manager.close()
+            finally:
+                self._applied_version = None
+                self._applied_digest = None
 
     def _validate_envelope(
         self,
@@ -217,6 +222,35 @@ async def _invoke_disposer(disposer: AsyncDisposerV2) -> None:
     result = disposer()
     if inspect.isawaitable(result):
         await result
+
+
+async def _cleanup_failed_publication(
+    staging: RuntimeGenerationV2 | None,
+    prepared: PreparedGenerationPublicationV2 | None,
+    original: BaseException,
+) -> None:
+    async def rollback() -> None:
+        errors: list[BaseException] = []
+        if prepared is not None:
+            try:
+                await _invoke_disposer(prepared.rollback)
+            except BaseException as error:
+                errors.append(error)
+        if staging is not None:
+            try:
+                await staging.dispose()
+            except BaseException as error:
+                errors.append(error)
+        if errors:
+            raise BaseExceptionGroup("Publication rollback failed", errors)
+
+    cleanup = OwnedLifecycleTaskV2(rollback, name="plugin-publication-rollback-v2")
+    try:
+        await cleanup.wait()
+    except BaseException as cleanup_error:
+        raise BaseExceptionGroup(
+            "Publication and cleanup failed", [original, cleanup_error]
+        ) from None
 
 
 __all__ = [

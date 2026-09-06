@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -48,6 +49,15 @@ def _clear_gc_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_gc_runtime_survives_generation_replacement_and_stops_last(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    old_released = asyncio.Event()
+    original_release = ArtifactContentOrphanGcRuntimeV2.release_generation
+
+    async def observe_release(runtime: ArtifactContentOrphanGcRuntimeV2) -> None:
+        await original_release(runtime)
+        if runtime.generation_references == 1:
+            old_released.set()
+
+    monkeypatch.setattr(ArtifactContentOrphanGcRuntimeV2, "release_generation", observe_release)
     worker = MagicMock(owner_id="artifact-gc-test")
     worker.stop = AsyncMock()
     worker_type = MagicMock(return_value=worker)
@@ -84,6 +94,8 @@ async def test_gc_runtime_survives_generation_replacement_and_stops_last(
         second_generation.snapshot.entries[0].scope,
     )
     assert replacement_runtime is runtime
+    # ACK commits the new identity; retirement drains independently afterward.
+    await asyncio.wait_for(old_released.wait(), timeout=2)
     assert runtime.generation_references == 1
     worker_type.assert_called_once()
     worker.start.assert_called_once_with()

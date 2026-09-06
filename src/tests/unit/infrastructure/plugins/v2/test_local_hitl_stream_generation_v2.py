@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -34,11 +35,21 @@ class _TrackedRedisClient:
     def __init__(self, name: str) -> None:
         self.name = name
         self.close_calls = 0
+        self.closed = asyncio.Event()
         self.xgroup_create = AsyncMock()
         self.xack = AsyncMock()
+        self.xadd = AsyncMock(return_value="1-0")
+
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str | bytes]:
+        for key in ():
+            yield key
+
+    async def delete(self, *keys: str | bytes) -> int:
+        return 0
 
     async def aclose(self) -> None:
         self.close_calls += 1
+        self.closed.set()
 
 
 async def test_local_hitl_project_registration_holds_current_generation_redis_lease() -> None:
@@ -203,6 +214,7 @@ async def test_local_hitl_stop_releases_cancelled_resume_generation_reservation(
             version=606,
         )
         assert second.accepted is True
+        await asyncio.wait_for(first_client.closed.wait(), timeout=2)
         assert first_client.close_calls == 1
         assert second_client.close_calls == 0
     finally:

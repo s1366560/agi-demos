@@ -71,6 +71,9 @@ class _TrackedRedisClient:
         self.cache_deletes.append(keys)
         return len(keys)
 
+    async def xadd(self, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Redis stream publication is outside this authority fixture")
+
     async def aclose(self) -> None:
         self.close_calls += 1
 
@@ -383,7 +386,14 @@ async def test_detached_recovery_stream_keeps_exact_generation_after_reload(  # 
         "resolve",
         resolve_recovery_stream,
     )
-    stream = AsyncMock()
+    stream_started = asyncio.Event()
+    stream_resume = asyncio.Event()
+
+    async def blocked_stream(**_kwargs: object) -> None:
+        stream_started.set()
+        await stream_resume.wait()
+
+    stream = AsyncMock(side_effect=blocked_stream)
     monkeypatch.setattr(subscription_handler, "stream_hitl_response_to_websocket", stream)
 
     def conversation_repository(db: AsyncSession) -> Any:
@@ -399,10 +409,13 @@ async def test_detached_recovery_stream_keeps_exact_generation_after_reload(  # 
         async with pin_generation_v2(host):
             await SubscribeHandler().handle(context, {"conversation_id": "conversation-1"})
 
+        await asyncio.wait_for(stream_started.wait(), timeout=1)
         assert first_client.close_calls == 0
+        assert created_tasks and all(not task.done() for task in created_tasks)
         assert host.manager.current is not None
         assert host.manager.current.generation == 950
-        await asyncio.gather(*created_tasks)
+        stream_resume.set()
+        await asyncio.wait_for(asyncio.gather(*created_tasks), timeout=1)
 
         assert [(generation, redis_name, db) for generation, redis_name, db, _ in resolved] == [
             (949, "first", detached_db)
@@ -414,6 +427,8 @@ async def test_detached_recovery_stream_keeps_exact_generation_after_reload(  # 
         assert static_probe.redis_accesses == 0
         assert static_probe.event_repository_accesses == 0
     finally:
+        stream_resume.set()
+        await asyncio.wait_for(asyncio.gather(*created_tasks), timeout=1)
         clear_process_generation_host_v2(host)
         await parent_db.close()
         await detached_db.close()

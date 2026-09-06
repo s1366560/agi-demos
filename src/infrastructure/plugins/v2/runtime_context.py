@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, cast
@@ -18,6 +18,8 @@ from src.domain.model.plugins.generated_v2 import (
     PluginContractV2,
     ScopeV2,
 )
+
+from .lifecycle_tasks import OwnedLifecycleTaskV2
 
 type AsyncDisposerV2 = Callable[[], None | Awaitable[None]]
 type EffectResultV2 = (
@@ -65,22 +67,32 @@ class _EffectRecord:
     active: bool = True
     error: str | None = None
 
+    _disposal: OwnedLifecycleTaskV2 | None = field(default=None, init=False, repr=False)
+
     async def dispose(self) -> None:
-        if not self.active:
-            return
-        self.active = False
+        if self._disposal is None:
+            self.active = False
+            self._disposal = OwnedLifecycleTaskV2(self._dispose, name="plugin-v2-effect-dispose")
+        await self._disposal.wait()
+
+    async def _dispose(self) -> None:
         try:
             result = self.disposer()
             if inspect.isawaitable(result):
                 await result
-        except Exception as exc:
-            self.error = f"{type(exc).__name__}: {exc}"
+        except BaseException as exc:
+            self.error = _cleanup_diagnostic(exc)
+            # Preserve the existing ordinary-error diagnostic contract. Fatal
+            # failures, including a disposer self-cancellation, remain observable.
+            if not isinstance(exc, Exception):
+                raise
 
 
 class _EffectStack:
     def __init__(self, phase: Callable[[], FiberPhaseV2]) -> None:
         self._phase = phase
         self._records: list[_EffectRecord] = []
+        self._disposal = OwnedLifecycleTaskV2(self._dispose, name="plugin-v2-effect-stack-dispose")
 
     def add(self, disposer: AsyncDisposerV2, *, label: str) -> AsyncDisposerV2:
         self._ensure_active()
@@ -112,16 +124,20 @@ class _EffectStack:
         raise RuntimeV2Error("invalid_effect", f"{label} returned an unsupported effect")
 
     async def dispose(self) -> None:
-        pending_base_error: BaseException | None = None
+        await self._disposal.wait()
+
+    async def _dispose(self) -> None:
+        errors: list[BaseException] = []
         for record in reversed(self._records):
             try:
                 await record.dispose()
             except BaseException as exc:
-                record.error = f"{type(exc).__name__}: {exc}"
-                if pending_base_error is None:
-                    pending_base_error = exc
-        if pending_base_error is not None:
-            raise pending_base_error
+                record.error = _cleanup_diagnostic(exc)
+                errors.append(exc)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise BaseExceptionGroup("plugin effect cleanup failed", errors)
 
     def diagnostics(self) -> tuple[EffectDiagnosticV2, ...]:
         return tuple(
@@ -129,8 +145,18 @@ class _EffectStack:
         )
 
     def _ensure_active(self) -> None:
-        if self._phase() not in {FiberPhaseV2.LOADING, FiberPhaseV2.ACTIVE}:
+        if self._disposal.started or self._phase() not in {
+            FiberPhaseV2.LOADING,
+            FiberPhaseV2.ACTIVE,
+        }:
             raise RuntimeV2Error("inactive_effect", "inactive context cannot register an effect")
+
+
+def _cleanup_diagnostic(error: BaseException) -> str:
+    try:
+        return f"{type(error).__name__}: {error}"
+    except BaseException:
+        return "plugin effect cleanup failed"
 
 
 @dataclass(frozen=True)

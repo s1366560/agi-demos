@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import zipfile
@@ -308,7 +309,15 @@ async def test_failed_health_disposes_candidate_keeps_last_good_and_retries() ->
     signer = Ed25519PrivateKey.generate()
     bundle, archive, source, desired = _candidate_inputs(signer)
     state: dict[str, object] = {"archive": archive, "source": source, "desired": desired}
-    events: list[str] = []
+    old_disposed = asyncio.Event()
+
+    class DisposalEvents(list[str]):
+        def append(self, event: str) -> None:
+            super().append(event)
+            if self[-2:] == ["dispose:consumer:0.7", "dispose:provider:根"]:
+                old_disposed.set()
+
+    events: list[str] = DisposalEvents()
     reject_health = [False]
     watcher = _watcher(
         state=state,
@@ -353,6 +362,8 @@ async def test_failed_health_disposes_candidate_keeps_last_good_and_retries() ->
     assert watcher.host.manager.current is not first_generation
     assert watcher.last_good is not None
     assert watcher.last_good.snapshot.generation == 2
+    assert first_generation is not None
+    await asyncio.wait_for(old_disposed.wait(), timeout=2)
     assert events[-3:] == [
         "health:2",
         "dispose:consumer:0.7",

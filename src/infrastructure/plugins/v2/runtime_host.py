@@ -232,8 +232,11 @@ class PlatformPluginRuntimeHostV2:
 
     async def close(self) -> None:
         """Retire the active generation and dispose it after leases drain."""
-        await self.reconciler.close()
-        self._current_publication = None
+        async with self._apply_lock:
+            try:
+                await self.reconciler.close()
+            finally:
+                self._current_publication = None
 
 
 class DataPlaneGenerationAdmissionV2:

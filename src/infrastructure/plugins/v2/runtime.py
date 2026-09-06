@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Protocol, cast
@@ -27,6 +28,7 @@ from .artifacts import (
     RepositoryPythonArtifactResolverV2,
     ResolvedPluginArtifactV2,
 )
+from .lifecycle_tasks import OwnedLifecycleTaskV2
 from .runtime_context import (
     AsyncDisposerV2,
     ContextV2,
@@ -95,6 +97,7 @@ class FiberV2:
             inject=entry.inject,
             isolation=entry.isolate,
         )
+        self._disposal = OwnedLifecycleTaskV2(self._dispose, name="plugin-fiber-drain-v2")
 
     async def start(self) -> None:
         if self.phase != FiberPhaseV2.PENDING:
@@ -106,23 +109,31 @@ class FiberV2:
                 result = await result
             await self._effects.add_result(result, label="apply")
             self.phase = FiberPhaseV2.ACTIVE
-        except Exception as exc:
+        except BaseException as exc:
             self.error = exc
             self.phase = FiberPhaseV2.FAILED
-            await self._effects.dispose()
+            try:
+                await self._effects.dispose()
+            except BaseException as cleanup_error:
+                raise BaseExceptionGroup(
+                    "Fiber activation and cleanup failed", [exc, cleanup_error]
+                ) from None
             raise
 
     async def dispose(self) -> None:
-        if self.phase == FiberPhaseV2.DISPOSED:
-            return
+        if not self._disposal.started and self.phase is not FiberPhaseV2.PENDING:
+            self.phase = FiberPhaseV2.UNLOADING
+        await self._disposal.wait()
+
+    async def _dispose(self) -> None:
         if self.phase == FiberPhaseV2.PENDING:
             self.phase = FiberPhaseV2.DISPOSED
             return
-        if self.phase == FiberPhaseV2.UNLOADING:
-            return
         self.phase = FiberPhaseV2.UNLOADING
-        await self._effects.dispose()
-        self.phase = FiberPhaseV2.DISPOSED
+        try:
+            await self._effects.dispose()
+        finally:
+            self.phase = FiberPhaseV2.DISPOSED
 
     def diagnostics(self) -> FiberDiagnosticV2:
         return FiberDiagnosticV2(
@@ -153,6 +164,7 @@ class RuntimeGenerationV2:
         self._lease_count = 0
         self._retired = False
         self._disposed = False
+        self._disposal = OwnedLifecycleTaskV2(self._dispose, name="plugin-generation-drain-v2")
 
     @property
     def generation(self) -> int:
@@ -183,11 +195,20 @@ class RuntimeGenerationV2:
         return self._providers.resolve(service, version, scope, isolation)
 
     async def dispose(self) -> None:
-        if self._disposed:
-            return
+        await self._disposal.wait()
+
+    async def _dispose(self) -> None:
+        errors: list[BaseException] = []
         for fiber in reversed(self.fibers):
-            await fiber.dispose()
+            try:
+                await fiber.dispose()
+            except BaseException as error:
+                errors.append(error)
         self._disposed = True
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise BaseExceptionGroup("Generation cleanup failed", errors)
 
 
 class OperationContextV2:
@@ -220,6 +241,7 @@ class OperationContextV2:
             contexts.append(contexts[-1].extend(scope=child_scope))
         self.contexts = tuple(contexts)
         self.context = self.contexts[-1]
+        self._disposal = OwnedLifecycleTaskV2(self._dispose, name="plugin-operation-drain-v2")
 
     @property
     def descriptor(self) -> PluginGenerationDescriptorV2:
@@ -265,14 +287,19 @@ class OperationContextV2:
         await self.context.effect(setup, label=label)
 
     async def dispose(self) -> None:
-        if self.phase is FiberPhaseV2.DISPOSED:
-            return
+        if not self._disposal.started and self.phase is not FiberPhaseV2.PENDING:
+            self.phase = FiberPhaseV2.UNLOADING
+        await self._disposal.wait()
+
+    async def _dispose(self) -> None:
         if self.phase is FiberPhaseV2.PENDING:
             self.phase = FiberPhaseV2.DISPOSED
             return
         self.phase = FiberPhaseV2.UNLOADING
-        await self._effects.dispose()
-        self.phase = FiberPhaseV2.DISPOSED
+        try:
+            await self._effects.dispose()
+        finally:
+            self.phase = FiberPhaseV2.DISPOSED
 
     def _ensure_active(self) -> None:
         if self.phase is not FiberPhaseV2.ACTIVE:
@@ -341,9 +368,20 @@ class LoaderV2:
                 )
                 fibers.append(fiber)
                 await fiber.start()
-        except Exception:
-            for fiber in reversed(fibers):
-                await fiber.dispose()
+        except BaseException as error:
+            candidate = RuntimeGenerationV2(
+                snapshot=snapshot,
+                fibers=fibers,
+                providers=providers,
+                events=events,
+                event_contracts=event_contracts,
+            )
+            try:
+                await candidate.dispose()
+            except BaseException as cleanup_error:
+                raise BaseExceptionGroup(
+                    "Generation staging and cleanup failed", [error, cleanup_error]
+                ) from None
             raise
         return RuntimeGenerationV2(
             snapshot=snapshot,
@@ -534,6 +572,9 @@ class GenerationLeaseV2:
         self._manager = manager
         self.generation = generation
         self._released = False
+        self._release_task = OwnedLifecycleTaskV2(
+            self._release, name="plugin-generation-lease-release-v2"
+        )
 
     async def __aenter__(self) -> RuntimeGenerationV2:
         return self.generation
@@ -542,10 +583,17 @@ class GenerationLeaseV2:
         await self.release()
 
     async def release(self) -> None:
-        if self._released:
-            return
+        await self._release_task.wait()
+
+    async def _release(self) -> None:
         self._released = True
         await self._manager._release(self.generation)
+
+
+@dataclass(frozen=True, kw_only=True)
+class GenerationRetirementDiagnosticV2:
+    generation: RuntimeGenerationV2
+    error: BaseException
 
 
 class GenerationManagerV2:
@@ -555,33 +603,68 @@ class GenerationManagerV2:
         self._current: RuntimeGenerationV2 | None = None
         self._owned_generations: set[RuntimeGenerationV2] = set()
         self._lock = asyncio.Lock()
+        self._retirements: dict[RuntimeGenerationV2, OwnedLifecycleTaskV2] = {}
+        self._retirement_diagnostics: list[GenerationRetirementDiagnosticV2] = []
+        self._close_task: OwnedLifecycleTaskV2 | None = None
 
     @property
     def current(self) -> RuntimeGenerationV2 | None:
         return self._current
+
+    @property
+    def retirement_diagnostics(self) -> tuple[GenerationRetirementDiagnosticV2, ...]:
+        return tuple(self._retirement_diagnostics)
 
     async def publish(
         self,
         generation: RuntimeGenerationV2,
         *,
         commit: Callable[[], None] | None = None,
+        defer_retirement: bool = False,
     ) -> RuntimeGenerationV2 | None:
         """Publish one generation with an optional no-await companion commit."""
-        dispose: RuntimeGenerationV2 | None = None
+        retirement: OwnedLifecycleTaskV2 | None = None
         async with self._lock:
+            if generation is self._current:
+                return None
+            if generation._disposed or generation._retired or generation._disposal.started:
+                raise RuntimeV2Error(
+                    "generation_not_publishable", "disposed or retired generation cannot publish"
+                )
             if commit is not None:
                 commit()
             previous = self._current
             self._current = generation
+            self._close_task = None
             self._owned_generations.add(generation)
             if previous is not None:
                 previous._retired = True
                 if previous._lease_count == 0:
-                    dispose = previous
                     self._owned_generations.discard(previous)
-        if dispose is not None:
-            await dispose.dispose()
+                    retirement = self._retire(previous)
+        # Reconciler and host bind their identities without awaiting retired effects.
+        if retirement is not None and not defer_retirement:
+            await retirement.wait()
         return previous
+
+    def _retire(self, generation: RuntimeGenerationV2) -> OwnedLifecycleTaskV2:
+        async def drain() -> None:
+            try:
+                await generation.dispose()
+            except BaseException as error:
+                self._retirement_diagnostics.append(
+                    GenerationRetirementDiagnosticV2(generation=generation, error=error)
+                )
+                raise
+            finally:
+                self._retirements.pop(generation, None)
+
+        task = self._retirements.get(generation)
+        if task is None:
+            task = OwnedLifecycleTaskV2(drain, name="plugin-retirement-v2")
+            self._retirements[generation] = task
+            task.start()
+        return task
 
     async def acquire(self) -> GenerationLeaseV2:
         async with self._lock:
@@ -607,15 +690,28 @@ class GenerationManagerV2:
         return GenerationLeaseV2(self, generation)
 
     async def close(self) -> None:
+        if self._close_task is None:
+            expected = self._current
+            self._close_task = OwnedLifecycleTaskV2(
+                lambda: self._close(expected), name="plugin-manager-close-v2"
+            )
+        await self._close_task.wait()
+
+    async def _close(self, current: RuntimeGenerationV2 | None) -> None:
         dispose: RuntimeGenerationV2 | None = None
         async with self._lock:
-            current = self._current
-            self._current = None
+            if self._current is current:
+                self._current = None
             if current is not None:
                 current._retired = True
                 if current._lease_count == 0:
                     dispose = current
                     self._owned_generations.discard(current)
+            retirements = tuple(self._retirements.values())
+        for retirement in retirements:
+            # Original failures remain available in retirement_diagnostics.
+            with suppress(BaseException):
+                await retirement.wait()
         if dispose is not None:
             await dispose.dispose()
 
@@ -634,7 +730,7 @@ class GenerationManagerV2:
             if dispose:
                 self._owned_generations.discard(generation)
         if dispose:
-            await generation.dispose()
+            await self._retire(generation).wait()
 
 
 def _operation_scope_chain(scope: ScopeV2) -> tuple[ScopeV2, ...]:

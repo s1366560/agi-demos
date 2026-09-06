@@ -895,9 +895,11 @@ async def test_operation_context_continues_lifo_cleanup_and_preserves_cancellati
         scope=_scope(ScopeKindV2.ROOT),
     )
 
+    cancellation = asyncio.CancelledError("operation cleanup cancelled")
+
     async def cancelled_disposer() -> None:
         disposed.append("cancelled")
-        raise asyncio.CancelledError
+        raise cancellation
 
     await operation.__aenter__()
     try:
@@ -905,8 +907,13 @@ async def test_operation_context_continues_lifo_cleanup_and_preserves_cancellati
         await operation.effect(lambda: cancelled_disposer, label="cancelled")
         await operation.effect(lambda: lambda: disposed.append("last"), label="last")
 
-        with pytest.raises(asyncio.CancelledError):
+        with pytest.raises(asyncio.CancelledError) as first:
             await operation.dispose()
+        assert first.value is cancellation
         assert disposed == ["last", "cancelled", "first"]
     finally:
-        await operation.dispose()
+        with pytest.raises(asyncio.CancelledError) as repeated:
+            await operation.dispose()
+        assert repeated.value is cancellation
+        assert disposed == ["last", "cancelled", "first"]
+        assert operation.phase is FiberPhaseV2.DISPOSED
