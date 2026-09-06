@@ -1,4 +1,4 @@
-"""Verify scoped restart races on an owned PostgreSQL ledger migration slice."""
+"""Verify scoped and ROOT startup races on an owned PostgreSQL migration slice."""
 
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ TESTS = (
     "src/tests/integration/test_scoped_publication_coordinator_postgres.py",
     "src/tests/integration/test_platform_plugin_scoped_ledger_postgres.py",
     "src/tests/integration/test_scoped_profile_fence_postgres.py",
+    "src/tests/integration/test_root_startup_postgres.py",
 )
 
 
