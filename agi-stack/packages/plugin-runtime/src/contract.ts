@@ -176,11 +176,15 @@ function parseProvided(value: unknown, index: number): ServiceProvidedV2 {
 
 function parseRequired(value: unknown, index: number): ServiceRequiredV2 {
   const payload = objectValue(value, `requires[${index}]`);
-  exactKeys(payload, ['alias', 'service', 'version']);
+  exactKeys(payload, ['alias', 'service', 'version', 'contributes']);
+  if ('contributes' in payload && typeof payload.contributes !== 'boolean') {
+    schemaFail('service contribution flag must be boolean');
+  }
   return {
     alias: patternString(payload.alias, ALIAS, 'service alias'),
     service: patternString(payload.service, SERVICE, 'service'),
     version: patternString(payload.version, SEMVER, 'service version'),
+    ...('contributes' in payload ? { contributes: payload.contributes as boolean } : {}),
   };
 }
 
