@@ -600,6 +600,7 @@ async def test_v2_receipt_endpoint_rejects_unregistered_ephemeral_plane(
 async def test_v2_republish_endpoint_creates_auditable_new_publication(
     db_session: AsyncSession,
 ) -> None:
+    """Historical unbound publications cannot provide rollback source authority."""
     publication, _distribution = await _publication()
     await PlatformPluginRepositoryV2(db_session).record_publication_and_receipt(
         publication,
@@ -614,13 +615,10 @@ async def test_v2_republish_endpoint_creates_auditable_new_publication(
 
     response = client.post("/api/v1/platform-plugins/v2/publications/republish-last-ready")
 
-    assert response.status_code == status.HTTP_200_OK
-    payload = response.json()
-    assert payload["requested_version"] == publication.envelope.version + 1
-    assert payload["snapshot_digest"] == publication.snapshot.digest
-    assert payload["republished_from_nonce"] == publication.envelope.nonce
-    assert payload["required_data_plane_ids"] == ["python-api-v2", "rust-server"]
-    assert payload["status"] == "reconciling"
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"]["reason"] == "root_publication_source_missing"
+    latest = await PlatformPluginRepositoryV2(db_session).latest_requested_distribution()
+    assert latest["envelope"]["nonce"] == publication.envelope.nonce
 
 
 @pytest.mark.unit
@@ -643,6 +641,7 @@ async def test_v2_republish_endpoint_rejects_without_globally_ready_snapshot(
 async def test_v2_republish_endpoint_reconciles_required_local_python_plane(
     db_session: AsyncSession,
 ) -> None:
+    """A live minimal Host does not authorize rollback of unbound history."""
     host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
     publication = await host.bootstrap(
         profile_path=_PROFILE,
@@ -664,13 +663,11 @@ async def test_v2_republish_endpoint_reconciles_required_local_python_plane(
 
     response = client.post("/api/v1/platform-plugins/v2/publications/republish-last-ready")
 
-    assert response.status_code == status.HTTP_200_OK
-    payload = response.json()
-    assert payload["requested_version"] == 6
-    assert payload["status"] == "ready"
-    assert payload["data_planes"][0]["status"] == "ack"
-    assert host.current_publication is not None
-    assert host.current_publication.envelope.version == 6
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.json()["detail"]["reason"] == "root_publication_source_missing"
+    assert host.current_publication is publication
+    latest = await PlatformPluginRepositoryV2(db_session).latest_requested_distribution()
+    assert latest["envelope"]["nonce"] == publication.envelope.nonce
     await host.close()
 
 

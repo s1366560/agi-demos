@@ -37,6 +37,9 @@ from src.infrastructure.adapters.primary.web.dependencies.plugin_desired_source_
 from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
     plugin_publication_policy_v2_from_app,
 )
+from src.infrastructure.adapters.primary.web.startup.root_republish_v2 import (
+    republish_ready_root_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginV2DataPlaneCredentialModel,
@@ -56,7 +59,6 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_governanc
     PlatformPluginGovernanceRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
-    PYTHON_API_DATA_PLANE_ID_V2,
     PlatformPluginLedgerV2Error,
     PlatformPluginPublicationReadinessV2,
     PlatformPluginRepositoryV2,
@@ -78,7 +80,6 @@ from src.infrastructure.plugins.v2.route_authority import (
 )
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime_context import RuntimeV2Error
-from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.scope import parse_scope_v2, scope_v2_to_payload
 from src.infrastructure.plugins.v2.web_public_view import project_web_public_view_v2
 
@@ -450,27 +451,12 @@ async def republish_last_ready_v2(
     repository = PlatformPluginRepositoryV2(db)
     policy = plugin_publication_policy_v2_from_app(request.app)
     try:
-        publication = await repository.republish_last_globally_ready(policy=policy)
+        publication = await republish_ready_root_v2(
+            request.app, db, actor_id=current_user.id, policy=policy
+        )
     except PlatformPluginLedgerV2Error as exc:
         await db.rollback()
         _raise_ledger_error(exc)
-    await db.commit()
-
-    if PYTHON_API_DATA_PLANE_ID_V2 in publication.required_data_plane_ids:
-        host = getattr(request.app.state, "platform_plugin_runtime_v2", None)
-        if isinstance(host, PlatformPluginRuntimeHostV2):
-            local = await host.apply_distribution(publication.distribution)
-            try:
-                _ = await repository.record_data_plane_receipt(
-                    data_plane_id=PYTHON_API_DATA_PLANE_ID_V2,
-                    nonce=publication.nonce,
-                    receipt=local.receipt,
-                )
-            except PlatformPluginLedgerV2Error as exc:
-                await db.rollback()
-                _raise_ledger_error(exc)
-            await db.commit()
-
     readiness = await repository.publication_readiness(publication.nonce)
     await db.commit()
     return _publication_readiness_response_v2(readiness)

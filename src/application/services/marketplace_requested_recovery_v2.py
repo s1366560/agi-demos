@@ -37,6 +37,7 @@ async def recover_live_requested_root_v2(
     allowed_registries: frozenset[str],
     on_route_commit: Callable[[BuiltinRouteGraphV2], None] | None,
     superseded_publication: PlatformPluginPublicationV2 | None = None,
+    expected_nonce: str | None = None,
 ) -> bool:
     async with session_factory() as session:
         state = await PlatformPluginRecoveryRepositoryV2(session).read(
@@ -44,6 +45,8 @@ async def recover_live_requested_root_v2(
             PYTHON_API_DATA_PLANE_ID_V2,
         )
     if state.latest is None or state.latest_receipt is not None:
+        return False
+    if expected_nonce is not None and state.latest.envelope.nonce != expected_nonce:
         return False
     if (
         superseded_publication is not None
