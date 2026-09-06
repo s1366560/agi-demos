@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.model.plugins.generated_v2 import (
     ApplyStatusV2,
     PublicationStatusV2,
+    ScopeKindV2,
+    ScopeV2,
     SnapshotApplyReceiptV2,
 )
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
@@ -28,6 +30,10 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_publicati
     PlatformPluginDataPlaneReadinessV2,
     PlatformPluginPublicationPolicyV2,
     PlatformPluginPublicationReadinessV2,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_scope_ledger_v2 import (
+    PluginScopeColumnsV2,
+    ScopeLedgerBindingV2,
 )
 from src.infrastructure.plugins.v2.runtime_host import (
     PlatformPluginDistributionV2,
@@ -57,8 +63,18 @@ class PlatformPluginRepositoryV2:
     def __init__(  # pyright: ignore[reportMissingSuperCall]
         self,
         session: AsyncSession,
+        *,
+        scope: ScopeV2 = ScopeV2(kind=ScopeKindV2.ROOT),
     ) -> None:
         self._session = session
+        self._scope = ScopeLedgerBindingV2(scope, PlatformPluginLedgerV2Error)
+
+    async def allocate_publication_version(self) -> int:
+        """Allocate within the caller's transaction, independently for this scope."""
+        return await self._scope.allocate(self._session)
+
+    def _require_scope(self, row: PluginScopeColumnsV2) -> None:
+        self._scope.require_row(row)
 
     async def record_publication(
         self,
@@ -68,15 +84,25 @@ class PlatformPluginRepositoryV2:
         now: datetime | None = None,
     ) -> PlatformPluginV2PublicationModel:
         """Append one complete requested distribution, deduping only its nonce."""
+        head = await self._scope.lock(self._session)
         _validate_receipt(publication)
         resolved_policy = policy or PlatformPluginPublicationPolicyV2.local_default()
         requested_at = _utc_now_v2(now)
         envelope = publication.envelope
+        nonce_scope = await self._session.scalar(
+            select(PlatformPluginV2PublicationModel.scope_key).where(
+                PlatformPluginV2PublicationModel.nonce == envelope.nonce
+            )
+        )
+        if nonce_scope is not None and nonce_scope != self._scope.key:
+            raise PlatformPluginLedgerV2Error(
+                "publication_scope_mismatch", "publication nonce belongs to another scope"
+            )
         result = await self._session.execute(
             refresh_select_statement(
-                select(PlatformPluginV2PublicationModel).where(
-                    PlatformPluginV2PublicationModel.nonce == envelope.nonce
-                )
+                select(PlatformPluginV2PublicationModel)
+                .where(PlatformPluginV2PublicationModel.scope_key == self._scope.key)
+                .where(PlatformPluginV2PublicationModel.nonce == envelope.nonce)
             )
         )
         existing = result.scalar_one_or_none()
@@ -90,13 +116,14 @@ class PlatformPluginRepositoryV2:
             envelope=envelope,
         ).to_payload()
         if existing is not None:
+            self._require_scope(existing)
             if existing.distribution != distribution:
                 raise ValueError("plugin v2 publication nonce belongs to another distribution")
             _validate_existing_policy_v2(existing, resolved_policy)
             return cast(PlatformPluginV2PublicationModel, existing)
-        await self._degrade_superseded_publications(requested_at)
         model = PlatformPluginV2PublicationModel(
             id=PlatformPluginV2PublicationModel.generate_id(),
+            **self._scope.fields,
             profile_id=publication.snapshot.profile_id,
             generation=publication.snapshot.generation,
             snapshot_digest=publication.snapshot.digest,
@@ -112,8 +139,9 @@ class PlatformPluginRepositoryV2:
             republished_from_id=None,
             created_at=requested_at,
         )
-        self._session.add(model)
-        await self._session.flush()
+        await self._scope.insert_publication(self._session, model)
+        head.version_high_watermark = max(head.version_high_watermark, envelope.version)
+        await self._degrade_superseded_publications(requested_at, exclude_id=model.id)
         return model
 
     async def record_publication_and_receipt(
@@ -149,12 +177,14 @@ class PlatformPluginRepositoryV2:
         """Return the full distribution referenced by the data plane's retained ACK."""
         result = await self._session.execute(
             refresh_select_statement(
-                select(PlatformPluginV2ApplyStateModel).where(
-                    PlatformPluginV2ApplyStateModel.data_plane_id == data_plane_id
-                )
+                select(PlatformPluginV2ApplyStateModel)
+                .where(PlatformPluginV2ApplyStateModel.scope_key == self._scope.key)
+                .where(PlatformPluginV2ApplyStateModel.data_plane_id == data_plane_id)
             )
         )
         state = result.scalar_one_or_none()
+        if state is not None:
+            self._require_scope(state)
         if state is None or state.applied_publication_id is None:
             return None
         publication = await self._session.get(
@@ -163,20 +193,12 @@ class PlatformPluginRepositoryV2:
         )
         if publication is None:
             raise RuntimeError("plugin v2 last-good publication is missing")
+        self._require_scope(publication)
         return dict(publication.distribution)
 
     async def latest_requested_distribution(self) -> dict[str, Any] | None:
         """Return the newest complete requested distribution for polling data planes."""
-        result = await self._session.execute(
-            refresh_select_statement(
-                select(PlatformPluginV2PublicationModel).order_by(
-                    PlatformPluginV2PublicationModel.requested_version.desc(),
-                    PlatformPluginV2PublicationModel.created_at.desc(),
-                    PlatformPluginV2PublicationModel.id.desc(),
-                )
-            )
-        )
-        publication = result.scalars().first()
+        publication = await self._latest_publication(for_update=False)
         return None if publication is None else dict(publication.distribution)
 
     async def latest_publication_readiness(
@@ -185,6 +207,7 @@ class PlatformPluginRepositoryV2:
         now: datetime | None = None,
     ) -> PlatformPluginPublicationReadinessV2 | None:
         """Return and refresh readiness for the newest requested publication."""
+        _ = await self._scope.lock(self._session)
         publication = await self._latest_publication(for_update=True)
         if publication is None:
             return None
@@ -197,9 +220,11 @@ class PlatformPluginRepositoryV2:
         now: datetime | None = None,
     ) -> PlatformPluginPublicationReadinessV2:
         """Return and refresh readiness for one exact publication nonce."""
+        _ = await self._scope.lock(self._session)
         result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginV2PublicationModel)
+                .where(PlatformPluginV2PublicationModel.scope_key == self._scope.key)
                 .where(PlatformPluginV2PublicationModel.nonce == nonce)
                 .with_for_update()
             )
@@ -219,12 +244,14 @@ class PlatformPluginRepositoryV2:
         limit: int = 100,
     ) -> int:
         """Persist terminal readiness for a bounded batch of overdue publications."""
+        _ = await self._scope.lock(self._session)
         if isinstance(limit, bool) or not 1 <= limit <= 1000:
             raise ValueError("plugin v2 deadline reconciliation limit must be between 1 and 1000")
         observed_at = _utc_now_v2(now)
         result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginV2PublicationModel)
+                .where(PlatformPluginV2PublicationModel.scope_key == self._scope.key)
                 .where(
                     PlatformPluginV2PublicationModel.status
                     == PublicationStatusV2.RECONCILING.value,
@@ -252,11 +279,13 @@ class PlatformPluginRepositoryV2:
         now: datetime | None = None,
     ) -> PlatformPluginV2PublicationModel:
         """Create an auditable publication from the latest snapshot that reached ready."""
+        _ = await self._scope.lock(self._session)
         requested_at = _utc_now_v2(now)
         resolved_policy = policy or PlatformPluginPublicationPolicyV2.local_default()
         source_result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginV2PublicationModel)
+                .where(PlatformPluginV2PublicationModel.scope_key == self._scope.key)
                 .where(PlatformPluginV2PublicationModel.ready_at.is_not(None))
                 .order_by(
                     PlatformPluginV2PublicationModel.requested_version.desc(),
@@ -272,10 +301,6 @@ class PlatformPluginRepositoryV2:
                 "globally_ready_not_found",
                 "no globally-ready plugin v2 publication is available",
             )
-        latest = await self._latest_publication(for_update=True)
-        if latest is None:
-            raise RuntimeError("plugin v2 ready publication disappeared")
-        requested_version = latest.requested_version + 1
         publication_nonce = nonce or f"republish-{token_urlsafe(24)}"
         _validate_nonce_v2(publication_nonce)
         nonce_result = await self._session.execute(
@@ -290,15 +315,17 @@ class PlatformPluginRepositoryV2:
                 "publication_nonce_conflict",
                 "plugin v2 republish nonce is already in use",
             )
+        self._require_scope(source)
         distribution = deepcopy(source.distribution)
         envelope = distribution.get("envelope")
         if not isinstance(envelope, dict):
             raise RuntimeError("plugin v2 ready distribution has no envelope")
+        requested_version = await self.allocate_publication_version()
         envelope["version"] = requested_version
         envelope["nonce"] = publication_nonce
-        await self._degrade_superseded_publications(requested_at)
         model = PlatformPluginV2PublicationModel(
             id=PlatformPluginV2PublicationModel.generate_id(),
+            **self._scope.fields,
             profile_id=source.profile_id,
             generation=source.generation,
             snapshot_digest=source.snapshot_digest,
@@ -314,8 +341,8 @@ class PlatformPluginRepositoryV2:
             republished_from_id=source.id,
             created_at=requested_at,
         )
-        self._session.add(model)
-        await self._session.flush()
+        await self._scope.insert_publication(self._session, model)
+        await self._degrade_superseded_publications(requested_at, exclude_id=model.id)
         return model
 
     async def record_data_plane_receipt(
@@ -327,11 +354,13 @@ class PlatformPluginRepositoryV2:
         now: datetime | None = None,
     ) -> PlatformPluginV2ApplyStateModel:
         """Bind one external receipt to the exact immutable publication nonce."""
+        _ = await self._scope.lock(self._session)
         if not data_plane_id.strip():
             raise PlatformPluginLedgerV2Error("data_plane_id_invalid", "data_plane_id is required")
         result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginV2PublicationModel)
+                .where(PlatformPluginV2PublicationModel.scope_key == self._scope.key)
                 .where(PlatformPluginV2PublicationModel.nonce == nonce)
                 .with_for_update()
             )
@@ -351,12 +380,14 @@ class PlatformPluginRepositoryV2:
         _validate_external_receipt(publication, receipt)
         state_result = await self._session.execute(
             refresh_select_statement(
-                select(PlatformPluginV2ApplyStateModel).where(
-                    PlatformPluginV2ApplyStateModel.data_plane_id == data_plane_id
-                )
+                select(PlatformPluginV2ApplyStateModel)
+                .where(PlatformPluginV2ApplyStateModel.scope_key == self._scope.key)
+                .where(PlatformPluginV2ApplyStateModel.data_plane_id == data_plane_id)
             )
         )
         state = state_result.scalar_one_or_none()
+        if state is not None:
+            self._require_scope(state)
         if state is not None:
             if receipt.requested_version < state.requested_version:
                 raise PlatformPluginLedgerV2Error(
@@ -389,15 +420,26 @@ class PlatformPluginRepositoryV2:
         data_plane_id: str,
         now: datetime | None = None,
     ) -> PlatformPluginV2ApplyStateModel:
+        self._require_scope(publication)
+        _ = await self._scope.lock(self._session)
         result = await self._session.execute(
             refresh_select_statement(
-                select(PlatformPluginV2ApplyStateModel).where(
-                    PlatformPluginV2ApplyStateModel.data_plane_id == data_plane_id
-                )
+                select(PlatformPluginV2ApplyStateModel)
+                .where(PlatformPluginV2ApplyStateModel.scope_key == self._scope.key)
+                .where(PlatformPluginV2ApplyStateModel.data_plane_id == data_plane_id)
             )
         )
         state = result.scalar_one_or_none()
+        if state is not None:
+            self._require_scope(state)
         recorded_at = _utc_now_v2(now)
+        if state is not None and state.applied_publication_id is not None:
+            applied = await self._session.get(
+                PlatformPluginV2PublicationModel, state.applied_publication_id
+            )
+            if applied is None:
+                raise ValueError("plugin v2 last-good publication is missing")
+            self._require_scope(applied)
         if state is not None and _state_matches_receipt(publication, receipt, state):
             await self._refresh_publication_status(publication, recorded_at)
             return cast(PlatformPluginV2ApplyStateModel, state)
@@ -420,6 +462,7 @@ class PlatformPluginRepositoryV2:
         if state is None:
             state = PlatformPluginV2ApplyStateModel(
                 id=PlatformPluginV2ApplyStateModel.generate_id(),
+                **self._scope.fields,
                 data_plane_id=data_plane_id,
                 last_ack_at=recorded_at if receipt.status is ApplyStatusV2.ACK else None,
                 created_at=recorded_at,
@@ -436,6 +479,7 @@ class PlatformPluginRepositoryV2:
         self._session.add(
             PlatformPluginV2ApplyStateEventModel(
                 id=PlatformPluginV2ApplyStateEventModel.generate_id(),
+                **self._scope.fields,
                 data_plane_id=data_plane_id,
                 recorded_at=recorded_at,
                 **values,
@@ -450,20 +494,28 @@ class PlatformPluginRepositoryV2:
         *,
         for_update: bool,
     ) -> PlatformPluginV2PublicationModel | None:
-        statement = select(PlatformPluginV2PublicationModel).order_by(
-            PlatformPluginV2PublicationModel.requested_version.desc(),
-            PlatformPluginV2PublicationModel.created_at.desc(),
-            PlatformPluginV2PublicationModel.id.desc(),
+        statement = (
+            select(PlatformPluginV2PublicationModel)
+            .where(PlatformPluginV2PublicationModel.scope_key == self._scope.key)
+            .order_by(
+                PlatformPluginV2PublicationModel.requested_version.desc(),
+                PlatformPluginV2PublicationModel.created_at.desc(),
+                PlatformPluginV2PublicationModel.id.desc(),
+            )
         )
         if for_update:
             statement = statement.with_for_update()
         result = await self._session.execute(refresh_select_statement(statement))
-        return cast("PlatformPluginV2PublicationModel | None", result.scalars().first())
+        publication = result.scalars().first()
+        if publication is not None:
+            self._require_scope(publication)
+        return cast("PlatformPluginV2PublicationModel | None", publication)
 
     async def _validate_current_publication(
         self,
         publication: PlatformPluginV2PublicationModel,
     ) -> None:
+        self._require_scope(publication)
         latest = await self._latest_publication(for_update=False)
         if latest is None or latest.id == publication.id:
             return
@@ -473,15 +525,20 @@ class PlatformPluginRepositoryV2:
                 "plugin v2 receipt targets a superseded publication",
             )
 
-    async def _degrade_superseded_publications(self, now: datetime) -> None:
+    async def _degrade_superseded_publications(self, now: datetime, *, exclude_id: str) -> None:
         result = await self._session.execute(
             refresh_select_statement(
-                select(PlatformPluginV2PublicationModel).where(
-                    PlatformPluginV2PublicationModel.status == PublicationStatusV2.RECONCILING.value
+                select(PlatformPluginV2PublicationModel)
+                .where(PlatformPluginV2PublicationModel.scope_key == self._scope.key)
+                .where(
+                    PlatformPluginV2PublicationModel.id != exclude_id,
+                    PlatformPluginV2PublicationModel.status
+                    == PublicationStatusV2.RECONCILING.value,
                 )
             )
         )
         for publication in result.scalars():
+            self._require_scope(publication)
             publication.status = PublicationStatusV2.DEGRADED.value
             publication.status_updated_at = now
         await self._session.flush()
@@ -491,10 +548,12 @@ class PlatformPluginRepositoryV2:
         publication: PlatformPluginV2PublicationModel,
         now: datetime,
     ) -> PlatformPluginPublicationReadinessV2:
+        self._require_scope(publication)
         await self._refresh_publication_status(publication, now)
         result = await self._session.execute(
             refresh_select_statement(
                 select(PlatformPluginV2ApplyStateEventModel)
+                .where(PlatformPluginV2ApplyStateEventModel.scope_key == self._scope.key)
                 .where(
                     PlatformPluginV2ApplyStateEventModel.requested_publication_id == publication.id,
                     PlatformPluginV2ApplyStateEventModel.data_plane_id.in_(
@@ -507,7 +566,10 @@ class PlatformPluginRepositoryV2:
                 )
             )
         )
-        state_by_plane = {event.data_plane_id: event for event in result.scalars()}
+        events = list(result.scalars())
+        for event in events:
+            self._require_scope(event)
+        state_by_plane = {event.data_plane_id: event for event in events}
         source_nonce: str | None = None
         if publication.republished_from_id is not None:
             source = await self._session.get(
@@ -516,6 +578,7 @@ class PlatformPluginRepositoryV2:
             )
             if source is None:
                 raise RuntimeError("plugin v2 republish source is missing")
+            self._require_scope(source)
             source_nonce = source.nonce
         data_planes: list[PlatformPluginDataPlaneReadinessV2] = []
         for data_plane_id in publication.required_data_plane_ids:
@@ -552,12 +615,15 @@ class PlatformPluginRepositoryV2:
         publication: PlatformPluginV2PublicationModel,
         now: datetime,
     ) -> None:
+        self._require_scope(publication)
         latest = await self._latest_publication(for_update=False)
         if latest is not None and latest.id != publication.id:
             return
         result = await self._session.execute(
             refresh_select_statement(
-                select(PlatformPluginV2ApplyStateModel).where(
+                select(PlatformPluginV2ApplyStateModel)
+                .where(PlatformPluginV2ApplyStateModel.scope_key == self._scope.key)
+                .where(
                     PlatformPluginV2ApplyStateModel.requested_publication_id == publication.id,
                     PlatformPluginV2ApplyStateModel.data_plane_id.in_(
                         publication.required_data_plane_ids
@@ -565,7 +631,10 @@ class PlatformPluginRepositoryV2:
                 )
             )
         )
-        state_by_plane = {state.data_plane_id: state for state in result.scalars()}
+        states = list(result.scalars())
+        for state in states:
+            self._require_scope(state)
+        state_by_plane = {state.data_plane_id: state for state in states}
         required_states = [
             state_by_plane.get(data_plane_id)
             for data_plane_id in publication.required_data_plane_ids

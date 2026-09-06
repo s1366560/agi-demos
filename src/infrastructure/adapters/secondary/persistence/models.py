@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -33,6 +34,11 @@ except ImportError:
     Vector = None
 
 from src.domain.model.enums import DataStatus, ProcessingStatus
+from src.infrastructure.adapters.secondary.persistence.plugin_scope_columns_v2 import (
+    ROOT_SCOPE_KEY_V2,
+    PluginScopeColumnsV2,
+    plugin_scope_constraints_v2,
+)
 
 
 class Base(DeclarativeBase):
@@ -3404,7 +3410,25 @@ class PlatformPluginV2DataPlaneCredentialModel(IdGeneratorMixin, Base):
     )
 
 
-class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
+class PlatformPluginV2ScopeHeadModel(PluginScopeColumnsV2, Base):
+    """Transaction-locked version high water mark for one exact scope."""
+
+    __tablename__ = "platform_plugin_v2_scope_heads"
+
+    scope_key: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=ROOT_SCOPE_KEY_V2, server_default=ROOT_SCOPE_KEY_V2
+    )
+    version_high_watermark: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+
+    __table_args__ = (
+        *plugin_scope_constraints_v2("plugin_v2_head"),
+        CheckConstraint("version_high_watermark >= 0", name="ck_plugin_v2_head_version"),
+    )
+
+
+class PlatformPluginV2PublicationModel(PluginScopeColumnsV2, IdGeneratorMixin, Base):
     """Append-only requested protocol-v2 snapshot distribution."""
 
     __tablename__ = "platform_plugin_v2_publications"
@@ -3426,7 +3450,6 @@ class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
     status_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     republished_from_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -3434,6 +3457,21 @@ class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
     )
 
     __table_args__ = (
+        *plugin_scope_constraints_v2("plugin_v2_publication"),
+        ForeignKeyConstraint(
+            ["scope_key", "republished_from_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_publication_republished_from_id",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("scope_key", "id", name="uq_plugin_v2_publication_scope_id"),
+        Index(
+            "ix_plugin_v2_publication_scope_latest",
+            "scope_key",
+            "requested_version",
+            "created_at",
+            "id",
+        ),
         CheckConstraint(
             "generation > 0 AND requested_version > 0",
             name="ck_platform_plugin_v2_publication_versions",
@@ -3467,23 +3505,21 @@ class PlatformPluginV2PublicationModel(IdGeneratorMixin, Base):
     )
 
 
-class PlatformPluginV2ApplyStateModel(IdGeneratorMixin, Base):
+class PlatformPluginV2ApplyStateModel(PluginScopeColumnsV2, IdGeneratorMixin, Base):
     """Latest requested receipt and retained last-good v2 publication per data plane."""
 
     __tablename__ = "platform_plugin_v2_apply_states"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False)
     requested_publication_id: Mapped[str] = mapped_column(
         String(36),
-        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
         nullable=False,
     )
     requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
     requested_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     applied_publication_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
         nullable=True,
     )
     applied_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -3500,6 +3536,20 @@ class PlatformPluginV2ApplyStateModel(IdGeneratorMixin, Base):
     )
 
     __table_args__ = (
+        *plugin_scope_constraints_v2("plugin_v2_apply"),
+        ForeignKeyConstraint(
+            ["scope_key", "requested_publication_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_apply_requested_publication_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["scope_key", "applied_publication_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_apply_applied_publication_id",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("scope_key", "data_plane_id", name="uq_plugin_v2_apply_scope_plane"),
         CheckConstraint(
             "requested_version > 0 AND (applied_version IS NULL OR applied_version > 0)",
             name="ck_platform_plugin_v2_apply_versions",
@@ -3518,7 +3568,7 @@ class PlatformPluginV2ApplyStateModel(IdGeneratorMixin, Base):
     )
 
 
-class PlatformPluginV2ApplyStateEventModel(IdGeneratorMixin, Base):
+class PlatformPluginV2ApplyStateEventModel(PluginScopeColumnsV2, IdGeneratorMixin, Base):
     """Append-only protocol-v2 ACK/NACK evidence."""
 
     __tablename__ = "platform_plugin_v2_apply_state_events"
@@ -3527,14 +3577,12 @@ class PlatformPluginV2ApplyStateEventModel(IdGeneratorMixin, Base):
     data_plane_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     requested_publication_id: Mapped[str] = mapped_column(
         String(36),
-        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
         nullable=False,
     )
     requested_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
     requested_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     applied_publication_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("platform_plugin_v2_publications.id", ondelete="RESTRICT"),
         nullable=True,
     )
     applied_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -3547,6 +3595,20 @@ class PlatformPluginV2ApplyStateEventModel(IdGeneratorMixin, Base):
     )
 
     __table_args__ = (
+        *plugin_scope_constraints_v2("plugin_v2_apply_event"),
+        ForeignKeyConstraint(
+            ["scope_key", "requested_publication_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_apply_event_requested_publication_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["scope_key", "applied_publication_id"],
+            ["platform_plugin_v2_publications.scope_key", "platform_plugin_v2_publications.id"],
+            name="fk_plugin_v2_apply_event_applied_publication_id",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_plugin_v2_apply_event_scope_plane", "scope_key", "data_plane_id", "recorded_at"),
         CheckConstraint(
             "requested_version > 0 AND (applied_version IS NULL OR applied_version > 0)",
             name="ck_platform_plugin_v2_apply_event_versions",
