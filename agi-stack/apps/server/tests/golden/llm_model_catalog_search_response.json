@@ -1,13 +1,13 @@
 {
-  "query": "claude-3-5-haiku-20241022",
+  "query": "claude-fable-5",
   "total": 1,
   "models": [
     {
-      "name": "claude-3-5-haiku-20241022",
-      "context_length": 200000,
-      "max_output_tokens": 8192,
-      "input_cost_per_1m": 0.8,
-      "output_cost_per_1m": 4.0,
+      "name": "claude-fable-5",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 10.0,
+      "output_cost_per_1m": 50.0,
       "capabilities": [
         "chat",
         "function_calling",
@@ -23,20 +23,20 @@
       ],
       "variants": [],
       "default_variant": null,
-      "family": "claude-haiku",
-      "release_date": "2024-10-22",
+      "family": "claude-fable",
+      "release_date": "2026-06-07",
       "is_deprecated": false,
-      "description": "Claude Haiku 3.5",
+      "description": "Claude Fable 5",
       "max_input_tokens": null,
-      "reasoning": false,
-      "supports_temperature": true,
+      "reasoning": true,
+      "supports_temperature": false,
       "supports_tool_call": true,
-      "supports_structured_output": false,
+      "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.08,
-      "cache_write_cost_per_1m": 1.0,
+      "cache_read_cost_per_1m": 1.0,
+      "cache_write_cost_per_1m": 12.5,
       "reasoning_cost_per_1m": null,
-      "knowledge_cutoff": "2024-07-31",
+      "knowledge_cutoff": null,
       "open_weights": false,
       "default_temperature": null,
       "default_top_p": null,
@@ -46,18 +46,12 @@
       "default_stop": null,
       "supports_response_format": true,
       "supports_seed": false,
-      "supports_stop": true,
+      "supports_stop": false,
       "supports_frequency_penalty": false,
       "supports_presence_penalty": false,
-      "supports_top_p": true,
-      "temperature_range": [
-        0.0,
-        1.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ],
+      "supports_top_p": false,
+      "temperature_range": null,
+      "top_p_range": null,
       "supported_params": null
     }
   ]
