@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +23,7 @@ from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
 from .bundle_archive import VerifiedBundleArchiveV2
 from .composer import ProfileDocumentV2, compose_profile_v2, load_profile_document_v2
+from .lifecycle_tasks import OwnedLifecycleTaskV2
 from .protocol import (
     control_envelope_v2,
     control_envelope_v2_to_payload,
@@ -87,6 +88,8 @@ class PlatformPluginRuntimeHostV2:
         self.reconciler = PlatformPluginSnapshotReconcilerV2(self.loader)
         self._apply_lock = asyncio.Lock()
         self._current_publication: PlatformPluginPublicationV2 | None = None
+        self._receipt_blocked = False
+        self._pending_receipt: PlatformPluginPublicationV2 | None = None
         self._distributions: WeakKeyDictionary[
             RuntimeGenerationV2, PlatformPluginDistributionV2
         ] = WeakKeyDictionary()
@@ -120,6 +123,39 @@ class PlatformPluginRuntimeHostV2:
             )
         return distribution
 
+    @property
+    def pending_receipt(self) -> PlatformPluginPublicationV2 | None:
+        """Return the actual local outcome awaiting durable persistence."""
+        return self._pending_receipt
+
+    def _require_receipt_ready(self) -> None:
+        if self._receipt_blocked:
+            raise RuntimeV2Error(
+                "publication_receipt_pending",
+                "plugin publication receipt must be persisted before new admission",
+            )
+
+    def _record_publication(self, publication: PlatformPluginPublicationV2) -> None:
+        if not publication.accepted:
+            return
+        current = self.manager.current
+        expected = PluginGenerationDescriptorV2(
+            profile_id=publication.snapshot.profile_id,
+            generation=publication.snapshot.generation,
+            digest=publication.snapshot.digest,
+        )
+        if current is None or current.descriptor != expected:
+            raise RuntimeV2Error(
+                "generation_publication_missing",
+                "accepted plugin snapshot did not publish its runtime generation",
+            )
+        self._distributions[current] = PlatformPluginDistributionV2(
+            descriptor=current.descriptor,
+            snapshot=publication.snapshot,
+            envelope=publication.envelope,
+        )
+        self._current_publication = publication
+
     async def apply(
         self,
         snapshot: ProfileSnapshotV2,
@@ -127,35 +163,69 @@ class PlatformPluginRuntimeHostV2:
         *,
         publication_stager: GenerationPublicationStagerV2 | None = None,
         verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
+        receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
     ) -> PlatformPluginPublicationV2:
-        """Stage and atomically publish one snapshot, retaining last-good on NACK."""
+        """Publish locally and optionally fence admission until its receipt is durable.
+
+        The persister must own its persistence session and must not reenter this host.
+        Once started, durable publication survives cancellation of its caller.
+        """
         archives = None if verified_archives is None else tuple(verified_archives)
-        async with self._apply_lock:
-            receipt = await self.reconciler.apply(
-                snapshot,
-                envelope,
-                publication_stager=publication_stager,
-                verified_archives=archives,
-            )
-            publication = PlatformPluginPublicationV2(
-                snapshot=snapshot,
-                envelope=envelope,
-                receipt=receipt,
-            )
-            if publication.accepted:
-                self._current_publication = publication
-                current = self.manager.current
-                if current is None:
-                    raise RuntimeV2Error(
-                        "generation_publication_missing",
-                        "accepted plugin snapshot did not publish a runtime generation",
-                    )
-                self._distributions[current] = PlatformPluginDistributionV2(
-                    descriptor=current.descriptor,
-                    snapshot=publication.snapshot,
-                    envelope=publication.envelope,
+        result: list[PlatformPluginPublicationV2] = []
+
+        async def publish() -> None:
+            async with self._apply_lock:
+                self._require_receipt_ready()
+                if receipt_persister is not None:
+                    self._receipt_blocked = True
+                receipt = await self.reconciler.apply(
+                    snapshot,
+                    envelope,
+                    publication_stager=publication_stager,
+                    verified_archives=archives,
                 )
-            return publication
+                publication = PlatformPluginPublicationV2(
+                    snapshot=snapshot,
+                    envelope=envelope,
+                    receipt=receipt,
+                )
+                if receipt_persister is not None:
+                    self._pending_receipt = publication
+                    await receipt_persister(publication)
+                self._record_publication(publication)
+                self._pending_receipt = None
+                self._receipt_blocked = False
+                result.append(publication)
+
+        if receipt_persister is None:
+            await publish()
+        else:
+            await OwnedLifecycleTaskV2(publish, name="plugin-publication-receipt").wait()
+        return result[0]
+
+    async def retry_pending_receipt(
+        self,
+        receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]],
+    ) -> PlatformPluginPublicationV2:
+        """Persist the retained outcome without staging or applying it again."""
+        result: list[PlatformPluginPublicationV2] = []
+
+        async def persist() -> None:
+            async with self._apply_lock:
+                publication = self._pending_receipt
+                if publication is None:
+                    raise RuntimeV2Error(
+                        "publication_receipt_unavailable",
+                        "no local publication receipt is available for persistence retry",
+                    )
+                await receipt_persister(publication)
+                self._record_publication(publication)
+                self._pending_receipt = None
+                self._receipt_blocked = False
+                result.append(publication)
+
+        await OwnedLifecycleTaskV2(persist, name="plugin-publication-receipt-retry").wait()
+        return result[0]
 
     async def apply_distribution(
         self,
@@ -163,6 +233,7 @@ class PlatformPluginRuntimeHostV2:
         *,
         publication_stager: GenerationPublicationStagerV2 | None = None,
         verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
+        receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
     ) -> PlatformPluginPublicationV2:
         """Validate a complete process-safe distribution before staging it locally."""
         if set(payload) != {"descriptor", "snapshot", "envelope"}:
@@ -187,6 +258,7 @@ class PlatformPluginRuntimeHostV2:
             envelope,
             publication_stager=publication_stager,
             verified_archives=verified_archives,
+            receipt_persister=receipt_persister,
         )
 
     async def bootstrap(
@@ -219,6 +291,7 @@ class PlatformPluginRuntimeHostV2:
     async def acquire(self) -> GenerationLeaseV2:
         """Acquire the complete generation used by one data-plane boundary."""
         async with self._apply_lock:
+            self._require_receipt_ready()
             return await self.manager.acquire()
 
     async def acquire_exact(
@@ -243,6 +316,7 @@ class PlatformPluginRuntimeHostV2:
                 await self.reconciler.close()
             finally:
                 self._current_publication = None
+                self._pending_receipt = None
 
 
 class DataPlaneGenerationAdmissionV2:
