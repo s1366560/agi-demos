@@ -44,6 +44,13 @@ impl ReadOnlyAutomationToolHost {
 
 #[async_trait]
 impl ToolHost for ReadOnlyAutomationToolHost {
+    fn tool_definition(&self, name: &str) -> Option<agistack_core::ports::ToolDefinition> {
+        if !self.list_tools().iter().any(|allowed| allowed == name) {
+            return None;
+        }
+        self.inner.tool_definition(name)
+    }
+
     fn list_tools(&self) -> Vec<String> {
         self.inner
             .list_tools()

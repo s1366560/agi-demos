@@ -341,6 +341,21 @@ impl LlmPort for HttpLlm {
         parse_relationship_drafts(&content)
     }
 
+    async fn decide_with_tools(
+        &self,
+        goal: &str,
+        round: u64,
+        transcript: &[TranscriptEntry],
+        tools: &[agistack_core::ports::ToolDefinition],
+    ) -> CoreResult<AgentAction> {
+        let goal = agistack_core::tool_definition::prompt_with_tool_definitions(goal, tools)?;
+        let names = tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect::<Vec<_>>();
+        self.decide(&goal, round, transcript, &names).await
+    }
+
     async fn decide(
         &self,
         goal: &str,

@@ -366,10 +366,10 @@ impl ReActEngine {
             let mut doom_fired = false;
 
             // THINK — delegate the semantic decision to the planner/LLM.
-            let available = self.tools.list_tools();
+            let available = self.tools.tool_definitions()?;
             let action = self
                 .llm
-                .decide(&state.goal, state.round, &state.transcript, &available)
+                .decide_with_tools(&state.goal, state.round, &state.transcript, &available)
                 .await?;
 
             match action {

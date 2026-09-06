@@ -1,3 +1,7 @@
+mod llm_tool_contracts;
+mod plan_tool_contract;
+#[cfg(test)]
+mod tool_contract_tests;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     path::{Path as FsPath, PathBuf},
@@ -790,32 +794,6 @@ impl PlanModeToolHost {
             "total_count": tasks.len(),
         }))
         .map_err(|error| CoreError::Tool(error.to_string()))
-    }
-}
-
-#[async_trait]
-impl ToolHost for PlanModeToolHost {
-    fn list_tools(&self) -> Vec<String> {
-        let mut tools = self
-            .inner
-            .list_tools()
-            .into_iter()
-            .filter(|tool| Self::is_allowed(tool))
-            .collect::<Vec<_>>();
-        tools.push(SUBMIT_PLAN_TOOL_NAME.to_string());
-        tools
-    }
-
-    async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String> {
-        if !Self::is_allowed(tool) {
-            return Err(CoreError::Tool(format!(
-                "tool '{tool}' is blocked while the conversation is in plan mode"
-            )));
-        }
-        if tool == SUBMIT_PLAN_TOOL_NAME {
-            return self.submit_plan(input_json);
-        }
-        self.inner.call(tool, input_json).await
     }
 }
 
@@ -9809,45 +9787,6 @@ impl MeteredLlm {
     }
 }
 
-#[async_trait]
-impl LlmPort for MeteredLlm {
-    async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
-        let started_at = std::time::Instant::now();
-        let result = self.inner.extract_memory(episode).await;
-        if result.is_ok() {
-            self.record_success(started_at);
-        }
-        result
-    }
-
-    async fn extract_relationships(&self, memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
-        let started_at = std::time::Instant::now();
-        let result = self.inner.extract_relationships(memory).await;
-        if result.is_ok() {
-            self.record_success(started_at);
-        }
-        result
-    }
-
-    async fn decide(
-        &self,
-        goal: &str,
-        round: u64,
-        transcript: &[TranscriptEntry],
-        available_tools: &[String],
-    ) -> CoreResult<AgentAction> {
-        let started_at = std::time::Instant::now();
-        let result = self
-            .inner
-            .decide(goal, round, transcript, available_tools)
-            .await;
-        if result.is_ok() {
-            self.record_success(started_at);
-        }
-        result
-    }
-}
-
 impl FailoverLlm {
     const CANDIDATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 
@@ -9881,34 +9820,6 @@ impl FailoverLlm {
         Err(last_error.unwrap_or_else(|| {
             CoreError::Llm("model_unconfigured: no usable LLM routing targets".to_string())
         }))
-    }
-}
-
-#[async_trait]
-impl LlmPort for FailoverLlm {
-    async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
-        self.attempt(|candidate| async move { candidate.extract_memory(episode).await })
-            .await
-    }
-
-    async fn extract_relationships(&self, memory: &Memory) -> CoreResult<Vec<RelationshipDraft>> {
-        self.attempt(|candidate| async move { candidate.extract_relationships(memory).await })
-            .await
-    }
-
-    async fn decide(
-        &self,
-        goal: &str,
-        round: u64,
-        transcript: &[TranscriptEntry],
-        available_tools: &[String],
-    ) -> CoreResult<AgentAction> {
-        self.attempt(|candidate| async move {
-            candidate
-                .decide(goal, round, transcript, available_tools)
-                .await
-        })
-        .await
     }
 }
 
@@ -9992,43 +9903,6 @@ impl LlmPort for MockLocalLlm {
 
 struct AnthropicAgentLlm {
     inner: AnthropicLlm,
-}
-
-#[async_trait]
-impl LlmPort for AnthropicAgentLlm {
-    async fn extract_memory(&self, episode: &Episode) -> CoreResult<MemoryDraft> {
-        Ok(MemoryDraft {
-            title: "Anthropic local memory".to_string(),
-            content: episode.content.clone(),
-            tags: Vec::new(),
-            entities: Vec::new(),
-        })
-    }
-
-    async fn decide(
-        &self,
-        goal: &str,
-        round: u64,
-        transcript: &[TranscriptEntry],
-        available_tools: &[String],
-    ) -> CoreResult<AgentAction> {
-        let user = json!({
-            "goal": goal,
-            "round": round,
-            "transcript": transcript,
-            "available_tools": available_tools,
-        })
-        .to_string();
-        let raw = self
-            .inner
-            .stream_complete(
-                "You are a ReAct agent. Respond with ONLY JSON: {\"kind\":\"finish\",\"answer\":string} or {\"kind\":\"call_tool\",\"tool\":string,\"input_json\":string}.",
-                user,
-                |_| {},
-            )
-            .await?;
-        parse_agent_action(&raw)
-    }
 }
 
 fn parse_agent_action(raw: &str) -> CoreResult<AgentAction> {
