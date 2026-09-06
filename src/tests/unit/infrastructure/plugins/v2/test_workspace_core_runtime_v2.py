@@ -497,6 +497,67 @@ async def test_restart_republishes_disabled_primitive_as_active_workspace_core_s
     assert workspace_core_shadow_active_v2(first_distribution.snapshot) is False
     await first.close()
 
+    # Activation is an explicit saved configuration change, not a factory side effect.
+    from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
+        PlatformPluginDesiredBundleSetRepositoryV2,
+    )
+    from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
+        PlatformPluginProfileSourceRepositoryV2,
+    )
+    from src.infrastructure.plugins.v2.layer_composer import (
+        desired_bundle_set_digest_v2,
+        profile_source_digest_v2,
+    )
+
+    desired_repo = PlatformPluginDesiredBundleSetRepositoryV2(db_session)
+    source_repo = PlatformPluginProfileSourceRepositoryV2(db_session)
+    record = await desired_repo.current_desired_set(_ROOT_SCOPE)
+    assert record is not None
+    reference = record.desired_set.profile_source
+    source = await source_repo.read_exact(
+        scope=_ROOT_SCOPE,
+        source_id=reference.source_id,
+        revision=reference.revision,
+        digest=reference.digest,
+    )
+    assert source is not None
+    workspace_entries = {
+        WORKSPACE_CORE_RUNTIME_ENTRY_ID_V2,
+        WORKSPACE_CORE_CONTRACT_ACTOR_RESOLVER_ENTRY_ID_V2,
+        WORKSPACE_PROMPT_CONTEXT_ENTRY_ID_V2,
+    }
+    source = replace(
+        source,
+        revision=source.revision + 1,
+        layers=tuple(
+            replace(
+                layer,
+                replacements=tuple(
+                    replace(entry, enabled=True) if entry.entry_id in workspace_entries else entry
+                    for entry in layer.replacements
+                ),
+            )
+            for layer in source.layers
+        ),
+    )
+    source = replace(source, digest=profile_source_digest_v2(source))
+    await source_repo.record_source(
+        scope=_ROOT_SCOPE, source=source, expected_revision=reference.revision
+    )
+    desired = replace(
+        record.desired_set,
+        revision=record.desired_set.revision + 1,
+        profile_source=replace(reference, revision=source.revision, digest=source.digest),
+    )
+    desired = replace(desired, digest=desired_bundle_set_digest_v2(desired))
+    await desired_repo.record_desired_set(
+        scope=_ROOT_SCOPE,
+        desired_set=desired,
+        expected_revision=record.desired_set.revision,
+        actor_id="explicit-test-activation",
+    )
+    await db_session.commit()
+
     adapter = _TrackedProviderAdapter()
     runtime = _runtime(adapter)
 

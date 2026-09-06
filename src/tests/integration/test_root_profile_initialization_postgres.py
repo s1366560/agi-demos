@@ -88,5 +88,7 @@ async def test_concurrent_root_initializers_commit_one_exact_revision(sessions):
         )
         assert stored is not None
         assert stored.layers[:-1] == sources.profile_source.layers
-        assert len(stored.layers[-1].replacements) == 3
-        assert all(entry.enabled for entry in stored.layers[-1].replacements)
+        replacements = {entry.entry_id: entry for entry in stored.layers[-1].replacements}
+        assert len(replacements) == 4
+        assert replacements.pop("builtin-agent-pool-runtime").enabled is False
+        assert all(entry.enabled for entry in replacements.values())

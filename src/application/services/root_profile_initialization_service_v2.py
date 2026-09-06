@@ -1,5 +1,7 @@
 """Persist the explicit initial ROOT configuration; never rewrite an existing choice."""
 
+from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import replace
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -22,6 +24,12 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_s
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_scope_ledger_v2 import (
     ScopeLedgerBindingV2,
 )
+from src.infrastructure.plugins.v2.agent_pool_profile import (
+    AGENT_POOL_RUNTIME_ENTRY_ID_V2,
+    project_agent_pool_runtime_v2,
+)
+from src.infrastructure.plugins.v2.agent_pool_runtime import default_agent_pool_runtime_config_v2
+from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
 from src.infrastructure.plugins.v2.layer_composer import (
     compose_profile_sources_v2,
     desired_bundle_set_digest_v2,
@@ -68,9 +76,11 @@ class RootProfileInitializationServiceV2:
         self,
         *,
         workspace_core_enabled: bool,
+        agent_pool_runtime_enabled: bool = False,
+        agent_pool_runtime_config: Mapping[str, object] | None = None,
         actor_id: str | None = None,
     ) -> PlatformPluginDesiredBundleSetRecordV2:
-        if type(workspace_core_enabled) is not bool:
+        if type(workspace_core_enabled) is not bool or type(agent_pool_runtime_enabled) is not bool:
             raise RootProfileInitializationV2Error(
                 "root_initialization_invalid", "enabled must be boolean"
             )
@@ -103,6 +113,23 @@ class RootProfileInitializationServiceV2:
                         "Workspace Core baseline entry is missing or inconsistent",
                     )
                 replacements.append(replace(matches[0], enabled=workspace_core_enabled))
+            pool_config = (
+                deepcopy(dict(agent_pool_runtime_config))
+                if agent_pool_runtime_config is not None
+                else default_agent_pool_runtime_config_v2()
+            )
+            projected = project_agent_pool_runtime_v2(
+                ProfileDocumentV2(
+                    profile_id=self._sources.profile_source.profile_id, entries=tuple(entries)
+                ),
+                enabled=agent_pool_runtime_enabled,
+                config=pool_config,
+            )
+            replacements.extend(
+                entry
+                for entry in projected.entries
+                if entry.entry_id == AGENT_POOL_RUNTIME_ENTRY_ID_V2
+            )
             source = replace(
                 self._sources.profile_source,
                 source_id="memstack-root-initialized-profile-source-v2",
@@ -111,6 +138,8 @@ class RootProfileInitializationServiceV2:
                     {
                         "kind": "explicit-root-initialization",
                         "workspace_core_enabled": workspace_core_enabled,
+                        "agent_pool_runtime_enabled": agent_pool_runtime_enabled,
+                        "agent_pool_runtime_config": pool_config,
                         "original_provenance": self._sources.profile_source.provenance,
                     }
                 ).decode("utf-8"),

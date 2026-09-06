@@ -365,6 +365,17 @@ async def test_restart_upgrades_legacy_empty_target_snapshot_with_monotonic_publ
     await db_session.commit()
     await newer_requested_host.close()
 
+    # Explicitly choose the replacement configuration for this legacy fixture.
+    # Startup itself must not infer it from the old durable snapshot.
+    from src.application.services.root_profile_initialization_service_v2 import (
+        RootProfileInitializationServiceV2,
+    )
+    from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
+
+    await RootProfileInitializationServiceV2(
+        session_factory=session_factory,
+        production_sources=production_bundle_sources_v2(),
+    ).ensure_initialized(workspace_core_enabled=False, actor_id="explicit-test-migration")
     app = FastAPI()
     upgraded = await initialize_plugin_runtime_v2(app, session_factory=session_factory)
 

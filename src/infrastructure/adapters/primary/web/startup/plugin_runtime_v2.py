@@ -17,6 +17,9 @@ from src.domain.model.plugins.generated_v2 import (
     ScopeKindV2,
     ScopeV2,
 )
+from src.infrastructure.adapters.primary.web.startup.root_profile_startup_v2 import (
+    publish_configured_root_startup_v2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_deadline_reconciler_v2 import (
     PlatformPluginDeadlineReconcilerV2,
 )
@@ -92,7 +95,7 @@ DEFAULT_MANIFEST_V2_PATHS = (
 DEFAULT_PUBLICATION_POLICY_V2 = PlatformPluginPublicationPolicyV2.local_default()
 
 
-async def initialize_plugin_runtime_v2(  # noqa: PLR0913
+async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
     app: FastAPI,
     *,
     session_factory: Callable[[], Any] | None = None,
@@ -167,21 +170,39 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913
 
         durable_distribution = await _last_good_distribution_v2(session_factory)
         latest_distribution = await _latest_requested_distribution_v2(session_factory)
-        publication, record_startup_publication = await _publish_startup_generation_v2(
-            host,
-            durable_distribution=durable_distribution,
-            latest_distribution=latest_distribution,
-            agent_pool_runtime_enabled=agent_pool_runtime_enabled,
-            agent_pool_runtime_config=resolved_agent_pool_config,
-            activate_workspace_core_shadow=workspace_core_runtime_factory is not None,
-            publication_stager=stage_routes,
-        )
+        if session_factory is not None:
+            publication, record_startup_publication = await publish_configured_root_startup_v2(
+                host,
+                session_factory=session_factory,
+                durable_distribution=durable_distribution,
+                latest_distribution=latest_distribution,
+                agent_pool_runtime_enabled=agent_pool_runtime_enabled,
+                agent_pool_runtime_config=resolved_agent_pool_config,
+                workspace_core_enabled=workspace_core_runtime_factory is not None,
+                trusted_public_keys=getattr(
+                    app.state, "plugin_marketplace_trusted_public_keys_v2", ()
+                ),
+                allowed_registries=getattr(
+                    app.state, "plugin_marketplace_allowed_registries_v2", frozenset()
+                ),
+                publication_stager=stage_routes,
+            )
+        else:
+            publication, record_startup_publication = await _publish_startup_generation_v2(
+                host,
+                durable_distribution=durable_distribution,
+                latest_distribution=latest_distribution,
+                agent_pool_runtime_enabled=agent_pool_runtime_enabled,
+                agent_pool_runtime_config=resolved_agent_pool_config,
+                activate_workspace_core_shadow=workspace_core_runtime_factory is not None,
+                publication_stager=stage_routes,
+            )
         if not publication.accepted:
             await _record_startup_publication_v2(
                 session_factory,
                 publication,
                 publication_policy=publication_policy,
-                retain_requested_as_last_good=durable_distribution is not None,
+                retain_requested_as_last_good=durable_distribution,
             )
             failure = publication.receipt
             raise RuntimeV2Error(
@@ -202,7 +223,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913
                 publication,
                 publication_policy=publication_policy,
             )
-    except Exception:
+    except BaseException:
         await host.close()
         raise
 
@@ -404,7 +425,7 @@ async def _record_startup_publication_v2(
     publication: PlatformPluginPublicationV2,
     *,
     publication_policy: PlatformPluginPublicationPolicyV2,
-    retain_requested_as_last_good: bool = False,
+    retain_requested_as_last_good: Mapping[str, object] | None = None,
 ) -> None:
     if session_factory is None:
         return
@@ -414,16 +435,18 @@ async def _record_startup_publication_v2(
     )
 
     if (
-        retain_requested_as_last_good
+        retain_requested_as_last_good is not None
         and not publication.accepted
         and publication.receipt.applied_version is None
     ):
+        retained_envelope = parse_control_envelope_v2(retain_requested_as_last_good.get("envelope"))
+        retained_snapshot = parse_profile_snapshot_v2(retain_requested_as_last_good.get("snapshot"))
         publication = replace(
             publication,
             receipt=replace(
                 publication.receipt,
-                applied_version=publication.envelope.version,
-                applied_digest=publication.snapshot.digest,
+                applied_version=retained_envelope.version,
+                applied_digest=retained_snapshot.digest,
             ),
         )
     async with session_factory() as session:

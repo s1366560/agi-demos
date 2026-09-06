@@ -48,7 +48,10 @@ async def test_explicit_setting_persists_exact_source_and_is_not_overwritten(db_
         )
         assert source.layers[:-1] == sources.profile_source.layers
         replacements = source.layers[-1].replacements
-        assert len(replacements) == 3
+        assert len(replacements) == 4
+        replacements = tuple(
+            entry for entry in replacements if entry.entry_id != "builtin-agent-pool-runtime"
+        )
         assert all(entry.enabled == enabled for entry in replacements)
         composition = compose_profile_sources_v2(
             desired_set=record.desired_set,
@@ -129,3 +132,45 @@ async def test_source_cas_conflict_does_not_create_desired(db_session):
         assert (
             await PlatformPluginDesiredBundleSetRepositoryV2(db).current_desired_set(ROOT) is None
         )
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_explicit_agent_pool_config_is_durable_and_existing_choice_wins(db_session, enabled):
+    from src.infrastructure.plugins.v2.agent_pool_runtime import (
+        default_agent_pool_runtime_config_v2,
+    )
+
+    sources = production_bundle_sources_v2()
+    factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+    service = RootProfileInitializationServiceV2(
+        session_factory=factory, production_sources=sources
+    )
+    config = default_agent_pool_runtime_config_v2(health_check_interval_seconds=57)
+    config["max_total_instances"] = 12
+    record = await service.ensure_initialized(
+        workspace_core_enabled=False,
+        agent_pool_runtime_enabled=enabled,
+        agent_pool_runtime_config=config,
+    )
+    config["max_total_instances"] = 99
+    async with factory() as db:
+        ref = record.desired_set.profile_source
+        source = await PlatformPluginProfileSourceRepositoryV2(db).read_exact(
+            scope=ROOT, source_id=ref.source_id, revision=ref.revision, digest=ref.digest
+        )
+        entry = next(
+            entry
+            for entry in source.layers[-1].replacements
+            if entry.entry_id == "builtin-agent-pool-runtime"
+        )
+        assert entry.enabled is enabled
+        assert entry.config["max_total_instances"] == 12
+        assert entry.config["health_check_interval_seconds"] == 57
+    assert (
+        await service.ensure_initialized(
+            workspace_core_enabled=True,
+            agent_pool_runtime_enabled=not enabled,
+            agent_pool_runtime_config=config,
+        )
+        == record
+    )
