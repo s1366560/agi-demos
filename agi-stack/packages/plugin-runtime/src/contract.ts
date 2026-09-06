@@ -176,7 +176,8 @@ function parseProvided(value: unknown, index: number): ServiceProvidedV2 {
 
 function parseRequired(value: unknown, index: number): ServiceRequiredV2 {
   const payload = objectValue(value, `requires[${index}]`);
-  exactKeys(payload, ['alias', 'service', 'version', 'contributes']);
+  allowedKeys(payload, ['alias', 'service', 'version', 'contributes']);
+  requiredKeys(payload, ['alias', 'service', 'version']);
   if ('contributes' in payload && typeof payload.contributes !== 'boolean') {
     schemaFail('service contribution flag must be boolean');
   }
