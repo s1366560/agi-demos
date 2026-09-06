@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -819,7 +820,7 @@ test('operation helper revokes escaped authority and preserves primary failure o
 
 test('production and QA wiring remove every direct Marketplace transport fallback', () => {
   const source = (relativePath) => readFileSync(new URL(relativePath, REPOSITORY_ROOT), 'utf8');
-  const hook = source('agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts');
+  const hook = desktopProductionRuntimeSource();
   const app = source('agi-stack/apps/desktop/src/App.tsx');
   const settings = source('agi-stack/apps/desktop/src/features/settings/SettingsWindow.tsx');
   const management = source('agi-stack/apps/desktop/src/features/settings/usePluginManagement.ts');

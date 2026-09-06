@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -14,7 +15,7 @@ const retiredProvider = source(
 const authorityModule = source(
   "src/plugins/desktopConversationLifecycleAuthorityModuleV2.ts",
 );
-const generationHook = source("src/plugins/useDesktopPluginGenerationV2.ts");
+const generationHook = desktopProductionRuntimeSource();
 
 test("App creates one generation-backed conversation lifecycle operation port", () => {
   assert.match(app, /createDesktopConversationLifecycleOperationsV2/u);

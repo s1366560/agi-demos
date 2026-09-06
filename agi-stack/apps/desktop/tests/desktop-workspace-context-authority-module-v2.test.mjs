@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -793,10 +794,7 @@ test('operation helper rejects unavailable services without invoking a transport
 });
 
 test('production wiring registers the Definition and removes direct workspace context clients', () => {
-  const hook = readFileSync(
-    new URL('agi-stack/apps/desktop/src/plugins/useDesktopPluginGenerationV2.ts', REPOSITORY_ROOT),
-    'utf8',
-  );
+  const hook = desktopProductionRuntimeSource();
   const app = readFileSync(new URL('agi-stack/apps/desktop/src/App.tsx', REPOSITORY_ROOT), 'utf8');
   const settings = readFileSync(
     new URL('agi-stack/apps/desktop/src/features/settings/SettingsCorePages.tsx', REPOSITORY_ROOT),

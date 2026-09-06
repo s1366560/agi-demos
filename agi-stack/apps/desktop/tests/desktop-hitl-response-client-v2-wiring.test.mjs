@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -8,7 +9,7 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const generationHook = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const generationHook = desktopProductionRuntimeSource();
 const authorityModule = source('src/plugins/desktopHitlResponseAuthorityModuleV2.ts');
 const socket = source('src/hooks/useAgentSocket.ts');
 const legacyProviderPath = new URL(

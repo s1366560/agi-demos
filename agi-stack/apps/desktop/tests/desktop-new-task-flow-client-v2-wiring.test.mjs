@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -10,7 +11,7 @@ function source(relativePath) {
 const app = source('src/App.tsx');
 const flow = source('src/features/task/NewTaskFlow.tsx');
 const authority = source('src/plugins/desktopNewTaskFlowAuthorityModuleV2.ts');
-const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const generation = desktopProductionRuntimeSource();
 const standaloneQa = source('src/qa/NewTaskFlowQa.tsx');
 const noProjectQa = source('src/qa/NoProjectEntryQa.tsx');
 const qaAuthority = source('src/qa/desktopNewTaskFlowAuthorityQaV2.ts');

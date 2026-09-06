@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -21,10 +22,7 @@ const bootstrapPath = new URL(
 );
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
 const apiClientSource = readFileSync(new URL('../src/api/client.ts', import.meta.url), 'utf8');
-const generationSource = readFileSync(
-  new URL('../src/plugins/useDesktopPluginGenerationV2.ts', import.meta.url),
-  'utf8',
-);
+const generationSource = desktopProductionRuntimeSource();
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
 

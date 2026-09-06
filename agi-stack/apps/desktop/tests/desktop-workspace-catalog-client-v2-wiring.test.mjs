@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -14,7 +15,7 @@ const provider = source(
 const authority = source(
   "src/plugins/desktopWorkspaceCatalogAuthorityModuleV2.ts",
 );
-const generation = source("src/plugins/useDesktopPluginGenerationV2.ts");
+const generation = desktopProductionRuntimeSource();
 
 test("App creates one stable generation-backed workspace catalog operation port", () => {
   assert.match(app, /createDesktopWorkspaceCatalogOperationsV2/u);

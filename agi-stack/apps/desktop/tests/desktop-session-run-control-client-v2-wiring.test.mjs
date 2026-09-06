@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -10,7 +11,7 @@ function source(relativePath) {
 const app = source('src/App.tsx');
 const authority = source('src/plugins/desktopSessionRunControlAuthorityModuleV2.ts');
 const contract = source('src/plugins/desktopSessionRunControlContractV2.ts');
-const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const generation = desktopProductionRuntimeSource();
 const stableOperationsPattern = new RegExp(
   [
     'const desktopSessionRunControlOperationsV2 = useMemo\\(',

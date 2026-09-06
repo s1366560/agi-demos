@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -766,7 +767,7 @@ test('all production consumers use the V2 operations facade with no parallel cli
   const presentation = source(
     'src/features/project-blackboard/projectBlackboardPresentationModel.ts',
   );
-  const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+  const generation = desktopProductionRuntimeSource();
 
   assert.match(app, /createDesktopProjectBlackboardOperationsV2/u);
   assert.match(app, /createDesktopWorkspaceCollaborationClientV2/u);

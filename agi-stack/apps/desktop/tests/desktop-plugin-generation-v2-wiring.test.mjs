@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -7,7 +8,7 @@ function source(relativePath) {
 }
 
 test('desktop renderer owns a protocol-v2 generation host through the trusted sidecar IPC seam', () => {
-  const hook = source('src/plugins/useDesktopPluginGenerationV2.ts');
+  const hook = desktopProductionRuntimeSource();
   const host = source('src/plugins/DesktopRendererGenerationHostV2.tsx');
   const context = source('src/plugins/desktopRendererGenerationContextV2.tsx');
   const serviceOperationLease = source(

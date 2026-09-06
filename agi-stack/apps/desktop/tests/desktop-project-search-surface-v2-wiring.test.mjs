@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -7,7 +8,7 @@ function source(relativePath) {
 }
 
 const app = source('src/App.tsx');
-const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const generation = desktopProductionRuntimeSource();
 const authority = source('src/plugins/desktopProjectSearchAuthorityModuleV2.ts');
 const binding = source('src/features/search/projectSearchRouteBindingProviderV2.ts');
 const routeModule = source('src/features/search/projectSearchRouteModule.tsx');

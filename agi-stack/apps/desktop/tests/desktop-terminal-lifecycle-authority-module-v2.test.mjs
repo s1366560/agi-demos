@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -866,10 +867,7 @@ test('missing service fails closed and bind failures preserve the primary error'
 test('production wiring removes raw transport choice from App and useTerminalProxy', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const hook = readFileSync(new URL('../src/hooks/useTerminalProxy.ts', import.meta.url), 'utf8');
-  const generation = readFileSync(
-    new URL('../src/plugins/useDesktopPluginGenerationV2.ts', import.meta.url),
-    'utf8',
-  );
+  const generation = desktopProductionRuntimeSource();
 
   for (const pattern of [
     /api\.seedProxyAuthCookie\(/u,

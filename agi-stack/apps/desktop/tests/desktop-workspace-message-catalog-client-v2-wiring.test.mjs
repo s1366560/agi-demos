@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -12,7 +13,7 @@ const authorityModule = source('src/plugins/desktopWorkspaceMessageCatalogAuthor
 const retiredProvider = source(
   'src/features/workspace/desktopWorkspaceMessageCatalogClientProviderV2.ts'
 );
-const generationHost = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const generationHost = desktopProductionRuntimeSource();
 
 test('App constructs one stable generation-backed workspace message catalog operation port', () => {
   assert.match(app, /createDesktopWorkspaceMessageCatalogOperationsV2/u);

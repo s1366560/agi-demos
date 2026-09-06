@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -9,7 +10,7 @@ function source(relativePath) {
 
 const app = source('src/App.tsx');
 const authority = source('src/plugins/desktopMyWorkAuthorityModuleV2.ts');
-const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const generation = desktopProductionRuntimeSource();
 const testTypeScriptConfig = source('tsconfig.test.json');
 
 test('App resolves My Work only through the generation-backed operation port', () => {

@@ -1,3 +1,4 @@
+import { desktopProductionRuntimeSource } from './support/desktop-production-runtime-source.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -10,7 +11,7 @@ function source(relativePath) {
 const app = source('src/App.tsx');
 const artifactAuthority = source('src/plugins/desktopArtifactContentAuthorityModuleV2.ts');
 const artifactClientProvider = source('src/features/chat/desktopArtifactClientProviderV2.ts');
-const generation = source('src/plugins/useDesktopPluginGenerationV2.ts');
+const generation = desktopProductionRuntimeSource();
 const artifactCatalog = source('src/plugins/desktopRendererArtifactCatalogV2.ts');
 const boundary = source('src/plugins/DesktopRendererSessionCanvasV2.tsx');
 const composition = source('src/plugins/desktopRendererAppCompositionV2.tsx');
