@@ -1,3 +1,4 @@
+import { waitForDesktopWorkspaceCoreReadyV2 } from './hooks/desktopWorkspaceCoreReadinessV2';
 import { useDesktopModalBackgroundV2 } from './hooks/useDesktopModalBackgroundV2';
 import { useDesktopRendererRuntimeAdmissionV2 } from './hooks/useDesktopRendererRuntimeAdmissionV2';
 import { createDesktopBrowserBridgeManagementOperationsV2, createDesktopBrowserBridgeManagementClientV2 } from './plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
@@ -3381,6 +3382,15 @@ export function App() {
       );
       activeRuntimeConversationRequestsRef.current = conversationRequestGenerations;
       try {
+        if (nextConfig.mode === 'local' && window.__MEMSTACK_DESKTOP__?.runtime === 'electron') {
+          const invoke = window.__MEMSTACK_DESKTOP__.core?.invoke;
+          if (!invoke) throw new Error('workspace_core_status_unavailable');
+          const ready = await waitForDesktopWorkspaceCoreReadyV2({
+            readStatus: () => invoke<unknown>('workspace_core_status'),
+            isCurrent: () => contextIsCurrent() && isDesktopRendererRuntimeAdmittedV2(),
+          });
+          if (!ready) return false;
+        }
         const runtimeConfig = await syncLocalRuntimeConfig(nextConfig);
         if (!contextIsCurrent()) return false;
         const availableProjects =
