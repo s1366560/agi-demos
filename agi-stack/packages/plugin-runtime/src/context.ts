@@ -53,6 +53,7 @@ export interface EventRecordV2 {
 
 export class EffectStackV2 {
   readonly records: EffectRecordV2[] = [];
+  private disposal?: Promise<void>;
 
   constructor(private readonly phase: () => FiberPhaseV2) {}
 
@@ -60,7 +61,7 @@ export class EffectStackV2 {
     this.ensureActive();
     const record: EffectRecordV2 = { label, disposer };
     this.records.push(record);
-    return async () => disposeRecord(record);
+    return () => disposeRecord(record);
   }
 
   async addResult(result: EffectResultV2, label: string): Promise<void> {
@@ -89,12 +90,23 @@ export class EffectStackV2 {
     throw new RuntimeV2Error('invalid_effect', `${label} returned an unsupported effect`);
   }
 
-  async dispose(): Promise<void> {
-    for (const record of [...this.records].reverse()) await disposeRecord(record);
+  dispose(): Promise<void> {
+    this.disposal ??= Promise.resolve().then(async () => {
+      const errors: unknown[] = [];
+      for (const record of [...this.records].reverse()) {
+        try {
+          await disposeRecord(record);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length > 0) throw new AggregateError(errors, 'effect cleanup failed');
+    });
+    return this.disposal;
   }
 
   ensureActive(): void {
-    if (this.phase() !== 'loading' && this.phase() !== 'active') {
+    if (this.disposal || (this.phase() !== 'loading' && this.phase() !== 'active')) {
       throw new RuntimeV2Error('inactive_effect', 'inactive context cannot register an effect');
     }
   }
@@ -414,15 +426,28 @@ function resolveProvision(
   return provision;
 }
 
-async function disposeRecord(record: EffectRecordV2): Promise<void> {
+const recordDisposals = new WeakMap<EffectRecordV2, Promise<void>>();
+
+function disposeRecord(record: EffectRecordV2): Promise<void> {
+  const existing = recordDisposals.get(record);
+  if (existing) return existing;
   const disposer = record.disposer;
-  if (!disposer) return;
   delete record.disposer;
-  try {
-    await disposer();
-  } catch (error) {
-    record.error = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  }
+  // Cache before invoking user cleanup so concurrent callers share its outcome.
+  const disposal = Promise.resolve().then(async () => {
+    try {
+      await disposer?.();
+    } catch (error) {
+      try {
+        record.error = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      } catch {
+        record.error = 'effect cleanup failed';
+      }
+      throw error;
+    }
+  });
+  recordDisposals.set(record, disposal);
+  return disposal;
 }
 
 function scopeRank(scope: ScopeV2): number {

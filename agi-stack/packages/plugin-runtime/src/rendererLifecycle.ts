@@ -1,7 +1,7 @@
 import { RuntimeV2Error } from './errors';
 import type { SnapshotApplyReceiptV2 } from './generated';
 import type { RendererPluginRuntimeV2 } from './renderer';
-import type { RuntimeGenerationV2 } from './runtime';
+import type { GenerationPublicationResultV2, RuntimeGenerationV2 } from './runtime';
 
 export type RendererGenerationStatusV2 = 'loading' | 'empty' | 'ready' | 'degraded' | 'error';
 
@@ -146,6 +146,8 @@ async function refreshRendererGenerationV2(
 ): Promise<void> {
   if (options.bootstrap !== undefined && options.runtime.getSnapshot() === undefined) {
     await options.bootstrap();
+    if (isStopped()) return;
+    settleRendererPublicationV2(options);
   }
   if (isStopped()) return;
 
@@ -161,7 +163,21 @@ async function refreshRendererGenerationV2(
     }
   }
   if (isStopped()) return;
-  options.statusStore.settle(options.runtime.getSnapshot() !== undefined);
+  settleRendererPublicationV2(options);
+}
+
+function settleRendererPublicationV2(options: StartRendererGenerationPollingOptionsV2): void {
+  const generation = options.runtime.getSnapshot();
+  const publication = options.runtime.lastPublication;
+  if (
+    publication !== undefined &&
+    publication.generation === generation &&
+    publication.diagnostics.length > 0
+  ) {
+    options.statusStore.fail(publicationErrorV2(publication), generation !== undefined);
+  } else {
+    options.statusStore.settle(generation !== undefined);
+  }
 }
 
 async function applyRendererDistributionV2(
@@ -177,4 +193,18 @@ function statusSnapshotV2(
   error: unknown | undefined
 ): RendererGenerationStatusSnapshotV2 {
   return Object.freeze({ status, error });
+}
+
+const publicationErrorsV2 = new WeakMap<GenerationPublicationResultV2, AggregateError>();
+
+function publicationErrorV2(publication: GenerationPublicationResultV2): AggregateError {
+  let error = publicationErrorsV2.get(publication);
+  if (error === undefined) {
+    error = new AggregateError(
+      publication.diagnostics.map((diagnostic) => diagnostic.error),
+      'Generation published with observer or retirement failures'
+    );
+    publicationErrorsV2.set(publication, error);
+  }
+  return error;
 }

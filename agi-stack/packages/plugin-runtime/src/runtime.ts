@@ -55,6 +55,7 @@ export class FiberV2 {
   error?: unknown;
   readonly context: ContextV2;
   private readonly effects: EffectStackV2;
+  private disposal?: Promise<void>;
 
   constructor(
     readonly entry: ProfileEntryV2,
@@ -90,20 +91,27 @@ export class FiberV2 {
     } catch (error) {
       this.error = error;
       this.phase = 'failed';
-      await this.effects.dispose();
-      throw error;
+      try {
+        await this.effects.dispose();
+      } catch (cleanupError) {
+        this.error = new AggregateError(
+          [error, cleanupError],
+          'Fiber activation and cleanup failed'
+        );
+      }
+      throw this.error;
     }
   }
 
-  async dispose(): Promise<void> {
-    if (this.phase === 'disposed' || this.phase === 'unloading') return;
-    if (this.phase === 'pending') {
-      this.phase = 'disposed';
-      return;
-    }
+  dispose(): Promise<void> {
+    if (this.disposal) return this.disposal;
     this.phase = 'unloading';
-    await this.effects.dispose();
-    this.phase = 'disposed';
+    this.disposal = Promise.resolve()
+      .then(() => this.effects.dispose())
+      .finally(() => {
+        this.phase = 'disposed';
+      });
+    return this.disposal;
   }
 
   diagnostics(): ReadonlyArray<Readonly<EffectRecordV2>> {
@@ -115,6 +123,7 @@ export class RuntimeGenerationV2 {
   leaseCount = 0;
   retired = false;
   disposed = false;
+  private disposal?: Promise<void>;
 
   constructor(
     readonly snapshot: ProfileSnapshotV2,
@@ -133,10 +142,21 @@ export class RuntimeGenerationV2 {
     ) as T;
   }
 
-  async dispose(): Promise<void> {
-    if (this.disposed) return;
-    for (const fiber of [...this.fibers].reverse()) await fiber.dispose();
-    this.disposed = true;
+  dispose(): Promise<void> {
+    if (this.disposal) return this.disposal;
+    this.disposal = Promise.resolve().then(async () => {
+      const errors: unknown[] = [];
+      for (const fiber of [...this.fibers].reverse()) {
+        try {
+          await fiber.dispose();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      this.disposed = true;
+      if (errors.length > 0) throw new AggregateError(errors, 'Generation cleanup failed');
+    });
+    return this.disposal;
   }
 }
 
@@ -226,6 +246,7 @@ export function projectSnapshotEntriesV2(
 
 export class GenerationLeaseV2 {
   private released = false;
+  private releasePromise?: Promise<void>;
 
   constructor(
     readonly generation: RuntimeGenerationV2,
@@ -234,32 +255,100 @@ export class GenerationLeaseV2 {
 
   fork(): GenerationLeaseV2 {
     if (this.released) {
-      throw new RuntimeV2Error('generation_lease_released', 'cannot fork a released generation lease');
+      throw new RuntimeV2Error(
+        'generation_lease_released',
+        'cannot fork a released generation lease'
+      );
     }
     return this.manager.acquire(this.generation);
   }
 
-  async release(): Promise<void> {
-    if (this.released) return;
-    this.released = true;
-    await this.manager.release(this.generation);
+  release(): Promise<void> {
+    if (!this.releasePromise) {
+      this.released = true;
+      this.releasePromise = this.manager.release(this.generation);
+    }
+    return this.releasePromise;
   }
+}
+
+export interface GenerationPublicationDiagnosticV2 {
+  readonly phase: 'observer' | 'retirement';
+  readonly generation: RuntimeGenerationV2;
+  readonly error: unknown;
+}
+
+export interface GenerationPublicationResultV2 {
+  readonly generation: RuntimeGenerationV2;
+  readonly diagnostics: readonly GenerationPublicationDiagnosticV2[];
 }
 
 export class GenerationManagerV2 {
   current: RuntimeGenerationV2 | undefined;
   private readonly managedGenerations = new WeakSet<RuntimeGenerationV2>();
   private readonly subscribers = new Set<() => void>();
+  private publication?: GenerationPublicationResultV2;
+  private readonly publications = new WeakMap<
+    RuntimeGenerationV2,
+    Promise<GenerationPublicationResultV2>
+  >();
+  private closePromise: Promise<void> | undefined;
 
-  async publish(generation: RuntimeGenerationV2): Promise<void> {
+  get lastPublication(): GenerationPublicationResultV2 | undefined {
+    return this.publication;
+  }
+
+  publish(generation: RuntimeGenerationV2): Promise<GenerationPublicationResultV2> {
+    if (generation === this.current) {
+      return (
+        this.publications.get(generation) ??
+        Promise.reject(
+          new RuntimeV2Error('generation_not_managed', 'current generation was not published here')
+        )
+      );
+    }
+    if (generation.disposed || generation.retired) {
+      return Promise.reject(
+        new RuntimeV2Error('retired_generation', 'cannot publish a retired generation')
+      );
+    }
+    const completion = deferredV2<GenerationPublicationResultV2>();
+    this.publications.set(generation, completion.promise);
     const previous = this.current;
     this.managedGenerations.add(generation);
     this.current = generation;
-    this.notify();
-    if (previous) {
-      previous.retired = true;
-      if (previous.leaseCount === 0) await previous.dispose();
+    this.closePromise = undefined;
+    if (previous) previous.retired = true;
+    const diagnostics: GenerationPublicationDiagnosticV2[] = this.notify().map((error) => ({
+      phase: 'observer',
+      generation,
+      error,
+    }));
+    void this.finishPublication(generation, previous, diagnostics).then(
+      completion.resolve,
+      completion.reject
+    );
+    return completion.promise;
+  }
+
+  private async finishPublication(
+    generation: RuntimeGenerationV2,
+    previous: RuntimeGenerationV2 | undefined,
+    diagnostics: GenerationPublicationDiagnosticV2[]
+  ): Promise<GenerationPublicationResultV2> {
+    if (previous && previous.leaseCount === 0) {
+      try {
+        await previous.dispose();
+      } catch (error) {
+        diagnostics.push({ phase: 'retirement', generation: previous, error });
+      }
     }
+    const result = Object.freeze({
+      generation,
+      diagnostics: Object.freeze(diagnostics),
+    });
+    if (this.current === generation) this.publication = result;
+    return result;
   }
 
   acquire(generation: RuntimeGenerationV2 | undefined = this.current): GenerationLeaseV2 {
@@ -289,14 +378,27 @@ export class GenerationManagerV2 {
 
   getSnapshot = (): RuntimeGenerationV2 | undefined => this.current;
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
+    if (this.closePromise) return this.closePromise;
+    const completion = deferredV2<void>();
+    this.closePromise = completion.promise;
     const current = this.current;
     this.current = undefined;
-    this.notify();
-    if (current) {
-      current.retired = true;
-      if (current.leaseCount === 0) await current.dispose();
-    }
+    if (current) current.retired = true;
+    const errors = this.notify();
+    void Promise.resolve()
+      .then(async () => {
+        if (current && current.leaseCount === 0) {
+          try {
+            await current.dispose();
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+        if (errors.length > 0) throw new AggregateError(errors, 'Generation manager close failed');
+      })
+      .then(completion.resolve, completion.reject);
+    return completion.promise;
   }
 
   async release(generation: RuntimeGenerationV2): Promise<void> {
@@ -307,9 +409,31 @@ export class GenerationManagerV2 {
     if (generation.retired && generation.leaseCount === 0) await generation.dispose();
   }
 
-  private notify(): void {
-    for (const listener of this.subscribers) listener();
+  private notify(): unknown[] {
+    const errors: unknown[] = [];
+    for (const listener of [...this.subscribers]) {
+      try {
+        listener();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    return errors;
   }
+}
+
+function deferredV2<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((accept, fail) => {
+    resolve = accept;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 
 function enabledTargetEntries(
@@ -352,7 +476,16 @@ async function activateGeneration(
       await fiber.start();
     }
   } catch (error) {
-    for (const fiber of [...fibers].reverse()) await fiber.dispose();
+    const errors: unknown[] = [error];
+    for (const fiber of [...fibers].reverse()) {
+      try {
+        await fiber.dispose();
+      } catch (cleanupError) {
+        errors.push(cleanupError);
+      }
+    }
+    if (errors.length > 1)
+      throw new AggregateError(errors, 'Generation activation and cleanup failed');
     throw error;
   }
   return new RuntimeGenerationV2(snapshot, fibers, services);

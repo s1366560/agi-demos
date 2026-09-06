@@ -162,6 +162,9 @@ async function fetchWebPluginDistributionV2(signal: AbortSignal): Promise<unknow
 function scheduleClose(): void {
   pendingClose = setTimeout(() => {
     pendingClose = null;
-    void webRendererRuntimeV2.close();
+    void webRendererRuntimeV2.close().catch((error: unknown) => {
+      logger.error('Failed to close plugin generation', error);
+      webRendererStatusStoreV2.fail(error, webRendererRuntimeV2.getSnapshot() !== undefined);
+    });
   }, 0);
 }

@@ -175,7 +175,7 @@ export class PluginSnapshotReconcilerV2 {
     try {
       await this.manager.publish(generation);
     } catch (error) {
-      await generation.dispose();
+      if (this.manager.current !== generation) await generation.dispose();
       throw error;
     }
   }
@@ -185,9 +185,12 @@ export class PluginSnapshotReconcilerV2 {
       await this.bootstrapPromise.catch(() => undefined);
     }
     await this.applyTail;
-    await this.manager.close();
-    this.appliedVersion = null;
-    this.appliedDigest = null;
+    try {
+      await this.manager.close();
+    } finally {
+      this.appliedVersion = null;
+      this.appliedDigest = null;
+    }
   }
 
   private ack(

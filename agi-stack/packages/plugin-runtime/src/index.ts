@@ -40,6 +40,8 @@ export {
   RuntimeV2Error,
   type AsyncDisposerV2,
   type EffectResultV2,
+  type GenerationPublicationDiagnosticV2,
+  type GenerationPublicationResultV2,
   type PluginDefinitionV2,
   type ProvideOptionsV2,
   type ResolveOptionsV2,

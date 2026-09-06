@@ -5,6 +5,7 @@ import {
   GenerationLeaseV2,
   LoaderV2,
   type PluginDefinitionV2,
+  type GenerationPublicationResultV2,
   type RuntimeGenerationV2,
 } from './runtime';
 import { parseProfileSnapshotV2 } from './validate';
@@ -27,6 +28,10 @@ export class RendererPluginRuntimeV2 {
 
   readonly getSnapshot = (): RuntimeGenerationV2 | undefined =>
     this.reconciler.manager.getSnapshot();
+
+  get lastPublication(): GenerationPublicationResultV2 | undefined {
+    return this.reconciler.manager.lastPublication;
+  }
 
   acquire(generation?: RuntimeGenerationV2): GenerationLeaseV2 {
     return this.reconciler.manager.acquire(generation);
@@ -57,6 +62,8 @@ export class RendererGenerationLeaseStoreV2 {
   private readonly leases = new Map<RuntimeGenerationV2, GenerationLeaseV2>();
   private readonly pendingReleases = new Set<Promise<void>>();
   private rootActive = false;
+  private deactivation: Promise<void> | undefined;
+  private rootIdentity: object = {};
   private runtimeUnsubscribe: (() => void) | undefined;
   private snapshot: RendererGenerationLeaseSnapshotV2;
 
@@ -71,6 +78,8 @@ export class RendererGenerationLeaseStoreV2 {
         'renderer generation lease store already owns a React root'
       );
     }
+    this.deactivation = undefined;
+    this.rootIdentity = {};
     this.rootActive = true;
     this.runtimeUnsubscribe = this.runtime.subscribe(this.capture);
     try {
@@ -110,13 +119,17 @@ export class RendererGenerationLeaseStoreV2 {
     await this.releaseExcept(snapshot.generation);
   }
 
-  async deactivateRoot(): Promise<void> {
-    if (!this.rootActive) return;
+  deactivateRoot(): Promise<void> {
+    if (this.deactivation) return this.deactivation;
+    if (!this.rootActive) return Promise.resolve();
     this.rootActive = false;
     this.listeners.clear();
     this.detach();
-    await this.releaseExcept(undefined);
-    await Promise.all(this.pendingReleases);
+    const releases = new Set(this.pendingReleases);
+    releases.add(this.releaseExcept(undefined));
+    this.pendingReleases.clear();
+    this.deactivation = drainRendererReleasesV2([...releases]);
+    return this.deactivation;
   }
 
   private readonly capture = (): void => {
@@ -127,7 +140,17 @@ export class RendererGenerationLeaseStoreV2 {
     }
     if (this.snapshot.generation === generation) return;
     this.snapshot = generationLeaseSnapshotV2(generation);
-    for (const listener of this.listeners) listener();
+    const identity = this.rootIdentity;
+    const errors: unknown[] = [];
+    for (const listener of [...this.listeners]) {
+      if (!this.rootActive || this.rootIdentity !== identity) break;
+      try {
+        listener();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0) throw new AggregateError(errors, 'Renderer generation observers failed');
   };
 
   private assertRootActive(): void {
@@ -152,7 +175,7 @@ export class RendererGenerationLeaseStoreV2 {
       releases.push(lease.release());
     }
     if (releases.length === 0) return Promise.resolve();
-    const pending = Promise.all(releases).then(() => undefined);
+    const pending = drainRendererReleasesV2(releases);
     this.pendingReleases.add(pending);
     void pending.finally(() => this.pendingReleases.delete(pending)).catch(() => undefined);
     return pending;
@@ -163,4 +186,11 @@ function generationLeaseSnapshotV2(
   generation: RuntimeGenerationV2 | undefined
 ): RendererGenerationLeaseSnapshotV2 {
   return Object.freeze({ generation });
+}
+
+async function drainRendererReleasesV2(releases: readonly Promise<void>[]): Promise<void> {
+  const results = await Promise.allSettled(releases);
+  const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (errors.length > 0)
+    throw new AggregateError(errors, 'Renderer generation lease cleanup failed');
 }

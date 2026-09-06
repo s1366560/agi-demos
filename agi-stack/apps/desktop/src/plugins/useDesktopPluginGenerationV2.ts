@@ -256,7 +256,9 @@ export function useDesktopPluginGenerationV2(
     desktopRendererStatusStoreV2.getSnapshot,
   );
   useLayoutEffect(() => {
-    void desktopRendererLeaseStoreV2.commit(snapshot);
+    void desktopRendererLeaseStoreV2.commit(snapshot).catch((error: unknown) => {
+      desktopRendererStatusStoreV2.fail(error, desktopRendererRuntimeV2.getSnapshot() !== undefined);
+    });
   }, [snapshot]);
 
   useEffect(() => {
@@ -316,6 +318,8 @@ async function fetchDesktopPluginDistributionV2(
 function scheduleClose(): void {
   pendingClose = setTimeout(() => {
     pendingClose = null;
-    void desktopRendererDistributionReconcilerV2.close();
+    void desktopRendererDistributionReconcilerV2.close().catch((error: unknown) => {
+      desktopRendererStatusStoreV2.fail(error, desktopRendererRuntimeV2.getSnapshot() !== undefined);
+    });
   }, 0);
 }
