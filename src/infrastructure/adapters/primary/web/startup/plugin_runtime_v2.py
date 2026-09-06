@@ -236,6 +236,7 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
     app.state.platform_plugin_http_route_publication_v2 = HttpRoutePublicationCoordinatorV2(
         host=host,
         registry=route_registry,
+        initial_graph=route_graph,
         workspace_core_settings=workspace_core_settings,
         dependency_overrides=app.dependency_overrides,
     )
