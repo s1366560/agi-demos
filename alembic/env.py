@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # This must happen before accessing Base.metadata
 import src.infrastructure.adapters.secondary.persistence.artifact_model
 import src.infrastructure.adapters.secondary.persistence.attachment_model
-import src.infrastructure.adapters.secondary.persistence.channel_models  # noqa: F401
+import src.infrastructure.adapters.secondary.persistence.channel_models
+import src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_model_v2  # noqa: F401
 from alembic import context
 
 # Import settings to get database URL
