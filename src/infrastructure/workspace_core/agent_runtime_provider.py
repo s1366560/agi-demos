@@ -17,13 +17,16 @@ from src.domain.events.types import AgentEventType
 from src.domain.model.agent import AgentExecutionEvent
 from src.domain.model.agent.conversation.conversation import Conversation, ConversationStatus
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
+from src.infrastructure.i18n import gettext as _
 from src.infrastructure.plugins.v2.agent_turn_projection import current_agent_turn_service_v2
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_DB_SESSION_SERVICE_V2,
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
-    pin_agent_turn_operation_v2,
 )
+from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.scoped_boundary import pin_scoped_agent_turn_operation_v2
+from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeReservationV2
 from src.infrastructure.workspace_core.client import (
     WorkspaceRuntimeCorrelationRequest,
     WorkspaceRuntimeCorrelationResponse,
@@ -165,6 +168,24 @@ class ProviderWorkspaceScope:
         return {key: value for key, value in values.items() if value is not None}
 
 
+class ProviderScopedAdmissionV2(Protocol):
+    async def authorize(self, db: AsyncSession, scope: ProviderWorkspaceScope) -> None: ...
+
+    async def acquire(
+        self, db: AsyncSession, scope: ProviderWorkspaceScope
+    ) -> ScopedRuntimeReservationV2: ...
+
+
+def _require_scoped_admission(
+    admission: ProviderScopedAdmissionV2 | None,
+) -> ProviderScopedAdmissionV2:
+    if admission is None:
+        raise RuntimeV2Error(
+            "scoped_runtime_missing", _("Provider scoped admission is unavailable")
+        )
+    return admission
+
+
 class MemStackAgentRuntimeProvider:
     """Bridge Provider calls into session-scoped MemStack runtime services."""
 
@@ -174,6 +195,7 @@ class MemStackAgentRuntimeProvider:
         workspace_core_client: _WorkspaceCoreRuntimeClient,
         session_factory: SessionFactory | None = None,
         container_provider: ContainerProvider | None = None,
+        scoped_admission: ProviderScopedAdmissionV2 | None = None,
         terminal_persist_wait_seconds: float = _MAX_TERMINAL_PERSIST_WAIT_SECONDS,
     ) -> None:
         super().__init__()
@@ -183,6 +205,7 @@ class MemStackAgentRuntimeProvider:
         self._session_factory = session_factory or _default_session_factory()
         self._container_provider = container_provider or _default_container_provider
         self._terminal_persist_wait_seconds = terminal_persist_wait_seconds
+        self._scoped_admission = scoped_admission
 
     async def stream_send(
         self,
@@ -194,6 +217,8 @@ class MemStackAgentRuntimeProvider:
             raise ValueError("chat.send requires a text message")
 
         async with self._session_factory() as db:
+            admission = _require_scoped_admission(self._scoped_admission)
+            await admission.authorize(db, scope)
             scoped = self._scoped_container(db)
             conversation = await _ensure_send_conversation(
                 db,
@@ -240,8 +265,10 @@ class MemStackAgentRuntimeProvider:
             turn_stack = AsyncExitStack()
 
             try:
+                reservation = await admission.acquire(db, scope)
                 _ = await turn_stack.enter_async_context(
-                    pin_agent_turn_operation_v2(
+                    pin_scoped_agent_turn_operation_v2(
+                        reservation,
                         operation_id=f"workspace-provider:{request.id}",
                         tenant_id=scope.tenant_id,
                         project_id=scope.project_id,

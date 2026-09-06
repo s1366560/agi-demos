@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import FastAPI
 
+from src.application.services.workspace_provider_admission_v2 import WorkspaceProviderAdmissionV2
 from src.configuration.workspace_core import WorkspaceCoreSettings
 from src.infrastructure.plugins.v2.boundary import reserve_current_generation_v2
 from src.infrastructure.plugins.v2.workspace_core_runtime import (
@@ -29,6 +32,8 @@ from src.infrastructure.workspace_core.provider import (
 
 def _build_workspace_core_runtime_service_v2(
     settings: WorkspaceCoreSettings,
+    *,
+    scoped_runtime_provider: Callable[[], object] | None = None,
 ) -> WorkspaceCoreRuntimeServiceV2:
     """Construct one isolated candidate without publishing process authority."""
     client = WorkspaceCoreClient(settings)
@@ -44,7 +49,14 @@ def _build_workspace_core_runtime_service_v2(
         event_token=settings.provider_event_token.get_secret_value(),
         timeout_seconds=settings.request_timeout_seconds,
     )
-    agent_runtime_provider = MemStackAgentRuntimeProvider(workspace_core_client=client)
+    agent_runtime_provider = MemStackAgentRuntimeProvider(
+        workspace_core_client=client,
+        scoped_admission=(
+            WorkspaceProviderAdmissionV2(client, scoped_runtime_provider)
+            if scoped_runtime_provider is not None
+            else None
+        ),
+    )
     provider_adapter = AvernetProviderAdapter(
         agent_runtime_provider,
         event_sink,
@@ -68,9 +80,13 @@ def _build_workspace_core_runtime_service_v2(
 
 async def create_workspace_core_runtime_service_v2(
     settings: WorkspaceCoreSettings,
+    *,
+    scoped_runtime_provider: Callable[[], object] | None = None,
 ) -> WorkspaceCoreRuntimeServiceV2:
     """Create and health-check a generation-owned Workspace Core candidate."""
-    runtime = _build_workspace_core_runtime_service_v2(settings)
+    runtime = _build_workspace_core_runtime_service_v2(
+        settings, scoped_runtime_provider=scoped_runtime_provider
+    )
     try:
         capabilities = await runtime.client.read_public_api_capabilities()
         require_complete_public_api(capabilities)

@@ -88,7 +88,9 @@ def test_avernet_injects_core_client_into_agent_runtime_provider() -> None:
     ):
         install_legacy_workspace_core_runtime(app, _settings())
 
-    provider_type.assert_called_once_with(workspace_core_client=app.state.workspace_core_client)
+    provider_type.assert_called_once_with(
+        workspace_core_client=app.state.workspace_core_client, scoped_admission=None
+    )
     provider_adapter_type.assert_called_once_with(
         provider_type.return_value,
         event_sink_type.return_value,
@@ -234,3 +236,28 @@ async def test_v2_factory_disposes_candidate_when_capability_check_fails() -> No
         await create_workspace_core_runtime_service_v2(_settings())
 
     provider_adapter.wait_until_idle.assert_awaited_once_with()
+
+
+@pytest.mark.unit
+async def test_scoped_admission_factory_defers_runtime_lookup_until_admission() -> None:
+    from src.application.services.workspace_provider_admission_v2 import (
+        WorkspaceProviderAdmissionV2,
+    )
+    from src.infrastructure.adapters.primary.web.workspace_core_runtime import (
+        _build_workspace_core_runtime_service_v2,
+    )
+
+    runtime_lookup = MagicMock(return_value=None)
+    with patch(
+        "src.infrastructure.adapters.primary.web.workspace_core_runtime.MemStackAgentRuntimeProvider"
+    ) as provider_type:
+        runtime = _build_workspace_core_runtime_service_v2(
+            _settings(), scoped_runtime_provider=runtime_lookup
+        )
+    try:
+        runtime_lookup.assert_not_called()
+        admission = provider_type.call_args.kwargs["scoped_admission"]
+        assert isinstance(admission, WorkspaceProviderAdmissionV2)
+        assert provider_type.call_args.kwargs["workspace_core_client"] is runtime.client
+    finally:
+        await runtime.dispose()

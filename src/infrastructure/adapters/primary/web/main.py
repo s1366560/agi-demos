@@ -171,7 +171,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
         raise RuntimeError("Workspace Core settings are not installed")
 
     async def workspace_core_runtime_factory() -> WorkspaceCoreRuntimeServiceV2:
-        return await create_workspace_core_runtime_service_v2(workspace_core_settings)
+        return await create_workspace_core_runtime_service_v2(
+            workspace_core_settings,
+            scoped_runtime_provider=lambda: getattr(app.state, "scoped_profile_runtime_v2", None),
+        )
 
     # Publish V2 before constructing legacy DI consumers. Graph, retrieval, and
     # sandbox/workflow resources are created by candidate effects and are not
