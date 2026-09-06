@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 
@@ -24,6 +25,7 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_scope_led
     ScopeLedgerBindingV2,
 )
 
+from .bundle_archive import VerifiedBundleArchiveV2
 from .lifecycle_tasks import OwnedLifecycleTaskV2
 from .protocol import (
     control_envelope_v2,
@@ -80,10 +82,12 @@ class ScopedPublicationCoordinatorV2:
         snapshot: ProfileSnapshotV2,
         *,
         expected_desired: DesiredBundleSetV2 | None = None,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> PlatformPluginPublicationV2:
         canonical = validate_scope_v2(scope)
         frozen = parse_profile_snapshot_v2(deepcopy(profile_snapshot_v2_to_payload(snapshot)))
         desired_fence = deepcopy(expected_desired)
+        archives = None if verified_archives is None else tuple(verified_archives)
         slot = self._slot(canonical)
         result: list[PlatformPluginPublicationV2] = []
 
@@ -110,7 +114,9 @@ class ScopedPublicationCoordinatorV2:
                     await session.commit()
                 # From this point a durable request exists; never admit an unreceipted apply.
                 slot.blocked = True
-                publication = await self._registry.publish(canonical, frozen, envelope)
+                publication = await self._registry.publish(
+                    canonical, frozen, envelope, verified_archives=archives
+                )
                 slot.pending = publication
                 await self._persist_receipt(canonical, slot)
                 result.append(publication)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -15,8 +16,10 @@ from src.domain.model.plugins.generated_v2 import (
 )
 from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
-from .artifacts import PluginArtifactResolverV2
+from .artifacts import PluginArtifactResolverV2, RepositoryPythonArtifactResolverV2
+from .bundle_archive import VerifiedBundleArchiveV2
 from .lifecycle_tasks import OwnedLifecycleTaskV2
+from .profile_watcher import CandidateBundleArtifactResolverV2
 from .protocol import parse_profile_snapshot_v2, profile_snapshot_v2_to_payload
 from .reconciler import PreparedGenerationPublicationV2
 from .route_authority import ROUTE_AUTHORITY_CATALOG_SERVICE_V2
@@ -44,6 +47,7 @@ _GLOBAL_ROUTE_SERVICES = frozenset(
 @dataclass(eq=False)
 class _ScopeSlot:
     host: PlatformPluginRuntimeHostV2
+    verified: bool = False
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     retired: bool = False
 
@@ -135,7 +139,8 @@ class ScopedRuntimeRegistryV2:
         self._definitions = tuple(definitions)
         self._definitions_factory = definitions_factory
         self._catalog = None if target_catalog is None else dict(target_catalog)
-        self._resolver = artifact_resolver
+        self._resolver = artifact_resolver or RepositoryPythonArtifactResolverV2()
+        self._candidate_artifacts = CandidateBundleArtifactResolverV2(self._resolver)
         self._slots: dict[str, _ScopeSlot] = {}
         self._retirements: dict[str, set[OwnedLifecycleTaskV2]] = {}
         self._retirement_errors: list[BaseException] = []
@@ -143,12 +148,19 @@ class ScopedRuntimeRegistryV2:
         self._closing = OwnedLifecycleTaskV2(self._drain_all, name="scoped-runtime-close-v2")
 
     async def publish(
-        self, scope: ScopeV2, snapshot: ProfileSnapshotV2, envelope: ControlPlaneEnvelopeV2
+        self,
+        scope: ScopeV2,
+        snapshot: ProfileSnapshotV2,
+        envelope: ControlPlaneEnvelopeV2,
+        *,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> PlatformPluginPublicationV2:
         """Validate scope containment before any apply; retain last-good on loader NACK."""
         canonical = validate_scope_v2(scope)
         validated = parse_profile_snapshot_v2(profile_snapshot_v2_to_payload(snapshot))
         _validate_snapshot_scope(canonical, validated)
+        archives = None if verified_archives is None else tuple(verified_archives)
+        verified = archives is not None
         if self._closed:
             raise RuntimeV2Error("scope_registry_closed", "scope registry is closed")
         key = scope_key_v2(canonical)
@@ -165,14 +177,43 @@ class ScopedRuntimeRegistryV2:
                         definitions,
                         target=DataPlaneTargetV2.PYTHON,
                         target_catalog=self._catalog,
-                        artifact_resolver=self._resolver,
+                        artifact_resolver=(
+                            self._candidate_artifacts if verified else self._resolver
+                        ),
                     )
-                )
+                ),
+                verified=verified,
             )
             self._slots[key] = slot
         async with slot.lock:
             slot.require_active()
-            return await slot.host.apply(validated, envelope, publication_stager=slot.stage)
+            if slot.verified != verified:
+                raise RuntimeV2Error(
+                    "scope_artifact_mode_mismatch", "scope host cannot change artifact trust mode"
+                )
+            with (
+                contextlib.nullcontext()
+                if archives is None
+                else self._candidate_artifacts.bind(archives)
+            ):
+                current = slot.host.current_publication
+                if (
+                    archives is not None
+                    and current is not None
+                    and current.snapshot.digest == validated.digest
+                ):
+                    # Reconciler may ACK this digest without staging a Loader candidate.
+                    # The new publication still has to supply the exact verified bytes.
+                    modules = {
+                        (manifest.plugin_id, module.module_ref): module
+                        for manifest in validated.manifests
+                        for module in manifest.modules
+                    }
+                    for entry in validated.entries:
+                        module = modules[(entry.plugin_ref, entry.module_ref)]
+                        if entry.enabled and DataPlaneTargetV2.PYTHON in module.targets:
+                            _ = self._candidate_artifacts.resolve(module)
+                return await slot.host.apply(validated, envelope, publication_stager=slot.stage)
 
     async def acquire(self, scope: ScopeV2) -> GenerationLeaseV2:
         """Lease only this exact authority; ancestors are never host fallbacks."""

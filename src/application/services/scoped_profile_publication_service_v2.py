@@ -84,6 +84,7 @@ class ScopedProfilePublicationServiceV2:
                     "scope_profile_source_missing", "exact profile source is missing"
                 )
         bundles: list[BundleManifestV2] = []
+        archives: list[VerifiedBundleArchiveV2] = []
         for reference in desired.bundles:
             archive = cast(object, await self._load_bundle(reference))
             if not isinstance(archive, VerifiedBundleArchiveV2):
@@ -101,6 +102,7 @@ class ScopedProfilePublicationServiceV2:
                     "verified bundle differs from exact reference",
                 )
             bundles.append(manifest)
+            archives.append(archive)
         composition = compose_profile_sources_v2(
             desired_set=desired, bundles=bundles, profile_source=source, scope=canonical
         )
@@ -113,7 +115,7 @@ class ScopedProfilePublicationServiceV2:
             snapshot, scope=canonical, required_services=self._requirements
         )
         publication = await self._coordinator.publish(
-            canonical, projected, expected_desired=desired
+            canonical, projected, expected_desired=desired, verified_archives=tuple(archives)
         )
         return ScopedProfilePublicationResultV2(
             desired_revision=desired.revision, publication=publication

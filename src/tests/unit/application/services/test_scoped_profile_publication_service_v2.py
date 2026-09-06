@@ -42,9 +42,29 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture
-async def setup_service(db_session):
+async def setup_service(db_session, request):
     signer = Ed25519PrivateKey.generate()
     bundle, raw, source, desired = _candidate_inputs(signer)
+    if getattr(request, "param", None) == "missing-python":
+        import base64
+
+        from src.infrastructure.plugins.v2.layer_composer import bundle_manifest_digest_v2
+        from src.tests.unit.infrastructure.plugins.v2.test_profile_watcher_v2 import _archive
+
+        bundle = replace(
+            bundle,
+            artifacts=tuple(
+                artifact for artifact in bundle.artifacts if artifact.target.value != "python"
+            ),
+        )
+        bundle = replace(bundle, digest=bundle_manifest_digest_v2(bundle))
+        bundle = replace(
+            bundle,
+            signature=base64.b64encode(signer.sign(bundle.digest.encode("ascii"))).decode("ascii"),
+        )
+        raw = _archive(bundle)
+        desired = replace(desired, bundles=(replace(desired.bundles[0], digest=bundle.digest),))
+        desired = replace(desired, digest=desired_bundle_set_digest_v2(desired))
     scope = source.layers[0].scope
     factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
     async with factory() as session:
@@ -58,10 +78,20 @@ async def setup_service(db_session):
     events = []
     # The catalog carries the exact artifact digest from this verified test bundle.
     snapshot = replace(_fixture_snapshot(), manifests=bundle.manifests)
+
+    class Resolver(RuntimeTestArtifactResolverV2):
+        def resolve(self, module):
+            artifact = super().resolve(module)
+            return (
+                replace(artifact, canonical_bytes=b"different executable")
+                if getattr(request, "param", None) == "wrong-executable"
+                else artifact
+            )
+
     registry = ScopedRuntimeRegistryV2(
         _definitions(bundle, events),
         target_catalog=target_catalog_from_snapshot_v2(snapshot),
-        artifact_resolver=RuntimeTestArtifactResolverV2(),
+        artifact_resolver=Resolver(),
     )
     coordinator = ScopedPublicationCoordinatorV2(session_factory=factory, registry=registry)
 
@@ -123,11 +153,22 @@ async def test_desired_change_while_loading_is_fenced_before_requested_commit(se
     with pytest.raises(RuntimeV2Error, match="desired source changed"):
         await service.publish_current(scope)
     assert events == []
+
     async with factory() as session:
         assert (
             await session.scalar(select(func.count()).select_from(PlatformPluginV2PublicationModel))
             == 0
         )
+
+
+@pytest.mark.parametrize("setup_service", ["missing-python"], indirect=True)
+async def test_verified_archive_without_required_executable_nacks_without_apply(setup_service):
+    service, coordinator, scope, _desired, _factory, events, _load = setup_service
+    with pytest.raises(ValueError, match="no target artifact"):
+        await service.publish_current(scope)
+    assert events == []
+    with pytest.raises(RuntimeV2Error):
+        await coordinator.acquire(scope)
 
 
 async def test_wrong_verified_bundle_reference_never_applies(setup_service):
@@ -150,3 +191,18 @@ async def test_wrong_verified_bundle_reference_never_applies(setup_service):
     with pytest.raises(RuntimeV2Error, match="exact reference"):
         await service.publish_current(scope)
     assert events == []
+
+
+@pytest.mark.parametrize("setup_service", ["wrong-executable"], indirect=True)
+async def test_verified_archive_must_match_actual_execution_resolver(setup_service):
+    service, coordinator, scope, _desired, _factory, events, _load = setup_service
+    result = await service.publish_current(scope)
+    assert not result.publication.accepted
+    assert result.publication.receipt.error_code == "staging_failed"
+    assert (
+        "executable bytes differ from its verified bundle"
+        in result.publication.receipt.error_message
+    )
+    assert events == []
+    with pytest.raises(RuntimeV2Error):
+        await coordinator.acquire(scope)
