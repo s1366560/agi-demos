@@ -23,7 +23,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from src.configuration.config import get_settings
 from src.domain.model.plugins.generated_v2 import PublicationStatusV2
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -84,7 +83,9 @@ class _Rendezvous:
 @pytest.fixture
 async def postgres_engine() -> AsyncIterator[AsyncEngine]:
     database_url = os.getenv("PLATFORM_PLUGIN_V2_POSTGRES_TEST_URL")
-    engine = create_async_engine(database_url or get_settings().postgres_url, pool_pre_ping=True)
+    if not database_url:
+        pytest.skip("PLATFORM_PLUGIN_V2_POSTGRES_TEST_URL must identify an isolated test database")
+    engine = create_async_engine(database_url, pool_pre_ping=True)
     try:
         async with engine.connect() as connection:
             assert connection.dialect.name == "postgresql"
