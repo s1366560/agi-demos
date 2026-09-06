@@ -21,6 +21,9 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler imp
     WebSocketMessageHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.adapters.primary.web.websocket.scoped_session_admission_v2 import (
+    acquire_existing_scoped_session_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.plugins.v2.agent_worker_runtime import (
     current_agent_worker_redis_client_v2,
@@ -28,8 +31,8 @@ from src.infrastructure.plugins.v2.agent_worker_runtime import (
 from src.infrastructure.plugins.v2.boundary import (
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
-    pin_agent_turn_operation_v2,
 )
+from src.infrastructure.plugins.v2.scoped_boundary import pin_scoped_agent_turn_operation_v2
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -79,6 +82,8 @@ async def _publish_hitl_response_to_redis(
     response_data: dict[str, Any],
     user_id: str,
     agent_mode: str,
+    *,
+    context: MessageContext,
 ) -> bool:
     """Publish HITL response to Redis Stream for Ray Actor delivery."""
     try:
@@ -90,7 +95,14 @@ async def _publish_hitl_response_to_redis(
             logger.debug("[WS HITL] Realtime disabled, skipping Redis publish")
             return False
 
-        async with pin_agent_turn_operation_v2(
+        reservation = await acquire_existing_scoped_session_v2(
+            context,
+            conversation_id=conversation_id,
+            project_id=project_id,
+            hitl_request_id=request_id,
+        )
+        async with pin_scoped_agent_turn_operation_v2(
+            reservation,
             operation_id=f"agent-hitl-response-publish:{request_id}",
             tenant_id=tenant_id,
             project_id=project_id,
@@ -502,6 +514,7 @@ async def _handle_hitl_response(
         response_data=response_data,
         user_id=context.user_id,
         agent_mode=agent_mode,
+        context=context,
     )
 
     if not redis_sent:
@@ -774,15 +787,19 @@ async def _start_hitl_stream_bridge(
             f"conversation={conversation_id}"
         )
 
-        # Auto-subscribe session to conversation
-        await manager.subscribe(context.session_id, conversation_id)
-
         # Import here to avoid the handlers package initialization cycle.
         from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_handler import (
             _start_recovery_bridge_task_v2,
         )
 
-        async with pin_agent_turn_operation_v2(
+        reservation = await acquire_existing_scoped_session_v2(
+            context,
+            conversation_id=conversation_id,
+            project_id=hitl_request.project_id,
+            hitl_request_id=request_id,
+        )
+        async with pin_scoped_agent_turn_operation_v2(
+            reservation,
             operation_id=f"agent-hitl-recovery-admission:{request_id}",
             tenant_id=hitl_request.tenant_id,
             project_id=hitl_request.project_id,
@@ -802,6 +819,7 @@ async def _start_hitl_stream_bridge(
                 },
             },
         ):
+            await manager.subscribe(context.session_id, conversation_id)
             started = await _start_recovery_bridge_task_v2(
                 context=context,
                 conversation_id=conversation_id,
@@ -810,6 +828,7 @@ async def _start_hitl_stream_bridge(
                 cursor_time_us=None,
                 cursor_counter=None,
                 operation_kind="agent-hitl-recovery-stream",
+                hitl_request_id=request_id,
             )
         if not started:
             logger.info(

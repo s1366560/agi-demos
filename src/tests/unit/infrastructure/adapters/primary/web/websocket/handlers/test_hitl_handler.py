@@ -66,9 +66,13 @@ def _set_hitl_encryption_env(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_publish_hitl_response_uses_v2_operation_redis(monkeypatch) -> None:
     redis_client = SimpleNamespace(xadd=AsyncMock(return_value="1-0"))
     pin_calls: list[dict[str, object]] = []
+    reservation = object()
+    acquire = AsyncMock(return_value=reservation)
+    monkeypatch.setattr(hitl_handler, "acquire_existing_scoped_session_v2", acquire)
 
     @asynccontextmanager
-    async def pin_operation(**kwargs: object):
+    async def pin_operation(received: object, **kwargs: object):
+        assert received is reservation
         pin_calls.append(dict(kwargs))
         yield object()
 
@@ -86,7 +90,7 @@ async def test_publish_hitl_response_uses_v2_operation_redis(monkeypatch) -> Non
     monkeypatch.setattr(agent_worker_state, "get_redis_client", reject_process_global_redis)
     monkeypatch.setattr(
         hitl_handler,
-        "pin_agent_turn_operation_v2",
+        "pin_scoped_agent_turn_operation_v2",
         pin_operation,
         raising=False,
     )
@@ -97,7 +101,9 @@ async def test_publish_hitl_response_uses_v2_operation_redis(monkeypatch) -> Non
         raising=False,
     )
 
+    context = _make_context()
     published = await hitl_handler._publish_hitl_response_to_redis(
+        context=context,
         tenant_id="tenant-1",
         project_id="project-1",
         conversation_id="conversation-1",
@@ -109,6 +115,12 @@ async def test_publish_hitl_response_uses_v2_operation_redis(monkeypatch) -> Non
         agent_mode="default",
     )
 
+    acquire.assert_awaited_once_with(
+        context,
+        conversation_id="conversation-1",
+        project_id="project-1",
+        hitl_request_id="request-1",
+    )
     assert published is True
     assert pin_calls == [
         {
@@ -147,9 +159,13 @@ async def test_hitl_recovery_forks_v2_stream_from_scoped_admission(monkeypatch) 
     hitl_request = _make_hitl_request(request_type=HITLRequestType.DECISION)
     repository = SimpleNamespace(get_by_id=AsyncMock(return_value=hitl_request))
     pin_calls: list[dict[str, object]] = []
+    reservation = object()
+    acquire = AsyncMock(return_value=reservation)
+    monkeypatch.setattr(hitl_handler, "acquire_existing_scoped_session_v2", acquire)
 
     @asynccontextmanager
-    async def pin_operation(**kwargs: object):
+    async def pin_operation(received: object, **kwargs: object):
+        assert received is reservation
         pin_calls.append(dict(kwargs))
         yield object()
 
@@ -164,7 +180,7 @@ async def test_hitl_recovery_forks_v2_stream_from_scoped_admission(monkeypatch) 
         "SqlHITLRequestRepository",
         lambda _db: repository,
     )
-    monkeypatch.setattr(hitl_handler, "pin_agent_turn_operation_v2", pin_operation)
+    monkeypatch.setattr(hitl_handler, "pin_scoped_agent_turn_operation_v2", pin_operation)
     monkeypatch.setattr(
         subscription_handler,
         "_start_recovery_bridge_task_v2",
@@ -173,6 +189,9 @@ async def test_hitl_recovery_forks_v2_stream_from_scoped_admission(monkeypatch) 
 
     await hitl_handler._start_hitl_stream_bridge(context, "req-1")
 
+    acquire.assert_awaited_once_with(
+        context, conversation_id="conv-1", project_id="project-1", hitl_request_id="req-1"
+    )
     manager.subscribe.assert_awaited_once_with("session-1", "conv-1")
     assert pin_calls == [
         {
@@ -204,6 +223,7 @@ async def test_hitl_recovery_forks_v2_stream_from_scoped_admission(monkeypatch) 
         cursor_time_us=None,
         cursor_counter=None,
         operation_kind="agent-hitl-recovery-stream",
+        hitl_request_id="req-1",
     )
 
 

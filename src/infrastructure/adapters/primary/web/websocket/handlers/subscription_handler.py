@@ -18,6 +18,10 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler imp
     stream_hitl_response_to_websocket,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.adapters.primary.web.websocket.scoped_session_admission_v2 import (
+    acquire_existing_scoped_session_v2,
+    authorize_existing_scoped_session_v2,
+)
 from src.infrastructure.plugins.v2.agent_recovery_stream_services import (
     AGENT_RECOVERY_STREAM_SERVICE_V2,
     AgentRecoveryStreamResolverProtocolV2,
@@ -33,9 +37,9 @@ from src.infrastructure.plugins.v2.boundary import (
     current_operation_context_v2,
     detached_operation_task_context_v2,
     fork_current_agent_operation_v2,
-    pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.runtime import OperationContextV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.scoped_boundary import pin_scoped_agent_turn_operation_v2
 from src.infrastructure.plugins.v2.session_event_log import (
     SESSION_EVENT_LOG_SERVICE_V2,
     SessionEventLogServiceV2,
@@ -142,6 +146,7 @@ async def _run_recovery_stream_v2(
     cursor_time_us: int | None,
     cursor_counter: int | None,
     operation_kind: str,
+    hitl_request_id: str | None = None,
 ) -> None:
     async with (
         context.fresh_db_context() as stream_context,
@@ -156,6 +161,12 @@ async def _run_recovery_stream_v2(
             services={OPERATION_DB_SESSION_SERVICE_V2: stream_context.db},
         ) as operation,
     ):
+        _ = await authorize_existing_scoped_session_v2(
+            stream_context,
+            conversation_id=conversation_id,
+            project_id=operation.context.scope.project_id or "",
+            hitl_request_id=hitl_request_id,
+        )
         resolver = _agent_recovery_stream_resolver_v2(operation)
         agent_service = await resolver.resolve(operation)
         await stream_hitl_response_to_websocket(
@@ -178,6 +189,7 @@ async def _start_recovery_bridge_task_v2(
     cursor_time_us: int | None,
     cursor_counter: int | None,
     operation_kind: str,
+    hitl_request_id: str | None = None,
 ) -> bool:
     fork = await fork_current_agent_operation_v2()
     task_started = False
@@ -196,6 +208,7 @@ async def _start_recovery_bridge_task_v2(
                 cursor_time_us=cursor_time_us,
                 cursor_counter=cursor_counter,
                 operation_kind=operation_kind,
+                hitl_request_id=hitl_request_id,
             )
         finally:
             await fork.release()
@@ -244,7 +257,11 @@ async def _maybe_start_recovery_bridge(
 ) -> None:
     """Start a recovery bridge on subscribe when execution is still running."""
     try:
-        async with pin_agent_turn_operation_v2(
+        reservation = await acquire_existing_scoped_session_v2(
+            context, conversation_id=conversation_id, project_id=project_id
+        )
+        async with pin_scoped_agent_turn_operation_v2(
+            reservation,
             operation_id=f"agent-subscription-recovery:{conversation_id}",
             tenant_id=context.tenant_id,
             project_id=project_id,
@@ -359,6 +376,9 @@ class SubscribeHandler(WebSocketMessageHandler):
                     )
                     return
 
+                _ = await authorize_existing_scoped_session_v2(
+                    context, conversation_id=conversation_id, project_id=conversation.project_id
+                )
                 await context.connection_manager.subscribe(context.session_id, conversation_id)
                 await _maybe_start_recovery_bridge(
                     context=context,

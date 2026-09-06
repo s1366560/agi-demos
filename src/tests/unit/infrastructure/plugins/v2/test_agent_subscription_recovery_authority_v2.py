@@ -42,6 +42,91 @@ _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
+class _ScopedRecoveryAuthority:
+    """Real scope registry with an independent ROOT conversation-access host."""
+
+    def __init__(self, definitions):
+        from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+        from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeRegistryV2
+
+        self.scope = ScopeV2(
+            kind=ScopeKindV2.SESSION,
+            tenant_id="tenant-1",
+            project_id="project-1",
+            session_id="conversation-1",
+        )
+        self.registry = ScopedRuntimeRegistryV2(definitions)
+        self.root = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+        self.manager = None
+
+    async def bootstrap(self, *, profile_path, manifest_paths, generation, version):
+        import json
+
+        from src.domain.model.plugins.generated_v2 import ServiceRequiredV2
+        from src.infrastructure.plugins.v2.composer import (
+            compose_profile_v2,
+            load_profile_document_v2,
+        )
+        from src.infrastructure.plugins.v2.protocol import (
+            control_envelope_v2,
+            parse_plugin_manifest_v2,
+        )
+        from src.infrastructure.plugins.v2.service_closure import project_service_closure_v2
+
+        manifests = [
+            parse_plugin_manifest_v2(json.loads(path.read_text())) for path in manifest_paths
+        ]
+        snapshot = compose_profile_v2(
+            load_profile_document_v2(profile_path),
+            {m.plugin_id: m for m in manifests},
+            generation=generation,
+        )
+
+        def project(services):
+            return project_service_closure_v2(
+                snapshot,
+                scope=self.scope,
+                required_services=tuple(
+                    ServiceRequiredV2(alias=str(i), service=service, version="1.0.0")
+                    for i, service in enumerate(services)
+                ),
+            )
+
+        if self.root.manager.current is None:
+            root_snapshot = project(("service:application.conversation-access",))
+            assert (
+                await self.root.apply(
+                    root_snapshot, control_envelope_v2(root_snapshot, version=version)
+                )
+            ).accepted
+        scoped_snapshot = project(
+            (
+                "service:agent.recovery-stream",
+                "service:session-event-log",
+                "service:agent.worker-runtime",
+            )
+        )
+        publication = await self.registry.publish(
+            self.scope, scoped_snapshot, control_envelope_v2(scoped_snapshot, version=version)
+        )
+        reservation = await self.registry.acquire_bound(self.scope)
+        self.manager = reservation.host._slot.host.manager
+        await reservation.lease.release()
+        return publication
+
+    async def acquire_existing(self, context, *, conversation_id, project_id):
+        assert context.tenant_id == self.scope.tenant_id
+        assert conversation_id == self.scope.session_id
+        assert project_id == self.scope.project_id
+        reservation = await self.registry.acquire_bound(self.scope)
+        assert reservation.lease.generation is not self.root.manager.current
+        return reservation
+
+    async def close(self):
+        await self.registry.close()
+        await self.root.close()
+
+
 class _TrackedRedisClient:
     def __init__(self, name: str) -> None:
         self.name = name
@@ -184,7 +269,7 @@ async def test_subscription_recovery_keeps_one_generation_for_redis_and_session_
         "SqlSessionEventLogStoreV2",
         lambda: next(stores),
     )
-    host = PlatformPluginRuntimeHostV2(
+    host = _ScopedRecoveryAuthority(
         builtin_runtime_definitions_v2(redis_runtime_factory=redis_factory)
     )
     first = await host.bootstrap(
@@ -194,7 +279,11 @@ async def test_subscription_recovery_keeps_one_generation_for_redis_and_session_
         version=941,
     )
     assert first.accepted is True
-    install_process_generation_host_v2(host)
+    install_process_generation_host_v2(host.root)
+    monkeypatch.setattr(
+        subscription_handler, "acquire_existing_scoped_session_v2", host.acquire_existing
+    )
+    monkeypatch.setattr(subscription_handler, "authorize_existing_scoped_session_v2", AsyncMock())
 
     async def reload_generation() -> None:
         second = await host.bootstrap(
@@ -223,9 +312,9 @@ async def test_subscription_recovery_keeps_one_generation_for_redis_and_session_
     context = _message_context(static_probe, db)
 
     try:
-        async with pin_generation_v2(host):
+        async with pin_generation_v2(host.root):
             await SubscribeHandler().handle(context, {"conversation_id": "conversation-1"})
-            assert first_client.close_calls == 0
+            assert first_client.close_calls == 1
 
         assert first_client.calls == ["agent:running:conversation-1"]
         assert second_client.calls == []
@@ -244,7 +333,7 @@ async def test_subscription_recovery_keeps_one_generation_for_redis_and_session_
         )
         context.send_error.assert_not_awaited()
     finally:
-        clear_process_generation_host_v2(host)
+        clear_process_generation_host_v2(host.root)
         await db.close()
         await host.close()
 
@@ -260,7 +349,7 @@ async def test_subscription_recovery_does_not_fallback_when_v2_redis_is_unavaila
         "SqlSessionEventLogStoreV2",
         lambda: store,
     )
-    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    host = _ScopedRecoveryAuthority(builtin_runtime_definitions_v2())
     publication = await host.bootstrap(
         profile_path=_PROFILE_PATH,
         manifest_paths=(_MANIFEST_PATH,),
@@ -268,7 +357,11 @@ async def test_subscription_recovery_does_not_fallback_when_v2_redis_is_unavaila
         version=943,
     )
     assert publication.accepted is True
-    install_process_generation_host_v2(host)
+    install_process_generation_host_v2(host.root)
+    monkeypatch.setattr(
+        subscription_handler, "acquire_existing_scoped_session_v2", host.acquire_existing
+    )
+    monkeypatch.setattr(subscription_handler, "authorize_existing_scoped_session_v2", AsyncMock())
     static_probe = _StaticRecoveryAuthorityProbe()
     repository_sessions: list[AsyncSession] = []
 
@@ -285,7 +378,7 @@ async def test_subscription_recovery_does_not_fallback_when_v2_redis_is_unavaila
     context = _message_context(static_probe, db)
 
     try:
-        async with pin_generation_v2(host):
+        async with pin_generation_v2(host.root):
             await SubscribeHandler().handle(context, {"conversation_id": "conversation-1"})
 
         assert repository_sessions == [db]
@@ -300,7 +393,7 @@ async def test_subscription_recovery_does_not_fallback_when_v2_redis_is_unavaila
         )
         context.send_error.assert_not_awaited()
     finally:
-        clear_process_generation_host_v2(host)
+        clear_process_generation_host_v2(host.root)
         await db.close()
         await host.close()
 
@@ -319,7 +412,7 @@ async def test_detached_recovery_stream_keeps_exact_generation_after_reload(  # 
         return next(redis_clients)
 
     monkeypatch.setattr(store_module, "SqlSessionEventLogStoreV2", lambda: next(stores))
-    host = PlatformPluginRuntimeHostV2(
+    host = _ScopedRecoveryAuthority(
         builtin_runtime_definitions_v2(redis_runtime_factory=redis_factory)
     )
     first = await host.bootstrap(
@@ -329,7 +422,11 @@ async def test_detached_recovery_stream_keeps_exact_generation_after_reload(  # 
         version=949,
     )
     assert first.accepted is True
-    install_process_generation_host_v2(host)
+    install_process_generation_host_v2(host.root)
+    monkeypatch.setattr(
+        subscription_handler, "acquire_existing_scoped_session_v2", host.acquire_existing
+    )
+    monkeypatch.setattr(subscription_handler, "authorize_existing_scoped_session_v2", AsyncMock())
 
     async def reload_generation() -> None:
         second = await host.bootstrap(
@@ -406,7 +503,7 @@ async def test_detached_recovery_stream_keeps_exact_generation_after_reload(  # 
     )
 
     try:
-        async with pin_generation_v2(host):
+        async with pin_generation_v2(host.root):
             await SubscribeHandler().handle(context, {"conversation_id": "conversation-1"})
 
         await asyncio.wait_for(stream_started.wait(), timeout=1)
@@ -429,7 +526,7 @@ async def test_detached_recovery_stream_keeps_exact_generation_after_reload(  # 
     finally:
         stream_resume.set()
         await asyncio.wait_for(asyncio.gather(*created_tasks), timeout=1)
-        clear_process_generation_host_v2(host)
+        clear_process_generation_host_v2(host.root)
         await parent_db.close()
         await detached_db.close()
         await host.close()

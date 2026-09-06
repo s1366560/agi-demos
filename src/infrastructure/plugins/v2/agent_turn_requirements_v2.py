@@ -14,6 +14,7 @@ AGENT_TURN_REQUIRED_SERVICES_V2: tuple[ServiceRequiredV2, ...] = (
         alias="definitions", service="service:agent-definition-resolver", version="1.0.0"
     ),
     ServiceRequiredV2(alias="events", service="service:session-event-log", version="1.0.0"),
+    ServiceRequiredV2(alias="recovery", service="service:agent.recovery-stream", version="1.0.0"),
     ServiceRequiredV2(alias="worker", service="service:agent.worker-runtime", version="1.0.0"),
     ServiceRequiredV2(alias="loop", service="service:agent-loop-resolver", version="1.0.0"),
     ServiceRequiredV2(

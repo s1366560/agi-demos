@@ -25,7 +25,10 @@ class _FakeRecoveryFork:
         self.resolver = SimpleNamespace(resolve=AsyncMock(return_value=service))
         self.admit_calls: list[dict[str, object]] = []
         self.release = AsyncMock()
-        self.operation = SimpleNamespace(require=self._require)
+        self.operation = SimpleNamespace(
+            require=self._require,
+            context=SimpleNamespace(scope=SimpleNamespace(project_id="project-1")),
+        )
 
     def _require(self, service: str) -> object:
         assert service == "service:agent.recovery-stream"
@@ -80,6 +83,10 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         v2_session_event_log=session_event_log,
         v2_conversation_access=conversation_access,
     )
+    context.v2_authorize = AsyncMock()
+    monkeypatch.setattr(
+        subscription_handler, "authorize_existing_scoped_session_v2", context.v2_authorize
+    )
     context.v2_agent_service = AsyncMock()
     context.v2_recovery_fork = _FakeRecoveryFork(context.v2_agent_service)
     context.v2_recovery_stream = AsyncMock()
@@ -91,10 +98,15 @@ def _build_context(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     context.fresh_db_context = _fresh_db_context
 
     @asynccontextmanager
-    async def _operation_context(**_kwargs: object):
+    async def _operation_context(_reservation: object, **_kwargs: object):
         yield None
 
-    monkeypatch.setattr(subscription_handler, "pin_agent_turn_operation_v2", _operation_context)
+    monkeypatch.setattr(
+        subscription_handler, "pin_scoped_agent_turn_operation_v2", _operation_context
+    )
+    monkeypatch.setattr(
+        subscription_handler, "acquire_existing_scoped_session_v2", AsyncMock(return_value=object())
+    )
     monkeypatch.setattr(
         subscription_handler,
         "fork_current_agent_operation_v2",
@@ -677,3 +689,39 @@ def test_subscription_recovery_has_no_static_llm_or_agent_service_factory() -> N
 
     assert "create_llm_client" not in source
     assert "get_scoped_container().agent_service" not in source
+
+
+async def test_recovery_authorization_revoked_before_stream_releases_fork(monkeypatch):
+    context = _build_context(monkeypatch)
+    context.v2_conversation_access.find_by_id.return_value = SimpleNamespace(
+        user_id="user-1", tenant_id="tenant-1", project_id="project-1"
+    )
+    context.v2_redis.get.return_value = b"msg-1"
+    context.v2_authorize.side_effect = [None, PermissionError("membership revoked")]
+    tasks = []
+
+    async def start(**kwargs):
+        tasks.append(kwargs["task_factory"]())
+        return True
+
+    context.connection_manager.try_start_bridge_task.side_effect = start
+    await SubscribeHandler().handle(context, {"conversation_id": "conv-1"})
+    results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), 2)
+    assert len(results) == 1 and isinstance(results[0], PermissionError)
+    context.v2_recovery_fork.resolver.resolve.assert_not_awaited()
+    context.v2_recovery_stream.assert_not_awaited()
+    context.v2_recovery_fork.release.assert_awaited_once_with()
+
+
+async def test_subscribe_revoked_membership_never_subscribes_or_acknowledges(monkeypatch):
+    context = _build_context(monkeypatch)
+    context.v2_conversation_access.find_by_id.return_value = SimpleNamespace(
+        user_id="user-1", tenant_id="tenant-1", project_id="project-1"
+    )
+    context.v2_authorize.side_effect = PermissionError("membership revoked")
+    await SubscribeHandler().handle(context, {"conversation_id": "conv-1"})
+    context.connection_manager.subscribe.assert_not_awaited()
+    context.connection_manager.try_start_bridge_task.assert_not_awaited()
+    context.send_ack.assert_not_awaited()
+    context.send_error.assert_awaited_once()
+    context.v2_recovery_fork.resolver.resolve.assert_not_awaited()
