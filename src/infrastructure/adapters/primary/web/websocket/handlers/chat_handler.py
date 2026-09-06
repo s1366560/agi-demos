@@ -33,6 +33,9 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler imp
     WebSocketMessageHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.adapters.primary.web.websocket.scoped_chat_admission_v2 import (
+    acquire_scoped_chat_turn_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
@@ -53,9 +56,9 @@ from src.infrastructure.plugins.v2.boundary import (
     OPERATION_IDENTITY_SERVICE_V2,
     OPERATION_METADATA_SERVICE_V2,
     current_operation_context_v2,
-    pin_agent_turn_operation_v2,
 )
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+from src.infrastructure.plugins.v2.scoped_boundary import pin_scoped_agent_turn_operation_v2
 from src.infrastructure.plugins.v2.session_event_log import TURN_ADMITTED_EVENT_V2
 
 if TYPE_CHECKING:
@@ -1536,7 +1539,11 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
     turn_id = execution_message_id or str(uuid.uuid4())
     manager = context.connection_manager
     try:
-        async with pin_agent_turn_operation_v2(
+        reservation = await acquire_scoped_chat_turn_v2(
+            context, conversation_id=conversation_id, project_id=project_id
+        )
+        async with pin_scoped_agent_turn_operation_v2(
+            reservation,
             operation_id=f"agent-turn:{turn_id}",
             tenant_id=context.tenant_id,
             project_id=project_id,

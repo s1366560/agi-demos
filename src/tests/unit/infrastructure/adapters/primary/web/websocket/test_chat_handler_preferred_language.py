@@ -29,7 +29,7 @@ pytestmark = pytest.mark.unit
 
 
 @asynccontextmanager
-async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
+async def _noop_agent_turn_operation(_reservation: object, **_kwargs: object) -> AsyncIterator[None]:
     yield None
 
 
@@ -37,9 +37,15 @@ async def _noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
 def _isolate_language_tests_from_generation_admission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Language behavior is isolated from admission; real scoped leases are tested separately.
     monkeypatch.setattr(
         chat_handler_module,
-        "pin_agent_turn_operation_v2",
+        "acquire_scoped_chat_turn_v2",
+        AsyncMock(return_value=object()),
+    )
+    monkeypatch.setattr(
+        chat_handler_module,
+        "pin_scoped_agent_turn_operation_v2",
         _noop_agent_turn_operation,
     )
 

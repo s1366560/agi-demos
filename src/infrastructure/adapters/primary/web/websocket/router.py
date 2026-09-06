@@ -200,6 +200,9 @@ async def agent_websocket_endpoint(
                         container=container,
                         session_factory=async_session_factory,
                         plugin_runtime_host_v2=plugin_runtime_host_v2_from_scope(websocket.scope),
+                        scoped_profile_runtime_v2=getattr(
+                            websocket.app.state, "scoped_profile_runtime_v2", None
+                        ),
                         api_key=api_key,
                     )
                     await message_router.route(context, data)

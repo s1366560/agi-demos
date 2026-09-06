@@ -13,7 +13,7 @@ import pytest
 
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.subagent import AgentTrigger
-from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2, ServiceRequiredV2
 from src.infrastructure.adapters.primary.web.websocket.handlers import chat_handler
 from src.infrastructure.plugins.v2.agent_definition import (
     AGENT_DEFINITION_RESOLVER_SERVICE_V2,
@@ -35,8 +35,11 @@ from src.infrastructure.plugins.v2.boundary import (
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
 from src.infrastructure.plugins.v2.composer import ProfileDocumentV2
+from src.infrastructure.plugins.v2.protocol import control_envelope_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeRegistryV2
+from src.infrastructure.plugins.v2.service_closure import project_service_closure_v2
 
 _ROOT = Path(__file__).resolve().parents[8]
 _DI_CONTAINER_PATH = _ROOT / "src/configuration/di_container.py"
@@ -211,6 +214,7 @@ async def test_websocket_agent_turn_reuses_outer_generation_and_publishes_comple
     install_process_generation_host_v2(host)
     context = _TurnContext()
     observed: dict[str, object] = {}
+    registry = ScopedRuntimeRegistryV2(builtin_runtime_definitions_v2())
 
     class AgentService:
         async def stream_chat_v2(self, **_kwargs: Any):
@@ -239,7 +243,7 @@ async def test_websocket_agent_turn_reuses_outer_generation_and_publishes_comple
                 AGENT_TURN_SERVICE_V2,
                 ScopeV2(kind=ScopeKindV2.ROOT),
             )
-            await host.bootstrap(
+            scoped_publication = await host.bootstrap(
                 profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
                 manifest_paths=(
                     _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",
@@ -247,6 +251,25 @@ async def test_websocket_agent_turn_reuses_outer_generation_and_publishes_comple
                 generation=2,
                 version=2,
                 nonce="websocket-turn-2",
+            )
+            scope = ScopeV2(
+                kind=ScopeKindV2.SESSION,
+                tenant_id=context.tenant_id,
+                project_id="project-1",
+                session_id="conversation-1",
+            )
+            snapshot = _scoped_snapshot(scoped_publication.snapshot, scope)
+            published = await registry.publish(
+                scope, snapshot, control_envelope_v2(snapshot, version=2)
+            )
+            assert published.accepted
+            reservation = await registry.acquire_bound(scope)
+            scoped_resolver = reservation.lease.generation.resolve(AGENT_TURN_SERVICE_V2, scope)
+            monkeypatch.setattr(
+                chat_handler,
+                "acquire_scoped_chat_turn_v2",
+                AsyncMock(return_value=reservation),
+                raising=False,
             )
             await chat_handler.stream_agent_to_websocket(
                 context=context,  # type: ignore[arg-type]
@@ -256,9 +279,12 @@ async def test_websocket_agent_turn_reuses_outer_generation_and_publishes_comple
                 execution_message_id="turn-1",
             )
 
-            assert observed["generation"] == outer_generation.generation == 1
+            assert outer_generation.generation == 1
+            assert observed["generation"] == 2
+            assert reservation.lease._released is True
         assert observed["db"] is context.db
-        assert observed["resolver"] is outer_turn_resolver
+        assert observed["resolver"] is scoped_resolver
+        assert observed["resolver"] is not outer_turn_resolver
         assert observed["identity"] == {
             "tenant_id": "tenant-1",
             "user_id": "user-1",
@@ -272,11 +298,12 @@ async def test_websocket_agent_turn_reuses_outer_generation_and_publishes_comple
         }
         distribution = observed["distribution"]
         assert isinstance(distribution, dict)
-        assert distribution["descriptor"]["generation"] == 1
+        assert distribution["descriptor"]["generation"] == 2
         assert context.connection_manager.errors == []
         assert len(context.connection_manager.broadcasts) == 1
     finally:
         clear_process_generation_host_v2(host)
+        await registry.close()
         await host.close()
 
 
@@ -289,6 +316,16 @@ async def test_websocket_agent_turn_fails_closed_without_process_host(
     clear_process_generation_host_v2(unconfigured_host)
     await unconfigured_host.close()
     context = _TurnContext()
+    monkeypatch.setattr(
+        chat_handler,
+        "acquire_scoped_chat_turn_v2",
+        AsyncMock(
+            side_effect=RuntimeV2Error(
+                "scoped_runtime_unavailable", "scoped runtime is unavailable"
+            )
+        ),
+        raising=False,
+    )
     called = False
 
     async def resolve_turn() -> object:
@@ -311,7 +348,7 @@ async def test_websocket_agent_turn_fails_closed_without_process_host(
     assert context.connection_manager.broadcasts == []
     assert len(context.connection_manager.errors) == 1
     error = context.connection_manager.errors[0][1]
-    assert error["data"]["message"] == "plugin generation host is not configured for this process"
+    assert error["data"]["code"] == "scoped_runtime_unavailable"
 
 
 @pytest.mark.unit
@@ -339,6 +376,23 @@ async def test_websocket_agent_turn_rejects_missing_v2_service_without_fallback(
     assert publication.accepted is True
     install_process_generation_host_v2(host)
     context = _TurnContext()
+    registry = ScopedRuntimeRegistryV2(builtin_runtime_definitions_v2())
+    scope = ScopeV2(
+        kind=ScopeKindV2.SESSION,
+        tenant_id=context.tenant_id,
+        project_id="project-1",
+        session_id="conversation-1",
+    )
+    snapshot = _scoped_snapshot(publication.snapshot, scope, AGENT_DEFINITION_RESOLVER_SERVICE_V2)
+    scoped = await registry.publish(scope, snapshot, control_envelope_v2(snapshot, version=3))
+    assert scoped.accepted
+    reservation = await registry.acquire_bound(scope)
+    monkeypatch.setattr(
+        chat_handler,
+        "acquire_scoped_chat_turn_v2",
+        AsyncMock(return_value=reservation),
+        raising=False,
+    )
     monkeypatch.setattr(chat_handler, "_load_external_acp_backend", AsyncMock(return_value=None))
 
     try:
@@ -357,6 +411,7 @@ async def test_websocket_agent_turn_rejects_missing_v2_service_without_fallback(
         assert "service:agent.turn-service" in error["data"]["message"]
     finally:
         clear_process_generation_host_v2(host)
+        await registry.close()
         await host.close()
 
 
@@ -393,3 +448,78 @@ async def test_websocket_unsubscribe_closes_agent_stream(
 
     assert closed is True
     assert context.connection_manager.broadcasts == []
+
+
+@pytest.mark.unit
+async def test_scoped_stream_cancellation_releases_real_reservation(monkeypatch):
+    import asyncio
+
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    publication = await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=4,
+        version=4,
+        nonce="cancel-scoped-turn",
+    )
+    registry = ScopedRuntimeRegistryV2(builtin_runtime_definitions_v2())
+    context = _TurnContext()
+    scope = ScopeV2(
+        kind=ScopeKindV2.SESSION,
+        tenant_id=context.tenant_id,
+        project_id="project-1",
+        session_id="conversation-1",
+    )
+    snapshot = _scoped_snapshot(publication.snapshot, scope)
+    accepted = await registry.publish(scope, snapshot, control_envelope_v2(snapshot, version=4))
+    assert accepted.accepted
+    reservation = await registry.acquire_bound(scope)
+    monkeypatch.setattr(
+        chat_handler,
+        "acquire_scoped_chat_turn_v2",
+        AsyncMock(return_value=reservation),
+        raising=False,
+    )
+    started = asyncio.Event()
+    finished = asyncio.Event()
+
+    async def stream(**kwargs):
+        assert current_operation_context_v2().descriptor == reservation.lease.generation.descriptor
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(chat_handler, "_stream_agent_to_websocket_pinned", stream)
+    task = asyncio.create_task(
+        chat_handler.stream_agent_to_websocket(
+            context=context,
+            conversation_id="conversation-1",
+            user_message="hello",
+            project_id="project-1",
+            execution_message_id="cancel-turn",
+        )
+    )
+    try:
+        await asyncio.wait_for(started.wait(), 3)
+        task.cancel()
+        await task  # Existing websocket wrapper deliberately handles cancellation.
+        assert finished.is_set()
+        assert reservation.lease._released is True
+        with pytest.raises(RuntimeV2Error, match="consumed"):
+            reservation.claim()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await reservation.lease.release()
+        await registry.close()
+        await host.close()
+
+
+def _scoped_snapshot(snapshot, scope, service=AGENT_TURN_SERVICE_V2):
+    return project_service_closure_v2(
+        snapshot,
+        scope=scope,
+        required_services=(ServiceRequiredV2(service=service, version="1.0.0", alias="turn"),),
+    )
