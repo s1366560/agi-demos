@@ -200,6 +200,135 @@ for (const item of cases) {
       await runtime.close();
     });
 
+    it('accepts a host-only profile with registry and contributions disabled', async () => {
+      const base = await snapshotFor(item, 504);
+      const { digest: _digest, ...unsigned } = {
+        ...base,
+        entries: base.entries.map((entry) => ({
+          ...entry,
+          enabled: entry.module_ref === item.hostModule,
+        })),
+      };
+      const snapshot = await parseProfileSnapshotV2({
+        ...unsigned,
+        digest: await digestV2(unsigned),
+      });
+      const validate = vi.fn();
+      const runtime = new RendererPluginRuntimeV2(item.target, item.definitions, validate);
+      const receipt = await runtime.apply(envelope(snapshot));
+      expect(receipt.status).toBe('ack');
+      expect(runtime.getSnapshot()?.fibers).toHaveLength(1);
+      expect(runtime.getSnapshot()?.resolve(item.hostService, { kind: 'root' })).toMatchObject({
+        target: item.target,
+        strategy: item.strategy,
+      });
+      expect(validate).not.toHaveBeenCalled();
+      await runtime.close();
+    });
+
+    it('rejects an enabled declared registry that fails to provide its service and retains last-good', async () => {
+      let omitRegistry = false;
+      const definitions = item.definitions.map((definition) =>
+        definition.moduleRef !== item.registryModule
+          ? definition
+          : {
+              ...definition,
+              apply(
+                context: Parameters<PluginDefinitionV2['apply']>[0],
+                config: Readonly<Record<string, unknown>>
+              ) {
+                if (!omitRegistry) return definition.apply(context, config);
+                return undefined;
+              },
+            }
+      );
+      const runtime = new RendererPluginRuntimeV2(item.target, definitions);
+      await runtime.bootstrap(await snapshotFor(item));
+      const previous = runtime.getSnapshot()!;
+      const base = await snapshotFor(item, 505);
+      const { digest: _digest, ...unsigned } = {
+        ...base,
+        // No contributor can fail early while requiring registry: readiness itself must
+        // enforce the enabled provider declaration after its apply returned successfully.
+        entries: base.entries.map((entry) => ({
+          ...entry,
+          enabled: entry.module_ref === item.hostModule || entry.module_ref === item.registryModule,
+        })),
+      };
+      const snapshot = await parseProfileSnapshotV2({
+        ...unsigned,
+        digest: await digestV2(unsigned),
+      });
+      omitRegistry = true;
+      const receipt = await runtime.apply(envelope(snapshot));
+      expect(receipt.status).toBe('nack');
+      expect(runtime.getSnapshot()).toBe(previous);
+      expect(previous.retired).toBe(false);
+      expect(previous.disposed).toBe(false);
+      await runtime.close();
+    });
+
+    it.each(['tenant', 'isolated'] as const)(
+      'does not resolve a %s registry as the root registry',
+      async (placement) => {
+        const base = await snapshotFor(item, 506);
+        const { digest: _digest, ...unsigned } = {
+          ...base,
+          entries: base.entries
+            .filter(
+              (entry) =>
+                entry.module_ref === item.hostModule || entry.module_ref === item.registryModule
+            )
+            .map((entry) => ({
+              ...entry,
+              enabled:
+                entry.module_ref === item.hostModule || entry.module_ref === item.registryModule,
+              ...(entry.module_ref === item.registryModule
+                ? {
+                    scope:
+                      placement === 'tenant'
+                        ? { kind: 'tenant' as const, tenant_id: 'tenant-readiness' }
+                        : entry.scope,
+                    isolate:
+                      placement === 'isolated'
+                        ? { [item.registryService]: 'private-registry' }
+                        : entry.isolate,
+                  }
+                : {}),
+            })),
+        };
+        const snapshot = await parseProfileSnapshotV2({
+          ...unsigned,
+          digest: await digestV2(unsigned),
+        });
+        const validate = vi.fn();
+        const loader = new LoaderV2(
+          item.definitions,
+          item.target,
+          undefined,
+          createRendererCandidateReadinessV2(item.target, validate)
+        );
+        const generation = await loader.stage(snapshot);
+        expect(generation.fibers).toHaveLength(2);
+        expect(validate).not.toHaveBeenCalled();
+        expect(() => generation.resolve(item.registryService, { kind: 'root' })).toThrow();
+        const registry =
+          placement === 'tenant'
+            ? generation.resolve<RendererContributionRegistryV2>(item.registryService, {
+                kind: 'tenant',
+                tenant_id: 'tenant-readiness',
+              })
+            : generation.resolve<RendererContributionRegistryV2>(
+                item.registryService,
+                { kind: 'root' },
+                { isolation: 'private-registry' }
+              );
+        expect(registry.target).toBe(item.target);
+        expect(registry.list()).toEqual([]);
+        await generation.dispose();
+      }
+    );
+
     it('accepts removal of every target entry without requiring a host or registry', async () => {
       const validate = vi.fn();
       const runtime = new RendererPluginRuntimeV2(item.target, item.definitions, validate);
