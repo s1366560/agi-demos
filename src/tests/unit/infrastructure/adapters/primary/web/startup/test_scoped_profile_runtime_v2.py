@@ -34,7 +34,8 @@ from src.infrastructure.plugins.v2.service_closure import project_service_closur
 pytestmark = pytest.mark.unit
 
 
-async def test_production_startup_component_consumes_actual_builtin_source(db_session):
+@pytest.mark.parametrize("materialize", [False, True])
+async def test_production_startup_component_consumes_actual_builtin_source(db_session, materialize):
     source = production_bundle_sources_v2()
     scope = ScopeV2(kind=ScopeKindV2.SESSION, tenant_id="t", project_id="p", session_id="s")
     root_scope = ScopeV2(kind=ScopeKindV2.ROOT)
@@ -57,11 +58,15 @@ async def test_production_startup_component_consumes_actual_builtin_source(db_se
     assert (await host.apply(projected, control_envelope_v2(projected, version=1))).accepted
     factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
     async with factory() as session:
-        await PlatformPluginProfileSourceRepositoryV2(session).record_source(
-            scope=scope, source=source.profile_source, expected_revision=None
-        )
+        if not materialize:
+            await PlatformPluginProfileSourceRepositoryV2(session).record_source(
+                scope=scope, source=source.profile_source, expected_revision=None
+            )
         await PlatformPluginDesiredBundleSetRepositoryV2(session).record_desired_set(
-            scope=scope, desired_set=source.desired_set, expected_revision=None, actor_id="fixture"
+            scope=root_scope if materialize else scope,
+            desired_set=source.desired_set,
+            expected_revision=None,
+            actor_id="fixture",
         )
         await session.commit()
     app = FastAPI()
@@ -69,7 +74,11 @@ async def test_production_startup_component_consumes_actual_builtin_source(db_se
     configure_plugin_trust_v2(app, key_files=(), allowed_registries=())
     runtime = initialize_scoped_profile_runtime_v2(app, session_factory=factory, redis_client=None)
     try:
-        result = await runtime.publish_current(scope, required_services=requirements)
+        result = (
+            await runtime.prepare_current(scope, actor_id="fixture", required_services=requirements)
+            if materialize
+            else await runtime.publish_current(scope, required_services=requirements)
+        )
         assert result.publication.accepted
         reservation = await runtime.acquire(scope)
         assert reservation.lease.generation is not host.manager.current

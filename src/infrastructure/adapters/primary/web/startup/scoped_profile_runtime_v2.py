@@ -7,6 +7,9 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.scoped_installed_bundle_loader_v2 import ScopedInstalledBundleLoaderV2
+from src.application.services.scoped_profile_initialization_service_v2 import (
+    ScopedProfileInitializationServiceV2,
+)
 from src.application.services.scoped_profile_publication_service_v2 import (
     ScopedProfilePublicationResultV2,
     ScopedProfilePublicationServiceV2,
@@ -36,12 +39,27 @@ class ScopedProfileRuntimeV2:
         session_factory: async_sessionmaker[AsyncSession],
         coordinator: ScopedPublicationCoordinatorV2,
         bundle_loader: ScopedInstalledBundleLoaderV2,
+        initializer: ScopedProfileInitializationServiceV2,
     ) -> None:
         super().__init__()
         self._sessions = session_factory
         self._coordinator = coordinator
         self._loader = bundle_loader
+        self._initializer = initializer
         self._closed = False
+
+    async def prepare_current(
+        self,
+        scope: ScopeV2,
+        *,
+        actor_id: str,
+        required_services: Sequence[ServiceRequiredV2],
+    ) -> ScopedProfilePublicationResultV2:
+        """Initialize missing configuration after authorization, then publish its exact source."""
+        if self._closed:
+            raise RuntimeV2Error("scoped_runtime_closed", "scoped runtime is closed")
+        _ = await self._initializer.ensure_initialized(scope, actor_id=actor_id)
+        return await self.publish_current(scope, required_services=required_services)
 
     async def publish_current(
         self, scope: ScopeV2, *, required_services: Sequence[ServiceRequiredV2]
@@ -86,9 +104,10 @@ def initialize_scoped_profile_runtime_v2(
         isinstance(value, str) for value in cast(frozenset[object], registries)
     ):
         raise TypeError("deployment plugin registries are not initialized")
+    sources = production_bundle_sources_v2()
     loader = ScopedInstalledBundleLoaderV2(
         session_factory=session_factory,
-        production_sources=production_bundle_sources_v2(),
+        production_sources=sources,
         trusted_public_keys=cast(tuple[str, ...], keys),
         allowed_registries=cast(frozenset[str], registries),
     )
@@ -103,6 +122,9 @@ def initialize_scoped_profile_runtime_v2(
             session_factory=session_factory, registry=registry
         ),
         bundle_loader=loader,
+        initializer=ScopedProfileInitializationServiceV2(
+            session_factory=session_factory, production_sources=sources
+        ),
     )
     app.state.scoped_profile_runtime_v2 = runtime
     return runtime
