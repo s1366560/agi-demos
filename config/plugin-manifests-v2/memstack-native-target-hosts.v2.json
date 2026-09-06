@@ -7,9 +7,9 @@
   "modules": [
     {
       "module_ref": "builtin://memstack/rust-server/skill-evolution-worker",
-      "entrypoint": "BackgroundWorkerModuleV2::apply",
+      "entrypoint": "SkillEvolutionWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:517de0ad769aac693ea2de76874e824c890d0c98719d81ba20e15c26db1c5411",
+        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [
@@ -47,9 +47,9 @@
     },
     {
       "module_ref": "builtin://memstack/rust-server/channel-outbox-worker",
-      "entrypoint": "BackgroundWorkerModuleV2::apply",
+      "entrypoint": "ChannelOutboxWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:517de0ad769aac693ea2de76874e824c890d0c98719d81ba20e15c26db1c5411",
+        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [
@@ -87,9 +87,9 @@
     },
     {
       "module_ref": "builtin://memstack/rust-server/cron-scheduler-worker",
-      "entrypoint": "BackgroundWorkerModuleV2::apply",
+      "entrypoint": "CronSchedulerWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:517de0ad769aac693ea2de76874e824c890d0c98719d81ba20e15c26db1c5411",
+        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [

@@ -442,3 +442,37 @@ async fn dropping_unpolled_generation_start_releases_lease_without_starting_jobs
     .expect("unpolled startup lease drains");
     assert_eq!(probe.starts.load(Ordering::SeqCst), 0);
 }
+
+#[tokio::test]
+async fn each_worker_module_alone_provides_only_its_declared_controller() {
+    for selected in 0..WORKER_MODULES_V2.len() {
+        let mut snapshot = profile(30 + selected as u64);
+        for entry in &mut snapshot.entries {
+            if let Some(index) = WORKER_MODULES_V2
+                .iter()
+                .position(|module_ref| *module_ref == entry.module_ref)
+            {
+                entry.enabled = index == selected;
+            }
+        }
+        let generation = loader(no_workers()).stage(snapshot).await.unwrap();
+        let scope = ScopeV2 {
+            kind: ScopeKindV2::Root,
+            tenant_id: None,
+            project_id: None,
+            session_id: None,
+        };
+        for (index, service) in WORKER_SERVICES_V2.iter().enumerate() {
+            assert_eq!(
+                generation
+                    .resolve::<Arc<BackgroundWorkerControllerV2>>(service, &scope, None)
+                    .is_ok(),
+                index == selected,
+                "module {selected} must publish only its declared service, checked {service}"
+            );
+        }
+        let manager = GenerationManagerV2::new();
+        manager.publish(generation).await;
+        tokio::time::timeout(LIMIT, manager.close()).await.unwrap();
+    }
+}

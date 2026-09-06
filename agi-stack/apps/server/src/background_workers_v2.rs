@@ -28,38 +28,96 @@ const WORKER_CONTRACTS_V2: [&str; 3] = [
     "sha256:86e82e004640593f1d1ce1017fec173af733f249fa3fab8e66ebd1786cf11867",
 ];
 
-pub(crate) struct BackgroundWorkerModuleV2 {
-    service: &'static str,
+pub(crate) struct SkillEvolutionWorkerModuleV2 {
     factory: WorkerFactoryV2,
 }
 
 #[async_trait]
-impl PluginModuleRuntimeV2 for BackgroundWorkerModuleV2 {
+impl PluginModuleRuntimeV2 for SkillEvolutionWorkerModuleV2 {
     async fn apply(
         &self,
         context: &mut ContextV2,
         config: &BTreeMap<String, Value>,
     ) -> Result<(), RuntimeV2Error> {
-        let autostart = config
-            .get("autostart")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| RuntimeV2Error::Module("worker autostart must be a boolean".into()))?;
-        let factory = if autostart {
-            self.factory.clone()
-        } else {
-            Arc::new(|| None)
-        };
-        let controller = Arc::new(BackgroundWorkerControllerV2::paused(factory));
-        let cleanup = controller.clone();
-        context.effect(
-            self.service,
-            Box::new(move || {
-                Box::pin(async move { cleanup.drain().await.map_err(RuntimeV2Error::Module) })
-            }),
+        let controller = prepare_worker_controller_v2(
+            context,
+            config,
+            &self.factory,
+            "service:rust-server.skill-evolution-worker",
         )?;
-        context.provide(self.service, controller)?;
+        context.provide("service:rust-server.skill-evolution-worker", controller)?;
         Ok(())
     }
+}
+
+pub(crate) struct ChannelOutboxWorkerModuleV2 {
+    factory: WorkerFactoryV2,
+}
+
+#[async_trait]
+impl PluginModuleRuntimeV2 for ChannelOutboxWorkerModuleV2 {
+    async fn apply(
+        &self,
+        context: &mut ContextV2,
+        config: &BTreeMap<String, Value>,
+    ) -> Result<(), RuntimeV2Error> {
+        let controller = prepare_worker_controller_v2(
+            context,
+            config,
+            &self.factory,
+            "service:rust-server.channel-outbox-worker",
+        )?;
+        context.provide("service:rust-server.channel-outbox-worker", controller)?;
+        Ok(())
+    }
+}
+
+pub(crate) struct CronSchedulerWorkerModuleV2 {
+    factory: WorkerFactoryV2,
+}
+
+#[async_trait]
+impl PluginModuleRuntimeV2 for CronSchedulerWorkerModuleV2 {
+    async fn apply(
+        &self,
+        context: &mut ContextV2,
+        config: &BTreeMap<String, Value>,
+    ) -> Result<(), RuntimeV2Error> {
+        let controller = prepare_worker_controller_v2(
+            context,
+            config,
+            &self.factory,
+            "service:rust-server.cron-scheduler-worker",
+        )?;
+        context.provide("service:rust-server.cron-scheduler-worker", controller)?;
+        Ok(())
+    }
+}
+
+fn prepare_worker_controller_v2(
+    context: &mut ContextV2,
+    config: &BTreeMap<String, Value>,
+    factory: &WorkerFactoryV2,
+    label: &'static str,
+) -> Result<Arc<BackgroundWorkerControllerV2>, RuntimeV2Error> {
+    let autostart = config
+        .get("autostart")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| RuntimeV2Error::Module("worker autostart must be a boolean".into()))?;
+    let factory = if autostart {
+        factory.clone()
+    } else {
+        Arc::new(|| None)
+    };
+    let controller = Arc::new(BackgroundWorkerControllerV2::paused(factory));
+    let cleanup = controller.clone();
+    context.effect(
+        label,
+        Box::new(move || {
+            Box::pin(async move { cleanup.drain().await.map_err(RuntimeV2Error::Module) })
+        }),
+    )?;
+    Ok(controller)
 }
 
 pub(crate) fn worker_definitions_v2(state: Option<&AppState>) -> Vec<PluginDefinitionV2> {
@@ -88,16 +146,19 @@ pub(crate) fn worker_definitions_v2(state: Option<&AppState>) -> Vec<PluginDefin
 pub(crate) fn definitions_from_factories_v2(
     factories: [WorkerFactoryV2; 3],
 ) -> Vec<PluginDefinitionV2> {
-    factories
+    let [skill, outbox, cron] = factories;
+    let modules: [Arc<dyn PluginModuleRuntimeV2>; 3] = [
+        Arc::new(SkillEvolutionWorkerModuleV2 { factory: skill }),
+        Arc::new(ChannelOutboxWorkerModuleV2 { factory: outbox }),
+        Arc::new(CronSchedulerWorkerModuleV2 { factory: cron }),
+    ];
+    modules
         .into_iter()
         .enumerate()
-        .map(|(index, factory)| PluginDefinitionV2 {
+        .map(|(index, module)| PluginDefinitionV2 {
             module_ref: WORKER_MODULES_V2[index].into(),
             contract_digest: WORKER_CONTRACTS_V2[index].into(),
-            module: Arc::new(BackgroundWorkerModuleV2 {
-                service: WORKER_SERVICES_V2[index],
-                factory,
-            }),
+            module,
         })
         .collect()
 }
