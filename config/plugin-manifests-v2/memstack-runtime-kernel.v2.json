@@ -5473,7 +5473,7 @@
             {
               "alias": "catalog",
               "service": "service:channel-adapter-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -5489,7 +5489,7 @@
           }
         }
       },
-      "contract_digest": "sha256:b510246f29c7004d8cbf55f0af1515f1e4a506485c3ae9fa21217a12f89e582c",
+      "contract_digest": "sha256:a8d931d428beadaecb18e437e817d6227194cfcbb5ff40152cc563ed75b43108",
       "artifact": {
         "digest": "sha256:03e31d565d9d4c0a2c6882a11c55a3def802123f7d798d9711a558af7a4d0551",
         "source": "repo+python://src/infrastructure/plugins/v2/channel_adapters.py"
@@ -8236,7 +8236,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-command-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8252,7 +8252,7 @@
           }
         }
       },
-      "contract_digest": "sha256:87ae0d9f7b64a35e0aa62511c74aab81898b7a0d4f7d9f7b3fc41ac86966b979",
+      "contract_digest": "sha256:d3c8b22cd98b370b9580311d840d095e6134bf3a61cef09da3355105838748ba",
       "artifact": {
         "digest": "sha256:c1a2647c6530f839a83c03b421f983e5415ea9de50b6914838fc6c7d3a5c4346",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_commands.py"
@@ -8269,7 +8269,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8287,7 +8287,7 @@
           }
         }
       },
-      "contract_digest": "sha256:7b2d77250586cce57d88f89fb77f1c374bd27ed3e95a21909f0c5b34909d88e2",
+      "contract_digest": "sha256:9327ae9e404849e2031cc0dcad3c2a4ef764ab5cc5722f21165aef1d0f065891",
       "artifact": {
         "digest": "sha256:fbf0f259788248cbbccfd82d0b82b90de63fff7d9596b59500f745702d5f7d22",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_canvas_tools.py"
@@ -8329,7 +8329,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8352,7 +8352,7 @@
           }
         }
       },
-      "contract_digest": "sha256:5aa2066d4eaea2d096a867061f49a6080c4af68abece7017d6f4a1b526c54f5d",
+      "contract_digest": "sha256:d0964b6ac28eb5ddb3408fe37986c3d7c5a4e6a6619bd6fa5175e528db5090ba",
       "artifact": {
         "digest": "sha256:28465cc099baaacb59cfd45e63ae31a36b84515088685a5487340c99505c09e2",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_custom_tools.py"
@@ -8369,7 +8369,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8392,7 +8392,7 @@
           }
         }
       },
-      "contract_digest": "sha256:df809779d5f6273eb37fb7b9461fc22907680834c79ca0b4f8c9ac34c95ecb17",
+      "contract_digest": "sha256:85adf465204605c13ebb014392dad69f8f553e898563f5ba5fccc18278a59500",
       "artifact": {
         "digest": "sha256:c5de35a4111fec810907c3bae1577efcdf8cbb01cd8fc18ce1c31cf404b99d6e",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_sandbox_mcp_tools.py"
@@ -8409,7 +8409,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8427,7 +8427,7 @@
           }
         }
       },
-      "contract_digest": "sha256:c7f342838f75dd6bee53fd5c61cc830829457ed01ca6cfa6500fde3bf38d7faf",
+      "contract_digest": "sha256:405a1bf3d94e7ecbb257cd818d13b76797f84ec8292ef2ca0f71e942b807aab3",
       "artifact": {
         "digest": "sha256:5051d900de4b1bc988ce0ca9aa5a3198aa730531e16a311d86fcfd6a485e5de6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
@@ -8444,7 +8444,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8462,7 +8462,7 @@
           }
         }
       },
-      "contract_digest": "sha256:d1f02208a75b0805a735716f763a321664e9956162d84f6ed2f602a0f56e4d65",
+      "contract_digest": "sha256:eece223a96ed921c90a91a56483667da915bd7fb41aeff80de1347a762651def",
       "artifact": {
         "digest": "sha256:5051d900de4b1bc988ce0ca9aa5a3198aa730531e16a311d86fcfd6a485e5de6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
@@ -8479,7 +8479,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8497,7 +8497,7 @@
           }
         }
       },
-      "contract_digest": "sha256:ae723500afbb5b55019d73549550c3673094928ffca4d89eaaf35ec205986a94",
+      "contract_digest": "sha256:1139a5da8b2d926a30abcca08ae8d66f9266daf8cd1bed363eeee97f2ac98c01",
       "artifact": {
         "digest": "sha256:5051d900de4b1bc988ce0ca9aa5a3198aa730531e16a311d86fcfd6a485e5de6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
@@ -8514,7 +8514,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8532,7 +8532,7 @@
           }
         }
       },
-      "contract_digest": "sha256:3c2c2c6fc501462d25895dbf5220a0cec33e98c18256c1e811aec7954eb454d6",
+      "contract_digest": "sha256:35881591582d99dc3ec1212ac88f3d91c16c33ec2942792523fb1afcc09858be",
       "artifact": {
         "digest": "sha256:5051d900de4b1bc988ce0ca9aa5a3198aa730531e16a311d86fcfd6a485e5de6",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_task_session_tools.py"
@@ -8549,7 +8549,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8567,7 +8567,7 @@
           }
         }
       },
-      "contract_digest": "sha256:9df8c6d2f1105f11301e861410149bcf2ca7e8d8bf3290d7fb0bf86c569a4db0",
+      "contract_digest": "sha256:78f89d71249e85e62fc895436df0efcd282b347eefc1634c9e93c5882aeaf601",
       "artifact": {
         "digest": "sha256:732131600b8b5494666b9e46fa24cacc69569b4a398127280e1a7a09f5bc8911",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
@@ -8584,7 +8584,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             },
             {
               "alias": "skills",
@@ -8607,7 +8607,7 @@
           }
         }
       },
-      "contract_digest": "sha256:f988bf4bc6faae84b712fad5e60259ce227b6f81cf203b05dfdf509b4309d84c",
+      "contract_digest": "sha256:929b8eba9719c93ab3121c3ac727a53a92bf0482dae5dc0d4032faded30885f5",
       "artifact": {
         "digest": "sha256:732131600b8b5494666b9e46fa24cacc69569b4a398127280e1a7a09f5bc8911",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
@@ -8624,7 +8624,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8642,7 +8642,7 @@
           }
         }
       },
-      "contract_digest": "sha256:419fe8ca2c47ce089c983a79a3b057a50fb48c45c3659718a27f80af93d1f7be",
+      "contract_digest": "sha256:ca2e1b59a15a5bf11b8db9536560de97bb93a93222afca3cdb2ea6fff17f3d7e",
       "artifact": {
         "digest": "sha256:732131600b8b5494666b9e46fa24cacc69569b4a398127280e1a7a09f5bc8911",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
@@ -8659,7 +8659,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8677,7 +8677,7 @@
           }
         }
       },
-      "contract_digest": "sha256:70ad9b343b81405a671ab0b1cf48a5024fb895d0f7951475f6e2f73aa10d02e1",
+      "contract_digest": "sha256:e5237bdbeab62894d97d57258bd5b2597c2fefd909ef7eb0177e78e5dfb1820f",
       "artifact": {
         "digest": "sha256:732131600b8b5494666b9e46fa24cacc69569b4a398127280e1a7a09f5bc8911",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_runtime_utility_tools.py"
@@ -8694,7 +8694,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8712,7 +8712,7 @@
           }
         }
       },
-      "contract_digest": "sha256:af6130be8419f134c4fd690e48ece451299ed45123c2d4d7738600e600b6a972",
+      "contract_digest": "sha256:806bb522e729e3e9ebabeb87932da2c87d394be0f272820a73f7f3c86d1e10ac",
       "artifact": {
         "digest": "sha256:2013fe61387205fe2b9d075d5660c503dbdfc80d30fa8a06f46f262e18a2f288",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_hitl_tools.py"
@@ -8729,7 +8729,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8747,7 +8747,7 @@
           }
         }
       },
-      "contract_digest": "sha256:f9bf8907c6094fbf908726c66e6e44c0490673f2ec88cad79049e15c58a65696",
+      "contract_digest": "sha256:5895438a429a1ee1d017c953e539977e20eecf85732fd7ada03da43a4c3968fa",
       "artifact": {
         "digest": "sha256:bad6feaf3a883a3f34f15081292e5bfa670c900ca4d43110675be434c07b469f",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_memory_tools.py"
@@ -8764,7 +8764,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8782,7 +8782,7 @@
           }
         }
       },
-      "contract_digest": "sha256:56048baa10b5cc5e5de9128655b59053b1eef92912ed239240deb7abc6d06e96",
+      "contract_digest": "sha256:66c919f0ab32886eac3f59f937df87d1f7499f216aa5d9953ff10c1310aa9ce9",
       "artifact": {
         "digest": "sha256:ffc418957096ba5e2cd7da5bf3716c42b92a7988201a3f9c307c215d14b6ab28",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_model_awareness_tools.py"
@@ -8799,7 +8799,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8817,7 +8817,7 @@
           }
         }
       },
-      "contract_digest": "sha256:606f4420f80ef82dd1e8072e384100cc9e2e824e672078a995a3a6b3ff63c9cb",
+      "contract_digest": "sha256:59638bbc53bb5072c68ee4918165aac3b69a11eb5ef971973de6cff52f6bbf6c",
       "artifact": {
         "digest": "sha256:b5357aab1cc97e714bb45598fe6abb75bd55650f98009bede3599df3d39bc78e",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_system_api_tool.py"
@@ -8834,7 +8834,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             },
             {
               "alias": "publisher",
@@ -8857,7 +8857,7 @@
           }
         }
       },
-      "contract_digest": "sha256:ed92c9a549713927a32ce134371125c03104f7a6ee98062c191f566d79e819f8",
+      "contract_digest": "sha256:b8e5049e680e9f16b419b2e16ecf3ae67d9d50fce53363c52f925fa2cb0dc255",
       "artifact": {
         "digest": "sha256:9ca5a563da1b301085832032a0ebe030aa2ba6c03e9ff1ded01c640c12078b32",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_orchestration_tools.py"
@@ -8878,7 +8878,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8899,7 +8899,7 @@
           }
         }
       },
-      "contract_digest": "sha256:1dfdc11abb7f33a05c741b1966dcd79507b9fd3fc6956f8f2ef5bda96c69e982",
+      "contract_digest": "sha256:7c16e01c9ea5f7928f560eff83bbb27e5be54d397698b189c78b339c3be918bc",
       "artifact": {
         "digest": "sha256:bc94893bb6cd712ed52b53e0d63747b0f757937cae712835717aae82dde5e12b",
         "source": "repo+python://src/infrastructure/plugins/v2/github_capabilities.py"
@@ -8919,7 +8919,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -8962,7 +8962,7 @@
           }
         }
       },
-      "contract_digest": "sha256:017e0bdbcc41d4e092780b4aa0662003a65f9b2330ea0b981ae4eee98ab80ff0",
+      "contract_digest": "sha256:fb3137530f1705ec78e812aadf4a0cd446c3a29994d94f504d3aef2814ab1815",
       "artifact": {
         "digest": "sha256:dfb71ad6faeb57a6e25b8d8070b595d66a4d7df13686fd19722141980e65588d",
         "source": "repo+python://src/infrastructure/plugins/v2/docker_compose_capabilities.py"
@@ -8984,7 +8984,7 @@
             {
               "alias": "catalog",
               "service": "service:tool-set-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             },
             {
               "alias": "plugin_configs",
@@ -9012,7 +9012,7 @@
           }
         }
       },
-      "contract_digest": "sha256:0ec493af3f0f63c2ad40c4a3e331a33e505545bada796fdb7cf3c390cd1a27e7",
+      "contract_digest": "sha256:6dc755effd440e77e56e8789e0e7604e252bf40723271effff85bed73a13170a",
       "artifact": {
         "digest": "sha256:4bbad935fa5e44444814bac173032f8540b53cb56e72e369ab6cd0416853822d",
         "source": "repo+python://src/infrastructure/plugins/v2/drone_capabilities.py"
@@ -9630,7 +9630,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-definition-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -9646,7 +9646,7 @@
           }
         }
       },
-      "contract_digest": "sha256:e212362bfde8905af8bbe24271cd1a85f1f8f45de025ff117801e8429db8531d",
+      "contract_digest": "sha256:5b3162888c07314e05e0d99ba66bf7449fd8c603cf9f0c7ee385195dfc489ff8",
       "artifact": {
         "digest": "sha256:9bf1b833edb7b5037513ed4892ede0fc006ef87b82463d9ed64d46aaaae436e2",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_persisted_definition.py"
@@ -9663,7 +9663,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-definition-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -9690,7 +9690,7 @@
           }
         }
       },
-      "contract_digest": "sha256:94a9f647f558aa8cf89e7cc4d3361336e451bafff6bf5dad13e6e117e5b5ffd6",
+      "contract_digest": "sha256:f3d906681ae7b7c2f6c7fa867e68d51f4222af07475ced47d17a5a436734057d",
       "artifact": {
         "digest": "sha256:6c0cab7ec9922c39737b0405a1e304e4b82e49e108551e6cf05a153139b8fdcb",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_definition.py"
@@ -9736,7 +9736,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-capability-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -9752,7 +9752,7 @@
           }
         }
       },
-      "contract_digest": "sha256:628afbe88257ec446db86ad721698b1e0d8278232a74629be47522eea7bdb3a9",
+      "contract_digest": "sha256:e5555cc3a3ed175b3d558d6a84f999ef1a78af41df56e5e3a88f19534748a879",
       "artifact": {
         "digest": "sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020637c49e904c556cf68",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_capabilities.py"
@@ -9769,7 +9769,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-capability-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             },
             {
               "alias": "tool",
@@ -9789,7 +9789,7 @@
           }
         }
       },
-      "contract_digest": "sha256:04eacabaeda07b24c1029ce8458b0d29f7b08d5b260d9d5acc1b264603568de3",
+      "contract_digest": "sha256:f4fffb278d76a7fc3673f1a996cd6028643d14217f5663164b899cb1b4f9a1fb",
       "artifact": {
         "digest": "sha256:bc94893bb6cd712ed52b53e0d63747b0f757937cae712835717aae82dde5e12b",
         "source": "repo+python://src/infrastructure/plugins/v2/github_capabilities.py"
@@ -9806,7 +9806,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-capability-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             },
             {
               "alias": "tool",
@@ -9826,7 +9826,7 @@
           }
         }
       },
-      "contract_digest": "sha256:55c45bc9d4181cd6ec5d77865ecec1d924a8b3c107dd33440c6ccd1b816fff4c",
+      "contract_digest": "sha256:e012b7ec2690276136b7e936e6baf3017bd164fe9d793a27f5c76890e014eef6",
       "artifact": {
         "digest": "sha256:dfb71ad6faeb57a6e25b8d8070b595d66a4d7df13686fd19722141980e65588d",
         "source": "repo+python://src/infrastructure/plugins/v2/docker_compose_capabilities.py"
@@ -9843,7 +9843,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-capability-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             },
             {
               "alias": "tool",
@@ -9863,7 +9863,7 @@
           }
         }
       },
-      "contract_digest": "sha256:df128a48eac4a6de212b4780282ec26f0676c150ec55291f6bfbe15a4aea29c7",
+      "contract_digest": "sha256:1507dcc703665ac9a19426d52407cd8a6bed20dfcb231b9c841f64d45183d3b6",
       "artifact": {
         "digest": "sha256:4bbad935fa5e44444814bac173032f8540b53cb56e72e369ab6cd0416853822d",
         "source": "repo+python://src/infrastructure/plugins/v2/drone_capabilities.py"
@@ -9882,7 +9882,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-capability-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -9905,7 +9905,7 @@
           }
         }
       },
-      "contract_digest": "sha256:8238d6b42fdfcc0d1a88ec776d310e0c97e9e73ce34a7e5b97ec66168b561554",
+      "contract_digest": "sha256:a6b2e5e45be045d1d226d87fe1b7e834155c171974b28794dbac778dcc1bc6fb",
       "artifact": {
         "digest": "sha256:ba9ea8cffab65c2c129dddb99d4558621ca94904df564ef2c5d9fe0d19505aac",
         "source": "repo+python://src/infrastructure/plugins/v2/darwinian_evolver_capability.py"
@@ -9922,7 +9922,7 @@
             {
               "alias": "catalog",
               "service": "service:agent-capability-catalog",
-              "version": "1.0.0"
+              "version": "1.0.0", "contributes": true
             }
           ]
         },
@@ -9938,7 +9938,7 @@
           }
         }
       },
-      "contract_digest": "sha256:8d588df843b95d9a70e58bad29b96c985419732bfa3abc64918d91084a590fc3",
+      "contract_digest": "sha256:f9530ec27649669a78710cc04bc4894c210c1af17db5197742beb70caa3e44bd",
       "artifact": {
         "digest": "sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020637c49e904c556cf68",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_capabilities.py"

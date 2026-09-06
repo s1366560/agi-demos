@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 29d898f99289918dcdae5beb63e091ffb9f85f34470d8c6c191b2ec5e59277a5
+// Schema SHA-256: 83fe72a3b8ef51a1d31f6963a00d9f12f89330f7878f216de262d529f545ebd5
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 export type ScopeKindV2 = 'root' | 'tenant' | 'project' | 'session';
@@ -65,6 +65,7 @@ export interface ServiceRequiredV2 {
   readonly alias: string;
   readonly service: string;
   readonly version: string;
+  readonly contributes?: boolean;
 }
 
 export interface ServiceContractV2 {

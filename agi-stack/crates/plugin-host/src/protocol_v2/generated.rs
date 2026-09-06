@@ -1,5 +1,5 @@
 // Generated from shared/schemas/plugins/platform-plugin-protocol.v2.schema.json.
-// Schema SHA-256: 29d898f99289918dcdae5beb63e091ffb9f85f34470d8c6c191b2ec5e59277a5
+// Schema SHA-256: 83fe72a3b8ef51a1d31f6963a00d9f12f89330f7878f216de262d529f545ebd5
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 use std::collections::BTreeMap;
@@ -143,6 +143,8 @@ pub struct ServiceRequiredV2 {
     pub alias: String,
     pub service: String,
     pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contributes: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

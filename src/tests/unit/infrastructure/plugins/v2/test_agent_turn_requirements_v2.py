@@ -118,14 +118,19 @@ async def test_actual_scoped_loader_builds_prompt_and_tool_resolvers_without_ext
         assert isinstance(prompt, SystemPromptBuilderProtocolV2)
         assert isinstance(sections, SystemPromptSectionsProtocolV2)
         assert isinstance(tools, ToolSetResolverProtocolV2)
-        resolved = tools.resolve(
-            agent=object(),
-            selection_context=None,
-            prepared_tool_provider=PreparedToolProviderV2(tools={"prepared-tool": object()}),
-        )
-        assert resolved.tools == {}
-        # Existing enabled consumers inject the catalog, but forward dependency closure
-        # cannot infer that they register contributions into its provider.
+        from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
+
+        # A deliberately incomplete prepared set must reach real contribution validation,
+        # rather than silently resolving an empty catalog.
+        with pytest.raises(RuntimeV2Error) as error:
+            tools.resolve(
+                agent=object(),
+                selection_context=None,
+                prepared_tool_provider=PreparedToolProviderV2(tools={"prepared-tool": object()}),
+            )
+        assert error.value.code == "missing_prepared_tool_contribution"
+        catalog = generation.resolve("service:tool-set-catalog", SCOPE)
+        assert catalog.contributions()
         module_map = {
             (m.plugin_id, module.module_ref): module
             for m in snapshot.manifests
@@ -136,12 +141,12 @@ async def test_actual_scoped_loader_builds_prompt_and_tool_resolvers_without_ext
             for entry in snapshot.entries
             if entry.enabled
             and any(
-                r.service == "service:tool-set-catalog"
+                r.service == "service:tool-set-catalog" and r.contributes is True
                 for r in module_map[(entry.plugin_ref, entry.module_ref)].contract.services.requires
             )
         }
         assert dependents
-        assert dependents.isdisjoint({entry.entry_id for entry in projected.entries})
+        assert dependents <= {entry.entry_id for entry in projected.entries}
     finally:
         if generation is not None:
             await generation.dispose()

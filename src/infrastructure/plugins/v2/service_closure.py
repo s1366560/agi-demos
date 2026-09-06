@@ -95,6 +95,30 @@ def project_service_closure_v2(
         pending.extend(
             sorted(entry_dependencies_v2(entries, modules, entry_ids=(entry_id,))[entry_id])
         )
+        provided = {(item.service, item.version) for item in contract.services.provides}
+        for contributor_id, contributor in entries.items():
+            for requirement in modules[contributor_id].contract.services.requires:
+                if (
+                    requirement.contributes is not True
+                    or (requirement.service, requirement.version) not in provided
+                ):
+                    continue
+                if not scope_contains_v2(entries[entry_id].scope, contributor.scope) or (
+                    entries[entry_id].isolate.get(requirement.service)
+                    != contributor.isolate.get(requirement.service)
+                ):
+                    continue
+                provider_id = resolve_entry_service_provider_v2(
+                    entries,
+                    modules,
+                    entry_id=contributor_id,
+                    service=requirement.service,
+                    version=requirement.version,
+                    scope=contributor.scope,
+                    isolate=contributor.isolate,
+                )
+                if provider_id == entry_id:
+                    pending.append(contributor_id)
     selected_entries = {key: entry for key, entry in entries.items() if key in selected}
     selected_modules = {key: modules[key] for key in selected_entries}
     preflight_entries_v2(selected_entries, selected_modules)

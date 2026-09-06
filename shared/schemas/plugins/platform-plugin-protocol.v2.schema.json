@@ -112,6 +112,10 @@
         "version": {
           "type": "string",
           "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "contributes": {
+          "type": "boolean",
+          "description": "When true, this module registers contributions into the required service. Scoped projection includes it when that exact provider is selected."
         }
       }
     },
