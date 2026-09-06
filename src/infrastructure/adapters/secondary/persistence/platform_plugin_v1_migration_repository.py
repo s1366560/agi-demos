@@ -29,6 +29,7 @@ from src.infrastructure.plugins.v2.protocol import (
     parse_control_envelope_v2,
     parse_profile_snapshot_v2,
 )
+from src.infrastructure.plugins.v2.scope import scope_key_v2
 
 
 class PlatformPluginV1MigrationRepositoryError(ValueError):
@@ -211,7 +212,9 @@ class PlatformPluginV1MigrationRepository:
     ) -> GloballyReadyPluginPublicationExportV2:
         """Export an exact historical globally-ready distribution for disaster recovery."""
         statement = select(PlatformPluginV2PublicationModel).where(
-            PlatformPluginV2PublicationModel.ready_at.is_not(None)
+            PlatformPluginV2PublicationModel.scope_key
+            == scope_key_v2(ScopeV2(kind=ScopeKindV2.ROOT)),
+            PlatformPluginV2PublicationModel.ready_at.is_not(None),
         )
         if nonce is None:
             statement = statement.order_by(

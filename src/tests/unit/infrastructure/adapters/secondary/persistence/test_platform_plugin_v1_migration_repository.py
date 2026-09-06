@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.model.plugins.generated_v2 import (
     ApplyStatusV2,
     PublicationStatusV2,
+    ScopeKindV2,
+    ScopeV2,
     SnapshotApplyReceiptV2,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
@@ -90,3 +92,39 @@ async def test_export_globally_ready_v2_requires_historical_ready_receipt(
         await PlatformPluginV1MigrationRepository(db_session).export_globally_ready_v2()
 
     assert error.value.code == "migration_globally_ready_missing"
+
+
+@pytest.mark.parametrize("root_present", [False, True])
+@pytest.mark.parametrize("explicit_foreign_nonce", [False, True])
+async def test_retirement_baseline_cannot_select_foreign_ready_publication(
+    db_session: AsyncSession,
+    root_present: bool,
+    explicit_foreign_nonce: bool,
+) -> None:
+    root = await _publication(generation=1, version=1)
+    foreign = await _publication(generation=20, version=20)
+    if root_present:
+        await PlatformPluginRepositoryV2(db_session).record_publication_and_receipt(
+            root,
+            data_plane_id="python-api-v2",
+        )
+    foreign_repository = PlatformPluginRepositoryV2(
+        db_session,
+        scope=ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="foreign-tenant"),
+    )
+    await foreign_repository.record_publication_and_receipt(foreign, data_plane_id="python-api-v2")
+    ready = await foreign_repository.latest_publication_readiness()
+    assert ready.status is PublicationStatusV2.READY
+    await db_session.commit()
+    repository = PlatformPluginV1MigrationRepository(db_session)
+    nonce = foreign.envelope.nonce if explicit_foreign_nonce else None
+    if not root_present or explicit_foreign_nonce:
+        with pytest.raises(PlatformPluginV1MigrationRepositoryError) as error:
+            await repository.export_globally_ready_v2(nonce=nonce)
+        assert error.value.code == "migration_globally_ready_missing"
+    else:
+        exported = await repository.export_globally_ready_v2()
+        assert exported.nonce == root.envelope.nonce
+        assert exported.requested_version == 1
+        assert exported.snapshot_digest == root.snapshot.digest
+        assert await repository.export_globally_ready_v2(nonce=root.envelope.nonce) == exported
