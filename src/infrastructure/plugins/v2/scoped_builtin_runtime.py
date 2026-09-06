@@ -17,6 +17,40 @@ from .sandbox_runtime import (
     sandbox_runtime_definition_v2,
 )
 from .scope import validate_scope_v2
+from .workspace_core_runtime import (
+    WORKSPACE_CORE_RUNTIME_MODULE_V2,
+    WORKSPACE_CORE_RUNTIME_SERVICE_V2,
+    WorkspaceCoreRuntimeServiceV2,
+    workspace_core_runtime_definition_v2,
+)
+
+
+def leased_workspace_core_definition_v2(owner_host: GenerationHostV2) -> PluginDefinitionV2:
+    """Borrow the owner's verified bridges without taking over their disposal."""
+    contract = workspace_core_runtime_definition_v2()
+
+    async def apply(context: ContextV2, config: Mapping[str, Any]) -> EffectResultV2:
+        if config.get("strategy") != "avernet-client":
+            raise ValueError("Workspace Core runtime requires strategy avernet-client")
+        lease = await owner_host.acquire()
+        try:
+            runtime = lease.generation.resolve(
+                WORKSPACE_CORE_RUNTIME_SERVICE_V2, ScopeV2(kind=ScopeKindV2.ROOT)
+            )
+            if not isinstance(runtime, WorkspaceCoreRuntimeServiceV2):
+                raise RuntimeV2Error(
+                    "invalid_workspace_core_runtime_projection",
+                    "owner has an invalid Workspace Core runtime",
+                )
+            _ = context.provide(WORKSPACE_CORE_RUNTIME_SERVICE_V2, runtime)
+        except BaseException:
+            await lease.release()
+            raise
+        return lease.release
+
+    return PluginDefinitionV2(
+        module_ref=contract.module_ref, contract_digest=contract.contract_digest, apply=apply
+    )
 
 
 def leased_sandbox_definition_v2(owner_host: GenerationHostV2) -> PluginDefinitionV2:
@@ -55,7 +89,7 @@ def scoped_builtin_runtime_definitions_v2(
 ) -> tuple[PluginDefinitionV2, ...]:
     """Build definitions for one validated tenant; profile closure selects actual entries.
 
-    Redis is borrowed from process lifetime. Sandbox owns a generation lease per apply.
+    Redis is borrowed from process lifetime. Shared runtimes retain an owner lease per apply.
     Graph adapters are newly allocated with the explicit tenant and own their clients.
     """
     canonical = validate_scope_v2(scope)
@@ -66,7 +100,12 @@ def scoped_builtin_runtime_definitions_v2(
         sandbox_redis_client=redis_client,
     )
     sandbox = leased_sandbox_definition_v2(sandbox_owner_host)
+    workspace = leased_workspace_core_definition_v2(sandbox_owner_host)
     return tuple(
-        sandbox if definition.module_ref == SANDBOX_RUNTIME_MODULE_V2 else definition
+        sandbox
+        if definition.module_ref == SANDBOX_RUNTIME_MODULE_V2
+        else workspace
+        if definition.module_ref == WORKSPACE_CORE_RUNTIME_MODULE_V2
+        else definition
         for definition in definitions
     )
