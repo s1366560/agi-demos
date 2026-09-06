@@ -34,7 +34,7 @@ from .protocol import (
 from .runtime import GenerationLeaseV2, RuntimeV2Error
 from .runtime_host import PlatformPluginPublicationV2
 from .scope import scope_key_v2, validate_scope_v2
-from .scoped_runtime_registry import ScopedRuntimeRegistryV2
+from .scoped_runtime_registry import ScopedRuntimeRegistryV2, ScopedRuntimeReservationV2
 
 
 @dataclass
@@ -161,6 +161,10 @@ class ScopedPublicationCoordinatorV2:
         return result[0]
 
     async def acquire(self, scope: ScopeV2) -> GenerationLeaseV2:
+        return (await self.acquire_bound(scope)).lease
+
+    async def acquire_bound(self, scope: ScopeV2) -> ScopedRuntimeReservationV2:
+        """Return the exact host binding only after all durable admission checks succeed."""
         canonical = validate_scope_v2(scope)
         slot = self._slot(canonical)
         async with slot.lock:
@@ -190,7 +194,8 @@ class ScopedPublicationCoordinatorV2:
                         raise RuntimeV2Error(
                             "scope_publication_changed", "durable scope identity changed"
                         )
-                    lease = await self._registry.acquire(canonical)
+                    reservation = await self._registry.acquire_bound(canonical)
+                    lease = reservation.lease
                     descriptor = lease.generation.descriptor
                     if (descriptor.profile_id, descriptor.generation, descriptor.digest) != (
                         admitted.snapshot.profile_id,
@@ -202,7 +207,7 @@ class ScopedPublicationCoordinatorV2:
                         )
                     await session.commit()
                     self._active()
-                return lease
+                return reservation
             except BaseException:
                 if lease is not None:
                     try:

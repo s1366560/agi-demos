@@ -145,3 +145,29 @@ async def test_remote_new_request_blocks_local_acquisition(db_session):
             await coordinator.acquire(scope)
     finally:
         await coordinator.close()
+
+
+async def test_bound_reservation_requires_durable_admission_and_matches_distribution(db_session):
+    scope = _scope()
+    coordinator = ScopedPublicationCoordinatorV2(
+        session_factory=async_sessionmaker(db_session.bind, expire_on_commit=False),
+        registry=_registry(
+            _profile(scope), lambda context, _config: context.provide(_SERVICE, object())
+        ),
+    )
+    try:
+        with pytest.raises(RuntimeV2Error) as error:
+            await coordinator.acquire_bound(scope)
+        assert error.value.code == "scope_not_admitted"
+        publication = await coordinator.publish(scope, _profile(scope))
+        reservation = await coordinator.acquire_bound(scope)
+        assert reservation.scope == scope
+        generation = reservation.lease.generation
+        distribution = reservation.host.distribution_for_generation(generation)
+        assert distribution.envelope == publication.envelope
+        assert distribution.snapshot == publication.snapshot
+        exact = await reservation.host.acquire_exact(generation, generation.descriptor)
+        await exact.release()
+        await reservation.lease.release()
+    finally:
+        await coordinator.close()

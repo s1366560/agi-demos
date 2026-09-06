@@ -317,3 +317,74 @@ async def test_scope_close_drains_other_retirements_before_reporting_first_failu
         )
 
     assert contains(error.value)
+
+
+async def test_bound_reservation_keeps_exact_host_after_scope_recreation():
+    scope = _scope()
+    registry = _registry(
+        _profile(scope), lambda context, _config: context.provide(_SERVICE, object())
+    )
+    await _publish(registry, scope)
+    original = await registry.acquire_bound(scope)
+    old = original.lease.generation
+    await registry.close_scope(scope)
+    await _publish(registry, scope)
+    replacement = await registry.acquire_bound(scope)
+    assert replacement.lease.generation is not old
+    assert replacement.lease.generation.descriptor == old.descriptor
+    with pytest.raises(RuntimeV2Error, match="retired"):
+        await original.host.acquire()
+    exact = await original.host.acquire_exact(old, old.descriptor)
+    assert exact.generation is old
+    assert original.host.distribution_for_generation(old).descriptor == old.descriptor
+    with pytest.raises(RuntimeV2Error):
+        await replacement.host.acquire_exact(old, old.descriptor)
+    await exact.release()
+    await original.lease.release()
+    with pytest.raises(RuntimeV2Error):
+        await original.host.acquire_exact(old, old.descriptor)
+    await replacement.lease.release()
+    await registry.close()
+
+
+async def test_reservation_claim_rejects_reuse_and_released_lease():
+    scope = _scope()
+    registry = _registry(
+        _profile(scope), lambda context, _config: context.provide(_SERVICE, object())
+    )
+    await _publish(registry, scope)
+    reservation = await registry.acquire_bound(scope)
+    reservation.claim()
+    with pytest.raises(RuntimeV2Error) as error:
+        reservation.claim()
+    assert error.value.code == "scope_reservation_consumed"
+    assert not reservation.lease._released
+    await reservation.lease.release()
+    released = await registry.acquire_bound(scope)
+    await released.lease.release()
+    with pytest.raises(RuntimeV2Error) as error:
+        released.claim()
+    assert error.value.code == "scope_reservation_consumed"
+    await registry.close()
+
+
+async def test_bound_current_acquire_rechecks_retirement_after_host_lock_wait():
+    scope = _scope()
+    registry = _registry(
+        _profile(scope), lambda context, _config: context.provide(_SERVICE, object())
+    )
+    await _publish(registry, scope)
+    reservation = await registry.acquire_bound(scope)
+    lock = reservation.host._slot.host._apply_lock
+    await lock.acquire()
+    acquiring = asyncio.create_task(reservation.host.acquire())
+    await asyncio.sleep(0)
+    closing = asyncio.create_task(registry.close_scope(scope))
+    await asyncio.sleep(0)
+    lock.release()
+    with pytest.raises(RuntimeV2Error, match="retired"):
+        await asyncio.wait_for(acquiring, 2)
+    await asyncio.wait_for(closing, 2)
+    assert reservation.lease.generation._lease_count == 1
+    await reservation.lease.release()
+    await registry.close()

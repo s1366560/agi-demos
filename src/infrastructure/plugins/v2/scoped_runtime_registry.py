@@ -13,6 +13,7 @@ from src.domain.model.plugins.generated_v2 import (
     ProfileSnapshotV2,
     ScopeV2,
 )
+from src.domain.model.plugins.runtime import PluginGenerationDescriptorV2
 
 from .artifacts import PluginArtifactResolverV2
 from .lifecycle_tasks import OwnedLifecycleTaskV2
@@ -28,7 +29,11 @@ from .runtime import (
     RuntimeV2Error,
 )
 from .runtime_contracts import ModuleCatalogEntryV2
-from .runtime_host import PlatformPluginPublicationV2, PlatformPluginRuntimeHostV2
+from .runtime_host import (
+    PlatformPluginDistributionV2,
+    PlatformPluginPublicationV2,
+    PlatformPluginRuntimeHostV2,
+)
 from .scope import scope_key_v2, validate_scope_v2
 
 _GLOBAL_ROUTE_SERVICES = frozenset(
@@ -57,6 +62,61 @@ class _ScopeSlot:
     async def drain(self) -> None:
         async with self.lock:
             await self.host.close()
+
+
+@dataclass(frozen=True)
+class ScopedRuntimeHostV2:
+    """Bind exact reservations to one slot incarnation, including its leased retired generations."""
+
+    _slot: _ScopeSlot
+
+    async def acquire(self) -> GenerationLeaseV2:
+        async with self._slot.lock:
+            self._slot.require_active()
+            lease = await self._slot.host.acquire()
+            try:
+                self._slot.require_active()
+            except BaseException:
+                await lease.release()
+                raise
+            return lease
+
+    async def acquire_exact(
+        self, generation: RuntimeGenerationV2, descriptor: PluginGenerationDescriptorV2
+    ) -> GenerationLeaseV2:
+        return await self._slot.host.acquire_exact(generation, descriptor)
+
+    def distribution_for_generation(
+        self, generation: RuntimeGenerationV2
+    ) -> PlatformPluginDistributionV2:
+        return self._slot.host.distribution_for_generation(generation)
+
+
+@dataclass
+class _ReservationClaimV2:
+    claimed: bool = False
+
+
+@dataclass(frozen=True)
+class ScopedRuntimeReservationV2:
+    """An acquired lifecycle capability; authentication and durable admission belong to callers."""
+
+    scope: ScopeV2
+    host: ScopedRuntimeHostV2
+    lease: GenerationLeaseV2
+    _claim: _ReservationClaimV2 = field(
+        default_factory=_ReservationClaimV2, compare=False, repr=False
+    )
+
+    def claim(self) -> None:
+        """Transfer this acquired lease into exactly one boundary without an await gap."""
+        # Lease has no public release-state API; prevent claim during its owned release task.
+        releasing = self.lease._released or self.lease._release_task.started  # pyright: ignore[reportPrivateUsage]
+        if self._claim.claimed or releasing:
+            raise RuntimeV2Error(
+                "scope_reservation_consumed", "scope reservation is already consumed"
+            )
+        self._claim.claimed = True
 
 
 class ScopedRuntimeRegistryV2:
@@ -107,13 +167,18 @@ class ScopedRuntimeRegistryV2:
 
     async def acquire(self, scope: ScopeV2) -> GenerationLeaseV2:
         """Lease only this exact authority; ancestors are never host fallbacks."""
-        key = scope_key_v2(scope)
+        return (await self.acquire_bound(scope)).lease
+
+    async def acquire_bound(self, scope: ScopeV2) -> ScopedRuntimeReservationV2:
+        """Capture the host and lease under the same slot lock, never rebind by scope later."""
+        canonical = validate_scope_v2(scope)
+        key = scope_key_v2(canonical)
         slot = self._slots.get(key)
         if self._closed or slot is None:
             raise RuntimeV2Error("scope_unavailable", "scope authority is unavailable")
-        async with slot.lock:
-            slot.require_active()
-            return await slot.host.acquire()
+        host = ScopedRuntimeHostV2(slot)
+        lease = await host.acquire()
+        return ScopedRuntimeReservationV2(canonical, host, lease)
 
     async def close_scope(self, scope: ScopeV2) -> None:
         """Detach immediately; an explicit later publish may create a fresh authority."""

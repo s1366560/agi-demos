@@ -123,7 +123,29 @@ async def test_authenticated_source_and_desired_are_composed_and_admitted(
         assert result.desired_revision == desired.revision
         assert result.publication.accepted
         assert events == ["apply:provider:from-saved-source"]
-        async with await coordinator.acquire(scope) as generation:
-            assert generation.resolve("service:clock", scope) == 7
+        from src.infrastructure.plugins.v2.boundary import (
+            OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2,
+            fork_current_agent_operation_v2,
+        )
+        from src.infrastructure.plugins.v2.scoped_boundary import (
+            pin_scoped_agent_turn_operation_v2,
+        )
+
+        reservation = await coordinator.acquire_bound(scope)
+        async with pin_scoped_agent_turn_operation_v2(
+            reservation,
+            operation_id="authenticated-source-turn",
+            tenant_id="t",
+            project_id="p",
+            session_id="s",
+        ) as operation:
+            assert operation.generation.resolve("service:clock", scope) == 7
+            assert operation.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)["descriptor"] == (
+                operation.descriptor.to_payload()
+            )
+            fork = await fork_current_agent_operation_v2()
+        async with fork.admit(operation_id="authenticated-source-child", metadata={}) as child:
+            assert child.generation is reservation.lease.generation
+            assert child.generation.resolve("service:clock", scope) == 7
     finally:
         await coordinator.close()

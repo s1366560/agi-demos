@@ -584,6 +584,10 @@ def _distribution_payload_for_generation_v2(
     parent: OperationContextV2 | None,
 ) -> dict[str, Any]:
     if parent is not None:
+        if parent.generation is not generation:
+            raise RuntimeV2Error(
+                "generation_descriptor_mismatch", "parent belongs to a different generation"
+            )
         try:
             value = parent.require(OPERATION_PLUGIN_DISTRIBUTION_SERVICE_V2)
         except RuntimeV2Error as exc:
@@ -601,10 +605,18 @@ def _distribution_payload_for_generation_v2(
                     "invalid_operation_distribution",
                     "parent operation plugin distribution keys must be strings",
                 )
+            if object_map.get("descriptor") != generation.descriptor.to_payload():
+                raise RuntimeV2Error(
+                    "generation_descriptor_mismatch", "parent distribution differs from generation"
+                )
             return cast(dict[str, Any], dict(object_map))
 
-    host = current_process_generation_host_v2()
-    distribution = host.distribution_for_generation(generation)
+    host = _generation_host_context.get()
+    if host is None or not hasattr(host, "distribution_for_generation"):
+        raise RuntimeV2Error(
+            "exact_generation_host_unavailable", "bound host cannot provide a distribution"
+        )
+    distribution = cast(DistributionGenerationHostV2, host).distribution_for_generation(generation)
     payload = distribution.to_payload()
     if payload.get("descriptor") != generation.descriptor.to_payload():
         raise RuntimeV2Error(
