@@ -39,8 +39,10 @@ from src.infrastructure.plugins.v2.skill_evolution_runtime import (
     SkillEvolutionSchedulerRuntimeV2,
 )
 from src.infrastructure.plugins.v2.skill_repository_services import (
-    SKILL_REPOSITORY_APPLICATION_MODULE_V2,
     SKILL_REPOSITORY_APPLICATION_SERVICE_V2,
+)
+from src.tests.unit.infrastructure.plugins.v2.runtime_test_support import (
+    disable_service_provider_closure_v2,
 )
 
 pytestmark = pytest.mark.unit
@@ -273,16 +275,13 @@ async def test_skill_evolution_rejects_missing_repository_service_without_fallba
 
 async def test_skill_evolution_rejects_missing_skill_repository_service_without_fallback() -> None:
     document = load_profile_document_v2(_PROFILE_PATH)
-    disabled = replace(
-        document,
-        entries=tuple(
-            replace(entry, enabled=False)
-            if entry.module_ref == SKILL_REPOSITORY_APPLICATION_MODULE_V2
-            else entry
-            for entry in document.entries
-        ),
-    )
     manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    disabled = disable_service_provider_closure_v2(
+        document,
+        manifest,
+        missing_service=SKILL_REPOSITORY_APPLICATION_SERVICE_V2,
+        kept_consumer_module_ref=SKILL_EVOLUTION_RUNTIME_MODULE_V2,
+    )
     snapshot = compose_profile_v2(disabled, {manifest.plugin_id: manifest}, generation=150)
 
     with pytest.raises(RuntimeV2Error) as error:
@@ -290,6 +289,8 @@ async def test_skill_evolution_rejects_missing_skill_repository_service_without_
 
     assert error.value.code == "missing_inject_provider"
     assert "builtin-skill-evolution-scheduler" in str(error.value)
+
+    assert SKILL_REPOSITORY_APPLICATION_SERVICE_V2 in str(error.value)
 
 
 async def test_skill_evolution_rejects_wrong_plugin_config_alias_before_loading() -> None:

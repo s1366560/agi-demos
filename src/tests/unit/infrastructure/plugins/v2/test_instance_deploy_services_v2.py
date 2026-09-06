@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,8 +34,20 @@ _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
 _MANIFEST_PATH = _ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json"
 
 
+class _RedisCacheClient:
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str | bytes]:
+        for key in ():
+            yield key
+
+    async def delete(self, *keys: str | bytes) -> int:
+        return 0
+
+    async def xadd(self, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Redis stream publication is outside this authority fixture")
+
+
 async def test_application_resolver_builds_services_from_the_operation_provider() -> None:
-    redis_client = SimpleNamespace()
+    redis_client = _RedisCacheClient()
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(sandbox_redis_client=redis_client)
     )

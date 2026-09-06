@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -42,6 +41,9 @@ from src.infrastructure.plugins.v2.conversation_config_services import (
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.tests.unit.infrastructure.plugins.v2.runtime_test_support import (
+    disable_service_provider_closure_v2,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -118,16 +120,13 @@ def test_config_consumer_uses_explicit_access_and_agent_definition_aliases() -> 
 
 async def test_missing_agent_definition_provider_rejects_config_candidate() -> None:
     document = load_profile_document_v2(_PROFILE_PATH)
-    disabled = replace(
-        document,
-        entries=tuple(
-            replace(entry, enabled=False)
-            if entry.module_ref == AGENT_DEFINITION_MODULE_V2
-            else entry
-            for entry in document.entries
-        ),
-    )
     manifest = parse_plugin_manifest_v2(json.loads(_MANIFEST_PATH.read_text(encoding="utf-8")))
+    disabled = disable_service_provider_closure_v2(
+        document,
+        manifest,
+        missing_service=AGENT_DEFINITION_RESOLVER_SERVICE_V2,
+        kept_consumer_module_ref=CONVERSATION_CONFIG_MODULE_V2,
+    )
     snapshot = compose_profile_v2(
         disabled,
         {manifest.plugin_id: manifest},

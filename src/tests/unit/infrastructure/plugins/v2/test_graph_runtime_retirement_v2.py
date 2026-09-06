@@ -79,6 +79,7 @@ def test_legacy_di_and_agent_services_do_not_retain_graph_runtime_objects() -> N
 
 
 def test_router_scoped_container_clones_do_not_copy_graph_objects() -> None:
+    assert not (_ROOT / "src/infrastructure/adapters/primary/web/routers/agent/utils.py").exists()
     paths = (
         "src/infrastructure/adapters/primary/web/routers/clusters.py",
         "src/infrastructure/adapters/primary/web/routers/deploy.py",
@@ -88,7 +89,7 @@ def test_router_scoped_container_clones_do_not_copy_graph_objects() -> None:
         "src/infrastructure/adapters/primary/web/routers/skills.py",
         "src/infrastructure/adapters/primary/web/routers/subagents.py",
         "src/infrastructure/adapters/primary/web/routers/tenant_skill_configs.py",
-        "src/infrastructure/adapters/primary/web/routers/agent/utils.py",
+        "src/infrastructure/adapters/primary/web/routers/agent/__init__.py",
     )
 
     for relative_path in paths:
