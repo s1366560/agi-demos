@@ -1,3 +1,5 @@
+import { useDesktopModalBackgroundV2 } from './hooks/useDesktopModalBackgroundV2';
+import { useDesktopRendererRuntimeAdmissionV2 } from './hooks/useDesktopRendererRuntimeAdmissionV2';
 import { createDesktopBrowserBridgeManagementOperationsV2, createDesktopBrowserBridgeManagementClientV2 } from './plugins/desktopBrowserBridgeManagementAuthorityModuleV2';
 import { createDesktopVoiceSessionOperationsV2 } from './plugins/desktopVoiceSessionAuthorityModuleV2';
 import { createDesktopConversationMessagingOperationsV2 } from './plugins/desktopConversationMessagingAuthorityModuleV2';
@@ -1829,6 +1831,15 @@ export function App() {
       }
     };
   }, [desktopRendererGenerationV2.actions]);
+  const isDesktopRendererRuntimeAdmittedV2 = useDesktopRendererRuntimeAdmissionV2(
+    identityAuthenticated,
+    desktopRendererGenerationV2.meta.digest,
+    () => {
+      const runtimeConfig = configRef.current;
+      if (!runtimeConfig.tenantId.trim() || !runtimeConfig.projectId.trim()) return;
+      void productionRouteRefreshRef.current?.(runtimeConfig, auth.projects);
+    },
+  );
   const {
     authority: desktopRendererAuthorityV2,
     navigationRegistry: desktopCanonicalNavigationRegistry,
@@ -2915,27 +2926,7 @@ export function App() {
     shortcutsDialogOpen,
   ]);
 
-  useEffect(() => {
-    const shell = appShellRef.current;
-    if (!shell) return;
-    const backgroundRoots = [document.getElementById('root'), shell.parentElement, shell].filter(
-      (element, index, elements): element is HTMLElement =>
-        element instanceof HTMLElement && elements.indexOf(element) === index,
-    );
-
-    if (modalOpen) {
-      backgroundRoots.forEach((element) => {
-        element.setAttribute('aria-hidden', 'true');
-        element.setAttribute('inert', '');
-      });
-      return;
-    }
-
-    backgroundRoots.forEach((element) => {
-      element.removeAttribute('aria-hidden');
-      element.removeAttribute('inert');
-    });
-  }, [modalOpen]);
+  useDesktopModalBackgroundV2(appShellRef, identityAuthenticated && modalOpen);
 
   useEffect(() => {
     if (!runActionsMenuOpen) return;
@@ -3381,6 +3372,7 @@ export function App() {
         refreshRequestGeneration === runtimeRefreshRequestRef.current;
       setConnection('loading');
       setError(null);
+      if (!isDesktopRendererRuntimeAdmittedV2()) return false;
       let refreshProjectId = nextConfig.projectId.trim();
       let localConversationStatusRequest: LocalConversationStatusRequest | null = null;
       let conversationRequestGenerations = supersedeWorkspaceConversationRequests(
@@ -3872,6 +3864,7 @@ export function App() {
       desktopWorkspaceMessageCatalogOperationsV2,
       desktopWorkspaceRosterOperationsV2,
       listMyWorkForConfig,
+      isDesktopRendererRuntimeAdmittedV2,
       syncLocalRuntimeConfig,
       t,
       updateDataset,
