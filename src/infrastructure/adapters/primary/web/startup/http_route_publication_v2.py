@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,6 +18,7 @@ from src.infrastructure.plugins.v2.builtin_http_routes import (
     BuiltinRouteGraphV2,
     build_builtin_route_graph_v2,
 )
+from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
 from src.infrastructure.plugins.v2.http_routes import (
     RoutePublicationV2,
     RouteTableBuilderV2,
@@ -64,10 +65,12 @@ class HttpRoutePublicationCoordinatorV2:
         envelope: ControlPlaneEnvelopeV2,
         *,
         on_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> HttpRouteGenerationPublicationV2:
         """Publish any complete v2 snapshot with the same route/OpenAPI transaction."""
+        archives = None if verified_archives is None else tuple(verified_archives)
         async with self._lock:
-            result = await self._publish_locked(snapshot, envelope)
+            result = await self._publish_locked(snapshot, envelope, verified_archives=archives)
             if result.plugin_publication.accepted and result.graph is not None:
                 if on_commit is not None:
                     on_commit(result.graph)
@@ -77,6 +80,8 @@ class HttpRoutePublicationCoordinatorV2:
         self,
         snapshot: ProfileSnapshotV2,
         envelope: ControlPlaneEnvelopeV2,
+        *,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
     ) -> HttpRouteGenerationPublicationV2:
         staged_graph: BuiltinRouteGraphV2 | None = None
         staged_route_publication: RoutePublicationV2 | None = None
@@ -110,6 +115,7 @@ class HttpRoutePublicationCoordinatorV2:
             snapshot,
             envelope,
             publication_stager=stage_routes,
+            verified_archives=verified_archives,
         )
         if not publication.accepted:
             return HttpRouteGenerationPublicationV2(

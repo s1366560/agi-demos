@@ -6,7 +6,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from src.domain.model.plugins.generated_v2 import (
-    BundleManifestV2,
     BundleReferenceV2,
     ScopeKindV2,
     ScopeV2,
@@ -31,6 +30,7 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_repositor
     PlatformPluginRepositoryV2,
 )
 from src.infrastructure.plugins.v2.builtin_http_routes import BuiltinRouteGraphV2
+from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
 from src.infrastructure.plugins.v2.composer import compose_profile_v2
 from src.infrastructure.plugins.v2.layer_composer import compose_profile_sources_v2
 from src.infrastructure.plugins.v2.production_bundle import (
@@ -123,12 +123,12 @@ class PluginMarketplacePublicationServiceV2:
                     "profile_source_missing", "exact ROOT profile source is missing"
                 )
             source = baseline
-        bundles = tuple(
+        archives = tuple(
             [await self._load_bundle(reference) for reference in desired_record.desired_set.bundles]
         )
         composition = compose_profile_sources_v2(
             desired_set=desired_record.desired_set,
-            bundles=bundles,
+            bundles=tuple(archive.manifest for archive in archives),
             profile_source=source,
             scope=scope,
         )
@@ -142,6 +142,7 @@ class PluginMarketplacePublicationServiceV2:
             snapshot,
             control_envelope_v2(snapshot, version=version),
             on_commit=self._on_route_commit,
+            verified_archives=archives,
         )
         publication = result.plugin_publication
         if PYTHON_API_DATA_PLANE_ID_V2 in self._publication_policy.required_data_plane_ids:
@@ -160,8 +161,8 @@ class PluginMarketplacePublicationServiceV2:
             publication=publication,
         )
 
-    async def _load_bundle(self, reference: BundleReferenceV2) -> BundleManifestV2:
-        return (await self._bundle_loader.load(reference)).manifest
+    async def _load_bundle(self, reference: BundleReferenceV2) -> VerifiedBundleArchiveV2:
+        return await self._bundle_loader.load(reference)
 
     async def _next_publication_counters(self) -> tuple[int, int]:
         current = self._host.current_distribution
