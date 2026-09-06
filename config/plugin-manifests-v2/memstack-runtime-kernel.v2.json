@@ -10086,7 +10086,7 @@
       },
       "contract_digest": "sha256:f82b7609f4092641c08a22dbe8e98e715ea65d0fafd03581fdc3ef4e569a772c",
       "artifact": {
-        "digest": "sha256:afafc00ad75422dfc011bdf79dd42740063b32aa199bafdbd48a068d9dd924a8",
+        "digest": "sha256:c0d94c3a7286108ab0aaa0018897d4c4e5468b40ee8b0bd6f3ee884d93af487e",
         "source": "repo+python://src/infrastructure/plugins/v2/skill_evolution_runtime.py"
       }
     },

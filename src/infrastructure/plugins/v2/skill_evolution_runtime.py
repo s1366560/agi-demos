@@ -27,6 +27,7 @@ from .plugin_config_services import PluginConfigApplicationResolverProtocolV2
 from .runtime import (
     ContextV2,
     EffectResultV2,
+    OperationContextV2,
     PluginDefinitionV2,
     RuntimeV2Error,
     generated_contract_digest_v2,
@@ -101,6 +102,56 @@ class SkillEvolutionSchedulerProtocolV2(Protocol):
     ) -> dict[str, Any]: ...
 
 
+@runtime_checkable
+class SkillEvolutionActivationProtocolV2(Protocol):
+    """Explicit process admission, separate from the consumer contract."""
+
+    async def activate(self, operation: OperationContextV2) -> None: ...
+
+
+@dataclass(frozen=True)
+class SkillEvolutionGenerationSchedulerV2:
+    """A candidate cannot consume through another generation's activation."""
+
+    runtime: SkillEvolutionSchedulerRuntimeV2
+    token: int
+
+    async def activate(self, operation: OperationContextV2) -> None:
+        service = SKILL_EVOLUTION_RUNTIME_SERVICE_V2
+        if (
+            operation.require(service) is not self
+            or operation.generation.resolve(service, ScopeV2(kind=ScopeKindV2.ROOT)) is not self
+        ):
+            raise RuntimeV2Error(
+                "skill_evolution_activation_mismatch", "Activation belongs to another generation"
+            )
+        await self.runtime.activate_generation(self.token)
+
+    def _require_active(self) -> None:
+        self.runtime.require_activated_generation(self.token)
+
+    async def record_tool_event(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        self._require_active()
+        return await self.runtime.record_tool_event(payload)
+
+    async def capture_turn(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        self._require_active()
+        return await self.runtime.capture_turn(payload)
+
+    def schedule_evolution(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str | None = None,
+        skill_name: str | None = None,
+        reason: str = "manual",
+    ) -> dict[str, Any]:
+        self._require_active()
+        return self.runtime.schedule_evolution(
+            tenant_id=tenant_id, project_id=project_id, skill_name=skill_name, reason=reason
+        )
+
+
 def _llm_client_registry_v2() -> dict[int, TenantLlmClientFactoryProtocolV2]:
     return {}
 
@@ -116,6 +167,7 @@ class SkillEvolutionSchedulerRuntimeV2:
     _llm_clients_by_token: dict[int, TenantLlmClientFactoryProtocolV2] = field(
         default_factory=_llm_client_registry_v2
     )
+    _activated_tokens: set[int] = field(default_factory=lambda: set[int]())
     _next_token: int = 0
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -134,7 +186,7 @@ class SkillEvolutionSchedulerRuntimeV2:
         llm_clients: TenantLlmClientFactoryProtocolV2,
         config: SkillEvolutionConfig,
     ) -> int:
-        """Register one generation and start the process scheduler only once."""
+        """Register a paused candidate without starting background work."""
         async with self._lock:
             if self._llm_clients_by_token:
                 if self._config != config or self._session_factory is not sessions.factory:
@@ -167,7 +219,6 @@ class SkillEvolutionSchedulerRuntimeV2:
                         "Skill Evolution builder returned an invalid runtime",
                     )
                 self._plugin = plugin
-                await plugin.on_enable()
             except BaseException:
                 plugin = self._plugin
                 if plugin is not None:
@@ -182,8 +233,37 @@ class SkillEvolutionSchedulerRuntimeV2:
                 raise
             return token
 
+    def require_activated_generation(self, token: int) -> None:
+        """Reject consumers belonging to an unadmitted or retired generation."""
+        if token not in self._activated_tokens:
+            raise RuntimeV2Error(
+                "skill_evolution_runtime_unavailable", "Skill Evolution generation is not admitted"
+            )
+
+    async def activate_generation(self, token: int) -> None:
+        """Start only after the owner has durably admitted this generation."""
+        async with self._lock:
+            if token not in self._llm_clients_by_token or self._plugin is None:
+                raise RuntimeV2Error(
+                    "skill_evolution_runtime_unavailable", "Generation has already retired"
+                )
+            if token in self._activated_tokens:
+                return
+            if not self._activated_tokens:
+                try:
+                    await self._plugin.on_enable()
+                except BaseException as error:
+                    try:
+                        await self._plugin.on_disable()
+                    except BaseException as cleanup_error:
+                        raise BaseExceptionGroup(
+                            "Skill Evolution activation and cleanup failed", [error, cleanup_error]
+                        ) from None
+                    raise
+            self._activated_tokens.add(token)
+
     async def release_generation(self, token: int) -> None:
-        """Stop the scheduler after the final active or draining generation releases it."""
+        """Paused candidates do not retain an activated scheduler's lifetime."""
         async with self._lock:
             if token not in self._llm_clients_by_token:
                 raise RuntimeV2Error(
@@ -191,16 +271,16 @@ class SkillEvolutionSchedulerRuntimeV2:
                     "Skill Evolution generation reference is not active",
                 )
             _ = self._llm_clients_by_token.pop(token)
-            if self._llm_clients_by_token:
-                return
-            plugin = self._plugin
+            was_active = token in self._activated_tokens
+            self._activated_tokens.discard(token)
             try:
-                if plugin is not None:
-                    await plugin.on_disable()
+                if was_active and not self._activated_tokens and self._plugin is not None:
+                    await self._plugin.on_disable()
             finally:
-                self._plugin = None
-                self._config = None
-                self._session_factory = None
+                if not self._llm_clients_by_token:
+                    self._plugin = None
+                    self._config = None
+                    self._session_factory = None
 
     async def record_tool_event(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """Record one observation through the active generation-owned plugin."""
@@ -311,7 +391,7 @@ def skill_evolution_scheduler_definition_v2(
         try:
             _ = context.provide(
                 SKILL_EVOLUTION_RUNTIME_SERVICE_V2,
-                runtime,
+                SkillEvolutionGenerationSchedulerV2(runtime, token),
                 label="skill-evolution-scheduler",
             )
         except Exception:
@@ -355,6 +435,8 @@ __all__ = [
     "SKILL_EVOLUTION_SESSIONS_INJECT_V2",
     "SKILL_EVOLUTION_SKILLS_INJECT_V2",
     "AsyncSessionFactoryProviderProtocolV2",
+    "SkillEvolutionActivationProtocolV2",
+    "SkillEvolutionGenerationSchedulerV2",
     "SkillEvolutionPluginProtocolV2",
     "SkillEvolutionRuntimeBuilderV2",
     "SkillEvolutionSchedulerProtocolV2",

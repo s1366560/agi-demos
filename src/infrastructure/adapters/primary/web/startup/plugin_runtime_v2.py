@@ -63,6 +63,9 @@ from src.infrastructure.plugins.v2.reconciler import (
 )
 from src.infrastructure.plugins.v2.reflection_runtime import ReflectionRuntimeManagerV2
 from src.infrastructure.plugins.v2.retrieval_runtime import RetrievalRuntimeFactoryV2
+from src.infrastructure.plugins.v2.root_background_activation_v2 import (
+    activate_root_background_services_v2,
+)
 from src.infrastructure.plugins.v2.route_effects import ROUTE_TABLE_BUILDER_SERVICE_V2
 from src.infrastructure.plugins.v2.runtime import RuntimeGenerationV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import (
@@ -243,6 +246,12 @@ async def initialize_plugin_runtime_v2(  # noqa: PLR0913, PLR0915
     )
     app.state.platform_plugin_publication_policy_v2 = publication_policy
     install_process_generation_host_v2(host)
+    try:
+        await host.enable_post_admission_activation(activate_root_background_services_v2)
+    except BaseException:
+        clear_process_generation_host_v2(host)
+        await host.close()
+        raise
     logger.info(
         "Published plugin runtime v2 generation=%d digest=%s",
         publication.snapshot.generation,

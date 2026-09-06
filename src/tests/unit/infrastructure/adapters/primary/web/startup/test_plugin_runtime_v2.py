@@ -361,7 +361,13 @@ async def test_restart_upgrades_legacy_empty_target_snapshot_with_monotonic_publ
         version=15,
         nonce="newer-unapplied-empty-target-snapshot",
     )
-    await PlatformPluginRepositoryV2(db_session).record_publication(newer_requested)
+    assert newer_requested.accepted
+    # This is completed historical authority, not an unbound pending request.
+    # Pending requests require exact source lineage and remain fail-closed.
+    await PlatformPluginRepositoryV2(db_session).record_publication_and_receipt(
+        newer_requested,
+        data_plane_id="python-api-v2",
+    )
     await db_session.commit()
     await newer_requested_host.close()
 

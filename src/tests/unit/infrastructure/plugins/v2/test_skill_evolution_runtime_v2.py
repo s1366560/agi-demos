@@ -22,7 +22,7 @@ from src.infrastructure.plugins.v2.plugin_config_services import (
     PLUGIN_CONFIG_APPLICATION_SERVICE_V2,
 )
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
-from src.infrastructure.plugins.v2.runtime import LoaderV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.runtime import LoaderV2, OperationContextV2, RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
 from src.infrastructure.plugins.v2.skill_evolution_repository_services import (
     SKILL_EVOLUTION_REPOSITORY_APPLICATION_MODULE_V2,
@@ -36,7 +36,7 @@ from src.infrastructure.plugins.v2.skill_evolution_runtime import (
     SKILL_EVOLUTION_RUNTIME_SERVICE_V2,
     SKILL_EVOLUTION_SESSIONS_INJECT_V2,
     SKILL_EVOLUTION_SKILLS_INJECT_V2,
-    SkillEvolutionSchedulerRuntimeV2,
+    SkillEvolutionGenerationSchedulerV2,
 )
 from src.infrastructure.plugins.v2.skill_repository_services import (
     SKILL_REPOSITORY_APPLICATION_SERVICE_V2,
@@ -85,6 +85,19 @@ def _plugin() -> SimpleNamespace:
     )
 
 
+async def _activate(host: PlatformPluginRuntimeHostV2) -> SkillEvolutionGenerationSchedulerV2:
+    lease = await host.acquire()
+    async with lease as generation, OperationContextV2(
+        generation=generation,
+        operation_id="activate-test",
+        scope=generation.snapshot.entries[0].scope,
+    ) as operation:
+        facade = operation.require(SKILL_EVOLUTION_RUNTIME_SERVICE_V2)
+        assert isinstance(facade, SkillEvolutionGenerationSchedulerV2)
+        await facade.activate(operation)
+        return facade
+
+
 async def test_skill_evolution_starts_once_across_generation_replacement(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -106,7 +119,9 @@ async def test_skill_evolution_starts_once_across_generation_replacement(
         SKILL_EVOLUTION_RUNTIME_SERVICE_V2,
         first_generation.snapshot.entries[0].scope,
     )
-    assert isinstance(runtime, SkillEvolutionSchedulerRuntimeV2)
+    assert isinstance(runtime, SkillEvolutionGenerationSchedulerV2)
+    retained = await host.acquire()
+    await _activate(host)
 
     second = await host.bootstrap(
         profile_path=_PROFILE_PATH,
@@ -118,17 +133,20 @@ async def test_skill_evolution_starts_once_across_generation_replacement(
     assert second.accepted is True
     second_generation = host.manager.current
     assert second_generation is not None
+    second_facade = await _activate(host)
+    assert second_facade.runtime is runtime.runtime
     assert (
         second_generation.resolve(
             SKILL_EVOLUTION_RUNTIME_SERVICE_V2,
             second_generation.snapshot.entries[0].scope,
         )
-        is runtime
+        is second_facade
     )
     build.assert_called_once()
     plugin.on_enable.assert_awaited_once_with()
     plugin.on_disable.assert_not_awaited()
 
+    await retained.release()
     await host.close()
     plugin.on_disable.assert_awaited_once_with()
 
@@ -152,9 +170,12 @@ async def test_skill_evolution_start_failure_nacks_and_cleans_candidate(
         version=143,
     )
 
-    assert publication.accepted is False
-    assert publication.receipt.error_code == "staging_failed"
-    assert host.manager.current is None
+    # Activation failure is post-admission and cannot rewrite the actual ACK.
+    assert publication.accepted is True
+    with pytest.raises(RuntimeError, match="scheduler unavailable"):
+        await _activate(host)
+    assert host.manager.current is not None
+    await host.close()
     plugin.on_enable.assert_awaited_once_with()
     plugin.on_disable.assert_awaited_once_with()
 
@@ -176,6 +197,7 @@ async def test_skill_evolution_config_change_requires_process_restart(
         version=144,
     )
     assert first.accepted is True
+    await _activate(host)
 
     def disable_scheduler(document):
         return replace(

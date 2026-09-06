@@ -91,6 +91,10 @@ class PlatformPluginRuntimeHostV2:
         self._receipt_blocked = False
         self._pending_receipt: PlatformPluginPublicationV2 | None = None
         self._pending_requires_ack = False
+        self._post_admission_activation: Callable[[RuntimeGenerationV2], Awaitable[None]] | None = (
+            None
+        )
+        self._activated_generation: RuntimeGenerationV2 | None = None
         self._distributions: WeakKeyDictionary[
             RuntimeGenerationV2, PlatformPluginDistributionV2
         ] = WeakKeyDictionary()
@@ -162,6 +166,55 @@ class PlatformPluginRuntimeHostV2:
         )
         self._current_publication = publication
 
+    async def enable_post_admission_activation(
+        self,
+        callback: Callable[[RuntimeGenerationV2], Awaitable[None]],
+    ) -> None:
+        """Opt an installed process host into activation after durable admission.
+
+        The caller must first install this host and persist any externally owned
+        startup receipt. Scoped and remote hosts remain inactive by default.
+        The callback receives a leased generation and must not reenter this host.
+        """
+        async with self._apply_lock:
+            self._require_receipt_ready()
+            publication = self._current_publication
+            if publication is None:
+                raise RuntimeV2Error(
+                    "generation_publication_missing",
+                    "process activation requires an accepted publication",
+                )
+            if (
+                self._post_admission_activation is not None
+                and self._post_admission_activation is not callback
+            ):
+                raise RuntimeV2Error(
+                    "generation_activation_callback_conflict",
+                    "process activation callback is already configured",
+                )
+            self._post_admission_activation = callback
+            await self._activate_publication(publication)
+
+    async def _activate_publication(self, publication: PlatformPluginPublicationV2) -> None:
+        callback = self._post_admission_activation
+        if callback is None or not publication.accepted:
+            return
+        current = self.manager.current
+        if current is self._activated_generation:
+            return
+        # The apply lock fences replacement while this short lease activates consumers.
+        async with await self.manager.acquire() as generation:
+            try:
+                await callback(generation)
+            except BaseException:
+                # Retain the actual outcome for existing idempotent receipt recovery;
+                # never admit new operations after only part of activation succeeds.
+                self._pending_receipt = publication
+                self._pending_requires_ack = False
+                self._receipt_blocked = True
+                raise
+            self._activated_generation = generation
+
     async def apply(
         self,
         snapshot: ProfileSnapshotV2,
@@ -201,6 +254,7 @@ class PlatformPluginRuntimeHostV2:
                 self._record_publication(publication)
                 self._pending_receipt = None
                 self._receipt_blocked = False
+                await self._activate_publication(publication)
                 result.append(publication)
 
         if receipt_persister is None:
@@ -261,6 +315,7 @@ class PlatformPluginRuntimeHostV2:
                 self._record_publication(publication)
                 self._pending_receipt = None
                 self._receipt_blocked = False
+                await self._activate_publication(publication)
                 results.append(publication)
 
         await OwnedLifecycleTaskV2(supersede, name="plugin-publication-supersession").wait()
@@ -290,6 +345,7 @@ class PlatformPluginRuntimeHostV2:
                 self._record_publication(publication)
                 self._pending_receipt = None
                 self._receipt_blocked = False
+                await self._activate_publication(publication)
                 result.append(publication)
 
         await OwnedLifecycleTaskV2(persist, name="plugin-publication-receipt-retry").wait()

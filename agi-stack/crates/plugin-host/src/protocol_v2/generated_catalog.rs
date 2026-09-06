@@ -3,8 +3,8 @@
 // Do not edit by hand; run scripts/generate_plugin_protocol_v2.py.
 
 pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
-    "{\"catalog_digest\":\"sha256:efb3f5799092b5967d468632150c5a10bd8b126655697613c44bd5538f2898",
-    "cd\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
+    "{\"catalog_digest\":\"sha256:a574de1f30195be42212f89045003b8b494c5761fc9eeaab15a1ab7380d902",
+    "ba\",\"modules\":[{\"artifact_digest\":\"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020",
     "637c49e904c556cf68\",\"artifact_source\":\"repo+python://src/infrastructure/plugins/v2/agent",
     "_capabilities.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-schema.org/draft/",
     "2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"strategy\":{\"const\":\"ordered-",
@@ -4284,8 +4284,8 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "3545291297662ebb0b66883b515d434548e15fbc1839c59e7a1\",\"entrypoint\":\"src.infrastructure.pl",
     "ugins.v2.reflection_runtime:reflection_runtime_definition_v2\",\"module_ref\":\"builtin://me",
     "mstack/runtime/reflection\",\"plugin_id\":\"memstack-runtime-kernel\",\"plugin_version\":\"2.0.0",
-    "\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:afafc00ad75422dfc011bdf79dd42740063b3",
-    "2aa199bafdbd48a068d9dd924a8\",\"artifact_source\":\"repo+python://src/infrastructure/plugins",
+    "\",\"targets\":[\"python\"]},{\"artifact_digest\":\"sha256:c0d94c3a7286108ab0aaa0018897d4c4e5468",
+    "b40ee8b0bd6f3ee884d93af487e\",\"artifact_source\":\"repo+python://src/infrastructure/plugins",
     "/v2/skill_evolution_runtime.py\",\"contract\":{\"config_schema\":{\"$schema\":\"https://json-sch",
     "ema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"enabled\":{\"typ",
     "e\":\"boolean\"},\"environment_overrides\":{\"type\":\"boolean\"},\"strategy\":{\"const\":\"periodic-s",
@@ -4525,4 +4525,4 @@ pub const PLUGIN_MODULE_CATALOG_V2_JSON: &str = concat!(
     "-runtime-kernel\",\"plugin_version\":\"2.0.0\",\"targets\":[\"python\"]}],\"schema_version\":2}\n",
 );
 pub const PLUGIN_MODULE_CATALOG_DIGEST_V2: &str =
-    "sha256:efb3f5799092b5967d468632150c5a10bd8b126655697613c44bd5538f2898cd";
+    "sha256:a574de1f30195be42212f89045003b8b494c5761fc9eeaab15a1ab7380d902ba";
