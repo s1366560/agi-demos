@@ -173,6 +173,12 @@ async function probeWorkspaceCollaborationCapabilityV2(
     }
     return Object.freeze({
       ...capability,
+      scope: Object.freeze({
+        tenant_id: scope.tenantId,
+        project_id: scope.projectId,
+        workspace_id: scope.workspaceId,
+        instance_id: null,
+      }),
       authority_revision: authorityRevision,
     });
   } catch (error) {
