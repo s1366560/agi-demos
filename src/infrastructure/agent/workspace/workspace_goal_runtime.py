@@ -9,9 +9,8 @@ import json
 import logging
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +44,6 @@ from src.application.services.workspace_task_session_attempt_service import (
     WorkspaceTaskSessionAttemptService,
 )
 from src.domain.events.types import AgentEventType
-from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.workspace.workspace_task import (
     WorkspaceTask,
     WorkspaceTaskPriority,
@@ -70,7 +68,6 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     LAST_WORKER_REPORT_ATTEMPT_ID,
     LAST_WORKER_REPORT_SUMMARY,
     PENDING_LEADER_ADJUDICATION,
-    PREFERRED_LANGUAGE,
     REMEDIATION_STATUS,
     REMEDIATION_SUMMARY,
     ROOT_GOAL_TASK_ID,
@@ -107,40 +104,6 @@ async def _publish_workspace_goal_events_v2(
     """Publish workspace goal effects through the pinned generation Redis."""
     publisher = WorkspaceTaskEventPublisher(_current_workspace_goal_redis_client_v2())
     await publisher.publish_pending_events(events)
-
-
-class _RetryConversationProjection(Protocol):
-    workspace_id: str | None
-    linked_workspace_task_id: str | None
-    agent_config: dict[str, object]
-    metadata: dict[str, object]
-    updated_at: datetime | None
-
-
-class _RetryConversationRepository(Protocol):
-    async def find_by_id(self, entity_id: str) -> Conversation | None: ...
-
-    async def save(self, conversation: Conversation) -> Conversation: ...
-
-
-class _RetryWorkspaceProjection(Protocol):
-    project_id: str
-    tenant_id: str
-
-
-@dataclass(frozen=True)
-class _RetryConversationRequest:
-    conversation_id: str
-    workspace_id: str
-    workspace_task_id: str
-    root_goal_task_id: str
-    attempt_id: str
-    attempt_number: int | str | None
-    actor_user_id: str
-    leader_agent_id: str
-    worker_binding_id: str | None
-    preferred_language: str | None
-    conversation_scope: str
 
 
 _WORKSPACE_TASK_ID_PATTERN = re.compile(
@@ -956,105 +919,6 @@ async def _launch_workspace_retry_attempt_after_backoff(
     )
 
 
-def _patch_retry_conversation_linkage(
-    conversation: _RetryConversationProjection,
-    *,
-    workspace_id: str,
-    workspace_task_id: str,
-    root_goal_task_id: str,
-    attempt_id: str,
-    leader_agent_id: str,
-    conversation_scope: str,
-) -> bool:
-    changed = False
-    if conversation.workspace_id != workspace_id:
-        conversation.workspace_id = workspace_id
-        changed = True
-    if conversation.linked_workspace_task_id != workspace_task_id:
-        conversation.linked_workspace_task_id = workspace_task_id
-        changed = True
-    metadata = dict(conversation.metadata or {})
-    metadata_updates = {
-        "workspace_id": workspace_id,
-        "workspace_task_id": workspace_task_id,
-        "linked_workspace_task_id": workspace_task_id,
-        ROOT_GOAL_TASK_ID: root_goal_task_id,
-        "attempt_id": attempt_id,
-        "conversation_scope": conversation_scope,
-        "source": _RETRY_CONVERSATION_SOURCE,
-        "workspace_llm_stage": _RETRY_CONVERSATION_STAGE,
-    }
-    for key, value in metadata_updates.items():
-        if metadata.get(key) != value:
-            metadata[key] = value
-            changed = True
-    agent_config = dict(conversation.agent_config or {})
-    if agent_config.get("selected_agent_id") != leader_agent_id:
-        agent_config["selected_agent_id"] = leader_agent_id
-        conversation.agent_config = agent_config
-        changed = True
-    if changed:
-        conversation.metadata = metadata
-        conversation.updated_at = datetime.now(UTC)
-    return changed
-
-
-async def _ensure_retry_conversation(
-    *,
-    conversation_repo: _RetryConversationRepository,
-    workspace: _RetryWorkspaceProjection,
-    request: _RetryConversationRequest,
-) -> None:
-    conversation = await conversation_repo.find_by_id(request.conversation_id)
-    if conversation is None:
-        metadata: dict[str, object] = {
-            "workspace_id": request.workspace_id,
-            "agent_id": request.leader_agent_id,
-            "workspace_agent_binding_id": request.worker_binding_id,
-            "workspace_task_id": request.workspace_task_id,
-            "linked_workspace_task_id": request.workspace_task_id,
-            ROOT_GOAL_TASK_ID: request.root_goal_task_id,
-            "attempt_id": request.attempt_id,
-            "conversation_scope": request.conversation_scope,
-            "retry_launch": True,
-            "source": _RETRY_CONVERSATION_SOURCE,
-            "workspace_llm_stage": _RETRY_CONVERSATION_STAGE,
-            "created_at": datetime.now(UTC).isoformat(),
-        }
-        if request.attempt_number is not None:
-            metadata["attempt_number"] = request.attempt_number
-        if request.preferred_language is not None:
-            metadata[PREFERRED_LANGUAGE] = request.preferred_language
-        _ = await conversation_repo.save(
-            Conversation(
-                id=request.conversation_id,
-                project_id=workspace.project_id,
-                tenant_id=workspace.tenant_id,
-                user_id=request.actor_user_id,
-                title=f"Workspace Retry - {request.workspace_task_id}",
-                status=ConversationStatus.ACTIVE,
-                agent_config={"selected_agent_id": request.leader_agent_id},
-                metadata=metadata,
-                message_count=0,
-                created_at=datetime.now(UTC),
-                workspace_id=request.workspace_id,
-                linked_workspace_task_id=request.workspace_task_id,
-            )
-        )
-        return
-
-    if _patch_retry_conversation_linkage(
-        conversation,
-        workspace_id=request.workspace_id,
-        workspace_task_id=request.workspace_task_id,
-        root_goal_task_id=request.root_goal_task_id,
-        attempt_id=request.attempt_id,
-        leader_agent_id=request.leader_agent_id,
-        conversation_scope=request.conversation_scope,
-    ):
-        _ = await conversation_repo.save(conversation)
-
-
 async def _launch_workspace_retry_attempt(
     *,
     workspace_id: str,
@@ -1067,130 +931,6 @@ async def _launch_workspace_retry_attempt(
     retry_feedback: str,
 ) -> None:
     legacy_workspace_runtime_retired("Workspace retry attempt launch")
-    from src.application.services.agent_service import AgentService
-    from src.application.services.workspace_mention_router import WorkspaceMentionRouter
-    from src.configuration.di_container import DIContainer
-    from src.configuration.factories import create_llm_client
-
-    conversation_scope = f"task:{workspace_task_id}:attempt:{attempt_id}"
-    conversation_id = WorkspaceMentionRouter.workspace_conversation_id(
-        workspace_id,
-        leader_agent_id,
-        conversation_scope=conversation_scope,
-    )
-    worker_binding_id: str | None = None
-    preferred_language: str | None = None
-    try:
-        async with async_session_factory() as db:
-            task = await legacy_workspace_runtime_retired(db).find_by_id(workspace_task_id)
-            if task is not None:
-                worker_binding_id = task.get_workspace_agent_binding_id()
-                candidate_language = task.metadata.get(PREFERRED_LANGUAGE)
-                if isinstance(candidate_language, str) and candidate_language in {
-                    "en-US",
-                    "zh-CN",
-                }:
-                    preferred_language = candidate_language
-                if worker_binding_id is None and task.assignee_agent_id:
-                    binding = await legacy_workspace_runtime_retired(
-                        db
-                    ).find_by_workspace_and_agent_id(
-                        workspace_id=workspace_id,
-                        agent_id=task.assignee_agent_id,
-                    )
-                    worker_binding_id = binding.id if binding is not None else None
-            if preferred_language is None:
-                root_task = await legacy_workspace_runtime_retired(db).find_by_id(root_goal_task_id)
-                if root_task is not None:
-                    candidate_language = root_task.metadata.get(PREFERRED_LANGUAGE)
-                    if isinstance(candidate_language, str) and candidate_language in {
-                        "en-US",
-                        "zh-CN",
-                    }:
-                        preferred_language = candidate_language
-    except Exception:
-        logger.warning(
-            "Workspace retry launch could not resolve worker binding id",
-            exc_info=True,
-            extra={"workspace_id": workspace_id, "workspace_task_id": workspace_task_id},
-        )
-    worker_binding_line = (
-        f"workspace_agent_binding_id={worker_binding_id}\n" if worker_binding_id else ""
-    )
-    attempt_number_line = f"attempt_number={attempt_number}\n" if attempt_number is not None else ""
-    user_message = (
-        "Please continue autonomous workspace task execution for the existing workspace task. "
-        "Review the previous attempt feedback, relaunch execution for the same task, and keep "
-        "the same workspace task identity. Do not structurally replan the root goal unless the "
-        "task is impossible under the current scope.\n\n"
-        "[workspace-task-binding]\n"
-        f"workspace_task_id={workspace_task_id}\n"
-        f"attempt_id={attempt_id}\n"
-        f"{attempt_number_line}"
-        f"root_goal_task_id={root_goal_task_id}\n"
-        f"workspace_id={workspace_id}\n"
-        f"{worker_binding_line}"
-        "[/workspace-task-binding]\n\n"
-        f"Leader retry feedback: {retry_feedback.strip() or 'rework required'}"
-    )
-
-    try:
-        redis_client = _current_workspace_goal_redis_client_v2()
-        async with async_session_factory() as db:
-            workspace_repo = legacy_workspace_runtime_retired("Workspace retry authority lookup")
-            workspace = await workspace_repo.find_by_id(workspace_id)
-            if workspace is None:
-                logger.warning(
-                    "Workspace retry launch skipped because workspace %s was not found",
-                    workspace_id,
-                )
-                return
-            conversation_repo = DIContainer(
-                db=db, redis_client=redis_client
-            ).conversation_repository()
-            await _ensure_retry_conversation(
-                conversation_repo=conversation_repo,
-                workspace=workspace,
-                request=_RetryConversationRequest(
-                    conversation_id=conversation_id,
-                    workspace_id=workspace_id,
-                    workspace_task_id=workspace_task_id,
-                    root_goal_task_id=root_goal_task_id,
-                    attempt_id=attempt_id,
-                    attempt_number=attempt_number,
-                    actor_user_id=actor_user_id,
-                    leader_agent_id=leader_agent_id,
-                    worker_binding_id=worker_binding_id,
-                    preferred_language=preferred_language,
-                    conversation_scope=conversation_scope,
-                ),
-            )
-            await db.commit()
-
-            llm = await create_llm_client(workspace.tenant_id)
-            container = DIContainer(db=db, redis_client=redis_client)
-            agent_service: AgentService = container.agent_service(llm)
-            async for _ in agent_service.stream_chat_v2(
-                conversation_id=conversation_id,
-                user_message=user_message,
-                project_id=workspace.project_id,
-                user_id=actor_user_id,
-                tenant_id=workspace.tenant_id,
-                agent_id=leader_agent_id,
-                preferred_language=preferred_language,
-            ):
-                pass
-    except Exception:
-        logger.warning(
-            "Workspace retry attempt launch failed",
-            extra={
-                "workspace_id": workspace_id,
-                "workspace_task_id": workspace_task_id,
-                "attempt_id": attempt_id,
-                "leader_agent_id": leader_agent_id,
-            },
-            exc_info=True,
-        )
 
 
 async def _ensure_execution_attempt(

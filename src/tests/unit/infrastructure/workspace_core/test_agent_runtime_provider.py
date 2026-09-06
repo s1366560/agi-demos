@@ -475,10 +475,22 @@ def _provider(
     def session_factory() -> AbstractAsyncContextManager[Any]:
         return FakeSessionContext(active_db)
 
+    @asynccontextmanager
+    async def repository_lease(**identity):
+        assert isinstance(identity["conversation_id"], str) and identity["conversation_id"]
+        assert {key: value for key, value in identity.items() if key != "conversation_id"} == {
+            "db": active_db,
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+        }
+        yield SimpleNamespace(
+            conversation=scoped.conversation_repo, execution_event=scoped.event_repo
+        )
+
     return MemStackAgentRuntimeProvider(
         workspace_core_client=cast(Any, active_core_client),
         session_factory=cast(Any, session_factory),
-        container_provider=cast(Any, lambda: FakeContainer(scoped)),
+        repository_lease=cast(Any, repository_lease),
         terminal_persist_wait_seconds=0.2,
         scoped_admission=(
             SimpleNamespace(authorize=AsyncMock(), acquire=AsyncMock(return_value=object()))
@@ -1055,7 +1067,7 @@ async def test_provider_control_authorization_precedes_all_side_effects(
     )
     provider = _provider(scoped, core_client=core, scoped_admission=admission)
     container = MagicMock(side_effect=AssertionError("container accessed before authorization"))
-    monkeypatch.setattr(provider, "_scoped_container", container)
+    monkeypatch.setattr(provider, "_repository_lease", container)
     cancel = AsyncMock()
     monkeypatch.setattr(
         "src.application.services.agent.runtime_cancellation.cancel_conversation_runtime", cancel
@@ -1106,3 +1118,48 @@ async def test_provider_control_authorizes_without_runtime_acquisition(monkeypat
         scope.conversation_id,
     ) == ("tenant-1", "project-1", "workspace-1", "user-1", "conversation-1")
     admission.acquire.assert_not_awaited()
+
+
+@pytest.mark.parametrize("cancel_waiter", [False, True])
+async def test_repository_lease_covers_stream_close_and_cancellation(monkeypatch, cancel_waiter):
+    import asyncio
+
+    scoped = FakeScopedContainer()
+    lifecycle = []
+    blocked = asyncio.Event()
+
+    class BlockingService:
+        async def stream_chat_v2(self, **kwargs):
+            try:
+                yield {"type": "text_delta", "data": {"delta": "leased"}}
+                blocked.set()
+                await asyncio.Event().wait()
+            finally:
+                lifecycle.append("agent-closed")
+
+    scoped.service = BlockingService()
+    provider = _provider(scoped)
+
+    @asynccontextmanager
+    async def lease(**identity):
+        assert identity["conversation_id"] == "conversation-1"
+        lifecycle.append("lease-entered")
+        try:
+            yield SimpleNamespace(
+                conversation=scoped.conversation_repo, execution_event=scoped.event_repo
+            )
+        finally:
+            lifecycle.append("lease-released")
+
+    monkeypatch.setattr(provider, "_repository_lease", lease)
+    stream = provider.stream_send(_request())
+    await asyncio.wait_for(anext(stream), timeout=1)
+    assert lifecycle == ["lease-entered"]
+    if cancel_waiter:
+        waiter = asyncio.create_task(anext(stream))
+        await asyncio.wait_for(blocked.wait(), timeout=1)
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+    await stream.aclose()
+    assert lifecycle == ["lease-entered", "agent-closed", "lease-released"]

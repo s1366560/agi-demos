@@ -2,14 +2,14 @@
 
 Configuration loading and dependency injection for the entire backend.
 
-Last checked against code: 2026-08-26
+Last checked against code: 2026-09-07
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `config.py` | Pydantic `Settings` class (~624 lines, 100+ env vars). `get_settings()` is `@lru_cache` singleton |
-| `di_container.py` | `DIContainer` class (~174 lines). Composes 3 sub-containers and delegates the remaining infrastructure and agent factories |
+| `di_container.py` | Application infrastructure shell. Keeps scoped DB handles and shared infrastructure; no Agent business factories |
 | `factories.py` | Factory functions for LLM clients and `NativeGraphAdapter` (Neo4j + embedding) |
 | `ray_config.py` | Ray Actor configuration for distributed execution |
 | `containers/` | 3 domain-specific sub-containers (see below) |
@@ -32,9 +32,9 @@ Last checked against code: 2026-08-26
 ## DI Container Pattern
 
 - `DIContainer.__init__()` accepts `db`, `redis_client`, `session_factory`, and an optional shared `InfraContainer`
-- Creates the Auth, Infra, and Agent sub-containers in `__init__`, passing dependencies down
+- Creates Auth and shared Infra containers in `__init__`; never assembles an Agent container
 - `with_db(db)` returns a NEW `DIContainer` clone with the given session
-- Public methods delegate to sub-containers: `self._auth.user_repository()`, `self._agent.agent_service()`, etc.
+- Business repositories and services resolve from declared V2 Providers under a generation lease, not through top-level DI delegates
 
 ## CRITICAL: DB Session Rules
 

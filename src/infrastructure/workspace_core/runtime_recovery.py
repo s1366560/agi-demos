@@ -22,6 +22,10 @@ from src.domain.model.agent import AgentExecutionEvent
 from src.domain.model.agent.conversation.conversation import Conversation
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
 from src.infrastructure.llm.model_pool import ModelPoolService, PoolFilter, get_model_pool_service
+from src.infrastructure.plugins.v2.workspace_runtime_repository_lease_v2 import (
+    RepositoryLeaseV2,
+    lease_workspace_runtime_repositories_v2,
+)
 from src.infrastructure.workspace_core.client import (
     WorkspaceCoreClient,
     WorkspaceCoreNotFoundError,
@@ -125,30 +129,7 @@ class _ConversationRepository(Protocol):
     async def find_by_id(self, conversation_id: str) -> Conversation | None: ...
 
 
-class _AgentExecutionEventRepository(Protocol):
-    async def save_and_commit(self, event: AgentExecutionEvent) -> None: ...
-
-    async def get_events_by_message(
-        self,
-        conversation_id: str,
-        message_id: str,
-    ) -> list[AgentExecutionEvent]: ...
-
-    async def get_last_event_time(self, conversation_id: str) -> tuple[int, int]: ...
-
-
-class _ScopedContainer(Protocol):
-    def conversation_repository(self) -> _ConversationRepository: ...
-
-    def agent_execution_event_repository(self) -> _AgentExecutionEventRepository: ...
-
-
-class _ApplicationContainer(Protocol):
-    def with_db(self, db: AsyncSession) -> _ScopedContainer: ...
-
-
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
-ContainerProvider = Callable[[], _ApplicationContainer | None]
 
 
 class AgentRuntimeRecoveryJudge:
@@ -237,20 +218,27 @@ class MemStackRuntimeRecoveryEvidence:
         self,
         *,
         session_factory: SessionFactory | None = None,
-        container_provider: ContainerProvider | None = None,
+        repository_lease: RepositoryLeaseV2 | None = None,
     ) -> None:
         super().__init__()
         self._session_factory = session_factory or _default_session_factory()
-        self._container_provider = container_provider or _default_container_provider
+        self._repository_lease = repository_lease or lease_workspace_runtime_repositories_v2
 
     async def find_terminal(
         self,
         recovery: WorkspaceRuntimeRecoveryItem,
     ) -> AgentExecutionEvent | None:
-        async with self._session_factory() as db:
-            scoped = self._scoped_container(db)
-            _ = await _authorized_conversation(scoped.conversation_repository(), recovery)
-            events = await scoped.agent_execution_event_repository().get_events_by_message(
+        async with (
+            self._session_factory() as db,
+            self._repository_lease(
+                db=db,
+                tenant_id=recovery.tenant_id,
+                project_id=recovery.project_id,
+                conversation_id=recovery.conversation_id,
+            ) as repositories,
+        ):
+            _ = await _authorized_conversation(repositories.conversation, recovery)
+            events = await repositories.execution_event.get_events_by_message(
                 recovery.conversation_id,
                 _execution_message_id(recovery.delivery_request_id),
             )
@@ -277,10 +265,17 @@ class MemStackRuntimeRecoveryEvidence:
         *,
         audit_id: str,
     ) -> AgentExecutionEvent:
-        async with self._session_factory() as db:
-            scoped = self._scoped_container(db)
-            _ = await _authorized_conversation(scoped.conversation_repository(), recovery)
-            repository = scoped.agent_execution_event_repository()
+        async with (
+            self._session_factory() as db,
+            self._repository_lease(
+                db=db,
+                tenant_id=recovery.tenant_id,
+                project_id=recovery.project_id,
+                conversation_id=recovery.conversation_id,
+            ) as repositories,
+        ):
+            _ = await _authorized_conversation(repositories.conversation, recovery)
+            repository = repositories.execution_event
             existing = await repository.get_events_by_message(
                 recovery.conversation_id,
                 _execution_message_id(recovery.delivery_request_id),
@@ -323,12 +318,6 @@ class MemStackRuntimeRecoveryEvidence:
             )
             await repository.save_and_commit(event)
             return event
-
-    def _scoped_container(self, db: AsyncSession) -> _ScopedContainer:
-        container = self._container_provider()
-        if container is None:
-            raise RuntimeError("MemStack application container is not initialized")
-        return container.with_db(db)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -786,12 +775,6 @@ def _default_session_factory() -> SessionFactory:
     from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
     return cast("SessionFactory", async_session_factory)
-
-
-def _default_container_provider() -> _ApplicationContainer | None:
-    from src.infrastructure.adapters.primary.web.startup.container import get_app_container
-
-    return cast("_ApplicationContainer | None", get_app_container())
 
 
 def default_runtime_recovery_config() -> RuntimeRecoveryConfig:

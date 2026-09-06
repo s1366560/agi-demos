@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.containers.agent_container import AgentContainer
 from src.configuration.di_container import DIContainer
@@ -12,6 +13,9 @@ pytestmark = pytest.mark.unit
 
 def test_unused_agent_repository_facades_are_retired_from_top_level_di() -> None:
     retired_facades = {
+        "conversation_repository",
+        "agent_execution_event_repository",
+        "agent_service",
         "agent_execution_repository",
         "execution_checkpoint_repository",
         "skill_version_repository",
@@ -22,6 +26,21 @@ def test_unused_agent_repository_facades_are_retired_from_top_level_di() -> None
     }
 
     assert retired_facades.isdisjoint(vars(DIContainer))
+
+
+def test_application_shell_does_not_construct_an_agent_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def reject_agent_container(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Application shell must not assemble Agent business services")
+
+    monkeypatch.setattr(AgentContainer, "__init__", reject_agent_container)
+    container = DIContainer()
+    scoped = container.with_db(AsyncSession())
+
+    assert scoped._infra is container._infra
+    assert not hasattr(container, "_agent")
+    assert not hasattr(scoped, "_agent")
 
 
 def test_unused_cross_domain_facades_are_retired_from_top_level_di() -> None:

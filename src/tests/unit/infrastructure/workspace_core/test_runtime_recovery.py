@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -535,7 +538,7 @@ async def test_evidence_selects_terminal_matching_core_status() -> None:
     container = _ContainerWithEvents(conversation, [error_event, complete_event])
     evidence = MemStackRuntimeRecoveryEvidence(
         session_factory=cast(Callable[[], Any], _SessionContext),
-        container_provider=lambda: cast(Any, container),
+        repository_lease=_repository_lease(container),
     )
 
     terminal = await evidence.find_terminal(_recovery(status="failed"))
@@ -558,8 +561,113 @@ async def test_evidence_rejects_cross_scope_conversation() -> None:
     session_factory = cast(Callable[[], Any], _SessionContext)
     evidence = MemStackRuntimeRecoveryEvidence(
         session_factory=session_factory,
-        container_provider=lambda: cast(Any, container),
+        repository_lease=_repository_lease(container),
     )
 
     with pytest.raises(PermissionError, match="scope does not match"):
         await evidence.find_terminal(_recovery())
+
+
+def _repository_lease(container):
+    @asynccontextmanager
+    async def lease(**identity):
+        assert identity["tenant_id"] == "tenant-1"
+        assert identity["project_id"] == "project-1"
+        assert identity["conversation_id"] == "conversation-1"
+        events = getattr(
+            container.scoped,
+            "events",
+            SimpleNamespace(
+                get_events_by_message=AsyncMock(
+                    side_effect=AssertionError("unauthorized event read")
+                )
+            ),
+        )
+        yield SimpleNamespace(conversation=container.scoped.repository, execution_event=events)
+
+    return lease
+
+
+@pytest.mark.parametrize("action", ["find_terminal", "persist_failure"])
+async def test_recovery_repository_lease_releases_on_identity_denial(action):
+    conversation = Conversation(
+        id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_id="wrong-user",
+        title="Recovery",
+        workspace_id="workspace-1",
+    )
+    events = SimpleNamespace(get_events_by_message=AsyncMock(), save_and_commit=AsyncMock())
+    lifecycle = []
+
+    @asynccontextmanager
+    async def lease(**identity):
+        lifecycle.append("entered")
+        try:
+            yield SimpleNamespace(
+                conversation=_ConversationRepository(conversation), execution_event=events
+            )
+        finally:
+            lifecycle.append("released")
+
+    evidence = MemStackRuntimeRecoveryEvidence(
+        session_factory=cast(Any, _SessionContext), repository_lease=lease
+    )
+    kwargs = {"audit_id": "audit-1"} if action == "persist_failure" else {}
+    with pytest.raises(PermissionError, match="scope does not match"):
+        await getattr(evidence, action)(_recovery(), **kwargs)
+    events.get_events_by_message.assert_not_awaited()
+    events.save_and_commit.assert_not_awaited()
+    assert lifecycle == ["entered", "released"]
+
+
+async def test_recovery_failure_retains_lease_until_persisted_and_deduplicates():
+    import asyncio
+
+    conversation = Conversation(
+        id="conversation-1",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_id="user-1",
+        title="Recovery",
+        workspace_id="workspace-1",
+        linked_workspace_task_id="task-1",
+    )
+    saved = []
+    entered = asyncio.Event()
+    settle = asyncio.Event()
+    lifecycle = []
+
+    async def save(event):
+        entered.set()
+        await settle.wait()
+        saved.append(event)
+
+    events = SimpleNamespace(
+        get_events_by_message=AsyncMock(side_effect=lambda *a: list(saved)),
+        get_last_event_time=AsyncMock(return_value=(0, 0)),
+        save_and_commit=AsyncMock(side_effect=save),
+    )
+
+    @asynccontextmanager
+    async def lease(**identity):
+        lifecycle.append("entered")
+        try:
+            yield SimpleNamespace(
+                conversation=_ConversationRepository(conversation), execution_event=events
+            )
+        finally:
+            lifecycle.append("released")
+
+    evidence = MemStackRuntimeRecoveryEvidence(
+        session_factory=cast(Any, _SessionContext), repository_lease=lease
+    )
+    pending = asyncio.create_task(evidence.persist_failure(_recovery(), audit_id="audit-1"))
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    assert lifecycle == ["entered"] and not pending.done()
+    settle.set()
+    first = await asyncio.wait_for(pending, timeout=1)
+    assert lifecycle == ["entered", "released"]
+    assert await evidence.persist_failure(_recovery(), audit_id="audit-1") is first
+    events.save_and_commit.assert_awaited_once()
