@@ -24,11 +24,13 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_b
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_outcome_supersession_model_v2 import (
+    PlatformPluginV2OutcomeSupersessionModel,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
     PlatformPluginProfileSourceRepositoryV2,
 )
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
-    PlatformPluginLedgerV2Error,
     PlatformPluginRepositoryV2,
 )
 from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
@@ -157,9 +159,16 @@ async def test_stale_receipt_is_not_rewritten_or_admitted(pending_marketplace):
         host=host, coordinator=coordinator, session_factory=factory, policy=policy
     )
     try:
-        with pytest.raises(PlatformPluginLedgerV2Error) as caught:
+        with pytest.raises(RuntimeV2Error) as caught:
             await recovery.run_once()
-        assert caught.value.code == "stale_receipt"
+        assert caught.value.code == "root_receipt_pending"
+        async with factory() as session:
+            assert (
+                await session.scalar(
+                    select(func.count()).select_from(PlatformPluginV2OutcomeSupersessionModel)
+                )
+                == 0
+            )
         assert host.pending_receipt is pending
         assert not completed.is_set()
         assert await _receipt_count(factory) == 1

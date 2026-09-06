@@ -88,15 +88,20 @@ class MarketplaceReceiptRecoveryV2:
 
     async def run_once(self) -> bool:
         """Recover a retained receipt or apply the exact committed unapplied request."""
-        if self._host.pending_receipt is None:
-            return await recover_live_requested_root_v2(
-                coordinator=self._coordinator,
-                session_factory=self._session_factory,
-                policy=self._policy,
-                trusted_public_keys=self._trusted_public_keys,
-                allowed_registries=self._allowed_registries,
-                on_route_commit=self._on_route_commit,
-            )
+        pending = self._host.pending_receipt
+        recovered = await recover_live_requested_root_v2(
+            coordinator=self._coordinator,
+            session_factory=self._session_factory,
+            policy=self._policy,
+            trusted_public_keys=self._trusted_public_keys,
+            allowed_registries=self._allowed_registries,
+            on_route_commit=self._on_route_commit,
+            superseded_publication=pending,
+        )
+        if recovered or pending is None:
+            return recovered
+        if self._host.pending_requires_ack:
+            return False
         try:
             _ = await self._coordinator.retry_pending_receipt(
                 lambda publication: persist_marketplace_receipt_v2(

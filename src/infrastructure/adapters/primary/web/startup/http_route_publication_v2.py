@@ -146,6 +146,52 @@ class HttpRoutePublicationCoordinatorV2:
         if result.plugin_publication.accepted and result.graph is not None and callback is not None:
             callback(result.graph)
 
+    async def supersede_pending(
+        self,
+        expected_pending: PlatformPluginPublicationV2,
+        snapshot: ProfileSnapshotV2,
+        envelope: ControlPlaneEnvelopeV2,
+        *,
+        audit_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]],
+        receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]],
+        on_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
+        receipt_check: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
+        pre_apply_check: Callable[[], Awaitable[None]] | None = None,
+    ) -> HttpRouteGenerationPublicationV2:
+        """Audit and replace an exact blocked route outcome without opening admission."""
+        archives = None if verified_archives is None else tuple(verified_archives)
+        results: list[HttpRouteGenerationPublicationV2] = []
+
+        async def supersede() -> None:
+            async with self._lock:
+                pending = self._pending
+                if (
+                    pending is None
+                    or pending.plugin_publication is not expected_pending
+                    or self._host.pending_receipt is not expected_pending
+                ):
+                    raise RuntimeV2Error(
+                        "route_receipt_mismatch", "pending route publication identity changed"
+                    )
+                if pre_apply_check is not None:
+                    await pre_apply_check()
+                results.append(
+                    await self._publish_locked(
+                        snapshot,
+                        envelope,
+                        verified_archives=archives,
+                        receipt_persister=receipt_persister,
+                        receipt_check=receipt_check,
+                        on_commit=on_commit,
+                        superseded_publication=expected_pending,
+                        audit_persister=audit_persister,
+                    )
+                )
+
+        await OwnedLifecycleTaskV2(supersede, name="http-route-publication-supersession").wait()
+        return results[0]
+
     async def retry_pending_receipt(
         self,
         receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]],
@@ -199,6 +245,8 @@ class HttpRoutePublicationCoordinatorV2:
         receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
         receipt_check: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
         on_commit: Callable[[BuiltinRouteGraphV2], None] | None = None,
+        superseded_publication: PlatformPluginPublicationV2 | None = None,
+        audit_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]] | None = None,
     ) -> HttpRouteGenerationPublicationV2:
         async def stage_routes(
             generation: RuntimeGenerationV2,
@@ -239,13 +287,26 @@ class HttpRoutePublicationCoordinatorV2:
             await receipt_persister(publication)
             self._notify_commit(result, on_commit)
 
-        publication = await self._host.apply(
-            snapshot,
-            envelope,
-            publication_stager=stage_routes,
-            verified_archives=verified_archives,
-            receipt_persister=persist if receipt_persister is not None else None,
-        )
+        if superseded_publication is None:
+            publication = await self._host.apply(
+                snapshot,
+                envelope,
+                publication_stager=stage_routes,
+                verified_archives=verified_archives,
+                receipt_persister=persist if receipt_persister is not None else None,
+            )
+        else:
+            if audit_persister is None or receipt_persister is None:
+                raise RuntimeError("route supersession persistence callbacks are unavailable")
+            publication = await self._host.supersede_pending(
+                superseded_publication,
+                snapshot,
+                envelope,
+                publication_stager=stage_routes,
+                verified_archives=verified_archives,
+                audit_persister=audit_persister,
+                receipt_persister=persist,
+            )
         result = self._route_result(publication)
         self._pending = None
         self._pending_on_commit = None

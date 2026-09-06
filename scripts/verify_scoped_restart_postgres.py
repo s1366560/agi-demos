@@ -40,6 +40,7 @@ TESTS = (
     "src/tests/integration/test_marketplace_live_recovery_postgres.py",
     "src/tests/integration/test_marketplace_receipt_source_fence_postgres.py",
     "src/tests/integration/test_outcome_supersession_postgres.py",
+    "src/tests/integration/test_marketplace_supersession_recovery_postgres.py",
 )
 
 

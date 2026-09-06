@@ -90,6 +90,7 @@ class PlatformPluginRuntimeHostV2:
         self._current_publication: PlatformPluginPublicationV2 | None = None
         self._receipt_blocked = False
         self._pending_receipt: PlatformPluginPublicationV2 | None = None
+        self._pending_requires_ack = False
         self._distributions: WeakKeyDictionary[
             RuntimeGenerationV2, PlatformPluginDistributionV2
         ] = WeakKeyDictionary()
@@ -127,6 +128,11 @@ class PlatformPluginRuntimeHostV2:
     def pending_receipt(self) -> PlatformPluginPublicationV2 | None:
         """Return the actual local outcome awaiting durable persistence."""
         return self._pending_receipt
+
+    @property
+    def pending_requires_ack(self) -> bool:
+        """Whether only a newer accepted replacement can release this pending outcome."""
+        return self._pending_requires_ack
 
     def _require_receipt_ready(self) -> None:
         if self._receipt_blocked:
@@ -203,6 +209,63 @@ class PlatformPluginRuntimeHostV2:
             await OwnedLifecycleTaskV2(publish, name="plugin-publication-receipt").wait()
         return result[0]
 
+    async def supersede_pending(
+        self,
+        expected_pending: PlatformPluginPublicationV2,
+        snapshot: ProfileSnapshotV2,
+        envelope: ControlPlaneEnvelopeV2,
+        *,
+        audit_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]],
+        receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]],
+        publication_stager: GenerationPublicationStagerV2 | None = None,
+        verified_archives: Sequence[VerifiedBundleArchiveV2] | None = None,
+    ) -> PlatformPluginPublicationV2:
+        """Replace an exact blocked attempt after its real outcome audit commits.
+
+        Callbacks must own their transactions, be safe to retry, and never reenter
+        this Host or wait for its old leases. A replacement NACK stays fenced even
+        if persistence succeeds; only an accepted replacement can restore admission.
+        """
+        archives = None if verified_archives is None else tuple(verified_archives)
+        results: list[PlatformPluginPublicationV2] = []
+
+        async def supersede() -> None:
+            async with self._apply_lock:
+                pending = self._pending_receipt
+                if pending is None or pending is not expected_pending or not self._receipt_blocked:
+                    raise RuntimeV2Error(
+                        "publication_receipt_mismatch", "pending publication identity changed"
+                    )
+                if envelope.version <= pending.envelope.version:
+                    raise RuntimeV2Error(
+                        "publication_supersession_not_newer", "replacement version must advance"
+                    )
+                await audit_persister(pending)
+                receipt = await self.reconciler.apply(
+                    snapshot,
+                    envelope,
+                    publication_stager=publication_stager,
+                    verified_archives=archives,
+                )
+                publication = PlatformPluginPublicationV2(
+                    snapshot=snapshot, envelope=envelope, receipt=receipt
+                )
+                self._pending_receipt = publication
+                self._pending_requires_ack = not publication.accepted
+                await receipt_persister(publication)
+                if self._pending_requires_ack:
+                    raise RuntimeV2Error(
+                        "publication_supersession_nack",
+                        "rejected replacement requires a newer accepted publication",
+                    )
+                self._record_publication(publication)
+                self._pending_receipt = None
+                self._receipt_blocked = False
+                results.append(publication)
+
+        await OwnedLifecycleTaskV2(supersede, name="plugin-publication-supersession").wait()
+        return results[0]
+
     async def retry_pending_receipt(
         self,
         receipt_persister: Callable[[PlatformPluginPublicationV2], Awaitable[None]],
@@ -217,6 +280,11 @@ class PlatformPluginRuntimeHostV2:
                     raise RuntimeV2Error(
                         "publication_receipt_unavailable",
                         "no local publication receipt is available for persistence retry",
+                    )
+                if self._pending_requires_ack:
+                    raise RuntimeV2Error(
+                        "publication_supersession_nack",
+                        "rejected replacement requires a newer accepted publication",
                     )
                 await receipt_persister(publication)
                 self._record_publication(publication)
@@ -317,6 +385,7 @@ class PlatformPluginRuntimeHostV2:
             finally:
                 self._current_publication = None
                 self._pending_receipt = None
+                self._pending_requires_ack = False
 
 
 class DataPlaneGenerationAdmissionV2:
