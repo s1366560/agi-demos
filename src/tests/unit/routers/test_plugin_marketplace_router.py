@@ -24,6 +24,9 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlatformPluginCatalogModel,
     PlatformPluginDesiredStateModel,
+    PlatformPluginPackageModel,
+    PlatformPluginPermissionModel,
+    PlatformPluginV2DesiredBundleSetModel,
     PlatformPluginV2PublicationModel,
     Tenant,
     User,
@@ -265,6 +268,8 @@ async def test_marketplace_install_with_empty_trust_store_fails_closed(
         user_id="marketplace-empty-trust-admin",
         tenant_id="marketplace-empty-trust-tenant",
     )
+    user.is_superuser = True
+    await db_session.commit()
 
     async with _client(_app(db_session, user)) as client:
         response = await client.post(
@@ -302,6 +307,8 @@ async def test_marketplace_v2_publication_is_idempotent_retains_last_good_and_un
         user_id="marketplace-loop-admin",
         tenant_id="marketplace-loop-tenant",
     )
+    user.is_superuser = True
+    await db_session.commit()
     app = _app(db_session, user)
     app.state.plugin_marketplace_trusted_public_keys_v2 = (public_key,)
     monkeypatch.setattr(
@@ -394,3 +401,43 @@ async def test_marketplace_v2_publication_is_idempotent_retains_last_good_and_un
         assert await _legacy_row_counts(db_session) == (0, 0)
     finally:
         await shutdown_plugin_runtime_v2(app)
+
+
+@pytest.mark.parametrize("operation", ["install", "uninstall"])
+async def test_tenant_admin_cannot_mutate_root_marketplace_state(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    signer = Ed25519PrivateKey.generate()
+    public_key = _public_key_pem(signer)
+    bundle, archive = _signed_bundle(signer)
+    user, tenant = await _tenant_admin(
+        db_session, user_id="root-denied-admin", tenant_id="root-denied-tenant"
+    )
+    assert user.is_superuser is False
+    app = _app(db_session, user)
+    app.state.plugin_marketplace_trusted_public_keys_v2 = (public_key,)
+    monkeypatch.setattr(
+        plugin_marketplace, "OciPluginArtifactClient", lambda _client: FakeArtifactClient(archive)
+    )
+    payload = (
+        _request(bundle, archive, public_key)
+        .model_copy(update={"tenant_id": tenant.id})
+        .model_dump(mode="json")
+        if operation == "install"
+        else {"version": bundle.version, "tenant_id": tenant.id}
+    )
+    async with _client(app) as client:
+        response = await client.post(
+            f"/api/v1/plugin-marketplace/packages/{bundle.bundle_id}/{operation}", json=payload
+        )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    for model in (
+        PlatformPluginV2DesiredBundleSetModel,
+        PlatformPluginV2PublicationModel,
+        PlatformPluginPackageModel,
+        PlatformPluginPermissionModel,
+    ):
+        assert await db_session.scalar(select(func.count()).select_from(model)) == 0
+    assert await _legacy_row_counts(db_session) == (0, 0)

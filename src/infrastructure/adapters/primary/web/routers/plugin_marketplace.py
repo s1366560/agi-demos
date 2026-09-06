@@ -248,7 +248,11 @@ async def install_package(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Plugin path and request body must identify the same package"),
         )
-    await _require_tenant_admin(db, _current_user, request.tenant_id)
+    if not _current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Only a platform administrator may install a marketplace package"),
+        )
     decision = await service.request_install(request=request, actor_id=_current_user.id)
     if decision.status == "approved":
         if decision.desired_changed:
@@ -351,7 +355,11 @@ async def uninstall_package(
     db: AsyncSession = Depends(get_db),
 ) -> MarketplacePackageUninstallResponse:
     """Uninstall a package and remove it from the next desired snapshot."""
-    await _require_tenant_admin(db, current_user, request.tenant_id)
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Only a platform administrator may uninstall a marketplace package"),
+        )
     try:
         result = await service.uninstall(
             plugin_id=plugin_id,
