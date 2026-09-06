@@ -44,8 +44,8 @@ candidate; main-checkout generation and completeness checks pass. Logs:
 
 ## Remaining integration
 
-The registry is not yet wired into HTTP requests or Agent turns. Publication and receipt storage
-still need scope-bound identities and concurrency-safe version allocation; production membership
+The registry is not yet wired into HTTP requests or Agent turns. Publication and receipt storage now have scope-bound identities and transaction-safe
+version allocation in `9354abeaf`; production membership
 authorization and exact ProfileSource loading must be connected before non-root publication is
 enabled. The Web public view remains root-only. These changes do not prove Stage 6 completion,
 full native acceptance, or final V1 retirement.

@@ -10,7 +10,12 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from src.domain.model.plugins.generated_v2 import ApplyStatusV2, SnapshotApplyReceiptV2
+from src.domain.model.plugins.generated_v2 import (
+    ApplyStatusV2,
+    ScopeKindV2,
+    ScopeV2,
+    SnapshotApplyReceiptV2,
+)
 from src.infrastructure.adapters.primary.web.dependencies import create_api_key
 from src.infrastructure.adapters.primary.web.routers import platform_plugins
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -66,7 +71,15 @@ async def authenticated_views(db_session):
         yield client, keys, workload.secret
 
 
-async def requested(db, *, invalid_config=False, nonroot=False):
+async def requested(
+    db,
+    *,
+    invalid_config=False,
+    nonroot=False,
+    scope=ScopeV2(kind=ScopeKindV2.ROOT),
+    version=1,
+    nonce="private-workload-nonce",
+):
     payload = json.loads((_ROOT / "shared/profiles/memstack-default-bootstrap.v2.json").read_text())
     host = next(
         entry
@@ -94,18 +107,18 @@ async def requested(db, *, invalid_config=False, nonroot=False):
     payload.pop("digest")
     payload["digest"] = hashlib.sha256(canonical_json_v2(payload)).hexdigest()
     snapshot = parse_profile_snapshot_v2(payload)
-    envelope = control_envelope_v2(snapshot, version=1, nonce="private-workload-nonce")
+    envelope = control_envelope_v2(snapshot, version=version, nonce=nonce)
     # A requested publication is readable before any workload has accepted it.
     receipt = SnapshotApplyReceiptV2(
         status=ApplyStatusV2.NACK,
-        requested_version=1,
+        requested_version=version,
         requested_digest=snapshot.digest,
         applied_version=None,
         applied_digest=None,
         error_code="fixture_not_applied",
         error_message="No local application attempted",
     )
-    await PlatformPluginRepositoryV2(db).record_publication(
+    await PlatformPluginRepositoryV2(db, scope=scope).record_publication(
         PlatformPluginPublicationV2(snapshot=snapshot, envelope=envelope, receipt=receipt)
     )
     await db.commit()
@@ -177,3 +190,32 @@ async def test_nonroot_view_requires_future_scope_authorization(authenticated_vi
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "web_public_view_unavailable"
     assert "private-tenant-canary" not in response.text
+
+
+@pytest.mark.parametrize("has_root", [False, True])
+async def test_root_http_views_ignore_newer_scoped_publications(
+    authenticated_views, db_session, has_root
+):
+    client, keys, workload = authenticated_views
+    user_headers = {"Authorization": f"Bearer {keys[0]}"}
+    workload_headers = {"Authorization": f"Bearer {workload}"}
+    distribution_path = "/api/v1/platform-plugins/v2/distribution"
+    if has_root:
+        await requested(db_session)
+    prior_view = await client.get(_PATH, headers=user_headers)
+    prior_distribution = await client.get(distribution_path, headers=workload_headers)
+    expected = 200 if has_root else 404
+    assert prior_view.status_code == prior_distribution.status_code == expected
+    await requested(
+        db_session,
+        scope=ScopeV2(kind=ScopeKindV2.TENANT, tenant_id="isolated-tenant"),
+        version=999,
+        nonce="scoped-private-nonce",
+        invalid_config=True,
+    )
+    view = await client.get(_PATH, headers=user_headers)
+    distribution = await client.get(distribution_path, headers=workload_headers)
+    assert view.status_code == distribution.status_code == expected
+    assert view.json() == prior_view.json()
+    assert distribution.json() == prior_distribution.json()
+    assert "scoped-private-nonce" not in distribution.text

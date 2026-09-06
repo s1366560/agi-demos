@@ -35,3 +35,9 @@ Autogenerate input/output, the isolated database runner and PostgreSQL test log
 are retained with hashes in `/var/tmp/cordis-scoped-ledger-ku4urjz_`.
 Final V1 retirement, full historical migration recovery and final native acceptance
 are not completed by this batch.
+
+The real-authentication HTTP suite additionally passed seven tests. It verifies
+that both ROOT distribution and public Web-view endpoints remain unchanged when
+a tenant publication has a higher version, and return 404 when only scoped data
+exists. Only the database dependency is overridden; real user and workload
+credentials exercise the production router. Log: `/tmp/cordis-root-http-scope-isolation.log`.
