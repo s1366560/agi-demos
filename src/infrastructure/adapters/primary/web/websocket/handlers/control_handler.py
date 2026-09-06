@@ -20,6 +20,9 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler imp
     WebSocketMessageHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.adapters.primary.web.websocket.scoped_session_admission_v2 import (
+    authorize_existing_scoped_session_v2,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentPlanRunModel,
@@ -106,7 +109,7 @@ async def _acquire_control_reservation_v2(
     runtime = context.scoped_profile_runtime_v2
     if not isinstance(runtime, ScopedProfileRuntimeV2):
         raise RuntimeV2Error("scoped_runtime_missing", _("Scoped control runtime is unavailable"))
-    return await runtime.acquire(
+    reservation = await runtime.acquire(
         ScopeV2(
             kind=ScopeKindV2.SESSION,
             tenant_id=context.tenant_id,
@@ -114,6 +117,14 @@ async def _acquire_control_reservation_v2(
             session_id=conversation.id,
         )
     )
+    try:
+        _authorized_scope = await authorize_existing_scoped_session_v2(
+            context, conversation_id=conversation.id, project_id=conversation.project_id
+        )
+    except BaseException:
+        await reservation.lease.release()
+        raise
+    return reservation
 
 
 class _SubAgentControlHandler(WebSocketMessageHandler):

@@ -20,6 +20,10 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_publicati
     PYTHON_API_DATA_PLANE_ID_V2,
     PlatformPluginPublicationPolicyV2,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_recovery_repository_v2 import (
+    PlatformPluginRecoveryRepositoryV2,
+    ScopedRecoveryStateV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginLedgerV2Error,
     PlatformPluginRepositoryV2,
@@ -188,6 +192,85 @@ class ScopedPublicationCoordinatorV2:
 
     async def acquire(self, scope: ScopeV2) -> GenerationLeaseV2:
         return (await self.acquire_bound(scope)).lease
+
+    async def restore_last_good(
+        self,
+        scope: ScopeV2,
+        *,
+        expected_state: ScopedRecoveryStateV2,
+        verified_archives: Sequence[VerifiedBundleArchiveV2],
+    ) -> PlatformPluginPublicationV2:
+        """Restage proven historical authority without allocating a new publication."""
+        canonical = validate_scope_v2(scope)
+        expected = deepcopy(expected_state)
+        archives = tuple(verified_archives)
+        if expected.scope != canonical:
+            raise RuntimeV2Error(
+                "scope_recovery_mismatch", "recovery state belongs to another scope"
+            )
+        latest, retained, receipt, source = (
+            expected.latest,
+            expected.last_good,
+            expected.latest_receipt,
+            expected.source,
+        )
+        if latest is None or retained is None or receipt is None or source is None:
+            raise RuntimeV2Error(
+                "scope_recovery_unavailable",
+                "recovery requires retained source and current receipt",
+            )
+        if {(ref.bundle_id, ref.version, ref.digest) for ref in source.bundles} != {
+            (archive.manifest.bundle_id, archive.manifest.version, archive.manifest.digest)
+            for archive in archives
+        }:
+            raise RuntimeV2Error(
+                "scope_bundle_reference_mismatch", "recovery archives differ from retained source"
+            )
+        slot = self._slot(canonical)
+        result: list[PlatformPluginPublicationV2] = []
+
+        async def work() -> None:
+            async with slot.lock:
+                self._active()
+                if slot.pending is not None or slot.admitted is not None:
+                    raise RuntimeV2Error(
+                        "scope_recovery_conflict", "scope already has local publication state"
+                    )
+                async with self._sessions() as session:
+                    current = await PlatformPluginRecoveryRepositoryV2(session).read(
+                        scope=canonical, data_plane_id=self._plane
+                    )
+                    if current != expected:
+                        raise RuntimeV2Error(
+                            "scope_recovery_changed", "durable recovery state changed"
+                        )
+                slot.blocked = True
+                publication = await self._registry.publish(
+                    canonical, retained.snapshot, retained.envelope, verified_archives=archives
+                )
+                if not publication.accepted:
+                    raise RuntimeV2Error(
+                        "scope_recovery_rejected", "retained generation could not be restored"
+                    )
+                async with self._sessions() as session:
+                    current = await PlatformPluginRecoveryRepositoryV2(session).read(
+                        scope=canonical, data_plane_id=self._plane
+                    )
+                    if current != expected:
+                        raise RuntimeV2Error(
+                            "scope_recovery_changed",
+                            "durable recovery state changed during staging",
+                        )
+                    self._active()
+                    slot.admitted = publication
+                    slot.observed = PlatformPluginPublicationV2(
+                        snapshot=latest.snapshot, envelope=latest.envelope, receipt=receipt
+                    )
+                    slot.blocked = False
+                result.append(publication)
+
+        await OwnedLifecycleTaskV2(work, name="scoped-publication-restore-v2").wait()
+        return result[0]
 
     async def acquire_bound(self, scope: ScopeV2) -> ScopedRuntimeReservationV2:
         """Return the exact host binding only after all durable admission checks succeed."""

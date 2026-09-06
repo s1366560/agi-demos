@@ -15,6 +15,13 @@ from src.application.services.scoped_profile_publication_service_v2 import (
     ScopedProfilePublicationServiceV2,
 )
 from src.domain.model.plugins.generated_v2 import ScopeV2, ServiceRequiredV2
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
+    PYTHON_API_DATA_PLANE_ID_V2,
+)
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_recovery_repository_v2 import (
+    PlatformPluginRecoveryRepositoryV2,
+)
+from src.infrastructure.plugins.v2.bundle_archive import VerifiedBundleArchiveV2
 from src.infrastructure.plugins.v2.production_bundle import production_bundle_sources_v2
 from src.infrastructure.plugins.v2.runtime import RuntimeV2Error
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
@@ -76,7 +83,44 @@ class ScopedProfileRuntimeV2:
     async def acquire(self, scope: ScopeV2) -> ScopedRuntimeReservationV2:
         if self._closed:
             raise RuntimeV2Error("scoped_runtime_closed", "scoped runtime is closed")
+        try:
+            return await self._coordinator.acquire_bound(scope)
+        except RuntimeV2Error as error:
+            if error.code != "scope_not_admitted":
+                raise
+        await self.restore_existing(scope)
         return await self._coordinator.acquire_bound(scope)
+
+    async def restore_existing(self, scope: ScopeV2) -> None:
+        """Recover only historically bound authority after the consumer has authorized scope."""
+        if self._closed:
+            raise RuntimeV2Error("scoped_runtime_closed", "scoped runtime is closed")
+        async with self._sessions() as session:
+            state = await PlatformPluginRecoveryRepositoryV2(session).read(
+                scope=scope, data_plane_id=PYTHON_API_DATA_PLANE_ID_V2
+            )
+        if state.source is None or state.last_good is None or state.latest_receipt is None:
+            raise RuntimeV2Error(
+                "scope_recovery_unavailable", "scope lacks bound recovery authority"
+            )
+        archives: list[VerifiedBundleArchiveV2] = []
+        for reference in state.source.bundles:
+            archive = cast(object, await self._loader(reference))
+            if not isinstance(archive, VerifiedBundleArchiveV2):
+                raise RuntimeV2Error(
+                    "scope_bundle_unverified", "recovery requires verified archives"
+                )
+            archives.append(archive)
+        try:
+            _ = await self._coordinator.restore_last_good(
+                scope, expected_state=state, verified_archives=archives
+            )
+        except RuntimeV2Error as error:
+            if error.code != "scope_recovery_conflict":
+                raise
+            # Another authorized caller may have restored this scope while archives loaded.
+            reservation = await self._coordinator.acquire_bound(scope)
+            await reservation.lease.release()
 
     async def close(self) -> None:
         self._closed = True

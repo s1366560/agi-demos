@@ -170,3 +170,27 @@ async def test_assigned_hitl_recipient_requires_exact_persisted_request(existing
             )
         assert error.value.code == "CONVERSATION_ACCESS_DENIED"
         context.scoped_profile_runtime_v2.acquire.assert_not_awaited()
+
+
+@pytest.mark.parametrize("control", [False, True])
+async def test_membership_revoked_during_restore_releases_reservation(existing_session, control):
+    from src.infrastructure.adapters.primary.web.websocket.handlers.control_handler import (
+        _acquire_control_reservation_v2,
+    )
+
+    context = existing_session
+    reservation = SimpleNamespace(lease=SimpleNamespace(release=AsyncMock()))
+
+    async def revoke(_scope):
+        await context.db.execute(delete(UserTenant))
+        await context.db.commit()
+        return reservation
+
+    context.scoped_profile_runtime_v2.acquire.side_effect = revoke
+    with pytest.raises(RuntimeV2Error) as error:
+        if control:
+            await _acquire_control_reservation_v2(context, SimpleNamespace(id="s", project_id="p"))
+        else:
+            await acquire_existing_scoped_session_v2(context, conversation_id="s", project_id="p")
+    assert error.value.code == "CONVERSATION_ACCESS_DENIED"
+    reservation.lease.release.assert_awaited_once()

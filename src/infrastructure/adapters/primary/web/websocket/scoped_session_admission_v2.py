@@ -98,4 +98,15 @@ async def acquire_existing_scoped_session_v2(
     runtime = context.scoped_profile_runtime_v2
     if not isinstance(runtime, ScopedProfileRuntimeV2):
         raise RuntimeV2Error("scoped_runtime_missing", _("Scoped session runtime is unavailable"))
-    return await runtime.acquire(scope)
+    reservation = await runtime.acquire(scope)
+    try:
+        _authorized_scope = await authorize_existing_scoped_session_v2(
+            context,
+            conversation_id=conversation_id,
+            project_id=project_id,
+            hitl_request_id=hitl_request_id,
+        )
+    except BaseException:
+        await reservation.lease.release()
+        raise
+    return reservation
