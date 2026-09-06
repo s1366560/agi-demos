@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from src.application.schemas.platform_plugins import (
@@ -73,6 +75,12 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
             PlatformPluginDataPlaneCredentialResponseV2,
         ),
         (
+            f"{v2}/web-view",
+            ("GET",),
+            "get_web_public_view_v2",
+            dict[str, Any],
+        ),
+        (
             f"{v2}/distribution",
             ("GET",),
             "get_distribution_v2",
@@ -122,21 +130,22 @@ def test_platform_plugins_row_is_a_complete_explicit_v2_contribution() -> None:
         ),
     )
     assert (
-        tuple(definition.tags for definition in definitions[:13])
-        == (("Platform Plugins", "Platform Plugins V2"),) * 13
+        tuple(definition.tags for definition in definitions[:14])
+        == (("Platform Plugins", "Platform Plugins V2"),) * 14
     )
-    assert tuple(definition.tags for definition in definitions[13:]) == (
+    assert tuple(definition.tags for definition in definitions[14:]) == (
         ("Platform Plugins",),
         ("Platform Plugins",),
     )
     assert all(definition.include_in_schema is False for definition in definitions[-2:])
-    assert tuple(definition.status_code for definition in definitions[:13]) == (
+    assert tuple(definition.status_code for definition in definitions[:14]) == (
         None,
         None,
         None,
         201,
         None,
         201,
+        None,
         None,
         None,
         None,
