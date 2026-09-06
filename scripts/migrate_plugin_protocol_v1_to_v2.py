@@ -43,6 +43,9 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_b
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_governance_repository import (
     PlatformPluginGovernanceRepository,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_profile_source_repository_v2 import (
+    PlatformPluginProfileSourceRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_v1_migration_repository import (
     PlatformPluginV1MigrationRepository,
     PlatformPluginV1MigrationRepositoryError,
@@ -174,6 +177,7 @@ def _service(session: AsyncSession) -> PluginProtocolV1ToV2MigrationService:
         desired_repository=PlatformPluginDesiredBundleSetRepositoryV2(session),
         governance_repository=PlatformPluginGovernanceRepository(session),
         production_sources=production_bundle_sources_v2(),
+        source_repository=PlatformPluginProfileSourceRepositoryV2(session),
     )
 
 
