@@ -54,11 +54,16 @@ export interface EventRecordV2 {
 export class EffectStackV2 {
   readonly records: EffectRecordV2[] = [];
   private disposal?: Promise<void>;
+  private readonly pendingSetups = new Set<Promise<void>>();
 
   constructor(private readonly phase: () => FiberPhaseV2) {}
 
   add(disposer: AsyncDisposerV2, label: string): AsyncDisposerV2 {
     this.ensureActive();
+    return this.addOwned(disposer, label);
+  }
+
+  private addOwned(disposer: AsyncDisposerV2, label: string): AsyncDisposerV2 {
     const record: EffectRecordV2 = { label, disposer };
     this.records.push(record);
     return () => disposeRecord(record);
@@ -66,15 +71,53 @@ export class EffectStackV2 {
 
   async addResult(result: EffectResultV2, label: string): Promise<void> {
     this.ensureActive();
+    await this.registerResult(result, label, false);
+  }
+
+  async runSetup(
+    setup: () => EffectResultV2 | Promise<EffectResultV2>,
+    label: string
+  ): Promise<void> {
+    this.ensureActive();
+    let settled!: () => void;
+    const completion = new Promise<void>((resolve) => {
+      settled = resolve;
+    });
+    // Admission precedes user code, which can synchronously request disposal.
+    this.pendingSetups.add(completion);
+    try {
+      const result = await setup();
+      await this.registerResult(result, label, true);
+    } catch (error) {
+      let diagnostic = 'effect setup failed';
+      try {
+        diagnostic = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      } catch {
+        // Formatting diagnostics must not replace the original setup failure.
+      }
+      this.records.push({ label, error: diagnostic });
+      throw error;
+    } finally {
+      this.pendingSetups.delete(completion);
+      settled();
+    }
+  }
+
+  private async registerResult(
+    result: EffectResultV2,
+    label: string,
+    acceptedSetup: boolean
+  ): Promise<void> {
+    const add = acceptedSetup ? this.addOwned.bind(this) : this.add.bind(this);
     if (result === undefined) return;
     if (typeof result === 'function') {
-      this.add(result, label);
+      add(result, label);
       return;
     }
     if (isAsyncIterable(result)) {
       let index = 0;
       for await (const disposer of result) {
-        this.add(assertDisposer(disposer, `${label}[${index}]`), `${label}[${index}]`);
+        add(assertDisposer(disposer, `${label}[${index}]`), `${label}[${index}]`);
         index += 1;
       }
       return;
@@ -82,7 +125,7 @@ export class EffectStackV2 {
     if (isIterable(result)) {
       let index = 0;
       for (const disposer of result) {
-        this.add(assertDisposer(disposer, `${label}[${index}]`), `${label}[${index}]`);
+        add(assertDisposer(disposer, `${label}[${index}]`), `${label}[${index}]`);
         index += 1;
       }
       return;
@@ -92,6 +135,8 @@ export class EffectStackV2 {
 
   dispose(): Promise<void> {
     this.disposal ??= Promise.resolve().then(async () => {
+      // Accepted setup owns all returned effects through its final iterator yield.
+      await Promise.all([...this.pendingSetups]);
       const errors: unknown[] = [];
       for (const record of [...this.records].reverse()) {
         try {
@@ -226,8 +271,7 @@ export class ContextV2 {
     setup: () => EffectResultV2 | Promise<EffectResultV2>,
     label: string
   ): Promise<void> {
-    this.effects.ensureActive();
-    await this.effects.addResult(await setup(), label);
+    await this.effects.runSetup(setup, label);
   }
 
   on(event: string, handler: EventHandlerV2): AsyncDisposerV2 {
