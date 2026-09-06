@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -72,6 +73,13 @@ class _TrackedRedisClient:
     async def delete(self, key: str) -> int:
         self.calls.append(("delete", key))
         return int(self.values.pop(key, None) is not None)
+
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str | bytes]:
+        for key in ():
+            yield key
+
+    async def xadd(self, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Redis stream publication is outside this authority fixture")
 
     async def aclose(self) -> None:
         self.close_calls += 1

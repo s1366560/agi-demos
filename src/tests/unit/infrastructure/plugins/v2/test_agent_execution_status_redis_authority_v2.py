@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 import redis.asyncio as redis
@@ -64,6 +65,16 @@ class _TrackedRedisClient:
             )
         ][:count]
 
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str | bytes]:
+        for key in ():
+            yield key
+
+    async def xadd(self, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Redis stream publication is outside this authority fixture")
+
+    async def delete(self, *keys: str | bytes) -> int:
+        return 0
+
     async def aclose(self) -> None:
         self.close_calls += 1
 
@@ -83,10 +94,11 @@ class _StaticContainerRedisProbe:
         return self.event_repo
 
 
-def _request() -> Request:
+def _request(container: _StaticContainerRedisProbe) -> Request:
     return cast(
         Request,
         SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace(container=container)),
             method="GET",
             url=SimpleNamespace(path="/api/v1/agent/conversations/conversation-1/status"),
         ),
@@ -96,18 +108,16 @@ def _request() -> Request:
 def _bind_route(
     monkeypatch: pytest.MonkeyPatch,
     container: _StaticContainerRedisProbe,
-) -> MagicMock:
-    get_container = MagicMock(return_value=container)
+) -> Request:
     monkeypatch.setattr(messages, "_verify_conversation_access", AsyncMock(return_value=None))
-    monkeypatch.setattr(messages, "get_container_with_db", get_container)
     monkeypatch.setattr(redis, "Redis", _TrackedRedisClient)
-    return get_container
+    return _request(container)
 
 
-async def _read_status(*, include_recovery_info: bool) -> dict[str, Any]:
+async def _read_status(*, request: Request, include_recovery_info: bool) -> dict[str, Any]:
     return await messages.get_conversation_execution_status(
         "conversation-1",
-        request=_request(),
+        request=request,
         project_id="project-1",
         include_recovery_info=include_recovery_info,
         from_time_us=100_000,
@@ -152,11 +162,11 @@ async def test_execution_status_uses_exact_request_generation_redis_during_reloa
     first_client.reload_generation = reload_generation
     static_client = _TrackedRedisClient("static")
     static_probe = _StaticContainerRedisProbe(static_client)
-    get_container = _bind_route(monkeypatch, static_probe)
+    request = _bind_route(monkeypatch, static_probe)
 
     try:
         async with pin_generation_v2(host):
-            result = await _read_status(include_recovery_info=True)
+            result = await _read_status(request=request, include_recovery_info=True)
             assert first_client.close_calls == 0
 
         assert result == {
@@ -171,7 +181,6 @@ async def test_execution_status_uses_exact_request_generation_redis_during_reloa
                 "recovery_source": "stream",
             },
         }
-        get_container.assert_not_called()
         assert static_probe.accesses == 0
         assert first_client.calls == [
             ("exists", "agent:running:conversation-1"),
@@ -204,12 +213,12 @@ async def test_execution_status_rejects_when_v2_redis_is_unavailable(
 
     static_client = _TrackedRedisClient("static")
     static_probe = _StaticContainerRedisProbe(static_client)
-    get_container = _bind_route(monkeypatch, static_probe)
+    request = _bind_route(monkeypatch, static_probe)
 
     try:
         async with pin_generation_v2(host):
             with pytest.raises(HTTPException) as error:
-                await _read_status(include_recovery_info=False)
+                await _read_status(request=request, include_recovery_info=False)
     finally:
         clear_process_generation_host_v2(host)
         await host.close()
@@ -219,6 +228,5 @@ async def test_execution_status_rejects_when_v2_redis_is_unavailable(
         "code": "agent_worker_redis_unavailable",
         "message": "Agent execution status authority is unavailable",
     }
-    get_container.assert_not_called()
     assert static_probe.accesses == 0
     assert static_client.calls == []

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,16 @@ class _TrackedRedisClient:
     def __init__(self, name: str) -> None:
         self.name = name
         self.close_calls = 0
+
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str | bytes]:
+        for key in ():
+            yield key
+
+    async def xadd(self, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Redis stream publication is outside this authority fixture")
+
+    async def delete(self, *keys: str | bytes) -> int:
+        return 0
 
     async def aclose(self) -> None:
         self.close_calls += 1

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from pathlib import Path
 
@@ -73,8 +74,20 @@ def test_provider_and_consumer_are_independent_ordered_profile_entries() -> None
     )
 
 
+class _RedisCacheClient:
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str | bytes]:
+        for key in ():
+            yield key
+
+    async def delete(self, *keys: str | bytes) -> int:
+        return 0
+
+    async def xadd(self, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Redis stream publication is outside this authority fixture")
+
+
 async def test_resolver_builds_redis_dlq_with_real_republish_adapter() -> None:
-    redis_client = object()
+    redis_client = _RedisCacheClient()
     host = await _host(generation=120, redis_client=redis_client)
     try:
         async with (
