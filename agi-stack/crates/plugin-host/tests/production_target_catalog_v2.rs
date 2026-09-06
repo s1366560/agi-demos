@@ -6,11 +6,10 @@ use agistack_plugin_host::{
     parse_profile_snapshot_v2, rust_server_host_definition_v2,
     rust_server_http_routes_definition_v2, ContextV2, DataPlaneTargetV2,
     DesktopSidecarHttpRouteContributionV2, LoaderV2, PluginDefinitionV2, PluginModuleRuntimeV2,
-    RuntimeV2Error, RustServerHttpRouteContributionV2, ScopeKindV2, ScopeV2,
-    TargetHostDescriptorV2, DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2,
-    DESKTOP_SIDECAR_HOST_SERVICE_V2, DESKTOP_SIDECAR_HTTP_ROUTES_MODULE_REF_V2,
-    DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2, DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2,
-    RUST_SERVER_HOST_SERVICE_V2, RUST_SERVER_HTTP_ROUTES_SERVICE_V2,
+    RuntimeV2Error, ScopeKindV2, ScopeV2, TargetHostDescriptorV2,
+    DESKTOP_SIDECAR_DEFAULT_HTTP_ROUTE_CONTRIBUTION_ID_V2, DESKTOP_SIDECAR_HOST_SERVICE_V2,
+    DESKTOP_SIDECAR_HTTP_ROUTES_MODULE_REF_V2, DESKTOP_SIDECAR_HTTP_ROUTES_SERVICE_V2,
+    DESKTOP_SIDECAR_HTTP_ROUTE_STRATEGY_V2,
 };
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -143,7 +142,9 @@ impl PluginModuleRuntimeV2 for CustomDesktopHttpRoutes {
 fn generated_rust_server_catalog_activates_the_production_host_module() {
     block_on(async {
         let snapshot = parse_profile_snapshot_v2(BOOTSTRAP).expect("bootstrap profile must parse");
-        let generation = LoaderV2::for_target(
+        // The host crate supplies HTTP modules; actual worker implementations belong to
+        // the server crate. The complete production profile must fail closed without them.
+        let error = match LoaderV2::for_target(
             DataPlaneTargetV2::RustServer,
             [
                 rust_server_host_definition_v2(),
@@ -152,23 +153,19 @@ fn generated_rust_server_catalog_activates_the_production_host_module() {
         )
         .stage(snapshot)
         .await
-        .expect("rust server target must activate");
-
-        let descriptor = generation
-            .resolve::<TargetHostDescriptorV2>(RUST_SERVER_HOST_SERVICE_V2, &root_scope(), None)
-            .expect("rust server descriptor must be provided");
-        assert_eq!(descriptor.target, "rust-server");
-        assert_eq!(descriptor.strategy, "generated-catalog-bootstrap");
-        let routes = generation
-            .resolve::<RustServerHttpRouteContributionV2>(
-                RUST_SERVER_HTTP_ROUTES_SERVICE_V2,
-                &root_scope(),
-                None,
-            )
-            .expect("rust server HTTP route contribution must be provided");
-        assert_eq!(routes.contribution_id, "memstack-rust-default-api.v1");
-        assert_eq!(routes.strategy, "axum-host-router");
-        assert_eq!(generation.phases().len(), 2);
+        {
+            Ok(_) => panic!("production server must require its worker definitions"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            RuntimeV2Error::MissingModuleDefinition(module_ref)
+                if [
+                    "builtin://memstack/rust-server/skill-evolution-worker",
+                    "builtin://memstack/rust-server/channel-outbox-worker",
+                    "builtin://memstack/rust-server/cron-scheduler-worker",
+                ].contains(&module_ref.as_str())
+        ));
     });
 }
 

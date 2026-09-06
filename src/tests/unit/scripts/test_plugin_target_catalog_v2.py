@@ -26,6 +26,9 @@ _EXPECTED_TARGET_MODULES = {
         {
             "builtin://memstack/rust-server/generation-host",
             "builtin://memstack/rust-server/http-routes",
+            "builtin://memstack/rust-server/skill-evolution-worker",
+            "builtin://memstack/rust-server/channel-outbox-worker",
+            "builtin://memstack/rust-server/cron-scheduler-worker",
         }
     ),
     "desktop-sidecar": frozenset(
@@ -280,7 +283,14 @@ def test_generated_bootstrap_profile_projects_every_production_target() -> None:
         for index, entry in enumerate(entries)
         if entry["entry_id"] == "builtin-desktop-tenant-creation-routes"
     )
-    assert len(entries) == 433
+    for worker in ("skill-evolution-worker", "channel-outbox-worker", "cron-scheduler-worker"):
+        entry = next(item for item in entries if item["entry_id"] == f"builtin-rust-server-{worker}")
+        assert entry["module_ref"] == f"builtin://memstack/rust-server/{worker}"
+        assert entry["parent_entry_id"] == "builtin-rust-server-generation-host"
+        assert entry["enabled"] is True
+        assert entry["config"] == {"autostart": True}
+        assert entry["scope"]["kind"] == "root"
+    assert len(entries) == 436
     assert web_shell_index < web_routes_index
     assert entries[web_shell_index]["config"] == {
         "id": "web.authenticated-shell-surface",

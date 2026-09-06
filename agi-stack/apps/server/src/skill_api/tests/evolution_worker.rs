@@ -723,3 +723,6 @@ fn job_record_from_insert(job: &SkillEvolutionJobInsertRecord) -> SkillEvolution
 fn test_time() -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
 }
+
+
+include!("evolution_worker_lifecycle_v2.rs");

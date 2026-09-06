@@ -501,6 +501,8 @@ mod tests {
             snapshot.entries.retain(|entry| {
                 entry.module_ref != RUST_SERVER_HOST_MODULE_REF_V2
                     && entry.module_ref != RUST_SERVER_HTTP_ROUTES_MODULE_REF_V2
+                    && entry.parent_entry_id.as_deref()
+                        != Some("builtin-rust-server-generation-host")
             });
         } else if route_definition.is_none() {
             snapshot
@@ -509,7 +511,10 @@ mod tests {
         }
         LoaderV2::for_target(
             DataPlaneTargetV2::RustServer,
-            host_definition.into_iter().chain(route_definition),
+            host_definition
+                .into_iter()
+                .chain(route_definition)
+                .chain(crate::background_workers_v2::worker_definitions_v2(None)),
         )
         .stage(snapshot)
         .await
@@ -605,6 +610,7 @@ mod tests {
             "sha256:server-generation-41",
         )
         .await;
+        assert_eq!(generation.phases().len(), 5);
         let admission = admission_with(Some(generation)).await;
         let app = admission.bind(Router::new().route("/probe", get(descriptor_probe)));
 

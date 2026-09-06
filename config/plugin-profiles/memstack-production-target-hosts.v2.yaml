@@ -16,6 +16,48 @@ profile:
       permissions: []
       quotas: {}
       restart_policy: hot-generation
+    - entry_id: builtin-rust-server-skill-evolution-worker
+      parent_entry_id: builtin-rust-server-generation-host
+      plugin_ref: memstack-native-target-hosts
+      module_ref: builtin://memstack/rust-server/skill-evolution-worker
+      enabled: true
+      config:
+        autostart: true
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-rust-server-channel-outbox-worker
+      parent_entry_id: builtin-rust-server-generation-host
+      plugin_ref: memstack-native-target-hosts
+      module_ref: builtin://memstack/rust-server/channel-outbox-worker
+      enabled: true
+      config:
+        autostart: true
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
+    - entry_id: builtin-rust-server-cron-scheduler-worker
+      parent_entry_id: builtin-rust-server-generation-host
+      plugin_ref: memstack-native-target-hosts
+      module_ref: builtin://memstack/rust-server/cron-scheduler-worker
+      enabled: true
+      config:
+        autostart: true
+      inject: {}
+      isolate: {}
+      scope:
+        kind: root
+      permissions: []
+      quotas: {}
+      restart_policy: hot-generation
     - entry_id: builtin-rust-server-http-routes
       parent_entry_id: builtin-rust-server-generation-host
       plugin_ref: memstack-native-target-hosts

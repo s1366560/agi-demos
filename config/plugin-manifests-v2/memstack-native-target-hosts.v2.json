@@ -6,6 +6,126 @@
   "trust": "builtin",
   "modules": [
     {
+      "module_ref": "builtin://memstack/rust-server/skill-evolution-worker",
+      "entrypoint": "BackgroundWorkerModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:517de0ad769aac693ea2de76874e824c890d0c98719d81ba20e15c26db1c5411",
+        "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
+      },
+      "targets": [
+        "rust-server"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:rust-server.skill-evolution-worker",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "autostart"
+          ],
+          "properties": {
+            "autostart": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:2507be6512e34c55b3730d1f6d022c186bdcc7f122efbb6a1a1e0f0582215021"
+    },
+    {
+      "module_ref": "builtin://memstack/rust-server/channel-outbox-worker",
+      "entrypoint": "BackgroundWorkerModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:517de0ad769aac693ea2de76874e824c890d0c98719d81ba20e15c26db1c5411",
+        "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
+      },
+      "targets": [
+        "rust-server"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:rust-server.channel-outbox-worker",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "autostart"
+          ],
+          "properties": {
+            "autostart": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:0d1758bbf225811a434022ffae90c4b72ef5bdc6eb538ed0c85c29256bf75984"
+    },
+    {
+      "module_ref": "builtin://memstack/rust-server/cron-scheduler-worker",
+      "entrypoint": "BackgroundWorkerModuleV2::apply",
+      "artifact": {
+        "digest": "sha256:517de0ad769aac693ea2de76874e824c890d0c98719d81ba20e15c26db1c5411",
+        "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
+      },
+      "targets": [
+        "rust-server"
+      ],
+      "contract": {
+        "services": {
+          "provides": [
+            {
+              "service": "service:rust-server.cron-scheduler-worker",
+              "version": "1.0.0"
+            }
+          ],
+          "requires": []
+        },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
+        "config_schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "autostart"
+          ],
+          "properties": {
+            "autostart": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "contract_digest": "sha256:86e82e004640593f1d1ce1017fec173af733f249fa3fab8e66ebd1786cf11867"
+    },
+    {
       "module_ref": "builtin://memstack/rust-server/generation-host",
       "entrypoint": "RustServerHostModuleV2::apply",
       "artifact": {

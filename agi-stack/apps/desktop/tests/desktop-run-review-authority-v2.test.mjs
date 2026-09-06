@@ -445,7 +445,13 @@ test('Run Review V2 real Loader reuses both modules with disabled generation zer
       'utf8',
     ),
   );
-  assert.equal(profile.entries.length, 433);
+  assert.equal(profile.entries.length, 436);
+  for (const worker of ['skill-evolution-worker', 'channel-outbox-worker', 'cron-scheduler-worker']) {
+    const entry = profile.entries.find((item) => item.entry_id === `builtin-rust-server-${worker}`);
+    assert.equal(entry?.module_ref, `builtin://memstack/rust-server/${worker}`);
+    assert.equal(entry?.parent_entry_id, 'builtin-rust-server-generation-host');
+    assert.deepEqual(entry?.config, { autostart: true });
+  }
   const loader = new runtime.LoaderV2(
     [...runtime.createDesktopRendererDefinitionsV2(), ...authorities],
     'desktop-renderer',

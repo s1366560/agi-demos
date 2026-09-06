@@ -40,6 +40,8 @@ mod artifacts_api;
 mod attachments_api;
 mod audit_api;
 mod auth;
+mod background_worker_control_v2;
+mod background_workers_v2;
 mod billing_api;
 mod channel_api;
 mod conversation_session_api;
@@ -83,6 +85,7 @@ mod system_api;
 mod tenant_skill_config_api;
 mod tenant_webhooks_api;
 mod trust_api;
+mod worker_lifecycle_v2;
 mod workspace_authority;
 
 use agistack_adapters_docker::{DockerContainerRuntime, ImagePullPolicy};
@@ -342,6 +345,7 @@ const RUST_SERVER_HTTP_ROUTES_SERVICE_VERSION_V2: &str = "1.0.0";
 struct RustServerPluginRuntimeV2 {
     admission: RustServerGenerationAdmissionV2,
     route_contribution: RustServerHttpRouteContributionV2,
+    workers: Option<Arc<background_worker_control_v2::BackgroundWorkerGenerationV2>>,
 }
 
 impl RustServerPluginRuntimeV2 {
@@ -351,7 +355,12 @@ impl RustServerPluginRuntimeV2 {
     }
 
     async fn shutdown(&self) -> Result<(), RuntimeV2Error> {
-        self.admission.shutdown().await
+        let worker_result = match &self.workers {
+            Some(workers) => workers.shutdown().await.map_err(RuntimeV2Error::Module),
+            None => Ok(()),
+        };
+        let admission_result = self.admission.shutdown().await;
+        worker_result.and(admission_result)
     }
 
     fn validate_route_contribution(&self) -> Result<(), RuntimeV2Error> {
@@ -381,19 +390,31 @@ impl RustServerPluginRuntimeV2 {
     }
 }
 
-async fn start_plugin_runtime_v2() -> ServerResult<RustServerPluginRuntimeV2> {
+async fn start_plugin_runtime_v2(
+    state: Option<&AppState>,
+) -> ServerResult<RustServerPluginRuntimeV2> {
     let snapshot = parse_profile_snapshot_v2(include_str!(
         "../../../../shared/profiles/memstack-default-bootstrap.v2.json"
     ))?;
-    let generation = LoaderV2::for_target(
-        DataPlaneTargetV2::RustServer,
-        [
-            rust_server_host_definition_v2(),
-            rust_server_http_routes_definition_v2(),
-        ],
-    )
-    .stage(snapshot)
-    .await?;
+    let worker_services: Vec<_> = background_workers_v2::WORKER_MODULES_V2
+        .iter()
+        .enumerate()
+        .filter(|(_, module)| {
+            snapshot
+                .entries
+                .iter()
+                .any(|entry| entry.enabled && entry.module_ref == **module)
+        })
+        .map(|(index, _)| background_workers_v2::WORKER_SERVICES_V2[index])
+        .collect();
+    let mut definitions = vec![
+        rust_server_host_definition_v2(),
+        rust_server_http_routes_definition_v2(),
+    ];
+    definitions.extend(background_workers_v2::worker_definitions_v2(state));
+    let generation = LoaderV2::for_target(DataPlaneTargetV2::RustServer, definitions)
+        .stage(snapshot)
+        .await?;
     if generation.phases().is_empty() {
         return Err(RuntimeV2Error::Module(
             "rust-server protocol-v2 target catalog activated no modules".to_owned(),
@@ -416,11 +437,40 @@ async fn start_plugin_runtime_v2() -> ServerResult<RustServerPluginRuntimeV2> {
         .clone();
     let manager = Arc::new(GenerationManagerV2::new());
     manager.publish(generation).await;
-    let runtime = RustServerPluginRuntimeV2 {
-        admission: RustServerGenerationAdmissionV2::new(manager),
+    let mut runtime = RustServerPluginRuntimeV2 {
+        admission: RustServerGenerationAdmissionV2::new(manager.clone()),
         route_contribution,
+        workers: None,
     };
-    runtime.validate_route_contribution()?;
+    if let Err(error) = runtime.validate_route_contribution() {
+        manager.close().await;
+        return Err(error.into());
+    }
+    let lease = manager.acquire()?;
+    let controllers = worker_services.into_iter().map(|service| {
+        lease.generation()?.resolve_versioned::<Arc<background_worker_control_v2::BackgroundWorkerControllerV2>>(
+            service, "1.0.0", &ScopeV2 { kind: ScopeKindV2::Root, tenant_id: None, project_id: None, session_id: None }, None,
+        ).map(|controller| controller.as_ref().clone())
+    }).collect::<Result<Vec<_>, RuntimeV2Error>>();
+    let controllers = match controllers {
+        Ok(controllers) => controllers,
+        Err(error) => {
+            lease.release().await?;
+            manager.close().await;
+            return Err(error.into());
+        }
+    };
+    let workers =
+        match background_worker_control_v2::BackgroundWorkerGenerationV2::start(lease, controllers)
+            .await
+        {
+            Ok(workers) => workers,
+            Err(error) => {
+                manager.close().await;
+                return Err(RuntimeV2Error::Module(error).into());
+            }
+        };
+    runtime.workers = Some(Arc::new(workers));
     Ok(runtime)
 }
 
@@ -1159,29 +1209,21 @@ async fn main() -> ServerResult<()> {
     let addr = std::env::var("AGISTACK_ADDR").unwrap_or_else(|_| "127.0.0.1:8088".to_string());
     let database_url = repository_database_url()?;
     let state = build_state(&database_url).await?;
-    let _skill_evolution_runtime = state
-        .skill_evolution_worker
-        .as_ref()
-        .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
-    let _channel_outbox_delivery_runtime = state
-        .channel_outbox_delivery_worker
-        .as_ref()
-        .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
-    let cron_scheduler_runtime = state
-        .cron_scheduler
-        .as_ref()
-        .and_then(|scheduler| Arc::clone(scheduler).spawn_if_enabled());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    let plugin_runtime_v2 = start_plugin_runtime_v2().await?;
+    let plugin_runtime_v2 = start_plugin_runtime_v2(Some(&state)).await?;
     let app = plugin_runtime_v2.bind(state)?;
     println!("agistack-server listening on http://{addr}");
+    let workers = plugin_runtime_v2.workers.clone();
+    let shutdown = async move {
+        shutdown_signal().await;
+        if let Some(workers) = workers {
+            workers.request_stop();
+        }
+    };
     let serve_result = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown)
         .await;
     let plugin_shutdown_result = plugin_runtime_v2.shutdown().await;
-    if let Some(runtime) = cron_scheduler_runtime {
-        runtime.shutdown().await;
-    }
     plugin_shutdown_result?;
     serve_result?;
     Ok(())
@@ -1199,7 +1241,7 @@ mod runtime_mode_tests {
 
     #[tokio::test]
     async fn rust_server_starts_a_non_empty_protocol_v2_generation() {
-        let runtime = start_plugin_runtime_v2()
+        let runtime = start_plugin_runtime_v2(None)
             .await
             .expect("rust-server plugin runtime must start");
         let lease = runtime
@@ -1212,7 +1254,7 @@ mod runtime_mode_tests {
                 .expect("generation must remain leased")
                 .phases()
                 .len(),
-            2
+            5
         );
         assert_eq!(
             runtime.route_contribution().contribution_id,
@@ -1238,6 +1280,7 @@ mod runtime_mode_tests {
 
         for (contribution_id, strategy) in cases {
             let runtime = RustServerPluginRuntimeV2 {
+                workers: None,
                 admission: RustServerGenerationAdmissionV2::new(Arc::new(
                     GenerationManagerV2::new(),
                 )),
