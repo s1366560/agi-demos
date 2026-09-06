@@ -1036,3 +1036,73 @@ async def test_authorization_denial_has_no_conversation_correlation_or_acquire()
     assert core_client.correlations == []
     assert core_client.terminals == []
     assert scoped.service.stream_kwargs is None
+
+
+@pytest.mark.parametrize("method", ["inject", "abort", "history"])
+@pytest.mark.parametrize("failure_kind", ["missing", "denied"])
+async def test_provider_control_authorization_precedes_all_side_effects(
+    monkeypatch, method, failure_kind
+):
+    from unittest.mock import MagicMock
+
+    scoped = FakeScopedContainer()
+    core = FakeWorkspaceCoreClient()
+    denied = PermissionError("scope access denied")
+    admission = (
+        None
+        if failure_kind == "missing"
+        else SimpleNamespace(authorize=AsyncMock(side_effect=denied), acquire=AsyncMock())
+    )
+    provider = _provider(scoped, core_client=core, scoped_admission=admission)
+    container = MagicMock(side_effect=AssertionError("container accessed before authorization"))
+    monkeypatch.setattr(provider, "_scoped_container", container)
+    cancel = AsyncMock()
+    monkeypatch.setattr(
+        "src.application.services.agent.runtime_cancellation.cancel_conversation_runtime", cancel
+    )
+    lookup = AsyncMock(wraps=scoped.conversation_repo.find_by_id)
+    save = AsyncMock(wraps=scoped.conversation_repo.save)
+    monkeypatch.setattr(scoped.conversation_repo, "find_by_id", lookup)
+    monkeypatch.setattr(scoped.conversation_repo, "save", save)
+    request = _request(f"chat.{method}")
+    with pytest.raises(RuntimeV2Error if failure_kind == "missing" else PermissionError) as failure:
+        await getattr(provider, method)(request)
+    if admission is None:
+        assert failure.value.code == "scoped_runtime_missing"
+    else:
+        assert failure.value is denied
+        admission.authorize.assert_awaited_once()
+        admission.acquire.assert_not_awaited()
+    container.assert_not_called()
+    lookup.assert_not_awaited()
+    save.assert_not_awaited()
+    cancel.assert_not_awaited()
+    assert scoped.event_repo.events == []
+    assert core.correlations == []
+    assert core.terminals == []
+
+
+@pytest.mark.parametrize("method", ["inject", "abort", "history"])
+async def test_provider_control_authorizes_without_runtime_acquisition(monkeypatch, method):
+    scoped = FakeScopedContainer()
+    admission = SimpleNamespace(authorize=AsyncMock(), acquire=AsyncMock())
+    db = FakeDb()
+    provider = _provider(scoped, db=db, scoped_admission=admission)
+    cancel = AsyncMock(
+        return_value=SimpleNamespace(ray_cancelled=False, local_worker_cancelled=False)
+    )
+    monkeypatch.setattr(
+        "src.application.services.agent.runtime_cancellation.cancel_conversation_runtime", cancel
+    )
+    await getattr(provider, method)(_request(f"chat.{method}"))
+    admission.authorize.assert_awaited_once()
+    actual_db, scope = admission.authorize.await_args.args
+    assert actual_db is db
+    assert (
+        scope.tenant_id,
+        scope.project_id,
+        scope.workspace_id,
+        scope.user_id,
+        scope.conversation_id,
+    ) == ("tenant-1", "project-1", "workspace-1", "user-1", "conversation-1")
+    admission.acquire.assert_not_awaited()

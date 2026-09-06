@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.domain.model.plugins.generated_v2 import ScopeKindV2, ScopeV2, ServiceRequiredV2
+from src.infrastructure.adapters.primary.web.websocket.handlers import control_handler
 from src.infrastructure.adapters.primary.web.websocket.handlers.control_handler import (
     SteerSubAgentHandler,
 )
@@ -20,7 +22,11 @@ from src.infrastructure.plugins.v2.boundary import (
     pin_generation_v2,
 )
 from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_definitions_v2
+from src.infrastructure.plugins.v2.composer import ProfileDocumentV2, compose_profile_v2
+from src.infrastructure.plugins.v2.protocol import control_envelope_v2
 from src.infrastructure.plugins.v2.runtime_host import PlatformPluginRuntimeHostV2
+from src.infrastructure.plugins.v2.scoped_runtime_registry import ScopedRuntimeRegistryV2
+from src.infrastructure.plugins.v2.service_closure import project_service_closure_v2
 
 pytestmark = pytest.mark.unit
 
@@ -127,6 +133,33 @@ def _command() -> dict[str, Any]:
     }
 
 
+async def _reserve(registry, publication, monkeypatch):
+    scope = ScopeV2(
+        kind=ScopeKindV2.SESSION,
+        tenant_id="tenant-1",
+        project_id="project-1",
+        session_id="conversation-1",
+    )
+    snapshot = project_service_closure_v2(
+        publication.snapshot,
+        scope=scope,
+        required_services=(
+            ServiceRequiredV2(service="service:agent.turn-service", version="1.0.0", alias="turn"),
+            ServiceRequiredV2(
+                service="service:agent.worker-runtime", version="1.0.0", alias="worker"
+            ),
+        ),
+    )
+    assert (
+        await registry.publish(scope, snapshot, control_envelope_v2(snapshot, version=1))
+    ).accepted
+    reservation = await registry.acquire_bound(scope)
+    monkeypatch.setattr(
+        control_handler, "_acquire_control_reservation_v2", AsyncMock(return_value=reservation)
+    )
+    return scope, snapshot, reservation
+
+
 async def test_websocket_control_uses_connection_generation_redis_during_reload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -137,7 +170,8 @@ async def test_websocket_control_uses_connection_generation_redis_during_reload(
     async def redis_factory() -> _TrackedRedisClient:
         return next(clients)
 
-    host = PlatformPluginRuntimeHostV2(
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    registry = ScopedRuntimeRegistryV2(
         builtin_runtime_definitions_v2(redis_runtime_factory=redis_factory)
     )
     first = await host.bootstrap(
@@ -149,12 +183,16 @@ async def test_websocket_control_uses_connection_generation_redis_during_reload(
     assert first.accepted is True
     install_process_generation_host_v2(host)
 
+    scope, snapshot, reservation = await _reserve(registry, first, monkeypatch)
+
     async def reload_generation() -> None:
-        second = await host.bootstrap(
-            profile_path=_PROFILE_PATH,
-            manifest_paths=(_MANIFEST_PATH,),
+        next_snapshot = compose_profile_v2(
+            ProfileDocumentV2(profile_id=snapshot.profile_id, entries=snapshot.entries),
+            {manifest.plugin_id: manifest for manifest in snapshot.manifests},
             generation=922,
-            version=922,
+        )
+        second = await registry.publish(
+            scope, next_snapshot, control_envelope_v2(next_snapshot, version=2)
         )
         assert second.accepted is True
         assert first_client.close_calls == 0
@@ -177,7 +215,7 @@ async def test_websocket_control_uses_connection_generation_redis_during_reload(
     try:
         async with pin_generation_v2(host):
             await SteerSubAgentHandler().handle(context, _command())
-            assert first_client.close_calls == 0
+            assert reservation.lease._released
 
         ack = context.send_json.await_args.args[0]
         assert ack["accepted"] is True
@@ -189,6 +227,7 @@ async def test_websocket_control_uses_connection_generation_redis_during_reload(
         assert second_client.close_calls == 0
     finally:
         clear_process_generation_host_v2(host)
+        await registry.close()
         await host.close()
 
     assert second_client.close_calls == 1
@@ -207,6 +246,8 @@ async def test_websocket_control_rejects_when_v2_redis_is_unavailable(
     assert publication.accepted is True
     install_process_generation_host_v2(host)
 
+    registry = ScopedRuntimeRegistryV2(builtin_runtime_definitions_v2())
+    _scope, _snapshot, reservation = await _reserve(registry, publication, monkeypatch)
     send_control = AsyncMock(return_value=True)
     monkeypatch.setattr(
         "src.infrastructure.adapters.primary.web.websocket.handlers.control_handler."
@@ -221,8 +262,10 @@ async def test_websocket_control_rejects_when_v2_redis_is_unavailable(
             await SteerSubAgentHandler().handle(context, _command())
     finally:
         clear_process_generation_host_v2(host)
+        await registry.close()
         await host.close()
 
+    assert reservation.lease._released
     ack = context.send_json.await_args.args[0]
     assert ack["accepted"] is False
     assert ack["reason_code"] == "control_authority_unavailable"

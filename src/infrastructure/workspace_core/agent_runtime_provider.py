@@ -374,6 +374,7 @@ class MemStackAgentRuntimeProvider:
         if not content:
             raise ValueError("chat.inject requires a text message")
         async with self._session_factory() as db:
+            await _require_scoped_admission(self._scoped_admission).authorize(db, scope)
             scoped = self._scoped_container(db)
             conversation, _ = await _authorized_conversation(
                 scoped.conversation_repository(),
@@ -423,6 +424,7 @@ class MemStackAgentRuntimeProvider:
         scope = ProviderWorkspaceScope.from_request(request)
         terminal_event: ProviderRuntimeEvent | None = None
         async with self._session_factory() as db:
+            await _require_scoped_admission(self._scoped_admission).authorize(db, scope)
             scoped = self._scoped_container(db)
             conversation, _ = await _authorized_conversation(
                 scoped.conversation_repository(),
@@ -455,6 +457,7 @@ class MemStackAgentRuntimeProvider:
         scope = ProviderWorkspaceScope.from_request(request)
         limit = min(max(request.limit or _DEFAULT_HISTORY_LIMIT, 1), _MAX_HISTORY_LIMIT)
         async with self._session_factory() as db:
+            await _require_scoped_admission(self._scoped_admission).authorize(db, scope)
             scoped = self._scoped_container(db)
             conversation, _ = await _authorized_conversation(
                 scoped.conversation_repository(),
