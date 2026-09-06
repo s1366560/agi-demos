@@ -353,6 +353,16 @@ class PlatformPluginRepositoryV2:
         )
         await self._scope.insert_publication(self._session, model)
         await self._degrade_superseded_publications(requested_at, exclude_id=model.id)
+        from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_source_repository_v2 import (
+            PlatformPluginPublicationSourceRepositoryV2,
+        )
+
+        sources = PlatformPluginPublicationSourceRepositoryV2(self._session)
+        retained_source = await sources.read(scope=self._scope.scope, publication_id=source.id)
+        if retained_source is not None:
+            _ = await sources.record(
+                scope=self._scope.scope, publication_id=model.id, desired_set=retained_source
+            )
         return model
 
     async def record_data_plane_receipt(

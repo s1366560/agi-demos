@@ -13,6 +13,9 @@ from src.domain.model.plugins.generated_v2 import DesiredBundleSetV2, ProfileSna
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_desired_bundle_repository_v2 import (
     PlatformPluginDesiredBundleSetRepositoryV2,
 )
+from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_source_repository_v2 import (
+    PlatformPluginPublicationSourceRepositoryV2,
+)
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_publication_v2 import (
     PYTHON_API_DATA_PLANE_ID_V2,
     PlatformPluginPublicationPolicyV2,
@@ -108,9 +111,26 @@ class ScopedPublicationCoordinatorV2:
                                 "scope_desired_changed", "desired source changed before publication"
                             )
                     envelope = control_envelope_v2(frozen, version=version)
-                    _ = await repository.record_requested_distribution(
+                    requested = await repository.record_requested_distribution(
                         frozen, envelope, policy=self._policy
                     )
+                    if desired_fence is not None and archives is not None:
+                        references = {
+                            (ref.bundle_id, ref.version, ref.digest)
+                            for ref in desired_fence.bundles
+                        }
+                        verified = {
+                            (item.manifest.bundle_id, item.manifest.version, item.manifest.digest)
+                            for item in archives
+                        }
+                        if references != verified:
+                            raise RuntimeV2Error(
+                                "scope_bundle_reference_mismatch",
+                                "verified archives differ from desired source",
+                            )
+                        _ = await PlatformPluginPublicationSourceRepositoryV2(session).record(
+                            scope=canonical, publication_id=requested.id, desired_set=desired_fence
+                        )
                     await session.commit()
                 # From this point a durable request exists; never admit an unreceipted apply.
                 slot.blocked = True
