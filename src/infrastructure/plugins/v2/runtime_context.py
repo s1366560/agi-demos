@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import AsyncIterable, Awaitable, Callable, Iterable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
@@ -88,46 +89,104 @@ class _EffectRecord:
                 raise
 
 
+@dataclass
+class _EffectSetupRecord:
+    label: str
+    task: OwnedLifecycleTaskV2 | None = None
+    error: BaseException | None = None
+    observed: bool = False
+    waiter_done: asyncio.Event = field(default_factory=asyncio.Event)
+
+
 class _EffectStack:
     def __init__(self, phase: Callable[[], FiberPhaseV2]) -> None:
         self._phase = phase
         self._records: list[_EffectRecord] = []
+        self._setups: list[_EffectSetupRecord] = []
         self._disposal = OwnedLifecycleTaskV2(self._dispose, name="plugin-v2-effect-stack-dispose")
 
     def add(self, disposer: AsyncDisposerV2, *, label: str) -> AsyncDisposerV2:
         self._ensure_active()
+        return self._add_owned(disposer, label=label)
+
+    def _add_owned(self, disposer: AsyncDisposerV2, *, label: str) -> AsyncDisposerV2:
         record = _EffectRecord(label=label, disposer=disposer)
         self._records.append(record)
         return record.dispose
 
     async def add_result(self, result: EffectResultV2, *, label: str) -> None:
         self._ensure_active()
+        await self._register_result(result, label=label, accepted_setup=False)
+
+    async def _register_result(
+        self, result: EffectResultV2, *, label: str, accepted_setup: bool
+    ) -> None:
+        add = self._add_owned if accepted_setup else self.add
         if result is None:
             return
         if callable(result):
-            self.add(result, label=label)
+            add(result, label=label)
             return
         if isinstance(result, AsyncIterable):
             index = 0
             async for disposer in result:
                 if not callable(disposer):
                     raise RuntimeV2Error("invalid_effect", f"{label}[{index}] is not callable")
-                self.add(disposer, label=f"{label}[{index}]")
+                add(disposer, label=f"{label}[{index}]")
                 index += 1
             return
         if isinstance(result, Iterable) and not isinstance(result, (str, bytes, Mapping)):
             for index, disposer in enumerate(result):
                 if not callable(disposer):
                     raise RuntimeV2Error("invalid_effect", f"{label}[{index}] is not callable")
-                self.add(disposer, label=f"{label}[{index}]")
+                add(disposer, label=f"{label}[{index}]")
             return
         raise RuntimeV2Error("invalid_effect", f"{label} returned an unsupported effect")
+
+    async def run_setup(
+        self,
+        setup: Callable[[], EffectResultV2 | Awaitable[EffectResultV2]],
+        *,
+        label: str,
+    ) -> None:
+        self._ensure_active()
+        record = _EffectSetupRecord(label=label)
+
+        async def execute() -> None:
+            try:
+                result = setup()
+                if inspect.isawaitable(result):
+                    result = await result
+                await self._register_result(result, label=label, accepted_setup=True)
+            except BaseException as error:
+                record.error = error
+                raise
+
+        record.task = OwnedLifecycleTaskV2(execute, name="plugin-v2-effect-setup")
+        self._setups.append(record)
+        try:
+            await record.task.wait()
+        except BaseException as error:
+            if error is record.error:
+                record.observed = True
+            raise
+        finally:
+            record.waiter_done.set()
 
     async def dispose(self) -> None:
         await self._disposal.wait()
 
     async def _dispose(self) -> None:
         errors: list[BaseException] = []
+        for setup in self._setups:
+            if setup.task is not None:
+                # The cached outcome remains on the record; wait until its
+                # caller has either received it or cancelled its observation.
+                with suppress(BaseException):
+                    await setup.task.wait()
+            await setup.waiter_done.wait()
+            if setup.error is not None and not setup.observed:
+                errors.append(setup.error)
         for record in reversed(self._records):
             try:
                 await record.dispose()
@@ -142,6 +201,10 @@ class _EffectStack:
     def diagnostics(self) -> tuple[EffectDiagnosticV2, ...]:
         return tuple(
             EffectDiagnosticV2(label=item.label, error=item.error) for item in self._records
+        ) + tuple(
+            EffectDiagnosticV2(label=item.label, error=_cleanup_diagnostic(item.error))
+            for item in self._setups
+            if item.error is not None
         )
 
     def _ensure_active(self) -> None:
@@ -424,11 +487,7 @@ class ContextV2:
         *,
         label: str,
     ) -> None:
-        self._effects._ensure_active()
-        result = setup()
-        if inspect.isawaitable(result):
-            result = await result
-        await self._effects.add_result(result, label=label)
+        await self._effects.run_setup(setup, label=label)
 
     def on(self, event: str, handler: Callable[..., Any]) -> AsyncDisposerV2:
         self._effects._ensure_active()
