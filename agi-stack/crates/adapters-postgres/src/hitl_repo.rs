@@ -63,8 +63,9 @@ pub struct AutomationHitlResumeCandidate {
     pub project_id: String,
     pub conversation_id: String,
     pub run_id: String,
+    pub job_id: String,
+    pub runtime_revision: i64,
     pub checkpoint_session_id: String,
-    pub answer: String,
 }
 
 impl HitlRequestRecord {
@@ -201,9 +202,9 @@ impl PgHitlRequestRepository {
         sqlx::query_as::<_, AutomationHitlResumeRow>(
             "SELECT hitl.id AS request_id, hitl.request_type, hitl.tenant_id, \
                     hitl.project_id, hitl.conversation_id, run.id AS run_id, \
+                    run.job_id, run.runtime_revision, \
                     hitl.request_metadata ->> 'checkpoint_session_id' \
-                        AS checkpoint_session_id, \
-                    hitl.response_metadata ->> 'resume_answer' AS answer \
+                        AS checkpoint_session_id \
              FROM hitl_requests AS hitl \
              JOIN cron_job_runs AS run \
                ON run.id = hitl.message_id \
@@ -324,7 +325,7 @@ impl PgHitlRequestRepository {
     }
 }
 
-fn same_request(existing: &HitlRequestRecord, request: &NewHitlRequestRecord) -> bool {
+pub(crate) fn same_request(existing: &HitlRequestRecord, request: &NewHitlRequestRecord) -> bool {
     existing.request_type == request.request_type
         && existing.conversation_id == request.conversation_id
         && existing.message_id == request.message_id
@@ -339,7 +340,7 @@ fn same_request(existing: &HitlRequestRecord, request: &NewHitlRequestRecord) ->
 }
 
 #[derive(sqlx::FromRow)]
-struct HitlRequestRow {
+pub(crate) struct HitlRequestRow {
     id: String,
     request_type: String,
     conversation_id: String,
@@ -365,8 +366,9 @@ struct AutomationHitlResumeRow {
     project_id: String,
     conversation_id: String,
     run_id: String,
+    job_id: String,
+    runtime_revision: i64,
     checkpoint_session_id: String,
-    answer: String,
 }
 
 impl From<HitlRequestRow> for HitlRequestRecord {
@@ -400,8 +402,9 @@ impl From<AutomationHitlResumeRow> for AutomationHitlResumeCandidate {
             project_id: row.project_id,
             conversation_id: row.conversation_id,
             run_id: row.run_id,
+            job_id: row.job_id,
+            runtime_revision: row.runtime_revision,
             checkpoint_session_id: row.checkpoint_session_id,
-            answer: row.answer,
         }
     }
 }

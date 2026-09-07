@@ -170,6 +170,13 @@ impl ReActEngine {
         self
     }
 
+    /// Bind this clone to a host-owned checkpoint authority while retaining
+    /// its model, tools, budgets and supervisor configuration.
+    pub fn with_checkpoint_store(mut self, checkpoints: Arc<dyn CheckpointStore>) -> Self {
+        self.checkpoints = checkpoints;
+        self
+    }
+
     /// Override the default round budget (a circuit-breaker against runaway
     /// loops — a structural bound, not a semantic verdict).
     pub fn with_max_rounds(mut self, max_rounds: u64) -> Self {

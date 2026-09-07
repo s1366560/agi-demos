@@ -199,67 +199,9 @@ impl PgCronAutomationRuntimeRepository {
         lease: &AutomationRunLease,
         observed_at: DateTime<Utc>,
     ) -> Result<bool, AutomationRuntimeRepositoryError> {
-        sqlx::query(
-            "UPDATE cron_job_runs AS run \
-             SET status = 'waiting_human', runtime_lease_owner = NULL, \
-                 runtime_lease_token = NULL, runtime_lease_expires_at = NULL, \
-                 last_heartbeat_at = $8, conversation_id = $9 \
-             FROM cron_jobs AS job \
-             WHERE run.id = $1 AND run.runtime_execution_id = $2 \
-               AND run.project_id = $3 AND run.job_id = $4 \
-               AND run.status = 'running' AND run.runtime_revision = $5 \
-               AND run.runtime_lease_owner = $6 AND run.runtime_lease_token = $7 \
-               AND job.id = run.job_id AND job.tenant_id = $10 \
-               AND job.project_id = run.project_id",
-        )
-        .bind(&lease.context.run_id)
-        .bind(&lease.context.runtime_execution_id)
-        .bind(&lease.context.project_id)
-        .bind(&lease.context.job_id)
-        .bind(lease.runtime_revision)
-        .bind(&lease.lease_owner)
-        .bind(&lease.lease_token)
-        .bind(observed_at)
-        .bind(&lease.context.conversation_id)
-        .bind(&lease.context.tenant_id)
-        .execute(&self.pool)
-        .await
-        .map(|result| result.rows_affected() == 1)
-        .map_err(storage)
-    }
-
-    /// Queue an answered non-secret HITL run for durable checkpoint resume.
-    pub async fn queue_resume(
-        &self,
-        tenant_id: &str,
-        project_id: &str,
-        run_id: &str,
-        conversation_id: &str,
-        observed_at: DateTime<Utc>,
-    ) -> Result<bool, AutomationRuntimeRepositoryError> {
-        sqlx::query(
-            "UPDATE cron_job_runs AS run \
-             SET status = 'queued', runtime_lease_owner = NULL, runtime_lease_token = NULL, \
-                 runtime_lease_expires_at = NULL, last_heartbeat_at = $5 \
-             FROM cron_jobs AS job, agistack_cron_operations AS operation \
-             WHERE run.id = $1 AND run.runtime_execution_id = $1 \
-               AND run.project_id = $2 AND run.conversation_id = $3 \
-               AND run.status = 'waiting_human' \
-               AND job.id = run.job_id AND job.tenant_id = $4 \
-               AND job.project_id = run.project_id \
-               AND operation.run_id = run.id AND operation.operation_kind = 'execute_run' \
-               AND operation.tenant_id = $4 AND operation.project_id = $2 \
-               AND operation.status = 'waiting_runtime'",
-        )
-        .bind(run_id)
-        .bind(project_id)
-        .bind(conversation_id)
-        .bind(tenant_id)
-        .bind(observed_at)
-        .execute(&self.pool)
-        .await
-        .map(|result| result.rows_affected() == 1)
-        .map_err(storage)
+        crate::PgAutomationRunPersistence::new(self.pool.clone(), lease.clone())
+            .mark_waiting_human(observed_at)
+            .await
     }
 
     /// Project the first terminal result and job accounting in one transaction.

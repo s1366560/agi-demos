@@ -312,9 +312,9 @@ async fn answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope()
     .unwrap();
     sqlx::query(
         "INSERT INTO cron_job_runs \
-         (id, job_id, project_id, status, runtime_execution_id, conversation_id, deadline_at) \
+         (id, job_id, project_id, status, runtime_execution_id, conversation_id, deadline_at, runtime_revision) \
          VALUES ('hitl_resume_run', 'hitl_resume_job', 'hitl_resume_project', 'waiting_human', \
-                 'hitl_resume_run', 'hitl_resume_conversation', $1)",
+                 'hitl_resume_run', 'hitl_resume_conversation', $1, 1)",
     )
     .bind(ts(2099, 1, 1, 0, 0, 0))
     .execute(&pool)
@@ -363,7 +363,8 @@ async fn answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope()
     assert_eq!(candidates[0].request_id, "hitl_resume_permission");
     assert_eq!(candidates[0].run_id, "hitl_resume_run");
     assert_eq!(candidates[0].checkpoint_session_id, "hitl_resume_run");
-    assert_eq!(candidates[0].answer, "allow");
+    assert_eq!(candidates[0].job_id, "hitl_resume_job");
+    assert_eq!(candidates[0].runtime_revision, 1);
     assert!(repo
         .list_automation_resume_candidates("hitl_resume_tenant", "another_project", 10, Utc::now(),)
         .await
@@ -374,6 +375,7 @@ async fn answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope()
 async fn ensure_hitl_resume_tables(pool: &PgPool) {
     for ddl in [
         "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_execution_id text",
+        "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS runtime_revision bigint NOT NULL DEFAULT 0",
         "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS deadline_at timestamptz",
         "CREATE TABLE IF NOT EXISTS agistack_cron_operations ( \
             id text PRIMARY KEY, tenant_id text NOT NULL, project_id text NOT NULL, \

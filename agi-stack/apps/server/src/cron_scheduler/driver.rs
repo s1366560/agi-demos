@@ -3,8 +3,7 @@ use std::sync::Arc;
 use agistack_adapters_postgres::{
     AutomationRuntimeScope, CronControlScope, CronSchedulerLease,
     PgCronAutomationRuntimeRepository, PgCronControlRepository, PgCronOperationRepository,
-    PgCronScheduleFireRepository, PgCronScheduleRepository, PgCronSchedulerOwnerRepository,
-    PgHitlRequestRepository, PgPool,
+    PgCronScheduleFireRepository, PgCronScheduleRepository, PgCronSchedulerOwnerRepository, PgPool,
 };
 use agistack_core::ports::{CoreError, CoreResult};
 use agistack_core::ReActEngine;
@@ -17,8 +16,8 @@ use super::runner::{
     CronScheduler, CronSchedulerDriver, CronScopeControlReport, SharedCronScheduler,
 };
 use crate::cron_automation_runtime::{
-    CronAutomationRuntimeWorker, ExecuteRunDispatchHandler, ReActAutomationRunExecutor,
-    UuidConversationIdFactory,
+    CronAutomationRuntimeWorker, ExecuteRunDispatchHandler, PgAutomationRunPersistenceFactory,
+    ReActAutomationRunExecutor, UuidConversationIdFactory,
 };
 use crate::cron_readiness_v2::{CronRuntimeDependenciesV2, CronRuntimeProvenanceV2};
 use crate::cron_schedule_fire::CronScheduleFireCoordinator;
@@ -45,7 +44,9 @@ pub(crate) fn build_pg_cron_scheduler(
     let runtime_repository = Arc::new(PgCronAutomationRuntimeRepository::new(pool.clone()));
     let executor = Arc::new(
         ReActAutomationRunExecutor::new(engine)
-            .with_hitl_store(Arc::new(PgHitlRequestRepository::new(pool.clone())))
+            .with_run_persistence_factory(Arc::new(PgAutomationRunPersistenceFactory::new(
+                pool.clone(),
+            )))
             .with_tool_host_factory(Arc::new(RegistryAutomationToolHostFactory::new(registry))),
     );
     let runtime = Arc::new(CronAutomationRuntimeWorker::new(

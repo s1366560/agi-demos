@@ -513,3 +513,17 @@ Rollback must keep enrollment closed and preserve receipts/tasks; it cannot rest
 legacy writes on already enrolled projects. MemoryService/tools/use-cases and old
 reprocess/derived consumers still need closure before sync is exposed. Evidence:
 `/tmp/online-mutations-final.log`.
+
+I4.16 wires dedicated run-lease persistence into the Cloud ReAct executor and makes
+HITL resume use atomic admission. Checkpoint and HITL access now verifies the
+persisted run revision, owner/token, current expiry, deadline, scope and actor;
+post-write checks roll back writes delayed beyond expiry. Waiting-human transitions
+use the same gate. Shared engine checkpoint fallback and non-atomic queue_resume
+are removed from this path. Real PostgreSQL tests passed (7 persistence, 10 admission),
+including independent-pool stale-worker races; Server 644, Core 63 and PG library
+52 tests passed. PG strict Clippy passed; Server Clippy retains 17 existing warnings.
+No migration/readiness/owner switch changed. This protects workers using the new
+ports; retirement of old binaries remains a release prerequisite. Rollback must keep
+Cloud Cron closed and preserve checkpoints, HITL requests and durable run records.
+Evidence: `/tmp/memstack-cron-run-persistence-live.log` and
+`/tmp/memstack-cron-run-server-full.log`.

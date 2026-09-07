@@ -14,7 +14,7 @@ use agistack_adapters_postgres::{
     AutomationRunContext, AutomationRunLease, AutomationRuntimeRepositoryError,
     AutomationRuntimeScope, AutomationTerminalOutcome, AutomationTerminalProjection,
     CronOperationErrorCode, CronOperationKind, CronOperationRecord, NewHitlRequestRecord,
-    PgCronAutomationRuntimeRepository, PgHitlRequestRepository,
+    PgCronAutomationRuntimeRepository,
 };
 use agistack_core::agent::{HitlKind, HitlRequest, ReActEngine, ReActObserver, SessionStatus};
 use agistack_core::ports::{CoreError, CoreResult};
@@ -28,6 +28,9 @@ use crate::cron_tool_authority::AutomationToolHostFactory;
 use crate::cron_worker::{
     CronOperationHandler, CronOperationHandlerFailure, CronOperationHandlerOutcome, CronWorkerClock,
 };
+
+mod persistence;
+pub(crate) use persistence::{AutomationRunPersistenceFactory, PgAutomationRunPersistenceFactory};
 
 #[async_trait]
 pub(crate) trait AutomationDispatchStore: Send + Sync {
@@ -168,16 +171,9 @@ pub(crate) trait AutomationHitlStore: Send + Sync {
     async fn insert_pending(&self, request: &NewHitlRequestRecord) -> CoreResult<bool>;
 }
 
-#[async_trait]
-impl AutomationHitlStore for PgHitlRequestRepository {
-    async fn insert_pending(&self, request: &NewHitlRequestRecord) -> CoreResult<bool> {
-        PgHitlRequestRepository::insert_pending(self, request).await
-    }
-}
-
 pub(crate) struct ReActAutomationRunExecutor {
     engine: Arc<ReActEngine>,
-    hitl: Option<Arc<dyn AutomationHitlStore>>,
+    persistence: Option<Arc<dyn AutomationRunPersistenceFactory>>,
     tool_hosts: Option<Arc<dyn AutomationToolHostFactory>>,
 }
 
@@ -185,13 +181,16 @@ impl ReActAutomationRunExecutor {
     pub(crate) fn new(engine: Arc<ReActEngine>) -> Self {
         Self {
             engine,
-            hitl: None,
+            persistence: None,
             tool_hosts: None,
         }
     }
 
-    pub(crate) fn with_hitl_store(mut self, hitl: Arc<dyn AutomationHitlStore>) -> Self {
-        self.hitl = Some(hitl);
+    pub(crate) fn with_run_persistence_factory(
+        mut self,
+        persistence: Arc<dyn AutomationRunPersistenceFactory>,
+    ) -> Self {
+        self.persistence = Some(persistence);
         self
     }
 
@@ -215,9 +214,23 @@ impl AutomationRunExecutor for ReActAutomationRunExecutor {
                 CoreError::Tool("automation tool authority is not configured".to_string())
             })?
             .for_run(lease)?;
-        let engine = self.engine.as_ref().clone().with_tool_host(tools);
+        let persistence = self
+            .persistence
+            .as_ref()
+            .ok_or_else(|| {
+                CoreError::Checkpoint(
+                    "automation run persistence authority is not configured".into(),
+                )
+            })?
+            .for_run(lease)?;
+        let engine = self
+            .engine
+            .as_ref()
+            .clone()
+            .with_tool_host(tools)
+            .with_checkpoint_store(persistence.checkpoints);
         let observer = Arc::new(AutomationHitlObserver {
-            store: self.hitl.clone(),
+            store: Some(persistence.hitl),
             tenant_id: lease.context.tenant_id.clone(),
             project_id: lease.context.project_id.clone(),
             conversation_id: lease.context.conversation_id.clone(),
@@ -658,3 +671,6 @@ impl CronAutomationRuntimeWorker {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod persistence_tests;

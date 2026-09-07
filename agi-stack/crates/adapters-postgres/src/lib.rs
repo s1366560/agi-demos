@@ -42,6 +42,7 @@ mod cron_control_repo;
 mod cron_hitl_admission;
 mod cron_operation_repo;
 mod cron_repo;
+mod cron_run_persistence;
 mod cron_runtime_claim;
 mod cron_runtime_projection_support;
 mod cron_runtime_repo;
@@ -125,6 +126,7 @@ pub use cron_operation_repo::{
     CronOperationScope, CronOperationStatus, NewCronOperation, PgCronOperationRepository,
 };
 pub use cron_repo::{CronJobListQuery, CronJobRecord, CronJobRunRecord, PgCronRepository};
+pub use cron_run_persistence::PgAutomationRunPersistence;
 pub use cron_runtime_repo::PgCronAutomationRuntimeRepository;
 pub use cron_runtime_types::{
     AutomationPayload, AutomationRunContext, AutomationRunLease, AutomationRunStatus,
