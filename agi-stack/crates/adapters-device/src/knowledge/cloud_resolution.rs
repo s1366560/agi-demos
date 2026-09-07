@@ -93,6 +93,37 @@ pub(super) fn accept_journal(
     Ok(())
 }
 impl SqliteKnowledgeRepository {
+    /// Reads existing immutable work before a transport decides whether a fresh
+    /// conflict GET is needed. Missing is distinct from invalid or wrong-scope.
+    pub fn cloud_resolution_by_key_durable(
+        &self,
+        scope: &KnowledgeScope,
+        target: &KnowledgeSyncTarget,
+        actor: &str,
+        key: &str,
+    ) -> KnowledgeResult<Option<KnowledgeCloudResolutionRecord>> {
+        valid_identifier(actor)?;
+        valid_identifier(key)?;
+        self.cloud_transaction(scope,target,|tx|{
+            let id:Option<String>=tx.query_row("SELECT resolution_id FROM knowledge_cloud_resolutions WHERE tenant_id=?1 AND project_id=?2 AND actor_id=?3 AND idempotency_key=?4",params![scope.tenant_id,scope.project_id,actor,key],|r|r.get(0)).optional().map_err(storage)?;
+            id.map(|id|load(tx,scope,actor,&id)).transpose()
+        })
+    }
+    /// The remote path must use this saved conflict ID, never a renderer URL.
+    pub fn cloud_conflict_snapshot_durable(
+        &self,
+        scope: &KnowledgeScope,
+        target: &KnowledgeSyncTarget,
+        sequence: u64,
+    ) -> KnowledgeResult<Value> {
+        if sequence == 0 || sequence > i64::MAX as u64 {
+            return Err(KnowledgeError::InvalidInput);
+        }
+        self.cloud_transaction(scope,target,|tx|{
+            let value:Option<String>=tx.query_row("SELECT conflict_json FROM knowledge_unsettled_pushes WHERE tenant_id=?1 AND project_id=?2 AND sequence=?3 AND conflict_json IS NOT NULL",params![scope.tenant_id,scope.project_id,sequence],|r|r.get(0)).optional().map_err(storage)?;
+            serde_json::from_str(&value.ok_or(KnowledgeError::NotFound)?).map_err(storage)
+        })
+    }
     fn cloud_transaction<T>(
         &self,
         scope: &KnowledgeScope,

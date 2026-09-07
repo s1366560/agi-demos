@@ -19,6 +19,10 @@ use crate::trusted_session::{
     TrustedSessionSnapshot,
 };
 
+#[path = "cloud_transport.rs"]
+mod cloud_transport;
+pub(super) use cloud_transport::CloudResolutionResponse;
+
 pub(super) struct VerifiedCloudTransport {
     client: Client,
     authority: CloudAuthorityV2,
@@ -101,6 +105,12 @@ impl VerifiedCloudTransport {
             .await
             .map_err(|_| KnowledgeAuthorityErrorV2::RemoteRejected)?;
         self.ensure_current()?;
+        if matches!(
+            response.status(),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+        ) {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
+        }
         if response.status() != StatusCode::OK {
             return Err(KnowledgeAuthorityErrorV2::RemoteRejected);
         }

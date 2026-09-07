@@ -125,7 +125,14 @@ fn tombstone_restore_is_local_pending_intent_and_never_claims_remote_success() {
                 true
             );
             assert_eq!(repo.sync_status(&scope()).await.unwrap().pending_changes, 1);
-            assert!(repo.prepare_push(&scope(), &target()).await.is_err());
+            let prepared = repo
+                .prepare_push(&scope(), &target())
+                .await
+                .unwrap()
+                .unwrap();
+            let request: Value = serde_json::from_str(&prepared.request_json).unwrap();
+            assert_eq!(request["operation"], "update");
+            assert_eq!(request["expected_revision"], 2);
             assert_eq!(repo.sync_status(&scope()).await.unwrap().pending_changes, 1);
         }
     });

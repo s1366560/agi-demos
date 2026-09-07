@@ -14,6 +14,8 @@ use serde::Deserialize;
 use super::*;
 use crate::local_runtime::LocalRuntimeState;
 
+#[path = "cloud_routes.rs"]
+mod cloud_routes;
 #[path = "context_route.rs"]
 mod context_route;
 #[path = "resolution_routes.rs"]
@@ -27,6 +29,22 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
         .route("/api/v1/knowledge/sync-push", post(push_once))
         .route("/api/v1/knowledge/sync-pull", post(pull_once))
+        .route(
+            "/api/v1/knowledge/sync-resolve-push",
+            post(cloud_routes::resolve),
+        )
+        .route(
+            "/api/v1/knowledge/sync-resume-resolution",
+            post(cloud_routes::resume),
+        )
+        .route(
+            "/api/v1/knowledge/sync-reconcile-resolution",
+            post(cloud_routes::reconcile),
+        )
+        .route(
+            "/api/v1/knowledge/sync-cloud-query",
+            post(cloud_routes::query),
+        )
         .route(
             "/api/v1/knowledge/sync-resolve-pull",
             post(resolution_routes::resolve_pull),

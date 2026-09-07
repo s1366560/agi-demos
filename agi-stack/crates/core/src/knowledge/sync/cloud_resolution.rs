@@ -134,6 +134,19 @@ pub struct KnowledgeCloudResolutionOutcome {
 /// Native callers use the synchronous durable forms while holding their fence.
 #[async_trait]
 pub trait KnowledgeCloudResolutionRepository: Send + Sync {
+    async fn cloud_resolution_by_key(
+        &self,
+        scope: &KnowledgeScope,
+        target: &KnowledgeSyncTarget,
+        actor: &str,
+        key: &str,
+    ) -> KnowledgeResult<Option<KnowledgeCloudResolutionRecord>>;
+    async fn cloud_conflict_snapshot(
+        &self,
+        scope: &KnowledgeScope,
+        target: &KnowledgeSyncTarget,
+        local_sequence: u64,
+    ) -> KnowledgeResult<Value>;
     async fn cloud_conflict_context(
         &self,
         scope: &KnowledgeScope,

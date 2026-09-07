@@ -421,6 +421,11 @@ mod pull_session_tests;
 #[path = "pull_admission_tests.rs"]
 mod pull_admission_tests;
 
-#[path="resolution_http_tests.rs"] mod resolution_http_tests;
+#[path = "resolution_http_tests.rs"]
+mod resolution_http_tests;
 
-#[path="context_route_tests.rs"] mod context_route_tests;
+#[path = "context_route_tests.rs"]
+mod context_route_tests;
+
+#[path = "cloud_resolution_http_tests.rs"]
+mod cloud_resolution_http_tests;

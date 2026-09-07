@@ -2,6 +2,23 @@ use super::*;
 
 #[async_trait]
 impl KnowledgeCloudResolutionRepository for SqliteKnowledgeRepository {
+    async fn cloud_resolution_by_key(
+        &self,
+        scope: &KnowledgeScope,
+        target: &KnowledgeSyncTarget,
+        actor: &str,
+        key: &str,
+    ) -> KnowledgeResult<Option<KnowledgeCloudResolutionRecord>> {
+        self.cloud_resolution_by_key_durable(scope, target, actor, key)
+    }
+    async fn cloud_conflict_snapshot(
+        &self,
+        scope: &KnowledgeScope,
+        target: &KnowledgeSyncTarget,
+        sequence: u64,
+    ) -> KnowledgeResult<Value> {
+        self.cloud_conflict_snapshot_durable(scope, target, sequence)
+    }
     async fn cloud_conflict_context(
         &self,
         scope: &KnowledgeScope,

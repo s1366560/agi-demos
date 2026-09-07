@@ -618,3 +618,20 @@ Native I4.19 recheck after canonical rebuild at b33a6a48e shows the persisted
 QA reuse job last-run summary as 2026-09-07 18:11, success, matching its history
 record after restart. Evidence: `/tmp/memstack-qa-20260907/native-automation-last-run-projection.txt`.
 I3.14 final 136-test recheck is recorded at `/tmp/legacy-memory-admission-136-tests.log`.
+
+I3.15 connects native cloud conflict queries, explicit resolutions, immutable-key
+replay, and pending local reconciliation through the trusted session transport.
+New requests fetch only the persisted conflict ID; retries preserve journal bytes
+and never re-prepare from a changed local snapshot. Auth failures stop dispatch
+without deleting journals; only verified stale-resolution responses settle rejection.
+Session clear/rotation/ABA/expiry fences prepare and acknowledgement. A tombstone
+baseline retains its revision, obtains a real cloud conflict and requires explicit
+restore. Native Knowledge 39 and Device Knowledge 69 tests passed, including cloud
+success/local ack failure/new local edit/same-key replay with one cloud mutation.
+Core/Device strict Clippy passed; Sidecar retains 11 bin/12 test baseline errors
+with no owned-path diagnostics. No schema, release gate, UI or catalog changes.
+Rollback keeps sync closed and retains journals for recovery. Evidence:
+`/tmp/knowledge-cloud-transport-native-final.log`,
+`/tmp/knowledge-cloud-transport-device-all.log`,
+`/tmp/knowledge-cloud-transport-clippy.log`,
+`/tmp/knowledge-cloud-transport-sidecar-clippy-final.log`.

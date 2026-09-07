@@ -187,10 +187,9 @@ fn prepared_request(
         previous.validate()?;
     }
     let revision = previous.as_ref().map_or(0, |version| version.revision);
-    if revision >= MAX_REMOTE_REVISION
-        || previous.as_ref().is_some_and(|version| version.deleted)
-        || (deleted && revision == 0)
-    {
+    // A tombstone reserves its remote identity. Send the real revision so the
+    // cloud can issue a durable conflict requiring an explicit restore choice.
+    if revision >= MAX_REMOTE_REVISION || (deleted && revision == 0) {
         return Err(KnowledgeError::Conflict);
     }
     valid_identifier(&local.id)?;

@@ -1,6 +1,56 @@
 use super::*;
 
 #[test]
+fn by_key_and_saved_conflict_reads_are_scoped_and_preserve_immutable_work() {
+    block_on(async {
+        let repo = SqliteKnowledgeRepository::in_memory().unwrap();
+        let (seq, verified) = setup(&repo, false).await;
+        assert!(repo
+            .cloud_resolution_by_key_durable(&scope(), &target(), "actor", "key")
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            repo.cloud_conflict_snapshot_durable(&scope(), &target(), seq)
+                .unwrap(),
+            verified
+        );
+        assert!(repo
+            .cloud_conflict_snapshot_durable(&scope(), &target(), u64::MAX)
+            .is_err());
+        let record = repo
+            .prepare_cloud_resolution_durable(
+                &scope(),
+                &target(),
+                "actor",
+                "key",
+                command(seq, &verified, KnowledgeCloudChoice::KeepCurrent {}),
+                verified,
+            )
+            .unwrap();
+        edit(&repo, "new edit", "later content").await;
+        assert_eq!(
+            repo.cloud_resolution_by_key_durable(&scope(), &target(), "actor", "key")
+                .unwrap()
+                .unwrap()
+                .request_json,
+            record.request_json
+        );
+        assert!(repo
+            .cloud_resolution_by_key_durable(&scope(), &target(), "another-actor", "key")
+            .unwrap()
+            .is_none());
+        assert!(repo
+            .cloud_resolution_by_key_durable(&scope(), &target(), "actor", "")
+            .is_err());
+        let mut wrong = target();
+        wrong.authority = "https://other.test".into();
+        assert!(repo
+            .cloud_resolution_by_key_durable(&scope(), &wrong, "actor", "key")
+            .is_err());
+    });
+}
+
+#[test]
 fn wire_choices_reject_extra_fields_and_never_infer_a_decision() {
     for value in [
         json!({"decision":"keep_current","content":merged()}),

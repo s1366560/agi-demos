@@ -11,6 +11,10 @@ use super::{KnowledgeAuthorityErrorV2, KnowledgeOperationV2};
 use crate::trusted_session::TrustedSessionBroker;
 use agistack_core::knowledge::sync::push::{KnowledgePushReceipt, KnowledgePushRepository};
 
+#[path = "cloud_sync.rs"]
+mod cloud_sync;
+pub(super) use cloud_sync::CloudResolutionDispatch;
+
 impl KnowledgeOperationV2 {
     pub(super) async fn resolve_pull_conflicts(
         &self,
