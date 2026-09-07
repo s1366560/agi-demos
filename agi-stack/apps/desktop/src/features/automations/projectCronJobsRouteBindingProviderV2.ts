@@ -10,7 +10,7 @@ import type {
   ProjectCronJobsRouteScope,
 } from './projectCronJobsRouteModule';
 
-import { automationConversationChoices } from './automationConversationModel';
+import { automationConversationChoices, type AutomationConversationChoice } from './automationConversationModel';
 
 const AUTOMATION_RUN_CAPABILITY_ID = 'automation_run' as const;
 
@@ -36,6 +36,7 @@ export type ProjectCronJobsRouteBindingInputV2 = Readonly<{
   capabilitySnapshot: DesktopCapabilitySnapshot | null;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
+  onOpenConversation?: (choice: AutomationConversationChoice) => void;
 }>;
 
 export type ProjectCronJobsRouteBindingProviderV2 = Readonly<{
@@ -73,6 +74,7 @@ export function createProjectCronJobsRouteBindingProviderV2():
         conversations: automationConversationChoices(input.conversations ?? [], scope),
         onOpenProjectSettings: input.onOpenProjectSettings,
         onOpenConnection: input.onOpenConnection,
+        onOpenConversation: input.onOpenConversation,
       });
       publication = Object.freeze({ scope, binding });
     },

@@ -635,3 +635,16 @@ Rollback keeps sync closed and retains journals for recovery. Evidence:
 `/tmp/knowledge-cloud-transport-device-all.log`,
 `/tmp/knowledge-cloud-transport-clippy.log`,
 `/tmp/knowledge-cloud-transport-sidecar-clippy-final.log`.
+
+I4.21 adds run-history navigation to an already loaded exact-project conversation.
+The click rechecks current tenant/project, context revision, scope epoch and current
+conversation workspace before using existing shell navigation. Moved/deleted or
+foreign conversations cannot open; unloaded conversations retain their ID display.
+Twelve navigation/model/binding tests, three browser cases and TypeScript passed.
+The canonical native application opened the persisted QA reuse result and showed
+both scheduled/reuse answers. No API, migration or execution authorization changes.
+Rollback removes navigation only. Evidence: `/tmp/automation-navigation-tests.log`,
+`/tmp/automation-navigation-browser.log`, `/tmp/automation-navigation-tsc.log`,
+`/tmp/memstack-qa-20260907/native-automation-open-result.txt`.
+During development HMR, the native renderer reported an inactive generation lease
+store; full renderer reload recovered. HMR lifecycle root cause remains to verify.

@@ -2508,6 +2508,7 @@ const enUS: Record<string, string> = {
   'automations.projectRequired': 'Select a project first',
   'automations.projectRequiredBody':
     'Automations are always scoped to one authenticated project. Choose that context in Settings.',
+  'automations.openConversation': 'Open conversation',
   'automations.openSettings': 'Open workspace settings',
   'automations.unavailable': 'Automation service is unavailable',
   'automations.unavailableBody':
@@ -6362,6 +6363,7 @@ const zhCN: Record<string, string> = {
   'automations.guardedWrites': '修订版本保护写入',
   'automations.projectRequired': '请先选择项目',
   'automations.projectRequiredBody': '自动化始终归属于一个已认证项目，请在设置中选择工作上下文。',
+  'automations.openConversation': '打开会话',
   'automations.openSettings': '打开工作空间设置',
   'automations.unavailable': '自动化服务不可用',
   'automations.unavailableBody':

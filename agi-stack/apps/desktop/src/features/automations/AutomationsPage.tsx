@@ -45,6 +45,7 @@ type AutomationsPageProps = {
   runCapability: DesktopCapabilityView;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
+  onOpenConversation?: (choice: AutomationConversationChoice) => void;
 };
 
 export function AutomationsPage({
@@ -53,6 +54,7 @@ export function AutomationsPage({
   projectName,
   conversations = EMPTY_AUTOMATION_CONVERSATIONS,
   runCapability,
+  onOpenConversation,
   onOpenProjectSettings,
 }: AutomationsPageProps) {
   const { locale, t } = useI18n();
@@ -431,6 +433,8 @@ export function AutomationsPage({
           {selectedJob ? (
             <AutomationDetail
               job={selectedJob}
+              conversations={conversations}
+              onOpenConversation={onOpenConversation}
               runs={runs}
               runsLoading={runsLoading}
               locale={locale}

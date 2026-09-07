@@ -1,3 +1,7 @@
+import {
+  EMPTY_AUTOMATION_CONVERSATIONS,
+  type AutomationConversationChoice,
+} from './automationConversationModel';
 import { Pencil1Icon, RocketIcon, TrashIcon } from '@radix-ui/react-icons';
 import { AlertDialog, Badge, Button, Heading, Switch, Text } from '@radix-ui/themes';
 import { useI18n } from '../../i18n';
@@ -20,6 +24,8 @@ import {
 
 export function AutomationDetail({
   job,
+  conversations = EMPTY_AUTOMATION_CONVERSATIONS,
+  onOpenConversation,
   runs,
   runsLoading,
   locale,
@@ -34,6 +40,8 @@ export function AutomationDetail({
   onDelete,
 }: {
   job: AutomationJob;
+  conversations?: readonly AutomationConversationChoice[];
+  onOpenConversation?: (choice: AutomationConversationChoice) => void;
   runs: AutomationRun[];
   runsLoading: boolean;
   locale: string;
@@ -62,8 +70,7 @@ export function AutomationDetail({
     ? declaredRunCapability
     : {
         allowed: false,
-        reason_code:
-          runtimeRunCapability.reason_code ?? 'capability_contract_unavailable',
+        reason_code: runtimeRunCapability.reason_code ?? 'capability_contract_unavailable',
       };
   const editCapability = automationActionAvailability(capabilities, 'edit', {
     handler_available: true,
@@ -212,7 +219,17 @@ export function AutomationDetail({
         ) : (
           <div className="automation-run-list">
             {runs.map((run) => (
-              <AutomationRunRow key={run.id} run={run} locale={locale} />
+              <AutomationRunRow
+                key={run.id}
+                run={run}
+                locale={locale}
+                conversation={
+                  run.job_id === job.id && run.project_id === job.project_id
+                    ? conversations.find((choice) => choice.id === run.conversation_id)
+                    : undefined
+                }
+                onOpenConversation={onOpenConversation}
+              />
             ))}
           </div>
         )}
@@ -221,7 +238,17 @@ export function AutomationDetail({
   );
 }
 
-function AutomationRunRow({ run, locale }: { run: AutomationRun; locale: string }) {
+function AutomationRunRow({
+  run,
+  locale,
+  conversation,
+  onOpenConversation,
+}: {
+  run: AutomationRun;
+  locale: string;
+  conversation?: AutomationConversationChoice;
+  onOpenConversation?: (choice: AutomationConversationChoice) => void;
+}) {
   const { t } = useI18n();
   const status = automationRunStatus(run.status);
   const trigger = automationRunTrigger(run.trigger_type);
@@ -247,7 +274,13 @@ function AutomationRunRow({ run, locale }: { run: AutomationRun; locale: string 
           ? t('automations.durationMs', { count: run.duration_ms })
           : t('automations.durationPending')}
       </small>
-      {run.conversation_id ? <code>{run.conversation_id}</code> : null}
+      {conversation && onOpenConversation ? (
+        <Button variant="soft" onClick={() => onOpenConversation(conversation)}>
+          {t('automations.openConversation')}
+        </Button>
+      ) : run.conversation_id ? (
+        <code>{run.conversation_id}</code>
+      ) : null}
       {run.error_message ? <p role="alert">{run.error_message}</p> : null}
     </article>
   );

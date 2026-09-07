@@ -19,6 +19,7 @@ import './automationsQa.css';
 declare global {
   var __automationsQaRoot: Root | undefined;
   var __automationSubmittedInput: AutomationCreateInput | AutomationUpdateInput | undefined;
+  var __automationOpenedConversation: string | undefined;
 }
 
 type QaState = 'populated' | 'empty' | 'unavailable' | 'permission' | 'error';
@@ -235,6 +236,7 @@ function AutomationsQa() {
           api={api}
           projectId="local-project"
           projectName="Desktop Client"
+          onOpenConversation={(choice) => { globalThis.__automationOpenedConversation = choice.id; }}
           conversations={[
             {
               id: 'conversation-nightly-review',

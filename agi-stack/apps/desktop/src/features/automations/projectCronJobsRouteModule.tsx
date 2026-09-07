@@ -37,6 +37,7 @@ export type ProjectCronJobsRouteBinding = Readonly<{
   runCapability: DesktopCapabilityView;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
+  onOpenConversation?: (choice: AutomationConversationChoice) => void;
 }>;
 
 export type ProjectCronJobsRouteModuleOptions = Readonly<{
@@ -119,6 +120,7 @@ function BoundProjectCronJobsRoute({
       projectId={context.projectId}
       projectName={binding.projectName}
       conversations={binding.conversations}
+      onOpenConversation={binding.onOpenConversation}
       runCapability={binding.runCapability}
       onOpenProjectSettings={binding.onOpenProjectSettings}
       onOpenConnection={binding.onOpenConnection}

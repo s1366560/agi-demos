@@ -70,6 +70,7 @@ import { LoginScreen, type WorkspaceSsoPresentation } from './features/auth/Logi
 import {
   createProjectCronJobsRouteBindingProviderV2,
 } from './features/automations/projectCronJobsRouteBindingProviderV2';
+import { createAutomationConversationOpener } from './features/automations/automationConversationNavigation';
 import { initialDesktopRuntimeConfig } from './features/auth/loginRuntimeModel';
 import { resolveNativeOAuthResumePath } from './features/auth/nativeOAuthSessionModel';
 import type { ChatWorkflowTarget } from './features/chat/ChatWorkflowStrip';
@@ -6589,6 +6590,17 @@ export function App() {
     }),
     projects: auth.projects,
     conversations: Object.values(dataset.conversationsByWorkspace).flat(),
+    onOpenConversation: createAutomationConversationOpener({
+      current: () => ({
+        tenantId: configRef.current.tenantId,
+        projectId: configRef.current.projectId,
+        contextRevision: contextRevisionRef.current,
+        scopeEpoch: configScopeEpochRef.current,
+        conversations: Object.values(datasetRef.current.conversationsByWorkspace).flat(),
+      }),
+      open: selectConversation,
+      unavailable: () => setError(t('myWork.sessionUnavailable')),
+    }),
     capabilitySnapshot: desktopCapabilityState.snapshot,
     onOpenProjectSettings: openWorkspaceSettings,
     onOpenConnection: openConnectionSettings,

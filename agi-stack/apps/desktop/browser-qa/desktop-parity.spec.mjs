@@ -35,6 +35,13 @@ test('automation creation uses a fresh conversation and editing preserves a boun
     .toHaveText('Reuse conversation');
 });
 
+test('automation run history opens its matching conversation', async ({ page }) => {
+  await page.goto('/qa/automations.html');
+  await page.getByRole('button', { name: 'Open conversation', exact: true }).first().click();
+  expect(await page.evaluate(() => globalThis.__automationOpenedConversation))
+    .toBe('conversation-nightly-review');
+});
+
 test('automation reuse requires an explicit conversation and submits its workspace', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('agistack.desktop.locale', 'en'));
   await page.goto('/qa/automations.html');
