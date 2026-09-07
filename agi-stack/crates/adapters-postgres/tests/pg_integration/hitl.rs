@@ -287,8 +287,8 @@ async fn answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope()
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO user_projects (user_id, project_id, role) VALUES \
-         ('hitl_resume_user', 'hitl_resume_project', 'member')",
+        "INSERT INTO user_projects (id, user_id, project_id, role) VALUES \
+         ('hitl_resume_membership', 'hitl_resume_user', 'hitl_resume_project', 'member')",
     )
     .execute(&pool)
     .await
@@ -334,7 +334,7 @@ async fn answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope()
          (id, request_type, conversation_id, message_id, tenant_id, project_id, user_id, \
           question, request_metadata, status, response, response_metadata, expires_at, answered_at) \
          VALUES \
-         ('hitl_resume_permission', 'permission', 'hitl_resume_conversation', 'hitl_resume_run', \
+         ('hitl_resume_ordinary', 'clarification', 'hitl_resume_conversation', 'hitl_resume_run', \
           'hitl_resume_tenant', 'hitl_resume_project', 'hitl_resume_user', 'Allow?', \
           '{\"automation_run_id\":\"hitl_resume_run\",\"runtime_execution_id\":\"hitl_resume_run\",\"checkpoint_session_id\":\"hitl_resume_run\"}'::json, \
           'answered', 'allow', '{\"resume_answer\":\"allow\"}'::json, $1, now()), \
@@ -360,7 +360,7 @@ async fn answered_automation_hitl_is_selected_only_for_exact_waiting_run_scope()
         .unwrap();
 
     assert_eq!(candidates.len(), 1);
-    assert_eq!(candidates[0].request_id, "hitl_resume_permission");
+    assert_eq!(candidates[0].request_id, "hitl_resume_ordinary");
     assert_eq!(candidates[0].run_id, "hitl_resume_run");
     assert_eq!(candidates[0].checkpoint_session_id, "hitl_resume_run");
     assert_eq!(candidates[0].job_id, "hitl_resume_job");

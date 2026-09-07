@@ -561,3 +561,16 @@ must not open newer schema data. Evidence: `/tmp/knowledge-cloud-resolution-devi
 Post-commit I4.18 entry validation remains blocked by the parity audit revision
 7da7f53a differing from the newly committed App.tsx. Formal matrix regeneration and
 agent review are pending source freeze; the full Desktop gate is not yet green.
+
+I4.17 connects ordinary HITL resume to the production PostgreSQL driver. Each scope
+admits persisted clarification/decision answers before runtime claim and projection;
+permission/env remain excluded, with filtering before the candidate limit. Three
+real PostgreSQL driver tests passed (pause, answer, driver replacement, final
+projection, candidate fairness, and failure before claim), plus 17 persistence/
+admission regressions and one legacy HITL integration in a fresh temporary DB.
+Server 647 tests passed; Clippy retained 17 existing warnings. All readiness and owner
+switches remain closed. Rollback leaves accepted records intact and must keep Cloud
+Cron closed. This is a real database/stub model integration, not real provider or
+legacy-scheduler cutover acceptance. Evidence: `/tmp/memstack-cron-driver-live.log`,
+`/tmp/memstack-cron-driver-server-full.log`, `/tmp/memstack-cron-driver-pg-regression.log`,
+`/tmp/memstack-cron-driver-legacy-pg.log`.

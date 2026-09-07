@@ -191,7 +191,8 @@ impl PgHitlRequestRepository {
         .map_err(storage)
     }
 
-    /// List answered non-secret automation requests whose run still awaits resume.
+    /// List answered ordinary automation requests whose run still awaits resume.
+    /// Permission and environment answers remain outside this admission queue.
     pub async fn list_automation_resume_candidates(
         &self,
         tenant_id: &str,
@@ -216,7 +217,7 @@ impl PgHitlRequestRepository {
               AND operation.operation_kind = 'execute_run' \
              WHERE hitl.tenant_id = $1 AND hitl.project_id = $2 \
                AND hitl.status = 'answered' \
-               AND hitl.request_type IN ('clarification', 'decision', 'permission') \
+               AND hitl.request_type IN ('clarification', 'decision') \
                AND hitl.expires_at > $3 \
                AND hitl.request_metadata ->> 'automation_run_id' = run.id \
                AND hitl.request_metadata ->> 'runtime_execution_id' = run.id \

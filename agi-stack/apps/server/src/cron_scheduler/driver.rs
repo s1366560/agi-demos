@@ -19,6 +19,7 @@ use crate::cron_automation_runtime::{
     CronAutomationRuntimeWorker, ExecuteRunDispatchHandler, PgAutomationRunPersistenceFactory,
     ReActAutomationRunExecutor, UuidConversationIdFactory,
 };
+use crate::cron_hitl_resume::{CronHitlResumeCoordinator, PgAutomationHitlResumeStore};
 use crate::cron_readiness_v2::{CronRuntimeDependenciesV2, CronRuntimeProvenanceV2};
 use crate::cron_schedule_fire::CronScheduleFireCoordinator;
 use crate::cron_schedule_reconcile::ReconcileScheduleHandler;
@@ -41,35 +42,14 @@ pub(crate) fn build_pg_cron_scheduler(
     let ownership_store: Arc<dyn CronSchedulerOwnershipStore> = ownership;
     let clock: Arc<dyn CronWorkerClock> = Arc::new(UtcCronWorkerClock);
 
-    let runtime_repository = Arc::new(PgCronAutomationRuntimeRepository::new(pool.clone()));
-    let executor = Arc::new(
-        ReActAutomationRunExecutor::new(engine)
-            .with_run_persistence_factory(Arc::new(PgAutomationRunPersistenceFactory::new(
-                pool.clone(),
-            )))
-            .with_tool_host_factory(Arc::new(RegistryAutomationToolHostFactory::new(registry))),
-    );
-    let runtime = Arc::new(CronAutomationRuntimeWorker::new(
-        runtime_repository.clone(),
-        executor,
-        config.runtime_worker_config(),
-    ));
-    let fire = Arc::new(CronScheduleFireCoordinator::new(
-        Arc::new(PgCronScheduleFireRepository::new(pool.clone())),
-        Arc::clone(&ownership_store),
+    let driver = Arc::new(PgCronSchedulerDriver::new(
+        pool,
+        engine,
+        registry,
+        config.clone(),
+        ownership_store,
         Arc::clone(&clock),
     ));
-    let driver = Arc::new(PgCronSchedulerDriver {
-        control: PgCronControlRepository::new(pool.clone()),
-        operation_store: Arc::new(PgCronOperationRepository::new(pool.clone())),
-        schedule_store: Arc::new(PgCronScheduleRepository::new(pool)),
-        dispatch_store: runtime_repository,
-        ownership: ownership_store,
-        clock: Arc::clone(&clock),
-        fire,
-        runtime,
-        config: config.clone(),
-    });
     Arc::new(CronScheduler::with_dependencies(
         lease_store,
         driver,
@@ -88,10 +68,53 @@ struct PgCronSchedulerDriver {
     clock: Arc<dyn CronWorkerClock>,
     fire: Arc<CronScheduleFireCoordinator>,
     runtime: Arc<CronAutomationRuntimeWorker>,
+    resume: CronHitlResumeCoordinator,
     config: CronSchedulerConfig,
 }
 
 impl PgCronSchedulerDriver {
+    fn new(
+        pool: PgPool,
+        engine: Arc<ReActEngine>,
+        registry: HotPlugRegistry,
+        config: CronSchedulerConfig,
+        ownership_store: Arc<dyn CronSchedulerOwnershipStore>,
+        clock: Arc<dyn CronWorkerClock>,
+    ) -> Self {
+        let runtime_repository = Arc::new(PgCronAutomationRuntimeRepository::new(pool.clone()));
+        let executor = Arc::new(
+            ReActAutomationRunExecutor::new(engine)
+                .with_run_persistence_factory(Arc::new(PgAutomationRunPersistenceFactory::new(
+                    pool.clone(),
+                )))
+                .with_tool_host_factory(Arc::new(RegistryAutomationToolHostFactory::new(registry))),
+        );
+        let runtime = Arc::new(CronAutomationRuntimeWorker::new(
+            runtime_repository.clone(),
+            executor,
+            config.runtime_worker_config(),
+        ));
+        let fire = Arc::new(CronScheduleFireCoordinator::new(
+            Arc::new(PgCronScheduleFireRepository::new(pool.clone())),
+            Arc::clone(&ownership_store),
+            Arc::clone(&clock),
+        ));
+        Self {
+            control: PgCronControlRepository::new(pool.clone()),
+            operation_store: Arc::new(PgCronOperationRepository::new(pool.clone())),
+            schedule_store: Arc::new(PgCronScheduleRepository::new(pool.clone())),
+            dispatch_store: runtime_repository,
+            ownership: ownership_store,
+            clock: Arc::clone(&clock),
+            fire,
+            runtime,
+            resume: CronHitlResumeCoordinator::new(Arc::new(PgAutomationHitlResumeStore::new(
+                pool,
+            ))),
+            config,
+        }
+    }
+
     fn operation_worker(&self, scope: &CronControlScope) -> CronOperationWorker {
         let handlers: Vec<Arc<dyn CronOperationHandler>> = vec![
             Arc::new(ReconcileScheduleHandler::new(
@@ -169,16 +192,25 @@ impl CronSchedulerDriver for PgCronSchedulerDriver {
     }
 
     async fn drive_runtime_scope(&self, scope: &CronControlScope) -> CoreResult<()> {
-        self.runtime
+        let runtime_scope = AutomationRuntimeScope {
+            tenant_id: scope.tenant_id.clone(),
+            project_id: scope.project_id.clone(),
+        };
+        self.resume
             .drain_once(
-                &AutomationRuntimeScope {
-                    tenant_id: scope.tenant_id.clone(),
-                    project_id: scope.project_id.clone(),
-                },
+                &runtime_scope,
+                self.config.runtime_batch_size,
                 self.clock.now(),
             )
+            .await
+            .map_err(|_| CoreError::Storage("cron automation resume admission failed".into()))?;
+        self.runtime
+            .drain_once(&runtime_scope, self.clock.now())
             .await
             .map(|_| ())
             .map_err(|_| CoreError::Storage("cron automation runtime storage failed".to_string()))
     }
 }
+
+#[cfg(test)]
+mod tests;
