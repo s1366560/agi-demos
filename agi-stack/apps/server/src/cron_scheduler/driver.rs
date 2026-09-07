@@ -24,7 +24,9 @@ use crate::cron_readiness_v2::{CronRuntimeDependenciesV2, CronRuntimeProvenanceV
 use crate::cron_schedule_fire::CronScheduleFireCoordinator;
 use crate::cron_schedule_reconcile::ReconcileScheduleHandler;
 use crate::cron_scheduler_ownership::{CronSchedulerLeaseStore, CronSchedulerOwnershipStore};
-use crate::cron_tool_authority::RegistryAutomationToolHostFactory;
+use crate::cron_tool_authority::{
+    PgAutomationPermissionProducerFactory, RegistryAutomationToolHostFactory,
+};
 use crate::cron_worker::{
     CronOperationHandler, CronOperationStore, CronOperationWorker, CronWorkerClock,
     CronWorkerScope, UtcCronWorkerClock,
@@ -87,6 +89,10 @@ impl PgCronSchedulerDriver {
                 .with_run_persistence_factory(Arc::new(PgAutomationRunPersistenceFactory::new(
                     pool.clone(),
                 )))
+                .with_permission_producer_factory(PgAutomationPermissionProducerFactory::new(
+                    pool.clone(),
+                    registry.clone(),
+                ))
                 .with_tool_host_factory(Arc::new(RegistryAutomationToolHostFactory::new(registry))),
         );
         let runtime = Arc::new(CronAutomationRuntimeWorker::new(

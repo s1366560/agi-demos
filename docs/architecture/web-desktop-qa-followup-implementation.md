@@ -763,3 +763,22 @@ Evidence: `/tmp/knowledge-native-client-manifest.json`,
 `/tmp/knowledge-native-focused.log`, `/tmp/knowledge-native-desktop-final.log`,
 `/tmp/knowledge-native-artifact-check.log`. Rollback this batch and regenerate
 artifacts together; retain durable outbox and conflict records.
+
+I4.23 adds the host-owned permission suspension producer to the real PostgreSQL
+automation driver. The actual registry snapshot supplies tool identity and input
+digest; one lease-fenced transaction persists HITL, intent and the exact checkpoint,
+then parks the run. Ordinary answer/replay cannot resume a bound invocation.
+A renewal waiting on the producer's row lock continues polling execution and the
+deadline, avoiding a self-deadlock proven by a real delayed PostgreSQL trigger.
+Capability guidance is transient and appears only with an installed suspension
+port; the shared OpenAI prompt and durable goal/transcript are unchanged. Real
+HTTP capture covers initial and repair calls for both supported and default hosts.
+Validation: 24 PostgreSQL admission/permission tests, 4 real driver tests, 652 server
+tests and 165 core/memory/HTTP tests passed. Strict core/memory/PG/HTTP all-target
+Clippy passed; server retains pre-existing warnings. This producer neither grants
+authority nor dispatches a tool; dedicated dispatch and public release remain closed.
+Evidence: `/tmp/memstack-permission-producer-sha256.txt`,
+`/tmp/memstack-permission-capability-red.log`,
+`/tmp/memstack-permission-capability-green.log`,
+`/tmp/memstack-permission-producer-pg-final.log`. Rollback producer wiring together;
+retain pending durable intents and never route them through ordinary HITL.

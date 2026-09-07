@@ -6,6 +6,80 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Ephemeral guidance advertised only by a host with the suspension port installed.
+pub(crate) const PERMISSION_SUSPENSION_GUIDANCE: &str = "[Host decision capability] \
+This host supports atomic tool-invocation permission suspension. For an exact tool-invocation \
+permission, include request.permission_invocation as {\"tool\":string,\"input\":object}; tool must \
+equal decision.action.name and input must contain the exact proposed arguments. This field is \
+valid only for permission. Do not supply host identity, invocation IDs, versions, or grants.";
+
+pub(crate) fn decision_goal<'a>(
+    goal: &'a str,
+    port: &Option<std::sync::Arc<dyn PermissionSuspensionPort>>,
+) -> std::borrow::Cow<'a, str> {
+    // The live host port is the authority; no saved flag or user-text inference.
+    if port.is_some() {
+        std::borrow::Cow::Owned(format!("{goal}\n\n{PERMISSION_SUSPENSION_GUIDANCE}"))
+    } else {
+        std::borrow::Cow::Borrowed(goal)
+    }
+}
+
+pub(crate) fn reject_ordinary_resume(state: &crate::SessionState) -> crate::CoreResult<()> {
+    if state
+        .pending_hitl
+        .as_ref()
+        .is_some_and(|r| r.permission_invocation.is_some())
+    {
+        return Err(crate::CoreError::Tool(
+            "bound permission requires its dedicated answer boundary".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_proposal(
+    state: &crate::SessionState,
+    request: &crate::HitlRequest,
+) -> crate::CoreResult<()> {
+    let valid = request
+        .permission_invocation
+        .as_ref()
+        .is_some_and(|proposal| {
+            request.kind == crate::HitlKind::Permission
+                && !proposal.tool.trim().is_empty()
+                && !request.id.trim().is_empty()
+                && !request.prompt.trim().is_empty()
+                && request
+                    .decision
+                    .as_ref()
+                    .is_some_and(|d| d.is_complete() && d.action.name == proposal.tool)
+                && state.hitl_answer(&request.id).is_none()
+        });
+    if !valid {
+        return Err(crate::CoreError::Tool(
+            "invalid bound permission proposal".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Agent-proposed execution payload. This carries no host attestation or grant.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermissionInvocationProposal {
+    pub tool: String,
+    pub input: serde_json::Value,
+}
+
+/// Atomically persists the exact post-decision checkpoint, request and intent,
+/// and parks the run under its current host-owned execution authority.
+/// Successful suspension never authorizes or dispatches the proposed tool.
+#[async_trait::async_trait]
+pub trait PermissionSuspensionPort: Send + Sync {
+    async fn suspend(&self, state: &crate::SessionState) -> crate::CoreResult<()>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionAnswer {

@@ -387,3 +387,129 @@ async fn bad_json_content_maps_to_core_error() {
     let err = llm.decide("x", 0, &[], &[]).await.unwrap_err();
     assert!(matches!(err, CoreError::Llm(_)), "got {err:?}");
 }
+
+#[tokio::test]
+async fn permission_invocation_arguments_survive_the_structured_action_protocol() {
+    let packet = serde_json::json!({"kind":"request_human","request":{
+        "id":"bound","kind":"permission","prompt":"Write?",
+        "permission_invocation":{"tool":"write","input":{"path":"file","text":"exact"}},
+        "decision":{"action":{"name":"write","label":"Write"},"target":{"kind":"file","id":"file"},
+            "data":{"summary":"Update file"},"reason":"Requested task","risk":{"level":"low","rationale":"Single file"},
+            "reversibility":{"mode":"reversible"},"scope":{"kind":"files","ids":["file"]},
+            "evidence":[{"kind":"diff","id":"diff","label":"Proposed diff"}]}
+    }});
+    let (base, captured) = mock_responses(vec![chat_body(&packet.to_string())]).await;
+    let action = HttpLlm::new(base, "m")
+        .decide("write", 0, &[], &["write".into()])
+        .await
+        .unwrap();
+    let AgentAction::RequestHuman { request } = action else {
+        panic!("expected permission")
+    };
+    let proposal = request.permission_invocation.unwrap();
+    assert_eq!(proposal.tool, "write");
+    assert_eq!(
+        proposal.input,
+        packet["request"]["permission_invocation"]["input"]
+    );
+    assert!(!captured.lock().await[0].contains("permission_invocation"));
+}
+
+struct PermissionTestRuntime;
+#[async_trait::async_trait]
+impl agistack_core::CheckpointStore for PermissionTestRuntime {
+    async fn delete(&self, _: &str) -> agistack_core::CoreResult<()> {
+        Ok(())
+    }
+    async fn load(
+        &self,
+        _: &str,
+    ) -> agistack_core::CoreResult<Option<agistack_core::SessionState>> {
+        Ok(None)
+    }
+    async fn save(&self, _: &agistack_core::SessionState) -> agistack_core::CoreResult<()> {
+        Ok(())
+    }
+}
+#[async_trait::async_trait]
+impl agistack_core::ToolHost for PermissionTestRuntime {
+    fn list_tools(&self) -> Vec<String> {
+        vec!["write".into()]
+    }
+    async fn call(&self, _: &str, _: &str) -> agistack_core::CoreResult<String> {
+        panic!("no dispatch")
+    }
+}
+impl agistack_core::Clock for PermissionTestRuntime {
+    fn now_ms(&self) -> i64 {
+        0
+    }
+}
+#[async_trait::async_trait]
+impl agistack_core::automation_permission::PermissionSuspensionPort for PermissionTestRuntime {
+    async fn suspend(&self, _: &agistack_core::SessionState) -> agistack_core::CoreResult<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn permission_protocol_is_advertised_only_by_an_engine_with_the_host_port() {
+    for enabled in [false, true] {
+        let mut packet = serde_json::json!({"kind":"request_human","request":{
+            "id":"permission","kind":"permission","prompt":"Write?",
+            "decision":{"action":{"name":"write","label":"Write"},"target":{"kind":"file","id":"file"},
+                "data":{"summary":"Update file"},"reason":"Requested task","risk":{"level":"low","rationale":"Single file"},
+                "reversibility":{"mode":"reversible"},"scope":{"kind":"files","ids":["file"]},
+                "evidence":[{"kind":"diff","id":"diff","label":"Proposed diff"}]}
+        }});
+        if enabled {
+            packet["request"]["permission_invocation"] =
+                serde_json::json!({"tool":"write","input":{"path":"file"}});
+        }
+        let mut incomplete = packet.clone();
+        incomplete["request"]["decision"]["evidence"] = serde_json::json!([]);
+        let (base, captured) = mock_responses(vec![
+            chat_body(&incomplete.to_string()),
+            chat_body(&packet.to_string()),
+        ])
+        .await;
+        let runtime = Arc::new(PermissionTestRuntime);
+        let mut engine = agistack_core::ReActEngine::new(
+            Arc::new(HttpLlm::new(base, "m")),
+            runtime.clone(),
+            runtime.clone(),
+            runtime.clone(),
+        );
+        if enabled {
+            engine = engine.with_permission_suspension(runtime);
+        }
+        let state = engine
+            .run("session", "write the file", Some("project"))
+            .await
+            .unwrap();
+        assert_eq!(
+            state.goal, "write the file",
+            "capabilities must not alter the durable goal"
+        );
+        assert!(state
+            .transcript
+            .iter()
+            .all(|entry| !entry.content.contains("Host decision capability")));
+        assert_eq!(
+            state.pending_hitl.unwrap().permission_invocation.is_some(),
+            enabled
+        );
+        let requests = captured.lock().await;
+        assert_eq!(requests.len(), 2, "include the protocol repair request");
+        for request in requests.iter() {
+            let (_, body) = request.split_once("\r\n\r\n").unwrap();
+            let body: serde_json::Value = serde_json::from_str(body).unwrap();
+            let system = body["messages"][0]["content"].as_str().unwrap();
+            assert!(
+                !system.contains("permission_invocation"),
+                "shared native/default and repair system protocols must stay unchanged"
+            );
+            assert_eq!(request.contains("permission_invocation"), enabled);
+        }
+    }
+}

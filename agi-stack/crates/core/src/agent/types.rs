@@ -224,6 +224,9 @@ pub struct HitlRequest {
     pub decision: Option<Box<DecisionContext>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub a2ui_action: Option<Box<A2uiActionAuthority>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_invocation:
+        Option<Box<crate::automation_permission::PermissionInvocationProposal>>,
 }
 
 impl HitlRequest {
@@ -234,6 +237,7 @@ impl HitlRequest {
             prompt: prompt.into(),
             decision: None,
             a2ui_action: None,
+            permission_invocation: None,
         }
     }
 

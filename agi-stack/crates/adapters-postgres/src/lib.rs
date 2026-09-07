@@ -93,7 +93,8 @@ pub use audit_repo::{
 pub use auth_store::{ApiKeyRecord, PgApiKeyStore, PgProjectStore, ProjectRecord};
 pub use automation_permission::{
     AutomationPermissionAnswerCommand, AutomationPermissionIntentCommand,
-    AutomationPermissionOutcome, PgAutomationPermissionStore,
+    AutomationPermissionOutcome, AutomationPermissionSuspensionCommand,
+    PgAutomationPermissionStore,
 };
 pub use backend_store_repo::{
     BackendStoreAccessError, BackendStoreCreate, BackendStoreRecord, BackendStoreUpdate,

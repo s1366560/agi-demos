@@ -204,7 +204,9 @@ fn accepted_checkpoint(
     if state.session_id != command.run_id
         || state.project_id.as_deref() != Some(command.project_id.as_str())
         || !state.pending_hitl.as_ref().is_some_and(|request| {
-            request.id == command.request_id && request.kind == expected_kind
+            request.id == command.request_id
+                && request.kind == expected_kind
+                && request.permission_invocation.is_none()
         })
     {
         return Err(AutomationRuntimeRepositoryError::InvalidRunState);

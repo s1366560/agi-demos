@@ -6,6 +6,9 @@
 
 #![allow(dead_code)]
 
+mod permission_producer;
+pub(crate) use permission_producer::PgAutomationPermissionProducerFactory;
+
 use std::sync::Arc;
 
 use agistack_adapters_postgres::AutomationRunLease;

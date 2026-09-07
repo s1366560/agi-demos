@@ -24,7 +24,9 @@ use serde_json::json;
 use tokio::time::{interval, sleep};
 use uuid::Uuid;
 
-use crate::cron_tool_authority::AutomationToolHostFactory;
+use crate::cron_tool_authority::{
+    AutomationToolHostFactory, PgAutomationPermissionProducerFactory,
+};
 use crate::cron_worker::{
     CronOperationHandler, CronOperationHandlerFailure, CronOperationHandlerOutcome, CronWorkerClock,
 };
@@ -150,6 +152,7 @@ fn dispatch_failure(error: AutomationRuntimeRepositoryError) -> CronOperationHan
 pub(crate) enum AutomationExecutionBoundary {
     Finished,
     AwaitingHuman,
+    PermissionSuspended,
     Failed,
     Interrupted,
 }
@@ -175,6 +178,7 @@ pub(crate) struct ReActAutomationRunExecutor {
     engine: Arc<ReActEngine>,
     persistence: Option<Arc<dyn AutomationRunPersistenceFactory>>,
     tool_hosts: Option<Arc<dyn AutomationToolHostFactory>>,
+    permission_producers: Option<PgAutomationPermissionProducerFactory>,
 }
 
 impl ReActAutomationRunExecutor {
@@ -183,6 +187,7 @@ impl ReActAutomationRunExecutor {
             engine,
             persistence: None,
             tool_hosts: None,
+            permission_producers: None,
         }
     }
 
@@ -199,6 +204,14 @@ impl ReActAutomationRunExecutor {
         tool_hosts: Arc<dyn AutomationToolHostFactory>,
     ) -> Self {
         self.tool_hosts = Some(tool_hosts);
+        self
+    }
+
+    pub(crate) fn with_permission_producer_factory(
+        mut self,
+        factory: PgAutomationPermissionProducerFactory,
+    ) -> Self {
+        self.permission_producers = Some(factory);
         self
     }
 }
@@ -223,12 +236,19 @@ impl AutomationRunExecutor for ReActAutomationRunExecutor {
                 )
             })?
             .for_run(lease)?;
-        let engine = self
+        let mut engine = self
             .engine
             .as_ref()
             .clone()
             .with_tool_host(tools)
             .with_checkpoint_store(persistence.checkpoints);
+        let producer = self
+            .permission_producers
+            .as_ref()
+            .map(|factory| factory.for_run(lease));
+        if let Some(producer) = producer.as_ref() {
+            engine = engine.with_permission_suspension(producer.clone());
+        }
         let observer = Arc::new(AutomationHitlObserver {
             store: Some(persistence.hitl),
             tenant_id: lease.context.tenant_id.clone(),
@@ -246,8 +266,24 @@ impl AutomationRunExecutor for ReActAutomationRunExecutor {
                 observer,
             )
             .await?;
+        let bound = state
+            .pending_hitl
+            .as_ref()
+            .is_some_and(|request| request.permission_invocation.is_some());
+        if bound
+            && !producer
+                .as_ref()
+                .is_some_and(|producer| producer.committed())
+        {
+            return Err(CoreError::Tool(
+                "permission suspension was not committed by this run".into(),
+            ));
+        }
         let boundary = match state.status {
             SessionStatus::Finished => AutomationExecutionBoundary::Finished,
+            SessionStatus::AwaitingInput if bound => {
+                AutomationExecutionBoundary::PermissionSuspended
+            }
             SessionStatus::AwaitingInput => AutomationExecutionBoundary::AwaitingHuman,
             SessionStatus::Failed => AutomationExecutionBoundary::Failed,
             _ => AutomationExecutionBoundary::Interrupted,
@@ -562,13 +598,21 @@ impl CronAutomationRuntimeWorker {
 
         let result = loop {
             tokio::select! {
+                biased;
                 result = &mut execution => break Some(result),
                 _ = &mut deadline => break None,
                 _ = heartbeat.tick() => {
-                    let renewed = self.store
-                        .renew(lease, self.config.lease_seconds, Utc::now())
-                        .await
-                        .map_err(|error| AutomationRuntimeRepositoryError::Storage(error.to_string()))?;
+                    // The execution transaction may hold the run row needed by
+                    // renewal. Keep polling it so it can commit or roll back.
+                    let renewal = self.store.renew(lease, self.config.lease_seconds, Utc::now());
+                    tokio::pin!(renewal);
+                    let renewed = tokio::select! {
+                        biased;
+                        result = &mut execution => break Some(result),
+                        _ = &mut deadline => break None,
+                        renewed = &mut renewal => renewed.map_err(|error|
+                            AutomationRuntimeRepositoryError::Storage(error.to_string()))?,
+                    };
                     if !renewed {
                         report.lost_lease += 1;
                         return Ok(());
@@ -620,6 +664,9 @@ impl CronAutomationRuntimeWorker {
                 } else {
                     report.lost_lease += 1;
                 }
+            }
+            AutomationExecutionBoundary::PermissionSuspended => {
+                report.waiting_human += 1;
             }
             AutomationExecutionBoundary::Failed => {
                 self.project(

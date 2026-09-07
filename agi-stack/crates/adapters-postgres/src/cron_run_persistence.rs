@@ -25,7 +25,7 @@ impl PgAutomationRunPersistence {
     /// All write paths lock the run before touching checkpoint or HITL rows.
     /// Compare the database's current expiry, because successful heartbeats may
     /// have extended it beyond the immutable lease originally given to this host.
-    async fn lock_authority(
+    pub(crate) async fn lock_authority(
         &self,
         tx: &mut Transaction<'_, Postgres>,
         now: DateTime<Utc>,

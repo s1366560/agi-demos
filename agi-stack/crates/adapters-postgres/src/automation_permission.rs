@@ -1,6 +1,8 @@
 //! Persist exact permission intent and atomically admit an answer. No dispatch.
 
 mod locking;
+mod suspension;
+pub use suspension::AutomationPermissionSuspensionCommand;
 
 use agistack_core::{
     automation_permission::{HostPermissionBinding, PermissionAnswer},

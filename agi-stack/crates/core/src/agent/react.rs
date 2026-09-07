@@ -25,6 +25,7 @@ use crate::agent::doom_loop::{
 use crate::agent::types::{
     AgentAction, CompletedCall, HitlRequest, Role, SessionState, SessionStatus, TranscriptEntry,
 };
+use crate::automation_permission::{self as permission, PermissionSuspensionPort};
 use crate::ports::{CheckpointStore, Clock, CoreError, CoreResult, LlmPort, ToolHost};
 
 /// Receives non-mutating observations at ReAct run boundaries.
@@ -140,6 +141,7 @@ pub struct ReActEngine {
     /// Optional injected agent that judges a fired trigger (Agent First). Without
     /// one, a fired trigger is a deterministic structural stop.
     supervisor: Option<Arc<dyn SupervisorPort>>,
+    permission_suspension: Option<Arc<dyn PermissionSuspensionPort>>,
 }
 
 impl ReActEngine {
@@ -159,6 +161,7 @@ impl ReActEngine {
             cost_budget: None,
             terminal_tools: BTreeSet::new(),
             supervisor: None,
+            permission_suspension: None,
         }
     }
 
@@ -174,6 +177,11 @@ impl ReActEngine {
     /// its model, tools, budgets and supervisor configuration.
     pub fn with_checkpoint_store(mut self, checkpoints: Arc<dyn CheckpointStore>) -> Self {
         self.checkpoints = checkpoints;
+        self
+    }
+
+    pub fn with_permission_suspension(mut self, port: Arc<dyn PermissionSuspensionPort>) -> Self {
+        self.permission_suspension = Some(port);
         self
     }
 
@@ -284,6 +292,9 @@ impl ReActEngine {
             Some(existing) => existing,
             None => SessionState::new(session_id, goal, project_id),
         };
+        if state.status == SessionStatus::Running {
+            crate::automation_permission::reject_ordinary_resume(&state)?;
+        }
 
         // Robustness instruments (Wave N). Both are structural/deterministic; a
         // fire only *consults* the supervisor. They live on the stack for this
@@ -374,9 +385,10 @@ impl ReActEngine {
 
             // THINK — delegate the semantic decision to the planner/LLM.
             let available = self.tools.tool_definitions()?;
+            let decision_goal = permission::decision_goal(&state.goal, &self.permission_suspension);
             let action = self
                 .llm
-                .decide_with_tools(&state.goal, state.round, &state.transcript, &available)
+                .decide_with_tools(&decision_goal, state.round, &state.transcript, &available)
                 .await?;
 
             match action {
@@ -491,6 +503,17 @@ impl ReActEngine {
                         Role::Action,
                         format!("request_human[{:?}] {}", request.kind, request.prompt),
                     ));
+
+                    if request.permission_invocation.is_some() {
+                        crate::automation_permission::validate_proposal(&state, &request)?;
+                        let port = self.permission_suspension.as_ref().ok_or_else(|| {
+                            CoreError::Tool("atomic permission suspension is unavailable".into())
+                        })?;
+                        state.pending_hitl = Some(request);
+                        state.status = SessionStatus::AwaitingInput;
+                        port.suspend(&state).await?;
+                        break;
+                    }
 
                     match state.hitl_answer(&request.id).map(|a| a.to_string()) {
                         // Already answered (we are replaying after a resume): feed
@@ -717,7 +740,7 @@ impl ReActEngine {
             .await?
             .ok_or(CoreError::NotFound)?;
 
-        // Idempotent: nothing to resume if the session already moved on.
+        crate::automation_permission::reject_ordinary_resume(&state)?;
         if state.status != SessionStatus::AwaitingInput {
             return Ok(state);
         }

@@ -172,3 +172,6 @@ async fn postgres_driver_does_not_claim_when_resume_admission_storage_is_unavail
     );
     fixture.close().await;
 }
+
+#[path = "permission_tests.rs"]
+mod permission_tests;
