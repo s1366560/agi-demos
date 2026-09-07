@@ -37,6 +37,7 @@ const SNAPSHOT_KEYS_V2 = new Set([
   'page',
   'pageSize',
 ]);
+const LOCAL_SNAPSHOT_KEYS_V2 = new Set([...SNAPSHOT_KEYS_V2, 'hasMore']);
 const MEMORY_KEYS_V2 = new Set([
   'id',
   'projectId',
@@ -131,7 +132,7 @@ export function requireDesktopProjectMemoriesSnapshotV2(
   const page = normalizeDesktopProjectMemoriesPageV2(options);
   if (
     !isPlainRecordV2(value) ||
-    !hasExactKeysV2(value, SNAPSHOT_KEYS_V2) ||
+    !hasExactKeysV2(value, scope.authority === 'local' ? LOCAL_SNAPSHOT_KEYS_V2 : SNAPSHOT_KEYS_V2) ||
     value.authority !== scope.authority ||
     value.availability !== 'degraded' ||
     value.reasonCode !== PROJECT_MEMORIES_DEGRADED_REASON ||
@@ -143,7 +144,10 @@ export function requireDesktopProjectMemoriesSnapshotV2(
     value.pageSize !== page.pageSize ||
     !Array.isArray(value.memories) ||
     value.memories.length > page.pageSize ||
-    !validMemoryPageV2(value.memories, value.total, scope.projectId)
+    (scope.authority === 'local' && (value.total !== null || typeof value.hasMore !== 'boolean' ||
+      (value.hasMore && value.memories.length !== page.pageSize))) ||
+    !validMemoryPageV2(value.memories,
+      scope.authority === 'local' ? value.memories.length : value.total, scope.projectId)
   ) {
     throw invalidServiceContractV2();
   }

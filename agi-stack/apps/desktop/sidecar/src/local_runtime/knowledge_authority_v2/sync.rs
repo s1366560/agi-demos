@@ -1,4 +1,8 @@
 use agistack_core::knowledge::sync::pull::{KnowledgePullReceipt, KnowledgePullRepository};
+use agistack_core::knowledge::sync::resolution::{
+    KnowledgePullConflictContext, KnowledgePullConflictResolution, KnowledgeResolutionOutcome,
+    KnowledgeResolutionRepository,
+};
 use agistack_core::knowledge::sync::{
     KnowledgeSyncLink, KnowledgeSyncOutboxChange, KnowledgeSyncRepository, KnowledgeSyncStatus,
 };
@@ -8,6 +12,57 @@ use crate::trusted_session::TrustedSessionBroker;
 use agistack_core::knowledge::sync::push::{KnowledgePushReceipt, KnowledgePushRepository};
 
 impl KnowledgeOperationV2 {
+    pub(super) async fn resolve_pull_conflicts(
+        &self,
+        broker: &TrustedSessionBroker,
+        key: &str,
+        resolution: KnowledgePullConflictResolution,
+    ) -> Result<KnowledgeResolutionOutcome, KnowledgeAuthorityErrorV2> {
+        if !self.writable {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
+        }
+        let repository = self.authority.repository()?;
+        let link = repository
+            .sync_status(&self.scope)
+            .await?
+            .link
+            .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
+        let transport =
+            super::sync_transport::VerifiedCloudTransport::connect(broker, link).await?;
+        transport.with_current_session(|| {
+            Ok(repository.resolve_pull_conflicts_durable(
+                &self.scope,
+                &transport.target,
+                &self.actor_id,
+                key,
+                resolution,
+            )?)
+        })
+    }
+
+    pub(super) async fn pull_conflict_context(
+        &self,
+        id: &str,
+    ) -> Result<Option<KnowledgePullConflictContext>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .pull_conflict_context(&self.scope, id)
+            .await?)
+    }
+
+    pub(super) async fn resolution_history(
+        &self,
+        id: &str,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .resolution_history(&self.scope, id, limit)
+            .await?)
+    }
+
     pub(super) async fn pull_once(
         &self,
         broker: &TrustedSessionBroker,

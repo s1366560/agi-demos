@@ -25,8 +25,9 @@ export type ProjectKnowledgeViewModel = Readonly<{
   retryVisible: boolean;
   allowedActions: readonly string[];
   items: readonly ProjectKnowledgeItem[];
-  total: number;
-  pagination?: Readonly<{ page: number; pages: number }>;
+  total: number | null;
+  pagination?: Readonly<{ page: number }> &
+    (Readonly<{ pages: number }> | Readonly<{ pages: null; hasMore: boolean }>);
 }>;
 export type ProjectKnowledgePresentationInput<TSnapshot extends ProjectKnowledgeSnapshotBase> =
   | Readonly<{ kind: 'loading'; scope: ProjectKnowledgeScope; scopeSwitch: boolean }>
@@ -44,14 +45,14 @@ export function buildProjectKnowledgePresentation<TSnapshot extends ProjectKnowl
   input: ProjectKnowledgePresentationInput<TSnapshot>,
   project: (
     snapshot: TSnapshot,
-  ) => Readonly<{ items: readonly ProjectKnowledgeItem[]; total: number }>,
+  ) => Readonly<{ items: readonly ProjectKnowledgeItem[]; total: number | null }>,
 ): ProjectKnowledgeViewModel {
   if (input.kind === 'snapshot') {
     const projected = project(input.snapshot);
     return Object.freeze({
       routeId,
       state:
-        projected.total === 0
+        (projected.total === 0 || (projected.total === null && projected.items.length === 0))
           ? 'empty'
           : input.snapshot.availability === 'degraded'
             ? 'degraded'

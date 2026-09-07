@@ -300,16 +300,6 @@ test('HTTP projection keeps context and memory reads in one authority', async ()
       assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer memories-session');
       assert.doesNotMatch(JSON.stringify(init), /memories-launch/u);
     }
-    await assert.rejects(
-      createDesktopProjectMemoriesHttpAuthorityV2(
-        runtimeConfig({ mode: 'local' }),
-        scope('local'),
-      ).load(),
-      (error) =>
-        error.status === 501 &&
-        error.payload.reason_code === 'local_project_memories_authority_unavailable',
-    );
-    assert.equal(requests.length, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -394,6 +384,55 @@ function jsonResponse(payload, status = 200) {
     headers: { 'content-type': 'application/json' },
   });
 }
+
+test('local projection discovers native scope and rejects crossed generation or project results', async () => {
+  const originalFetch = globalThis.fetch;
+  const native = { tenant_id: 'tenant-1', project_id: 'project-1', context_revision: 7,
+    profile_id: 'native-profile', generation: 4, digest: 'native-digest' };
+  const config = runtimeConfig({ mode: 'local', apiBaseUrl: 'http://127.0.0.1:43123' });
+  let wrong = null;
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ input: String(input), init });
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer memories-session');
+    assert.doesNotMatch(JSON.stringify(init), /memories-launch/u);
+    const pathname = new URL(String(input)).pathname;
+    if (pathname === '/api/v1/knowledge/context') {
+      return jsonResponse({ contract_version: '1.0.0', scope: native });
+    }
+    assert.equal(pathname, '/api/v1/knowledge/query');
+    assert.deepEqual(JSON.parse(init.body), { scope: native,
+      query: { operation: 'list', offset: 50, limit: 50 } });
+    return jsonResponse({ contract_version: '1.0.0',
+      scope: { ...native, ...(wrong === 'generation' ? { generation: 5 } : {}) },
+      result: { offset: 50, limit: 50, has_more: false, items: [{ id: 'local-memory',
+        project_id: wrong === 'project' ? 'other-project' : 'project-1', title: 'Local memory',
+        content: 'Local content', content_type: 'text', version: 1, status: 'enabled',
+        created_at_ms: 0 }] } });
+  };
+  try {
+    const authority = createDesktopProjectMemoriesHttpAuthorityV2(config, scope('local'));
+    const value = await authority.load(undefined, { page: 2 });
+    assert.equal(value.authority, 'local');
+    assert.equal(value.total, null);
+    assert.equal(value.hasMore, false);
+    assert.equal(value.scopeRevision, 7);
+    assert.equal(value.memories[0].createdAt, '1970-01-01T00:00:00.000Z');
+    assert.equal(value.memories[0].processingStatus, 'unavailable');
+    const { requireDesktopProjectMemoriesSnapshotV2: validate } = require(
+      COMPILED_ROOT + '/src/plugins/desktopProjectMemoriesOperationContractV2.js');
+    assert.deepEqual(validate(value, scope('local'), { page: 2 }), value);
+    for (const changed of [{ total: 1 }, { hasMore: true }, { hasMore: undefined }]) {
+      assert.throws(() => validate({ ...value, ...changed }, scope('local'), { page: 2 }));
+    }
+    for (wrong of ['generation', 'project']) {
+      await assert.rejects(authority.load(undefined, { page: 2 }), (error) => error.status === 409);
+    }
+    assert.equal(requests.length, 6);
+    globalThis.fetch = async () => jsonResponse({ reason_code: 'knowledge_release_closed' }, 503);
+    await assert.rejects(authority.load(), (error) => error.status === 503);
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 test('Memories client carries pagination through the leased authority and vault main policy to HTTP', async () => {
   const originalFetch = globalThis.fetch;

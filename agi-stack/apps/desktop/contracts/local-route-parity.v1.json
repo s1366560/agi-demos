@@ -2668,6 +2668,41 @@
       "expected_status": 503,
       "expected_reason_code": "knowledge_release_closed",
       "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-resolve-pull",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-resolve-pull",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {
+        "resolution": {
+          "memory_id": "memory",
+          "conflict_sequences": [
+            1
+          ],
+          "expected_local_revision": 1,
+          "expected_remote_revision": 1,
+          "expected_baseline_revision": 0,
+          "choice": {
+            "decision": "use_remote"
+          }
+        }
+      },
+      "idempotency_key": "closed-resolution"
+    },
+    {
+      "area": "project_memories",
+      "method": "GET",
+      "uri": "/api/v1/knowledge/context",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/context",
+      "authority": "native_session_required",
+      "expected_status": 401,
+      "body": {}
     }
   ]
 }

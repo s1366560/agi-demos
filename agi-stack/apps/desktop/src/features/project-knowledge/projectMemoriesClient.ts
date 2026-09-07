@@ -23,7 +23,8 @@ export type ProjectMemory = Readonly<{
   updatedAt: string | null;
 }>;
 export type ProjectMemoriesSnapshot = ProjectKnowledgeSnapshotBase &
-  Readonly<{ memories: readonly ProjectMemory[]; total: number; page: number; pageSize: number }>;
+  Readonly<{ memories: readonly ProjectMemory[]; page: number; pageSize: number }> &
+  (Readonly<{ total: number }> | Readonly<{ total: null; hasMore: boolean }>);
 export type ProjectMemoriesPageOptions = Readonly<{ page?: number; pageSize?: number }>;
 export interface ProjectMemoriesClient extends ProjectKnowledgeClient<ProjectMemoriesSnapshot> {
   load(

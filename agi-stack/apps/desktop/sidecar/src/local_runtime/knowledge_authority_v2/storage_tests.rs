@@ -13,7 +13,7 @@ fn v3_push_upgrade_preserves_replica_and_backs_up_before_new_receipt_tables() {
             row.get(0)
         })
         .unwrap();
-    connection.execute_batch("DROP TABLE knowledge_sync_pull_cursors; DROP TABLE knowledge_sync_pull_events; DROP TABLE knowledge_sync_pull_conflicts; DROP TABLE knowledge_sync_pushes; DROP TABLE knowledge_sync_remote_versions; DROP TABLE knowledge_sync_targets; UPDATE knowledge_schema SET version=3;").unwrap();
+    connection.execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; DROP TABLE knowledge_sync_pull_cursors; DROP TABLE knowledge_sync_pull_events; DROP TABLE knowledge_sync_pull_conflicts; DROP TABLE knowledge_sync_pushes; DROP TABLE knowledge_sync_remote_versions; DROP TABLE knowledge_sync_targets; UPDATE knowledge_schema SET version=3;").unwrap();
     drop(storage_lifecycle::open(&directory.0).unwrap());
     let backups: Vec<_> = fs::read_dir(&knowledge)
         .unwrap()
@@ -53,7 +53,7 @@ fn v2_upgrade_backs_up_before_creating_persistent_replica() {
     let knowledge = directory.0.join("knowledge");
     let database = knowledge.join("memories.db");
     let connection = Connection::open(&database).unwrap();
-    connection.execute_batch("DROP TABLE knowledge_sync_pull_cursors; DROP TABLE knowledge_sync_pull_events; DROP TABLE knowledge_sync_pull_conflicts; DROP TABLE knowledge_sync_pushes; DROP TABLE knowledge_sync_remote_versions; DROP TABLE knowledge_sync_targets; DROP TABLE knowledge_sync_outbox; DROP TABLE knowledge_sync_links; DROP TABLE knowledge_replica; UPDATE knowledge_schema SET version=2;").unwrap();
+    connection.execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; DROP TABLE knowledge_sync_pull_cursors; DROP TABLE knowledge_sync_pull_events; DROP TABLE knowledge_sync_pull_conflicts; DROP TABLE knowledge_sync_pushes; DROP TABLE knowledge_sync_remote_versions; DROP TABLE knowledge_sync_targets; DROP TABLE knowledge_sync_outbox; DROP TABLE knowledge_sync_links; DROP TABLE knowledge_replica; UPDATE knowledge_schema SET version=2;").unwrap();
     drop(storage_lifecycle::open(&directory.0).unwrap());
     let backups: Vec<_> = fs::read_dir(&knowledge)
         .unwrap()
@@ -127,7 +127,7 @@ fn version_upgrade_backs_up_wal_and_validates_before_modifying() {
     let migrated: i64 = source
         .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(migrated, 5);
+    assert_eq!(migrated, 6);
     drop(repository);
     drop(storage_lifecycle::open(&directory.0).unwrap());
     assert_eq!(

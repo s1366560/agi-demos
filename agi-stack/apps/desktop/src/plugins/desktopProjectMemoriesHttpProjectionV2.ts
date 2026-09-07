@@ -18,6 +18,7 @@ import {
   type ProjectKnowledgeScope,
 } from '../features/project-knowledge/projectKnowledgeClient';
 import type { DesktopRuntimeConfig } from '../types';
+import { createDesktopProjectMemoriesLocalAuthorityV2 } from './desktopProjectMemoriesLocalProjectionV2';
 import {
   cloneDesktopProjectMemoriesRuntimeConfigV2,
   cloneDesktopProjectMemoriesScopeV2,
@@ -39,6 +40,9 @@ export function createDesktopProjectMemoriesHttpAuthorityV2(
 ): DesktopProjectMemoriesHttpAuthorityV2 {
   const runtimeConfig = cloneDesktopProjectMemoriesRuntimeConfigV2(config);
   const operationScope = cloneDesktopProjectMemoriesScopeV2(scope, runtimeConfig);
+  if (runtimeConfig.mode === 'local') {
+    return createDesktopProjectMemoriesLocalAuthorityV2(runtimeConfig, operationScope);
+  }
   return Object.freeze({
     async load(signal, options) {
       const pagination = normalizeDesktopProjectMemoriesPageV2(options);

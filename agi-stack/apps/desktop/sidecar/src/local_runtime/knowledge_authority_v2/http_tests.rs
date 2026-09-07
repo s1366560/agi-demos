@@ -149,7 +149,7 @@ async fn executable_catalog_negative_routes_enforce_closed_release() {
     let state = test_state(TOKEN);
     publish(&state, &directory, 1, false).await;
     let mut observed = std::collections::BTreeSet::new();
-    for probe in probes {
+    for probe in probes.iter().filter(|probe| probe["authority"] == "knowledge_release_closed") {
         assert_eq!(probe["area"], "project_memories");
         assert_eq!(probe["authority"], "knowledge_release_closed");
         assert_eq!(probe["source"], "sidecar_knowledge");
@@ -184,7 +184,8 @@ async fn executable_catalog_negative_routes_enforce_closed_release() {
             "/api/v1/knowledge/mutations",
             "/api/v1/knowledge/sync-link",
             "/api/v1/knowledge/sync-push",
-            "/api/v1/knowledge/sync-pull"
+            "/api/v1/knowledge/sync-pull",
+            "/api/v1/knowledge/sync-resolve-pull"
         ])
     );
     assert!(!directory.0.exists());

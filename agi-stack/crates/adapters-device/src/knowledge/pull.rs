@@ -186,8 +186,11 @@ impl KnowledgePullRepository for SqliteKnowledgeRepository {
         let conn = self.conn.lock().map_err(storage)?;
         let mut statement = conn
             .prepare(
-                "SELECT conflict_json FROM knowledge_sync_pull_conflicts
-             WHERE tenant_id=?1 AND project_id=?2 ORDER BY sequence LIMIT ?3",
+                "SELECT pc.conflict_json FROM knowledge_sync_pull_conflicts pc
+             WHERE pc.tenant_id=?1 AND pc.project_id=?2
+               AND NOT EXISTS (SELECT 1 FROM knowledge_sync_resolved_pull_conflicts r
+                 WHERE r.tenant_id=pc.tenant_id AND r.project_id=pc.project_id AND r.sequence=pc.sequence)
+             ORDER BY pc.sequence LIMIT ?3",
             )
             .map_err(storage)?;
         let rows = statement

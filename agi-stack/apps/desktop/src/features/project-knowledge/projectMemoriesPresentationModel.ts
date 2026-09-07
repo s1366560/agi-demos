@@ -25,7 +25,9 @@ export function buildProjectMemoriesPresentation(
     ...model,
     pagination: Object.freeze({
       page: input.snapshot.page,
-      pages: Math.max(1, Math.ceil(input.snapshot.total / input.snapshot.pageSize)),
+      ...(input.snapshot.total === null
+        ? { pages: null, hasMore: input.snapshot.hasMore }
+        : { pages: Math.max(1, Math.ceil(input.snapshot.total / input.snapshot.pageSize)) }),
     }),
   });
 }

@@ -17,7 +17,7 @@ export function ProjectKnowledgePage({
         <h1>
           <code>{model.routeId}</code>
         </h1>
-        <output>{model.total}</output>
+        {model.total === null ? null : <output>{model.total}</output>}
       </header>
       {model.reasonCode ? <code>{model.reasonCode}</code> : null}
       {model.items.length > 0 ? (
@@ -42,11 +42,14 @@ export function ProjectKnowledgePage({
             {t('common.previousPage')}
           </button>
           <output aria-live="polite">
-            {model.pagination.page} / {model.pagination.pages}
+            {model.pagination.page}
+            {model.pagination.pages === null ? null : ` / ${model.pagination.pages}`}
           </output>
           <button
             type="button"
-            disabled={model.pagination.page >= model.pagination.pages}
+            disabled={model.pagination.pages === null
+              ? !model.pagination.hasMore
+              : model.pagination.page >= model.pagination.pages}
             onClick={() => onPageChange(model.pagination!.page + 1)}
           >
             {t('common.nextPage')}

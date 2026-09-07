@@ -417,3 +417,24 @@ was `NATIVE_AUTOMATION_SCHEDULE_20260907_OK` with a successful complete event. E
 answer was also visible in the native conversation after restart, with Kimi selected.
 This default-only change has no migration; reverting it leaves saved jobs unchanged.
 Explicit reuse-session selection and richer run-detail navigation remain follow-ups.
+
+I3.9 adds schema 6 local pull-conflict resolution with explicit local/remote/merged/
+keep-both choices, three revision guards, exact conflict-set CAS, immutable archives,
+idempotency and real pending outbox entries. Prepared or cloud-conflicted pushes
+remain guarded. Both sides survive resolution; no cloud receipt or cursor is invented.
+Device tests passed 49/49 and the complete sidecar suite passed 681/681. Core/device
+strict Clippy passed; sidecar retains its existing 11 binary/12 test lint failures,
+with no new knowledge diagnostics. Cloud tombstone restoration and push-conflict
+orchestration remain incomplete. Downgrade requires the pre-migration backup;
+older schema readers must reject schema 6 rather than alter its tables.
+
+I2.4 adds authenticated native knowledge scope discovery and the renderer local list
+projection. Discovery uses the admitted sidecar generation and workspace revision,
+does not open storage, and remains readable while the release capability is closed.
+Actual knowledge operations remain closed. Local pages expose has-more with no
+invented total; cloud numbered pagination is retained. Cross-project/generation
+responses, invalid pagination and aborted stale results are rejected. Twenty-five
+focused renderer tests and TypeScript passed. Evidence logs:
+`/tmp/knowledge-resolution-device-final.log`, `/tmp/knowledge-resolution-native-final.log`,
+`/tmp/local-memories-renderer-focused.log`. This is protocol and component acceptance;
+enabled native knowledge CRUD/sync acceptance remains outstanding.

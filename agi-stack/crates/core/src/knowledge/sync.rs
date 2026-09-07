@@ -53,3 +53,5 @@ pub trait KnowledgeSyncRepository: Send + Sync {
         limit: usize,
     ) -> KnowledgeResult<Vec<KnowledgeSyncOutboxChange>>;
 }
+
+pub mod resolution;

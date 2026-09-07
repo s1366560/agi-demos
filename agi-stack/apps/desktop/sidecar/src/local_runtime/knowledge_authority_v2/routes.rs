@@ -6,7 +6,7 @@ use axum::{
     extract::{Extension, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
@@ -14,13 +14,23 @@ use serde::Deserialize;
 use super::*;
 use crate::local_runtime::LocalRuntimeState;
 
+#[path = "context_route.rs"]
+mod context_route;
+#[path = "resolution_routes.rs"]
+mod resolution_routes;
+
 pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
     Router::new()
+        .route("/api/v1/knowledge/context", get(context_route::context))
         .route("/api/v1/knowledge/query", post(query))
         .route("/api/v1/knowledge/mutations", post(mutate))
         .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
         .route("/api/v1/knowledge/sync-push", post(push_once))
         .route("/api/v1/knowledge/sync-pull", post(pull_once))
+        .route(
+            "/api/v1/knowledge/sync-resolve-pull",
+            post(resolution_routes::resolve_pull),
+        )
 }
 
 #[derive(Deserialize)]
@@ -41,6 +51,8 @@ enum KnowledgeQuery {
     RemoteBaseline { id: String },
     PushConflicts { limit: usize },
     PullConflicts { limit: usize },
+    PullConflictContext { id: String },
+    ResolutionHistory { id: String, limit: usize },
     SyncOutbox { after_sequence: u64, limit: usize },
 }
 
@@ -63,6 +75,13 @@ async fn query(
     let result = match request.query {
         KnowledgeQuery::RemoteBaseline { id } => {
             json!({"version":operation.remote_baseline(&id).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::PullConflictContext { id } => {
+            json!({"context":operation.pull_conflict_context(&id).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::ResolutionHistory { id, limit } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            json!({"items":operation.resolution_history(&id, limit).await.map_err(IntoResponse::into_response)?})
         }
         KnowledgeQuery::PullConflicts { limit } => {
             validate_limit(limit).map_err(invalid_page)?;

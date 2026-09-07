@@ -58,6 +58,32 @@ function buttons(element) {
   if (!element || typeof element !== 'object') return [];
   return [...(element.type === 'button' ? [element] : []), ...buttons(element.props?.children)];
 }
+test('local pages without a count use hasMore and never invent totals or page counts', async () => {
+  const scope = { ...initialScope, authority: 'local' };
+  const calls = [];
+  const controller = createProjectMemoriesController({
+    authority: 'local', initialScope: scope,
+    client: { async load(current, options) {
+      calls.push(options.page);
+      return { ...snapshot(current, options.page), authority: 'local', total: null,
+        hasMore: options.page === 1 };
+    } },
+  });
+  await controller.load(scope);
+  assert.equal(controller.getSnapshot().total, null);
+  assert.deepEqual(controller.getSnapshot().pagination, { page: 1, pages: null, hasMore: true });
+  await controller.goToPage(3);
+  assert.deepEqual(calls, [1]);
+  const Page = pageComponent();
+  const controls = () => buttons(Page({ model: controller.getSnapshot(),
+    onRetry() {}, onPageChange: controller.goToPage }));
+  assert.equal(controls()[1].props.disabled, false);
+  await controls()[1].props.onClick();
+  assert.equal(controls()[1].props.disabled, true);
+  await controller.goToPage(3);
+  await controls()[0].props.onClick();
+  assert.deepEqual(calls, [1, 2, 1]);
+});
 test('actual memory page buttons load next and previous pages and enforce bounds', async () => {
   const calls = [];
   const controller = createProjectMemoriesController({

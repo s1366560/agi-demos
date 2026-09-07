@@ -177,6 +177,7 @@ fn prepared_request(
     local: &Memory,
     deleted: bool,
     baseline: Option<Value>,
+    metadata_override: Option<serde_json::Map<String, Value>>,
 ) -> KnowledgeResult<String> {
     let previous: Option<RemoteMemoryVersion> = baseline
         .map(|value| serde_json::from_value(value).map_err(storage))
@@ -198,7 +199,9 @@ fn prepared_request(
         content_type: local.content_type.clone(),
         tags: local.tags.clone(),
         status: local.status.clone(),
-        metadata: previous.map_or_else(Default::default, |version| version.content.metadata),
+        metadata: metadata_override.unwrap_or_else(|| {
+            previous.map_or_else(Default::default, |version| version.content.metadata)
+        }),
     };
     if !deleted {
         content.validate()?;
@@ -228,10 +231,13 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
                  JOIN knowledge_processing_changes c ON c.sequence=o.sequence
                  LEFT JOIN knowledge_sync_pushes p ON p.sequence=o.sequence
                  WHERE c.tenant_id=?1 AND c.project_id=?2 AND p.receipt_json IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=o.sequence)
                    AND NOT EXISTS (
                      SELECT 1 FROM knowledge_sync_pull_conflicts pc
                      WHERE pc.tenant_id=c.tenant_id AND pc.project_id=c.project_id
                        AND pc.memory_id=c.memory_id
+                       AND NOT EXISTS (SELECT 1 FROM knowledge_sync_resolved_pull_conflicts r
+                         WHERE r.tenant_id=pc.tenant_id AND r.project_id=pc.project_id AND r.sequence=pc.sequence)
                    )
                    AND NOT EXISTS (
                      SELECT 1 FROM knowledge_sync_outbox eo
@@ -239,6 +245,7 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
                      LEFT JOIN knowledge_sync_pushes ep ON ep.sequence=eo.sequence
                      WHERE ec.tenant_id=c.tenant_id AND ec.project_id=c.project_id
                        AND ec.memory_id=c.memory_id AND ec.sequence<c.sequence
+                       AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=eo.sequence)
                        AND (ep.receipt_json IS NULL OR ep.conflict_json IS NOT NULL)
                    )
                  ORDER BY c.sequence LIMIT 1",
@@ -268,6 +275,7 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
                 &memory,
                 operation == "delete",
                 baseline(&tx, scope, &memory.id)?,
+                super::resolution::metadata(&tx, local_sequence)?,
             )?;
             tx.execute(
                 "INSERT INTO knowledge_sync_pushes(sequence,request_json) VALUES(?1,?2)",
