@@ -1028,6 +1028,7 @@ test("project capabilities preserve audited Local authority and per-surface acti
     "view",
     "list",
     "view-history",
+    "inspect-capabilities",
   ]);
   assert.equal(cron.surfaces.desktop_local.implementation_status, "partial");
   assert.equal(cron.surfaces.desktop_local.availability, "degraded");

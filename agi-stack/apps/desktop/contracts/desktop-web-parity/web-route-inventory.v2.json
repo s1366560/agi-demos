@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0.0",
   "checker_version": "2.1.0",
-  "source_revision": "c181945815fb5d6617b21046bb88301110130d2f",
+  "source_revision": "a79ea6c7b882641ee25f9dab716fa57b228520ea",
   "sources": {
     "canonical_navigation_registry": "web/src/config/navigation.ts#CANONICAL_NAVIGATION_DESTINATIONS",
     "eager_route_entries": "reachable route registration modules#relative imports used by JSX or object routes",
@@ -12,13 +12,13 @@
     "production_router": "reachable modules registering JSX Route or static react-router-dom route objects"
   },
   "counts": {
-    "audited_sources": 722,
+    "audited_sources": 723,
     "canonical_navigation_targets": 51,
     "eager_route_entries": 4,
     "lazy_page_entries": 92,
-    "production_dependency_edges": 1961,
-    "production_dependency_ownership": 721,
-    "production_dependency_sources": 721,
+    "production_dependency_edges": 1965,
+    "production_dependency_ownership": 722,
+    "production_dependency_sources": 722,
     "production_entry_sources": 2,
     "production_routes": 178,
     "route_registration_sources": 5
@@ -750,7 +750,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d4d48e04e0662aeb0a7ee97b1642190ba27aa5d996ffee6c4b6020e134032dea"
+      "sha256": "sha256:872ef6ba872e62451f78db1d33939ce3d67e3f144030b111aa7c15221301bbb7"
     },
     {
       "source_entry": "web/src/components/agent/multiAgent/MultiAgentPanel.tsx",
@@ -1408,7 +1408,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:2f6058777b9d785d398118875f54b2cb0fc3c891d56a750e8c27b867ed086453"
+      "sha256": "sha256:a75f330a11622f11c3e45ec34a9685d6c068975c632d47a892320aff5642397b"
     },
     {
       "source_entry": "web/src/components/graph/CytoscapeGraph/NodeInfoPanel.tsx",
@@ -1702,7 +1702,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:57f20213c9dc1e99301194386f547156c4b49819ec8afe1ce5295c16cac98f16"
+      "sha256": "sha256:557de8471a502246cfbd0c6e3c13793ef05dd3209771bb27dbb85a9b05a0e241"
     },
     {
       "source_entry": "web/src/components/project/BackendStoreSelectors.tsx",
@@ -2336,6 +2336,13 @@
       "sha256": "sha256:45899ed3303332887e9025a02c137955fb7aedb0a6eb7ac8351506d214dae076"
     },
     {
+      "source_entry": "web/src/hooks/useCronCapabilities.ts",
+      "roles": [
+        "production_dependency"
+      ],
+      "sha256": "sha256:5fc8fcaf73377c048235531ccc66cb77fa041b653689789d3083e34c48007b9d"
+    },
+    {
       "source_entry": "web/src/hooks/useDateFormatter.ts",
       "roles": [
         "production_dependency"
@@ -2494,14 +2501,14 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:5054f07c5b04431e4b5b985679ae9b52a55e6882008e78827495d779958e8aa4"
+      "sha256": "sha256:53c21f4c8308041dd7785cf9496e886e3a3b6787d575f013ac5f41911766ac78"
     },
     {
       "source_entry": "web/src/locales/zh-CN.json",
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:d8569d6797c4f4914d38fc866221711f1ad2cb9cca07d0964cc7c235877bcd7f"
+      "sha256": "sha256:43db5a4b03bb986a2ce9e73c37dcd63221bafa8186d95b3c402dd3fdfaa07fef"
     },
     {
       "source_entry": "web/src/main.tsx",
@@ -2529,7 +2536,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:222d4e76aa8cc1a6e0c3c31fa06ad3d490b81fe63fa555ba222119d632162df5"
+      "sha256": "sha256:eb9e6a912166af09f6199f99b340a86f487c2a0b9681e11832e8936a96148563"
     },
     {
       "source_entry": "web/src/pages/Login.tsx",
@@ -2592,14 +2599,14 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:8a1a7f53ade73083ce9669f90c4b8350cf32577e39c09185fcb2e7637bbacf0c"
+      "sha256": "sha256:ac230e245dbec550f5a48c1da620453d07b0cd0b85a0413704727f2df0b5625f"
     },
     {
       "source_entry": "web/src/pages/project/EnhancedSearch.tsx",
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:445ef87b2618cc7d0fbe62467a17a7e182a417acce4e3d9f457becdcc73b9441"
+      "sha256": "sha256:bc568d291bcde4819660ad914b3b756c5735b996020bc4be73dc92b9883cfb5b"
     },
     {
       "source_entry": "web/src/pages/project/EntitiesList.tsx",
@@ -2774,7 +2781,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:377552578bb60cafa858a1294804790e867786380c611d28382cba7cea9da711"
+      "sha256": "sha256:541521fbd17eeb3a21bee75903c242ba0d29cd1b3c1363374f39bd79b3ccb740"
     },
     {
       "source_entry": "web/src/pages/project/search/index.ts",
@@ -2851,7 +2858,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:4f1a0a9d0ac9211c7e927316336785ebdbb1b105530480017c0a481f8cd4d8dc"
+      "sha256": "sha256:6281896e93e2ac4ff140837381c6d0c964070dcc3b4b69332c94810b3c84eb0f"
     },
     {
       "source_entry": "web/src/pages/tenant/ChannelConfigSection.tsx",
@@ -2900,7 +2907,7 @@
       "roles": [
         "routed_page"
       ],
-      "sha256": "sha256:d078df3e5e2b9d5e8faebabb490886e053fe191b8963fe056b96bd658f32065a"
+      "sha256": "sha256:ce5afb24585d0e792b139970fff76eb8004858a140714744674b2655b3f83700"
     },
     {
       "source_entry": "web/src/pages/tenant/EditProject.tsx",
@@ -3642,7 +3649,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:0e77ff1bda4c03a36b50553e7984298c8cb7d52e0e8f0ff3cb1d5c0ca2aa2ac2"
+      "sha256": "sha256:e275d18ac3f9e49c3e7386e6660ae422f613bc80f5c98ecdef46f8c41f5fa506"
     },
     {
       "source_entry": "web/src/services/blackboardFileService.ts",
@@ -3677,7 +3684,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:3b13e01c612b710ecea662e463ea0b3110fdaf3fb6923fe7c4a7870ed8690a18"
+      "sha256": "sha256:22dc3992bc1568bca00c44abfbf43a43f918142e79be463d3df0f591fc7aef16"
     },
     {
       "source_entry": "web/src/services/client/queryClient.ts",
@@ -3726,7 +3733,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:2935210e9f623769addaac41d297d83e2097d38cb34345b791c247a32e11bf5b"
+      "sha256": "sha256:a63181979523d635f7ccfb9da1a8c4c4e9dbabe53434af2bc0ef55508a1ec0a6"
     },
     {
       "source_entry": "web/src/services/deployService.ts",
@@ -3810,7 +3817,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:6016f4241c24aff33f554f8903ebddb79b1589f7057a911db12924ef47a11913"
+      "sha256": "sha256:388d04fb8f9dd358a072637a42bd6fd995d416a5f05b0ae50a6cb2e9d7d1ae93"
     },
     {
       "source_entry": "web/src/services/kasmRetainedSessionV2.ts",
@@ -4202,7 +4209,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:56c50bf887f90161259b707813dd94749397f45fea048bdb213276c7858691b6"
+      "sha256": "sha256:c4ddb3dfc0fd691944d985a3ffdb484ba8923169cebef33b9955eb3a85d099a5"
     },
     {
       "source_entry": "web/src/stores/agent/streamingStore.ts",
@@ -4713,7 +4720,7 @@
       "roles": [
         "production_dependency"
       ],
-      "sha256": "sha256:962fb96584650206cefc6c7a338be42f179d9e8013f862da91cfa0f1f325ff6b"
+      "sha256": "sha256:67d69794c094185040402968fbaa48e8969b3f4feef2baf44a18359d10f4304a"
     },
     {
       "source_entry": "web/src/utils/tabSync.ts",
@@ -13808,6 +13815,11 @@
       "to_source_entry": "web/src/services/participantsService.ts"
     },
     {
+      "from_source_entry": "web/src/hooks/useCronCapabilities.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/cronService.ts"
+    },
+    {
       "from_source_entry": "web/src/hooks/useDateFormatter.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/utils/date.ts"
@@ -14105,6 +14117,11 @@
     {
       "from_source_entry": "web/src/pages/InviteAccept.tsx",
       "relationship": "static_import",
+      "to_source_entry": "web/src/plugins/webOperationAdmissionV2.ts"
+    },
+    {
+      "from_source_entry": "web/src/pages/InviteAccept.tsx",
+      "relationship": "static_import",
       "to_source_entry": "web/src/services/invitationService.ts"
     },
     {
@@ -14296,6 +14313,11 @@
       "from_source_entry": "web/src/pages/project/CronJobs.tsx",
       "relationship": "static_import",
       "to_source_entry": "web/src/components/cron/CronJobForm.tsx"
+    },
+    {
+      "from_source_entry": "web/src/pages/project/CronJobs.tsx",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/hooks/useCronCapabilities.ts"
     },
     {
       "from_source_entry": "web/src/pages/project/CronJobs.tsx",
@@ -17836,6 +17858,11 @@
       "from_source_entry": "web/src/services/invitationService.ts",
       "relationship": "static_import",
       "to_source_entry": "web/src/services/client/httpClient.ts"
+    },
+    {
+      "from_source_entry": "web/src/services/invitationService.ts",
+      "relationship": "static_import",
+      "to_source_entry": "web/src/services/client/kernelHttpClient.ts"
     },
     {
       "from_source_entry": "web/src/services/kasmRetainedSessionV2.ts",
@@ -22607,6 +22634,15 @@
       ],
       "reason_code": "multiple_routed_source_reachability",
       "source_entry": "web/src/hooks/useConversationParticipants.ts"
+    },
+    {
+      "classification": "shared",
+      "owner_source_entries": [
+        "web/src/layouts/TenantLayout.tsx",
+        "web/src/pages/project/CronJobs.tsx"
+      ],
+      "reason_code": "multiple_routed_source_reachability",
+      "source_entry": "web/src/hooks/useCronCapabilities.ts"
     },
     {
       "classification": "shared",
@@ -27785,6 +27821,7 @@
     "web/src/hooks/useCommandPaletteOpen.ts",
     "web/src/hooks/useConversationListAutoRefresh.ts",
     "web/src/hooks/useConversationParticipants.ts",
+    "web/src/hooks/useCronCapabilities.ts",
     "web/src/hooks/useDateFormatter.ts",
     "web/src/hooks/useDebounce.ts",
     "web/src/hooks/useLocalStorage.ts",
