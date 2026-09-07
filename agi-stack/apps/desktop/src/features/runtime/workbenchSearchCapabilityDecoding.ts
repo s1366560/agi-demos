@@ -191,4 +191,3 @@ function matchesExactStringArray(
     input.every((value, index) => value === expected[index])
   );
 }
-

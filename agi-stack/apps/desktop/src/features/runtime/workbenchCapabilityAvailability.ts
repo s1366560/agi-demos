@@ -63,4 +63,3 @@ export function emptyCapabilityScope(): DesktopCapabilityScope {
     instance_id: null,
   };
 }
-

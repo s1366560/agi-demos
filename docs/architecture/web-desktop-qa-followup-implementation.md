@@ -219,3 +219,12 @@ backs up v1/v2 before upgrading. Core/device strict Clippy, 13 storage tests, 65
 sidecar tests, generator check and contract completeness passed. Push receipts, pull
 cursors, conflict application and transport remain pending. Rollback must preserve the
 v3 database and replica ID; older binaries reject a newer schema instead of rewriting it.
+
+I1.4 verifies existing independent-failure isolation: search HTTP 503 or malformed JSON
+closes search only while a valid task capability retains its revision/actions; an
+unclassified aggregate rejection still rejects the whole snapshot. The production
+settlement logic already satisfies those regressions and is unchanged. Run Review now
+checks entry uniqueness and required module structure rather than a catalog-size magic
+number. TypeScript and 70 focused tests passed. Full Desktop: 4253 passed, one stale
+parity audit failure, two binary-gated skips (4256 total). Formal parity refresh and real
+binary/native acceptance remain open. Revert affects structure tests/whitespace only.

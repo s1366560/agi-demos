@@ -445,7 +445,17 @@ test('Run Review V2 real Loader reuses both modules with disabled generation zer
       'utf8',
     ),
   );
-  assert.equal(profile.entries.length, 436);
+  assert.ok(Array.isArray(profile.entries));
+  const entriesById = new Map(profile.entries.map((entry) => [entry.entry_id, entry]));
+  assert.equal(entriesById.size, profile.entries.length, 'profile entry IDs must be unique');
+  for (const authority of ['session-projection', 'session-run-changes']) {
+    const entry = entriesById.get(`builtin-desktop-${authority}-authority`);
+    assert.equal(entry?.module_ref, `builtin://memstack/desktop/${authority}-authority`);
+    assert.equal(entry?.parent_entry_id, 'builtin-desktop-renderer-host');
+    assert.equal(entry?.enabled, true);
+    assert.deepEqual(entry?.scope, { kind: 'root' });
+    assert.deepEqual(entry?.config, { strategy: 'desktop-api-client' });
+  }
   for (const worker of ['skill-evolution-worker', 'channel-outbox-worker', 'cron-scheduler-worker']) {
     const entry = profile.entries.find((item) => item.entry_id === `builtin-rust-server-${worker}`);
     assert.equal(entry?.module_ref, `builtin://memstack/rust-server/${worker}`);

@@ -2902,3 +2902,57 @@ test('cloud tenant projections preserve the aggregate capability snapshot', asyn
     globalThis.fetch = originalFetch;
   }
 });
+
+test('independent search transport and decoder failures preserve a healthy task capability', async () => {
+  const originalFetch = globalThis.fetch;
+  const taskOperations = tenantTasksOperationsV2Fixture();
+  try {
+    for (const response of [
+      () => new Response('unavailable', { status: 503 }),
+      () => new Response('{invalid', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ]) {
+      globalThis.fetch = async () => response();
+      const client = createWorkbenchCapabilityClient(
+        { getAutomationCapabilities: async () => automationContract },
+        { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-1' },
+        {
+          tenantTasksOperationsV2: {
+            async loadTenantTasks(input) {
+              return { ...await taskOperations.loadTenantTasks(input), authorityRevision: 23 };
+            },
+          },
+        },
+      );
+      const snapshot = await client.loadSnapshot();
+      assert.equal(snapshot.capabilities.search.availability, 'unavailable');
+      assert.deepEqual(snapshot.capabilities.search.allowed_actions, []);
+      assert.equal(snapshot.capabilities['tenant-tenant-tasks'].availability, 'available');
+      assert.equal(snapshot.capabilities['tenant-tenant-tasks'].authority_revision, 23);
+      assert.ok(snapshot.capabilities['tenant-tenant-tasks'].allowed_actions.includes('retry-task'));
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('unclassified aggregate branch rejection still rejects the entire snapshot', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify(searchContract), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+  const failure = new Error('snapshot authority protocol failure');
+  try {
+    const client = createWorkbenchCapabilityClient(
+      { getAutomationCapabilities: async () => automationContract },
+      { ...DEFAULT_CONFIG, mode: 'cloud', projectId: 'project-1' },
+      { tenantAdminCapabilityClient: { async load() { throw failure; } } },
+    );
+    await assert.rejects(client.loadSnapshot(), (error) => error === failure);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
