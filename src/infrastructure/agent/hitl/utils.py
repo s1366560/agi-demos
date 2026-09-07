@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from html import escape, unescape
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from src.infrastructure.agent.hitl.response_metadata import ordinary_resume_metadata
+
 if TYPE_CHECKING:
     from src.infrastructure.security.encryption_service import EncryptionService
 
@@ -809,10 +811,12 @@ def summarize_hitl_response(
         return _summarize_env_var_response(response_data)
 
     if hitl_type == "clarification":
-        return _summarize_choice_like_response(response_data.get("answer")), None
+        value = response_data.get("answer")
+        return _summarize_choice_like_response(value), ordinary_resume_metadata(value)
 
     if hitl_type == "decision":
-        return _summarize_choice_like_response(response_data.get("decision")), None
+        value = response_data.get("decision")
+        return _summarize_choice_like_response(value), ordinary_resume_metadata(value)
 
     if hitl_type == "permission":
         return _summarize_permission_response(response_data), None
