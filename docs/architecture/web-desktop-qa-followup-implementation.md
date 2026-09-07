@@ -378,3 +378,17 @@ and disable invalidation; eight focused lifecycle tests passed. Full Desktop obs
 regeneration. After source freeze, native QA retained the draft across refreshes and
 successfully created a one-shot local task scheduled for 2026-09-07 16:52 +08:00.
 The app exited before that trigger; recovery acceptance is still in progress.
+
+Native Automation recovery acceptance on 2026-09-07 used the canonical Electron launch
+and the existing isolated QA profile. The one-shot 16:52 +08:00 task survived app exit.
+Restart produced exactly one skipped schedule history row with
+`local_automation_app_was_not_running`, and no automatic execution. The first manual
+catch-up exposed a form defect: the default reuse mode had no conversation binding and
+failed with `local_automation_reuse_conversation_required`. After editing to fresh
+conversation mode, one explicit manual run succeeded in 3237 ms. Read-only inspection
+after app exit verified the persisted assistant message and complete event both contain
+`NATIVE_AUTOMATION_RECOVERY_20260907_OK`, with the same tenant/project/workspace.
+Evidence: `/tmp/memstack-qa-20260907/native-automation-recovery.txt` and
+`/tmp/memstack-qa-20260907/native-automation-timeline.json`. Default session configuration,
+run-result navigation and live history refresh remain product follow-ups; this result
+does not close cloud scheduling acceptance.
