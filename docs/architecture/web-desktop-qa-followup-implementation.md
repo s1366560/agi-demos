@@ -477,3 +477,14 @@ revocation. No schema or release gate changed. Rollback must retain all prepared
 requests; it may reintroduce the retry deadlock but must never rewrite those requests.
 Logs: `/tmp/knowledge-prepared-retry-tests.log` and
 `/tmp/knowledge-conflict-refresh-green.log`.
+
+I4.14 adds PostgreSQL atomic HITL admission for already accepted automation runs.
+The transaction rereads the persisted non-secret answer, locks run/job/operation/
+HITL/checkpoint, CAS-updates the original checkpoint JSON and queues the run with a
+new runtime revision. Ten real PostgreSQL tests and 52 adapter tests passed, plus
+strict Clippy. No migration or production wiring changed. This primitive is not yet
+the production recovery path, and does not claim that generic checkpoint writes are
+fenced. Permission answers resume conversation only and do not mint tool authority;
+sealed environment answers remain excluded. Rollback leaves the existing schema
+unchanged and production Cron blocked. Evidence:
+`/tmp/memstack-cron-hitl-admission-live.log`.
