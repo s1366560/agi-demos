@@ -51,10 +51,18 @@ def test_frozen_manifest_satisfies_public_api_capability_gate() -> None:
 
 
 @pytest.mark.unit
+def test_gateway_declaration_matches_canonical_manifest_identity() -> None:
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    assert manifest["manifestVersion"] == WORKSPACE_PUBLIC_API_MANIFEST_VERSION
+    assert manifest["routeCount"] == WORKSPACE_PUBLIC_API_ROUTE_COUNT
+    assert manifest["contractSha256"] == WORKSPACE_PUBLIC_API_CONTRACT_SHA256
+
+
+@pytest.mark.unit
 def test_incomplete_core_is_rejected_before_gateway_startup() -> None:
     with pytest.raises(
         WorkspaceCoreCompatibilityError,
-        match=r"implemented route count 0 != 92.*implemented contract hash is incomplete",
+        match=r"implemented route count 0 != 95.*implemented contract hash is incomplete",
     ):
         require_complete_public_api(
             _capabilities(
