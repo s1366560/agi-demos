@@ -29,6 +29,7 @@ use super::{
 mod processing;
 mod processing_context;
 mod processing_provider;
+mod retrieval;
 mod routes;
 mod storage_lifecycle;
 mod sync;
@@ -205,6 +206,9 @@ pub(super) struct KnowledgeOperationV2 {
     scope: KnowledgeScope,
     actor_id: String,
     writable: bool,
+    admitted_session_id: String,
+    admitted_context_revision: u64,
+    admitted_context_updated_at: String,
     _lease: Arc<ActivePlatformPluginGenerationLeaseV2>,
 }
 
@@ -244,6 +248,9 @@ impl KnowledgeOperationV2 {
             authority,
             scope,
             actor_id: authenticated.user.user_id.clone(),
+            admitted_session_id: authenticated.session_id.clone(),
+            admitted_context_revision: authenticated.workspace.revision,
+            admitted_context_updated_at: authenticated.workspace.updated_at.clone(),
             writable: matches!(
                 authenticated.membership_role.as_str(),
                 "owner" | "admin" | "member" | "contributor"

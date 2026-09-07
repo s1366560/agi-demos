@@ -17,6 +17,7 @@ mod processing;
 mod pull;
 mod push;
 mod resolution;
+mod retrieval;
 mod sync;
 
 pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 9;

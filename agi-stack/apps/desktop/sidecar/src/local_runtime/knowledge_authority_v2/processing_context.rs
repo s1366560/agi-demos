@@ -14,12 +14,71 @@ pub(super) fn with_current<T>(
         &dyn Fn() -> agistack_core::knowledge::KnowledgeResult<i64>,
     ) -> agistack_core::knowledge::KnowledgeResult<T>,
 ) -> Result<T, KnowledgeAuthorityErrorV2> {
-    if !operation.writable
+    with_access(operation, state, authenticated, true, action)
+}
+
+pub(super) fn with_read_current<T>(
+    operation: &KnowledgeOperationV2,
+    state: &LocalRuntimeState,
+    authenticated: &AuthenticatedContext,
+    action: impl FnOnce(
+        &dyn Fn() -> agistack_core::knowledge::KnowledgeResult<i64>,
+    ) -> agistack_core::knowledge::KnowledgeResult<T>,
+) -> Result<T, KnowledgeAuthorityErrorV2> {
+    ensure_current_generation(operation, state)?;
+    let mut generation_error = None;
+    let result = with_access(operation, state, authenticated, false, |clock| {
+        let value = action(clock)?;
+        if let Err(error) = ensure_current_generation(operation, state) {
+            generation_error = Some(error);
+            return Err(KnowledgeError::Conflict);
+        }
+        // Generation acquisition may wait; keep auth stable and recheck its
+        // time deadline after that final generation check too.
+        clock()?;
+        Ok(value)
+    });
+    match generation_error {
+        Some(error) => Err(error),
+        None => result,
+    }
+}
+
+fn ensure_current_generation(
+    operation: &KnowledgeOperationV2,
+    state: &LocalRuntimeState,
+) -> Result<(), KnowledgeAuthorityErrorV2> {
+    let generation = state
+        .platform_plugin_authority_v2
+        .acquire_generation()
+        .map_err(|_| KnowledgeAuthorityErrorV2::GenerationMismatch)?;
+    if generation.descriptor() != operation._lease.descriptor() {
+        return Err(KnowledgeAuthorityErrorV2::GenerationMismatch);
+    }
+    Ok(())
+}
+
+fn with_access<T>(
+    operation: &KnowledgeOperationV2,
+    state: &LocalRuntimeState,
+    authenticated: &AuthenticatedContext,
+    write: bool,
+    action: impl FnOnce(
+        &dyn Fn() -> agistack_core::knowledge::KnowledgeResult<i64>,
+    ) -> agistack_core::knowledge::KnowledgeResult<T>,
+) -> Result<T, KnowledgeAuthorityErrorV2> {
+    if (write && !operation.writable)
         || operation.actor_id != authenticated.user.user_id
         || operation.scope.tenant_id != authenticated.workspace.tenant_id
         || operation.scope.project_id != authenticated.workspace.project_id
     {
         return Err(KnowledgeAuthorityErrorV2::Forbidden);
+    }
+    if operation.admitted_session_id != authenticated.session_id
+        || operation.admitted_context_revision != authenticated.workspace.revision
+        || operation.admitted_context_updated_at != authenticated.workspace.updated_at
+    {
+        return Err(KnowledgeAuthorityErrorV2::ScopeMismatch);
     }
     operation.authority.repository()?;
     let connection = state
@@ -39,9 +98,9 @@ pub(super) fn with_current<T>(
          JOIN desktop_tenant_memberships m ON m.user_id=u.id AND m.tenant_id=t.id AND m.status='active'
          WHERE s.id=?1 AND s.user_id=?2 AND s.status='active' AND s.expires_at_ms>?3
            AND c.tenant_id=?4 AND c.project_id=?5 AND c.revision=?6 AND c.updated_at_ms=?7
-           AND m.role IN ('owner','admin','member','contributor')",
+           AND (m.role IN ('owner','admin','member','contributor') OR (?8=0 AND m.role='viewer'))",
         params![authenticated.session_id,authenticated.user.user_id,chrono::Utc::now().timestamp_millis(),
-            operation.scope.tenant_id,operation.scope.project_id,authenticated.workspace.revision,expected_updated],
+            operation.scope.tenant_id,operation.scope.project_id,authenticated.workspace.revision,expected_updated,write],
         |row|row.get(0),
     ).optional().map_err(|_|KnowledgeAuthorityErrorV2::Forbidden)?;
     let Some(expires_at_ms) = expires_at_ms else {

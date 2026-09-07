@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::Memory;
 
 pub mod processing;
+pub mod retrieval;
 pub mod sync;
 
 /// Explicit ownership supplied by the authenticated authority, never inferred

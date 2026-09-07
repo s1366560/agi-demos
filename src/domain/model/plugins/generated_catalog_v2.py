@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:efae0bd99dd00c6a627d11797e1d0e129a9fefd716785261e9343d6395f04a'
-    '14","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:a93747f742474a9cd9ba35f9677269c48ad20c1e3d535ec9634b6c72156e7a'
+    '9a","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -1594,8 +1594,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '591c3be9313b7e95be51385485b551a36281cd221e440ea5d","entrypoint":"DesktopSidecarHttpRoute'
     'sModuleV2::apply","module_ref":"builtin://memstack/desktop-sidecar/http-routes","plugin_'
     'id":"memstack-native-target-hosts","plugin_version":"2.0.0","targets":["desktop-sidecar"'
-    ']},{"artifact_digest":"sha256:70f09514a9e83349028c8433e1b67bcceeb6af3f34903aa712e5468d78'
-    'ea76b4","artifact_source":"repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/'
+    ']},{"artifact_digest":"sha256:dad25a43bbc65e9d117120635c56feca39af17a3882c3cbbcdac6a583b'
+    '0628a5","artifact_source":"repo+rust://agi-stack/apps/desktop/sidecar/src/local_runtime/'
     'knowledge_authority_v2.rs","contract":{"config_schema":{"$schema":"https://json-schema.o'
     'rg/draft/2020-12/schema","additionalProperties":false,"properties":{"release_contract":{'
     '"const":"knowledge-and-sync-v1","type":"string"},"release_state":{"const":"closed","type'
@@ -4539,7 +4539,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'time-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:efae0bd99dd00c6a627d11797e1d0e129a9fefd716785261e9343d6395f04a14"
+    "sha256:a93747f742474a9cd9ba35f9677269c48ad20c1e3d535ec9634b6c72156e7a9a"
 )
 # fmt: on
 

@@ -432,3 +432,6 @@ mod cloud_resolution_http_tests;
 
 #[path = "processing_tests.rs"]
 mod processing_tests;
+
+#[path = "retrieval_tests.rs"]
+mod retrieval_tests;
