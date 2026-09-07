@@ -7,7 +7,11 @@ import pytest
 from fastapi import HTTPException
 from pydantic import TypeAdapter, ValidationError
 
-from src.application.schemas.cron import AutomationRunCommandV2, ManualRunRequest
+from src.application.schemas.cron import (
+    AutomationRunCommandV2,
+    CronActionCapability,
+    ManualRunRequest,
+)
 from src.application.services.automation_command_service import (
     AutomationRunReceipt,
 )
@@ -100,7 +104,11 @@ async def test_capabilities_fail_closed_with_stable_reason_codes() -> None:
     assert response.run_now.reason_code == "durable_automation_execution_unavailable"
 
 
-async def test_manual_run_v2_returns_one_durable_receipt() -> None:
+async def test_manual_run_v2_returns_one_durable_receipt(monkeypatch: pytest.MonkeyPatch) -> None:
+    capabilities = cron_router._execution_capabilities().model_copy(
+        update={"run_now": CronActionCapability(allowed=True), "durable_execution": True}
+    )
+    monkeypatch.setattr(cron_router, "_execution_capabilities", lambda: capabilities)
     db = AsyncMock()
     job = CronJob(
         project_id="project-1",

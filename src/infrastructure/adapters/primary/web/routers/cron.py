@@ -122,6 +122,11 @@ async def get_cron_job_capabilities(
 ) -> CronJobCapabilitiesResponse:
     """Return structured automation availability without inferring from failed requests."""
     await _require_project_access(cron_application, project_id)
+    return _execution_capabilities()
+
+
+def _execution_capabilities() -> CronJobCapabilitiesResponse:
+    """Share the current execution boundary between discovery and command admission."""
     mutation_unavailable = CronActionCapability(
         allowed=False,
         reason_code="durable_automation_runtime_unavailable",
@@ -327,6 +332,16 @@ async def trigger_manual_run(
     existing = await svc.get_job(job_id)
     if existing is None or existing.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Cron job not found"))
+
+    run_capability = _execution_capabilities().run_now
+    if not run_capability.allowed:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "reason_code": run_capability.reason_code,
+                "message": _("Durable automation execution is not available"),
+            },
+        )
 
     if isinstance(body, AutomationRunCommandV2):
         command_service = cron_application.services.commands
