@@ -148,3 +148,10 @@ restart regression first reached the executor incorrectly; after the fix, three 
 fires remain in history without execution and an exact startup-boundary fire is eligible.
 All 28 automation tests passed. Missed-count presentation and an explicit catch-up action
 remain pending; this is not the complete local automation release.
+
+I4.4 makes local cron projection use civil-time candidates and explicit timezone
+resolution. Nonexistent times are skipped; ambiguous times use the first instant only,
+and candidates must move forward in UTC. Regressions exposed the library's gap snapping
+and backward candidate in a repeated hour before the fix. All 30 automation tests passed,
+including gap, fold and ordinary timezone transitions. Cloud projection still needs the
+same policy before the joint release gate can close. No storage schema changed.

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use chrono_tz::Tz;
 use croner::Cron;
 use serde_json::{json, Value};
@@ -107,10 +107,7 @@ pub(super) fn project_job_schedule(
             let cron = Cron::from_str(expression)
                 .map_err(|_| AutomationScheduleProjectionError::Invalid)?;
             let search_at = add_seconds(observed_at, -stagger_seconds)?;
-            let next = cron
-                .find_next_occurrence(&search_at.with_timezone(&timezone), false)
-                .map_err(|_| AutomationScheduleProjectionError::Invalid)?
-                .with_timezone(&Utc);
+            let next = next_cron_fire(&cron, timezone, search_at)?;
             Some(add_seconds(next, stagger_seconds)?)
         }
         _ => return Err(AutomationScheduleProjectionError::Invalid),
@@ -125,6 +122,33 @@ pub(super) fn project_job_schedule(
         fingerprint,
         next_fire_at,
     })
+}
+
+fn next_cron_fire(
+    cron: &Cron,
+    timezone: Tz,
+    observed_at: DateTime<Utc>,
+) -> Result<DateTime<Utc>, AutomationScheduleProjectionError> {
+    // Search civil calendar values without the library's gap snapping policy.
+    // Resolve each value once: gaps are absent, folds use their earliest instant.
+    let mut civil_cursor = observed_at.with_timezone(&timezone).naive_local().and_utc();
+    loop {
+        let candidate = cron
+            .find_next_occurrence(&civil_cursor, false)
+            .map_err(|_| AutomationScheduleProjectionError::Invalid)?;
+        if candidate <= civil_cursor {
+            return Err(AutomationScheduleProjectionError::Invalid);
+        }
+        civil_cursor = candidate;
+        if let Some(instant) = timezone
+            .from_local_datetime(&candidate.naive_utc())
+            .earliest()
+        {
+            if instant.with_timezone(&Utc) > observed_at {
+                return Ok(instant.with_timezone(&Utc));
+            }
+        }
+    }
 }
 
 fn next_interval_fire(
@@ -212,6 +236,36 @@ mod tests {
         let projection = project_job_schedule(&job, observed_at).expect("cron projection");
 
         assert_eq!(projection.next_fire_at, Some(utc("2026-03-08T13:00:00Z")));
+    }
+
+    #[test]
+    fn cron_projection_skips_missing_local_time() {
+        let job = automation_job(
+            json!({"kind": "cron", "config": {"expression": "30 2 * * *"}}),
+            "America/New_York",
+        );
+        assert_eq!(
+            project_job_schedule(&job, utc("2026-03-08T06:00:00Z"))
+                .unwrap()
+                .next_fire_at,
+            Some(utc("2026-03-09T06:30:00Z")),
+        );
+    }
+
+    #[test]
+    fn cron_projection_uses_only_first_occurrence_of_repeated_local_time() {
+        let job = automation_job(
+            json!({"kind": "cron", "config": {"expression": "* * * * *"}}),
+            "America/New_York",
+        );
+        for observed in ["2026-11-01T05:59:00Z", "2026-11-01T06:10:00Z"] {
+            assert_eq!(
+                project_job_schedule(&job, utc(observed))
+                    .unwrap()
+                    .next_fire_at,
+                Some(utc("2026-11-01T07:00:00Z")),
+            );
+        }
     }
 
     #[test]
