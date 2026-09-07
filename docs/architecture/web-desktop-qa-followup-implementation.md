@@ -177,3 +177,13 @@ passed 7/7. Generator check and contract completeness passed. Strict sidecar Cli
 blocked by existing diagnostics outside this batch. Disabling/reverting the definition
 retains the independent database and receipts; never delete the knowledge directory as
 part of a code rollback. The first product release still requires I3 sync and native QA.
+
+I4.6 serializes cloud runtime claims by locking each job alongside its run and excluding
+other running/waiting-human runs. A fresh query under that job lock also closes the
+selection-snapshot race and prevents two candidates in the same batch from starting.
+Two real PostgreSQL regressions failed before the change and passed afterward: batch
+selection retains unrelated-job progress; concurrent workers claim only one run, recover
+the same expired run, reject its stale lease, hold serialization during HITL, and release
+it after terminal completion. Tests use private schemas in an isolated QA database.
+Strict adapter Clippy passed for all targets. This does not enable cloud command readiness
+or prove scheduler cutover; reverting it requires stopping parallel runtime consumers.

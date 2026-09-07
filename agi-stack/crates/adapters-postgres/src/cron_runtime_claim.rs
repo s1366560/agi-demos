@@ -45,8 +45,13 @@ impl PgCronAutomationRuntimeRepository {
                     AND run.runtime_lease_expires_at <= $3 \
                     AND (run.deadline_at IS NULL OR run.deadline_at > $3) \
                )) \
+               AND NOT EXISTS ( \
+                    SELECT 1 FROM cron_job_runs AS active \
+                    WHERE active.job_id = run.job_id AND active.project_id = run.project_id \
+                      AND active.id <> run.id AND active.status IN ('running', 'waiting_human') \
+               ) \
              ORDER BY run.accepted_at, run.id \
-             LIMIT $4 FOR UPDATE OF run SKIP LOCKED",
+             LIMIT $4 FOR UPDATE OF run, job SKIP LOCKED",
         )
         .bind(&scope.tenant_id)
         .bind(&scope.project_id)
@@ -58,6 +63,23 @@ impl PgCronAutomationRuntimeRepository {
 
         let mut leases = Vec::with_capacity(candidates.len());
         for candidate in candidates {
+            // The job lock excludes other workers. Read again after acquiring it:
+            // the selection snapshot may predate another worker's commit, and an
+            // earlier candidate in this batch may already hold this job's run.
+            let active = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM cron_job_runs \
+                 WHERE job_id = $1 AND project_id = $2 AND id <> $3 \
+                   AND status IN ('running', 'waiting_human'))",
+            )
+            .bind(&candidate.job_id)
+            .bind(&candidate.project_id)
+            .bind(&candidate.run_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(storage)?;
+            if active {
+                continue;
+            }
             let context = context_from_candidate(&candidate)?;
             let timeout_seconds = context.timeout_seconds.max(1);
             let lease_expires_at = now + Duration::seconds(lease_seconds.max(1));
