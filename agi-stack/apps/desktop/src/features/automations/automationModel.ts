@@ -131,6 +131,7 @@ export function normalizeAutomationCapabilities(
   if (
     !isExactRecord(input, [
       'schema_version',
+      ...(isRecord(input) && input.schema_version === 3 ? ['authority_revision'] : []),
       'read',
       'revision_guarded',
       'idempotency_guarded',
@@ -142,7 +143,11 @@ export function normalizeAutomationCapabilities(
       'run_now',
       'delete',
     ]) ||
-    (input.schema_version !== 1 && input.schema_version !== 2) ||
+    (input.schema_version !== 1 && input.schema_version !== 2 && input.schema_version !== 3) ||
+    (input.schema_version === 3 &&
+      (typeof input.authority_revision !== 'number' ||
+        !Number.isSafeInteger(input.authority_revision) ||
+        input.authority_revision <= 0)) ||
     typeof input.read !== 'boolean' ||
     typeof input.revision_guarded !== 'boolean' ||
     typeof input.idempotency_guarded !== 'boolean' ||
@@ -160,6 +165,9 @@ export function normalizeAutomationCapabilities(
   if (!create || !edit || !toggle || !runNow || !deleteCapability) return null;
   return {
     schema_version: input.schema_version,
+    ...(input.schema_version === 3
+      ? { authority_revision: input.authority_revision as number }
+      : {}),
     read: input.read,
     revision_guarded: input.revision_guarded,
     idempotency_guarded: input.idempotency_guarded,
@@ -181,6 +189,7 @@ export function normalizeAutomationCapabilityEnvelope(
       'service_version',
       'contract_version',
       'schema_version',
+      ...(isRecord(input) && input.schema_version === 3 ? ['authority_revision'] : []),
       'read',
       'revision_guarded',
       'idempotency_guarded',

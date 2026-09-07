@@ -30,6 +30,44 @@ const BOOTSTRAP: &str =
     include_str!("../../../../../../shared/profiles/memstack-default-bootstrap.v2.json");
 const GENERATION_DIGEST: HeaderName = HeaderName::from_static("x-test-generation-digest");
 
+#[tokio::test]
+async fn automation_capabilities_report_the_admitted_generation_revision() {
+    let credential = "automation-generation-test";
+    let state = test_state(credential);
+    for generation in [51, 52, 9_007_199_254_740_991, 9_007_199_254_740_992] {
+        publish_generation(
+            &state,
+            "automation-capabilities",
+            generation,
+            &format!("{generation:064x}"),
+        )
+        .await;
+        let response = local_router_with_generation_required(Arc::clone(&state))
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/projects/local-project/cron-jobs/capabilities")
+                    .header("authorization", format!("Bearer {credential}"))
+                    .header("x-agistack-launch", credential)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        if generation > 9_007_199_254_740_991 {
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            continue;
+        }
+        assert_eq!(response.status(), StatusCode::OK);
+        let payload: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(payload["schema_version"], 3);
+        assert_eq!(payload["authority_revision"], generation);
+        assert_eq!(payload["read"], true);
+    }
+    state.platform_plugin_authority_v2.deactivate().await;
+}
+
 async fn publish_generation(
     state: &LocalRuntimeState,
     profile_id: &str,

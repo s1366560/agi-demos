@@ -22,6 +22,7 @@ const RUN_STATUSES_V2 = new Set([
   'failed',
   'queued',
   'running',
+  'skipped',
   'success',
   'timeout',
   'waiting_human',
@@ -157,8 +158,10 @@ export function cloneAutomationRunInputV2(value: unknown): AutomationRunInput {
 export function assertAutomationCapabilitiesV2(value: unknown): AutomationCapabilities {
   if (
     !isPlainRecordV2(value) ||
-    !Number.isSafeInteger(value.schema_version) ||
-    Number(value.schema_version) < 1 ||
+    (value.schema_version !== 1 && value.schema_version !== 2 && value.schema_version !== 3) ||
+    (value.schema_version === 3
+      ? !isPositiveIntegerV2(value.authority_revision)
+      : Object.prototype.hasOwnProperty.call(value, 'authority_revision')) ||
     typeof value.read !== 'boolean' ||
     typeof value.revision_guarded !== 'boolean' ||
     typeof value.idempotency_guarded !== 'boolean' ||
@@ -227,7 +230,8 @@ export function assertAutomationRunListV2(
         !isCanonicalStringV2(item.id) ||
         item.job_id !== automationId ||
         item.project_id !== config.projectId ||
-        !isCanonicalStringV2(item.status),
+        !isCanonicalStringV2(item.status) ||
+        !RUN_STATUSES_V2.has(item.status),
     )
   ) {
     throw invalidAutomationResponseV2();

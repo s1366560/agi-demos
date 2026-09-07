@@ -1999,7 +1999,8 @@ export type AutomationActionCapability = {
 };
 
 export type AutomationCapabilities = {
-  schema_version: number;
+  schema_version: 1 | 2 | 3;
+  authority_revision?: number;
   read: boolean;
   revision_guarded: boolean;
   idempotency_guarded: boolean;

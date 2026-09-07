@@ -1854,7 +1854,10 @@ export function normalizeAutomationCapabilityContract(
   ) {
     return unavailable('automation_capability_contract_invalid', negotiation);
   }
-  return available(negotiation, { allowedActions: ['run_now'] });
+  return available(negotiation, {
+    allowedActions: ['run_now'],
+    authorityRevision: capabilities.authority_revision,
+  });
 }
 
 export function normalizeProjectCronJobsCapabilityContract(
@@ -1931,10 +1934,14 @@ export function normalizeProjectCronJobsCapabilityContract(
     if (capability.allowed) allowedActions.push(action);
   }
   if (allowedActions.length === 9) {
-    return available(negotiation, { allowedActions });
+    return available(negotiation, {
+      allowedActions,
+      authorityRevision: capabilities.authority_revision,
+    });
   }
   return degraded('automation_actions_restricted', negotiation, {
     allowedActions,
+    authorityRevision: capabilities.authority_revision,
   });
 }
 

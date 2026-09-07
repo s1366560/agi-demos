@@ -15,7 +15,9 @@ use super::{
     automation_dispatcher::{self, AutomationLedgerError, ManualRunCommand, SystemAutomationClock},
     automation_executor,
     automation_store::{self, AutomationStoreError},
-    ensure_active_project, now_iso, AuthenticatedContext, LocalJsonResult, LocalRuntimeState,
+    ensure_active_project, now_iso,
+    platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
+    AuthenticatedContext, LocalJsonResult, LocalRuntimeState,
 };
 use validation::{validate_create, validate_idempotency_key, validate_run, validate_update};
 
@@ -181,10 +183,25 @@ pub(super) async fn list(
 pub(super) async fn capabilities(
     State(state): State<Arc<LocalRuntimeState>>,
     Extension(authenticated): Extension<AuthenticatedContext>,
+    lease: Option<Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>>,
     Path(project_id): Path<String>,
     Query(query): Query<CapabilityQuery>,
 ) -> LocalJsonResult {
     ensure_active_project(&authenticated, &project_id)?;
+    let authority_revision = match lease {
+        Some(Extension(lease))
+            if (1..=9_007_199_254_740_991).contains(&lease.descriptor().generation) =>
+        {
+            Some(lease.descriptor().generation)
+        }
+        None if cfg!(test) => None,
+        _ => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"detail":{"code":"automation_generation_revision_invalid"}})),
+            ))
+        }
+    };
     let workspace_id = query
         .workspace_id
         .as_deref()
@@ -209,10 +226,10 @@ pub(super) async fn capabilities(
     } else {
         json!("durable_automation_execution_unavailable")
     };
-    Ok(Json(json!({
+    let mut payload = json!({
         "service_version": LOCAL_AUTOMATION_SERVICE_VERSION,
         "contract_version": LOCAL_AUTOMATION_CONTRACT_VERSION,
-        "schema_version": 2,
+        "schema_version": if authority_revision.is_some() {3} else {2},
         "read": true,
         "revision_guarded": true,
         "idempotency_guarded": true,
@@ -226,7 +243,11 @@ pub(super) async fn capabilities(
             "reason_code": reason_code,
         },
         "delete": { "allowed": true },
-    })))
+    });
+    if let Some(revision) = authority_revision {
+        payload["authority_revision"] = json!(revision);
+    }
+    Ok(Json(payload))
 }
 
 pub(super) async fn create(

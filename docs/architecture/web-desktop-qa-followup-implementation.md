@@ -298,3 +298,12 @@ schemas. Ruff and type checks passed. No production enrollment or migration is a
 all existing content writers and indexing must migrate before enrollment is exposed.
 Rollback must stop synchronization consumers before removing the guard; preserved
 journals must not be advertised as a continuous cursor after unguarded writes resume.
+
+I4.10 closes the native Cron capability protocol gap with schema 3 and the actual
+request-admitted platform generation as authority revision. Strict decoders require a
+positive safe integer, preserve unavailable behavior for legacy revisionless contracts,
+and reject fabricated revisions on legacy schemas. Published-generation HTTP tests
+cover 51, 52, the JavaScript safe maximum and overflow rejection. Run history accepts
+the declared skipped status and rejects unknown statuses. Rust automation 31 passed;
+Desktop focused 87 passed; production and test TypeScript checks passed. Native UI
+recovery acceptance is still pending a canonical restart with this sidecar build.
