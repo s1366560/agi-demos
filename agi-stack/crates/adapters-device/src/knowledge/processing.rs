@@ -8,6 +8,7 @@ use super::{
     storage, validate, KnowledgeError, KnowledgeResult, KnowledgeScope, SqliteKnowledgeRepository,
 };
 
+pub(super) mod audit;
 mod leases;
 mod projection;
 mod schema;
@@ -24,6 +25,25 @@ fn transact<T>(
     let result = action(&tx)?;
     tx.commit().map_err(storage)?;
     Ok(result)
+}
+
+/// The clock/admission callback runs only after both repository and SQLite
+/// write locks are held, and again immediately before commit. No caller may
+/// reacquire an outer auth lock from this callback.
+fn transact_timed<T>(
+    repo: &SqliteKnowledgeRepository,
+    clock: &dyn Fn() -> KnowledgeResult<i64>,
+    action: impl FnOnce(&Transaction<'_>, i64) -> KnowledgeResult<(T, Option<i64>)>,
+) -> KnowledgeResult<T> {
+    transact(repo, |tx| {
+        let started = clock()?;
+        let (result, lease_deadline) = action(tx, started)?;
+        let finished = clock()?;
+        if finished < started || lease_deadline.is_some_and(|expiry| finished >= expiry) {
+            return Err(KnowledgeError::Conflict);
+        }
+        Ok(result)
+    })
 }
 
 fn validate_source(scope: &KnowledgeScope, source: &ProcessingSource) -> KnowledgeResult<()> {
@@ -149,3 +169,7 @@ impl ProcessingRepository for SqliteKnowledgeRepository {
         projection::read(self, scope, memory_id)
     }
 }
+
+#[cfg(test)]
+#[path = "processing/clock_tests.rs"]
+mod clock_tests;

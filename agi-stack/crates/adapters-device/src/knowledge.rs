@@ -19,7 +19,7 @@ mod push;
 mod resolution;
 mod sync;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 8;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 9;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -94,6 +94,7 @@ impl SqliteKnowledgeRepository {
         resolution::migrate(&tx, version)?;
         cloud_resolution::migrate(&tx, version)?;
         processing::migrate(&tx, version)?;
+        processing::audit::migrate(&tx, version)?;
         tx.execute(
             "UPDATE knowledge_schema SET version=?1",
             [KNOWLEDGE_SCHEMA_VERSION],

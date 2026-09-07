@@ -1,6 +1,6 @@
 use super::*;
 
-fn validate_projection(output: &ProcessingProjection) -> KnowledgeResult<()> {
+pub(super) fn validate_projection(output: &ProcessingProjection) -> KnowledgeResult<()> {
     if output
         .entities
         .iter()
@@ -29,24 +29,42 @@ pub(super) fn complete(
     now_ms: i64,
 ) -> KnowledgeResult<()> {
     validate_projection(&output)?;
-    let json = serde_json::to_string(&output).map_err(storage)?;
-    let result = serde_json::to_string(&ProcessingResult::Projection(output)).map_err(storage)?;
     transact(repo, |tx| {
         active_lease(tx, scope, lease, now_ms)?;
-        let source = &lease.source;
-        tx.execute(
-            "UPDATE knowledge_processing_jobs SET state='completed',worker_id=NULL,token=NULL,expires_at_ms=NULL,failure_json=NULL,result_json=?1
-             WHERE change_sequence=?2 AND tenant_id=?3 AND project_id=?4",
-            params![result,source.change_sequence,scope.tenant_id,scope.project_id],
+        let audited: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM knowledge_processing_audits WHERE change_sequence=?1 AND attempt=?2)",
+            params![lease.source.change_sequence,lease.attempt], |row| row.get(0),
         ).map_err(storage)?;
-        tx.execute(
-            "INSERT INTO knowledge_derived_projections(tenant_id,project_id,memory_id,revision,change_sequence,projection_json)
-             VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(tenant_id,project_id,memory_id)
-             DO UPDATE SET revision=excluded.revision,change_sequence=excluded.change_sequence,projection_json=excluded.projection_json",
-            params![scope.tenant_id,scope.project_id,source.memory_id,source.revision,source.change_sequence,json],
-        ).map_err(storage)?;
-        Ok(())
+        if audited {
+            return Err(KnowledgeError::Conflict);
+        }
+        publish(tx, scope, lease, &output)
     })
+}
+
+pub(super) fn publish(
+    tx: &Transaction<'_>,
+    scope: &KnowledgeScope,
+    lease: &ProcessingLease,
+    output: &ProcessingProjection,
+) -> KnowledgeResult<()> {
+    validate_projection(output)?;
+    let json = serde_json::to_string(output).map_err(storage)?;
+    let result =
+        serde_json::to_string(&ProcessingResult::Projection(output.clone())).map_err(storage)?;
+    let source = &lease.source;
+    tx.execute(
+        "UPDATE knowledge_processing_jobs SET state='completed',worker_id=NULL,token=NULL,expires_at_ms=NULL,failure_json=NULL,result_json=?1
+         WHERE change_sequence=?2 AND tenant_id=?3 AND project_id=?4",
+        params![result,source.change_sequence,scope.tenant_id,scope.project_id],
+    ).map_err(storage)?;
+    tx.execute(
+        "INSERT INTO knowledge_derived_projections(tenant_id,project_id,memory_id,revision,change_sequence,projection_json)
+         VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(tenant_id,project_id,memory_id)
+         DO UPDATE SET revision=excluded.revision,change_sequence=excluded.change_sequence,projection_json=excluded.projection_json",
+        params![scope.tenant_id,scope.project_id,source.memory_id,source.revision,source.change_sequence,json],
+    ).map_err(storage)?;
+    Ok(())
 }
 
 pub(super) fn status(

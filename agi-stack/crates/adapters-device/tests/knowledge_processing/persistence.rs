@@ -123,7 +123,7 @@ fn v7_migration_backfills_only_current_live_sources_without_sync_echoes() {
         db.connection().query_row("SELECT (SELECT count(*) FROM knowledge_processing_changes),(SELECT count(*) FROM knowledge_sync_outbox)", [], |row| Ok((row.get::<_,i64>(0)?,row.get::<_,i64>(1)?))).unwrap()
     };
     let before = count();
-    db.connection().execute_batch("DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_processing_jobs; DROP TABLE knowledge_derived_projections; UPDATE knowledge_schema SET version=7;").unwrap();
+    db.connection().execute_batch("DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_processing_jobs; DROP TABLE knowledge_derived_projections; UPDATE knowledge_schema SET version=7;").unwrap();
     block_on(async {
         let repo = db.open();
         let lease = repo
@@ -144,7 +144,10 @@ fn v7_migration_backfills_only_current_live_sources_without_sync_echoes() {
         .connection()
         .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 8);
+    assert_eq!(
+        version,
+        agistack_adapters_device::knowledge::KNOWLEDGE_SCHEMA_VERSION
+    );
     drop(db.open());
     let jobs: i64 = db
         .connection()
@@ -160,6 +163,7 @@ fn v7_migration_backfills_only_current_live_sources_without_sync_echoes() {
 #[test]
 fn current_schema_damage_and_future_version_fail_closed() {
     for damage in [
+        "DROP TABLE knowledge_processing_audits",
         "DROP TABLE knowledge_processing_jobs",
         "DROP TABLE knowledge_derived_projections",
         "DROP TRIGGER knowledge_processing_enqueue",

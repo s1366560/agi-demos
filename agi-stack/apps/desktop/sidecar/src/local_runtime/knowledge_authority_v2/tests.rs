@@ -429,3 +429,6 @@ mod context_route_tests;
 
 #[path = "cloud_resolution_http_tests.rs"]
 mod cloud_resolution_http_tests;
+
+#[path = "processing_tests.rs"]
+mod processing_tests;

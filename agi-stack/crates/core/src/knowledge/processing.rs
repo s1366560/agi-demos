@@ -1,6 +1,9 @@
 //! Durable, revision-bound processing storage. Extraction and semantic judgments
 //! belong to a later agent worker; these types describe storage effects only.
 
+pub mod audit;
+pub mod worker;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 

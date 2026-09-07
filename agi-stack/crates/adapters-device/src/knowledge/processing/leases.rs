@@ -9,9 +9,19 @@ pub(super) fn claim(
     now_ms: i64,
     lease_ms: u64,
 ) -> KnowledgeResult<Option<ProcessingLease>> {
+    claim_with_clock(repo, scope, worker_id, lease_ms, &|| Ok(now_ms))
+}
+
+pub(super) fn claim_with_clock(
+    repo: &SqliteKnowledgeRepository,
+    scope: &KnowledgeScope,
+    worker_id: &str,
+    lease_ms: u64,
+    clock: &dyn Fn() -> KnowledgeResult<i64>,
+) -> KnowledgeResult<Option<ProcessingLease>> {
     validate(scope, worker_id)?;
-    let expires_at_ms = deadline(now_ms, lease_ms)?;
-    transact(repo, |tx| {
+    transact_timed(repo, clock, |tx, now_ms| {
+        let expires_at_ms = deadline(now_ms, lease_ms)?;
         let candidate = tx.query_row(
             "SELECT j.memory_id,j.revision,j.change_sequence,j.attempt FROM knowledge_processing_jobs j
              JOIN knowledge_memories m ON m.tenant_id=j.tenant_id AND m.project_id=j.project_id
@@ -26,7 +36,7 @@ pub(super) fn claim(
             |row| Ok((row.get::<_,String>(0)?,row.get::<_,u32>(1)?,row.get::<_,u64>(2)?,row.get::<_,u32>(3)?)),
         ).optional().map_err(storage)?;
         let Some((memory_id, revision, change_sequence, attempt)) = candidate else {
-            return Ok(None);
+            return Ok((None, None));
         };
         let lease = ProcessingLease {
             source: ProcessingSource {
@@ -46,7 +56,7 @@ pub(super) fn claim(
              WHERE change_sequence=?1 AND tenant_id=?6 AND project_id=?7",
             params![change_sequence,worker_id,lease.token,lease.attempt,expires_at_ms,scope.tenant_id,scope.project_id],
         ).map_err(storage)?;
-        Ok(Some(lease))
+        Ok((Some(lease), Some(expires_at_ms)))
     })
 }
 
@@ -57,17 +67,30 @@ pub(super) fn renew(
     now_ms: i64,
     lease_ms: u64,
 ) -> KnowledgeResult<ProcessingLease> {
-    let proposed = deadline(now_ms, lease_ms)?;
-    transact(repo, |tx| {
-        let expires_at_ms = proposed.max(active_lease(tx, scope, lease, now_ms)?);
+    renew_with_clock(repo, scope, lease, lease_ms, &|| Ok(now_ms))
+}
+
+pub(super) fn renew_with_clock(
+    repo: &SqliteKnowledgeRepository,
+    scope: &KnowledgeScope,
+    lease: &ProcessingLease,
+    lease_ms: u64,
+    clock: &dyn Fn() -> KnowledgeResult<i64>,
+) -> KnowledgeResult<ProcessingLease> {
+    transact_timed(repo, clock, |tx, now_ms| {
+        let original_expiry = active_lease(tx, scope, lease, now_ms)?;
+        let expires_at_ms = deadline(now_ms, lease_ms)?.max(original_expiry);
         tx.execute(
             "UPDATE knowledge_processing_jobs SET expires_at_ms=?1 WHERE change_sequence=?2 AND tenant_id=?3 AND project_id=?4",
             params![expires_at_ms,lease.source.change_sequence,scope.tenant_id,scope.project_id],
         ).map_err(storage)?;
-        Ok(ProcessingLease {
-            expires_at_ms,
-            ..lease.clone()
-        })
+        Ok((
+            ProcessingLease {
+                expires_at_ms,
+                ..lease.clone()
+            },
+            Some(original_expiry),
+        ))
     })
 }
 

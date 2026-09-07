@@ -26,6 +26,9 @@ use super::{
     platform_plugin_authority_v2::ActivePlatformPluginGenerationLeaseV2,
 };
 
+mod processing;
+mod processing_context;
+mod processing_provider;
 mod routes;
 mod storage_lifecycle;
 mod sync;

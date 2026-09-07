@@ -1,7 +1,7 @@
 use super::*;
 use rusqlite::Connection;
 
-pub(super) const DROP_PROCESSING_SCHEMA: &str = "DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;";
+pub(super) const DROP_PROCESSING_SCHEMA: &str = "DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;";
 
 #[tokio::test]
 async fn v7_processing_upgrade_backs_up_source_and_rebuilds_only_pending_work() {
@@ -70,7 +70,7 @@ async fn v7_processing_upgrade_backs_up_source_and_rebuilds_only_pending_work() 
     );
 }
 
-pub(super) const DROP_CLOUD_SCHEMA: &str = "DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;";
+pub(super) const DROP_CLOUD_SCHEMA: &str = "DROP TABLE knowledge_processing_audits; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;";
 
 #[test]
 fn v6_cloud_resolution_upgrade_backs_up_before_journal_and_mapping_creation() {
@@ -290,4 +290,78 @@ fn symlinked_database_is_rejected_without_touching_target() {
     std::os::unix::fs::symlink(&target, directory.0.join("knowledge/memories.db")).unwrap();
     assert!(storage_lifecycle::open(&directory.0).is_err());
     assert_eq!(fs::read(target).unwrap(), b"unchanged");
+}
+
+#[tokio::test]
+async fn v8_to_v9_backup_contains_committed_wal_source_and_lease_before_audit_migration() {
+    use agistack_core::knowledge::{
+        processing::{ProcessingRepository, ProcessingState},
+        ScopedMemoryRepository,
+    };
+    let directory = TestDirectory::new();
+    let state = test_state(TOKEN);
+    let auth = authenticated(&state);
+    let scope = KnowledgeScope {
+        tenant_id: auth.workspace.tenant_id.clone(),
+        project_id: auth.workspace.project_id.clone(),
+    };
+    let MemoryMutation::Create { memory } = mutation(&auth) else {
+        panic!("create fixture");
+    };
+    let repo = storage_lifecycle::open(&directory.0).unwrap();
+    let source = repo.create(&scope, memory).await.unwrap();
+    let lease = repo
+        .claim(&scope, "v8-worker", 100, 500)
+        .await
+        .unwrap()
+        .unwrap();
+    drop(repo);
+    let knowledge = directory.0.join("knowledge");
+    let db = Connection::open(knowledge.join("memories.db")).unwrap();
+    db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; DROP TABLE knowledge_processing_audits; UPDATE knowledge_schema SET version=8; CREATE TABLE retained_v8_wal(value TEXT); INSERT INTO retained_v8_wal VALUES('v8 committed WAL');").unwrap();
+    assert!(
+        fs::metadata(knowledge.join("memories.db-wal"))
+            .unwrap()
+            .len()
+            > 0
+    );
+    let upgraded = storage_lifecycle::open(&directory.0).unwrap();
+    let backups: Vec<_> = fs::read_dir(&knowledge)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.file_name().unwrap().to_string_lossy().contains("pre-v8-"))
+        .collect();
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    let original:(i64,i64,String,String,String,i64)=backup.query_row("SELECT (SELECT version FROM knowledge_schema),(SELECT count(*) FROM sqlite_master WHERE name='knowledge_processing_audits'),(SELECT value FROM retained_v8_wal),(SELECT payload FROM knowledge_memories),(SELECT token FROM knowledge_processing_jobs),(SELECT expires_at_ms FROM knowledge_processing_jobs)",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))).unwrap();
+    assert_eq!((original.0, original.1), (8, 0));
+    assert_eq!(original.2, "v8 committed WAL");
+    assert_eq!(
+        serde_json::from_str::<Memory>(&original.3).unwrap().content,
+        source.content
+    );
+    assert_eq!(original.4, lease.token);
+    assert_eq!(original.5, lease.expires_at_ms);
+    assert_eq!(
+        db.query_row("SELECT version FROM knowledge_schema", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        9
+    );
+    let saved = upgraded.get(&scope, &source.id).await.unwrap().unwrap();
+    assert_eq!(saved.version, source.version);
+    assert_eq!(saved.content, source.content);
+    let status = upgraded
+        .processing_status(&scope, &lease.source)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status.state, ProcessingState::Leased);
+    assert_eq!(status.attempt, lease.attempt);
+    assert!(upgraded
+        .processing_audit_durable(&scope, &lease.source, lease.attempt)
+        .unwrap()
+        .is_none());
+    let renewed = upgraded.renew(&scope, &lease, 200, 500).await.unwrap();
+    assert_eq!(renewed.token, lease.token);
 }

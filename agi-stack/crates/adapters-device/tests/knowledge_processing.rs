@@ -209,3 +209,6 @@ fn update_supersedes_lease_and_delete_finishes_without_claim_or_projection() {
         assert_eq!(receipt.result, Some(ProcessingResult::Deleted));
     });
 }
+
+#[path = "knowledge_processing/audit.rs"]
+mod audit;
