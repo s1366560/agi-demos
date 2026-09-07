@@ -32,6 +32,25 @@ import type {
 } from '../../types/agent';
 
 describe('SSE Event Adapter', () => {
+  it('preserves replayed terminal errors and deduplicates their live copy', () => {
+    const event = {
+      type: 'error',
+      data: {
+        message: 'Initialization failed',
+        code: 'runtime_error',
+        event_time_us: 123000,
+        event_counter: 2,
+      },
+    } as AgentEvent<unknown>;
+    const replay = batchConvertSSEEvents([event]);
+    expect(replay[0]).toMatchObject({
+      type: 'error',
+      message: 'Initialization failed',
+      code: 'runtime_error',
+    });
+    expect(appendSSEEventToTimeline(replay, event)).toHaveLength(1);
+    expect(isSupportedEventType('error')).toBe(true);
+  });
   describe('Canonical event parity', () => {
     it('preserves explicitly routed canonical events as replayable timeline records', () => {
       const event = {
@@ -545,7 +564,6 @@ describe('SSE Event Adapter', () => {
     it('should return null for unsupported event types', () => {
       const unsupportedEvents = [
         { type: 'cost_update', data: {} },
-        { type: 'error', data: { message: 'Error occurred' } },
         { type: 'title_generated', data: { title: 'New Title' } },
         { type: 'thought_start', data: { thought_level: 'reasoning' } },
         { type: 'unknown_event', data: {} },

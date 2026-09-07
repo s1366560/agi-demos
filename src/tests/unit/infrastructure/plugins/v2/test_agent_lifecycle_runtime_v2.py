@@ -117,6 +117,11 @@ async def _manager(*, memory_enabled: bool = True) -> GenerationManagerV2:
     generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
     manager = GenerationManagerV2()
     await manager.publish(generation)
+    async with pin_operation_context_v2(
+        manager, operation_id="activate-lifecycle", scope=ScopeV2(kind=ScopeKindV2.ROOT)
+    ) as operation:
+        scheduler = operation.require(skill_evolution_runtime_v2.SKILL_EVOLUTION_RUNTIME_SERVICE_V2)
+        await scheduler.activate(operation)
     return manager
 
 

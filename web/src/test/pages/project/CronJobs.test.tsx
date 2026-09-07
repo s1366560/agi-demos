@@ -1,8 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CronJobs } from '../../../pages/project/CronJobs';
+import { cronAPI } from '../../../services/cronService';
 import type { CronJobResponse, CronJobRunResponse } from '../../../types/cron';
-import { fireEvent, render, screen } from '../../utils';
+import { fireEvent, render, screen, waitFor } from '../../utils';
+
+vi.mock('../../../services/cronService');
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router-dom')>()),
+  useParams: () => ({ projectId: 'project-1' }),
+}));
+
+const capabilities = (allowed: boolean) => ({
+  read: true,
+  create: { allowed },
+  edit: { allowed },
+  toggle: { allowed },
+  run_now: { allowed },
+  delete: { allowed },
+});
 
 const cronState = vi.hoisted(() => ({
   jobs: [] as CronJobResponse[],
@@ -98,18 +114,21 @@ describe('CronJobs', () => {
     cronState.loading = false;
     cronState.submitting = false;
     vi.clearAllMocks();
+    vi.mocked(cronAPI.capabilities).mockResolvedValue(capabilities(true));
   });
 
-  it('constrains the table to horizontal scrolling on narrow viewports', () => {
+  it('constrains the table to horizontal scrolling on narrow viewports', async () => {
     const { container } = render(<CronJobs />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).toBeEnabled());
 
     expect(screen.getByText('Scheduled Tasks')).toBeInTheDocument();
     expect(container.querySelector('.ant-table-content')).toHaveStyle({ overflowX: 'auto' });
     expect(container.querySelector('.ant-pagination')).not.toBeInTheDocument();
   });
 
-  it('labels job toggle switches with the job name', () => {
+  it('labels job toggle switches with the job name', async () => {
     render(<CronJobs />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).toBeEnabled());
 
     expect(
       screen.getByRole('switch', { name: 'Toggle Evolver Heartbeat + Task Earner' })
@@ -117,27 +136,61 @@ describe('CronJobs', () => {
     expect(screen.getByRole('switch', { name: 'Toggle EvoMap Node Monitor' })).toBeInTheDocument();
   });
 
-  it('uses server job totals to render pagination for full current pages', () => {
+  it('uses server job totals to render pagination for full current pages', async () => {
     cronState.jobs = Array.from({ length: 20 }, (_, index) =>
       buildJob({ id: `job-${index + 1}`, name: `Scheduled Task ${index + 1}` })
     );
     cronState.total = 25;
 
     const { container } = render(<CronJobs />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).toBeEnabled());
 
     expect(container.querySelector('.ant-pagination')).toBeInTheDocument();
     expect(screen.getByText('Showing 1-20 of 25 tasks')).toBeInTheDocument();
   });
 
-  it('uses server run totals to render run history pagination', () => {
-    cronState.runs = Array.from({ length: 10 }, (_, index) =>
-      buildRun({ id: `run-${index + 1}` })
-    );
+  it('uses server run totals to render run history pagination', async () => {
+    cronState.runs = Array.from({ length: 10 }, (_, index) => buildRun({ id: `run-${index + 1}` }));
     cronState.runsTotal = 23;
 
     render(<CronJobs />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).toBeEnabled());
     fireEvent.click(screen.getAllByText('History')[0]);
 
     expect(screen.getByText('Showing 1-10 of 23 runs')).toBeInTheDocument();
+  });
+
+  it('disables unavailable mutations while preserving read actions', async () => {
+    vi.mocked(cronAPI.capabilities).mockResolvedValue(capabilities(false));
+    render(<CronJobs />);
+    expect(await screen.findByText('project.cronJobs.operationsUnavailable')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Job' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Edit' })[0]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Run Now' })[0]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Delete' })[0]).toBeDisabled();
+    expect(screen.getAllByRole('switch')[0]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'History' })[0]).toBeEnabled();
+    fireEvent.click(screen.getAllByRole('switch')[0]);
+    expect(cronState.actions.toggleJob).not.toHaveBeenCalled();
+    expect(cronState.actions.createJob).not.toHaveBeenCalled();
+  });
+
+  it('enables and dispatches mutations only when the service allows them', async () => {
+    render(<CronJobs />);
+    await waitFor(() => expect(screen.getAllByRole('switch')[0]).toBeEnabled());
+    expect(cronAPI.capabilities).toHaveBeenCalledWith('project-1');
+    expect(screen.getByRole('button', { name: 'Create Job' })).toBeEnabled();
+    fireEvent.click(screen.getAllByRole('switch')[0]);
+    await waitFor(() =>
+      expect(cronState.actions.toggleJob).toHaveBeenCalledWith('project-1', 'job-1', false)
+    );
+  });
+
+  it('fails closed when capabilities cannot be loaded', async () => {
+    vi.mocked(cronAPI.capabilities).mockRejectedValue(new Error('offline'));
+    render(<CronJobs />);
+    expect(await screen.findByText('project.cronJobs.capabilitiesLoadFailed')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Job' })).toBeDisabled();
+    expect(screen.getAllByRole('switch')[0]).toBeDisabled();
   });
 });

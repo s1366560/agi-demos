@@ -245,3 +245,43 @@ async def test_generation_dispatcher_executes_claimed_row_before_static_fallback
     assert response.status_code == 200
     assert response.json() == [{"source": "v2"}]
     await host.close()
+
+
+@pytest.mark.unit
+async def test_static_collection_remains_reachable_after_parameter_route_contribution() -> None:
+    async def detail(project_id: str) -> dict[str, str]:
+        return {"project_id": project_id}
+
+    async def collection() -> dict[str, str]:
+        return {"source": "sandbox-collection"}
+
+    graph = build_builtin_route_graph_v2(
+        workspace_core_settings=get_workspace_core_settings(),
+        route_definitions=(
+            RouteDefinitionV2(
+                owner_entry_id="projects",
+                path="/projects/{project_id}",
+                methods=("GET",),
+                endpoint=detail,
+                name="project-detail",
+            ),
+            RouteDefinitionV2(
+                owner_entry_id="sandboxes",
+                path="/projects/sandboxes",
+                methods=("GET",),
+                endpoint=collection,
+                name="sandbox-list",
+            ),
+        ),
+    )
+    app = FastAPI()
+    app.mount("/", graph.table)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        collection_response = await client.get("/projects/sandboxes")
+        detail_response = await client.get("/projects/project-a")
+    assert collection_response.status_code == 200
+    assert collection_response.json() == {"source": "sandbox-collection"}
+    assert detail_response.status_code == 200
+    assert detail_response.json() == {"project_id": "project-a"}

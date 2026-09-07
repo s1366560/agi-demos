@@ -218,6 +218,7 @@ fn seed_resource_registry(connection: &Connection) -> Result<(), String> {
                 "description": description,
                 "status": "active",
                 "scope": "tenant",
+                "tenant_id": tenant_id,
                 "tools": tools,
                 "current_version": 1,
                 "is_system_skill": true,
@@ -401,7 +402,7 @@ fn reconcile_immutable_seed(
             changed |= replace_seed_fields(
                 object,
                 canonical,
-                &["name", "description", "scope", "tools"],
+                &["name", "description", "scope", "tenant_id", "tools"],
             );
         }
         ManagedResourceKind::Agent => {

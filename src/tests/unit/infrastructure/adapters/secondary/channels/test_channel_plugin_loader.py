@@ -36,7 +36,7 @@ class TestLoadChannelModule:
             load_channel_module("nonexistent_channel", "client")
 
     def test_unknown_submodule_raises_file_not_found(self) -> None:
-        with pytest.raises(FileNotFoundError, match="Channel plugin module not found"):
+        with pytest.raises(FileNotFoundError, match="Channel implementation module not found: .*does_not_exist_xyz.py"):
             load_channel_module("feishu", "does_not_exist_xyz")
 
 

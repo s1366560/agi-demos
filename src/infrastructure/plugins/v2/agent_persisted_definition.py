@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from uuid import uuid4
 
 from src.domain.ports.agent.agent_registry import AgentRegistryPort
 
@@ -39,7 +40,16 @@ async def _resolve_persisted_agent_definition_v2(
     project_id: str | None,
 ) -> object | None:
     """Resolve one exact scoped definition from the pinned operation database."""
-    from .boundary import OPERATION_DB_SESSION_SERVICE_V2, current_operation_context_v2
+    from .artifact_content_gc_runtime import (
+        ASYNC_SESSION_FACTORY_SERVICE_V2,
+        AsyncSessionFactoryServiceV2,
+    )
+    from .boundary import (
+        OPERATION_DB_SESSION_SERVICE_V2,
+        bind_operation_context_v2,
+        current_operation_context_v2,
+    )
+    from .runtime import OperationContextV2
 
     operation = current_operation_context_v2()
     scope = operation.context.scope
@@ -48,9 +58,32 @@ async def _resolve_persisted_agent_definition_v2(
             "agent_definition_scope_mismatch",
             "persisted Agent Definition scope does not match the pinned operation",
         )
-    repository = _build_agent_registry_v2(
-        operation.require(OPERATION_DB_SESSION_SERVICE_V2),
-    )
+    try:
+        db = operation.require(OPERATION_DB_SESSION_SERVICE_V2)
+    except RuntimeV2Error as exc:
+        if exc.code != "missing_service":
+            raise
+        sessions = operation.require(ASYNC_SESSION_FACTORY_SERVICE_V2)
+        if not isinstance(sessions, AsyncSessionFactoryServiceV2):
+            raise RuntimeV2Error(
+                "invalid_agent_definition_session_factory",
+                "persisted Agent Definition requires a generation-owned session factory",
+            ) from exc
+        async with sessions.factory() as db:
+            child = OperationContextV2(
+                generation=operation.generation,
+                operation_id=f"agent-definition-read:{uuid4().hex}",
+                scope=scope,
+            )
+            async with child:
+                _ = child.provide(OPERATION_DB_SESSION_SERVICE_V2, db)
+                with bind_operation_context_v2(child):
+                    return await _resolve_persisted_agent_definition_v2(
+                        agent_id=agent_id,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
+                    )
+    repository = _build_agent_registry_v2(db)
     return await repository.get_by_id(
         agent_id=agent_id,
         tenant_id=tenant_id,

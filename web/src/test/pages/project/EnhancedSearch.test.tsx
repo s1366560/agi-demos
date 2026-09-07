@@ -45,8 +45,21 @@ vi.mock('../../../stores/project', () => ({
 }));
 
 vi.mock('@/components/graph/CytoscapeGraph', () => ({
-  CytoscapeGraph: ({ projectId, tenantId }: { projectId?: string; tenantId?: string }) => (
-    <div data-testid="cytoscape-graph" data-project-id={projectId} data-tenant-id={tenantId}>
+  CytoscapeGraph: ({
+    projectId,
+    tenantId,
+    selectedNodeUuid,
+  }: {
+    projectId?: string;
+    tenantId?: string;
+    selectedNodeUuid?: string;
+  }) => (
+    <div
+      data-testid="cytoscape-graph"
+      data-project-id={projectId}
+      data-tenant-id={tenantId}
+      data-selected-node={selectedNodeUuid}
+    >
       Graph
     </div>
   ),
@@ -67,8 +80,19 @@ vi.mock('../../../pages/project/search', () => ({
       <div data-testid="config-open">{String(isConfigOpen)}</div>
     </div>
   ),
-  SearchResults: ({ results, isResultsCollapsed }: any) => (
+  SearchResults: ({ results, isResultsCollapsed, onResultClick }: any) => (
     <div data-testid="search-results">
+      {results.map((result: any) => (
+        <button
+          key={result.metadata.uuid}
+          onClick={() => onResultClick(result)}
+          data-testid="select-result"
+          data-score={String(result.score)}
+          data-source={result.source}
+        >
+          Select result
+        </button>
+      ))}
       <span data-testid="results-count">{results.length}</span>
       <div data-testid="results-collapsed">{String(isResultsCollapsed)}</div>
     </div>
@@ -83,6 +107,7 @@ vi.mock('../../../pages/project/search', () => ({
 describe('EnhancedSearch Compound Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseSearchParams.mockReturnValue([new URLSearchParams(), vi.fn()]);
     mockUseParams.mockReturnValue({ tenantId: 'tenant-1', projectId: 'test-project-1' });
     mockUseProjectStore.mockReturnValue({
       currentProject: { tenant_id: 'tenant-1' },
@@ -90,6 +115,21 @@ describe('EnhancedSearch Compound Component', () => {
   });
 
   describe('Root Component', () => {
+    it('connects traversal result selection to graph details without inventing a score', async () => {
+      mockUseSearchParams.mockReturnValue([
+        new URLSearchParams('mode=graphTraversal&start=node-1'),
+        vi.fn(),
+      ]);
+      vi.mocked(graphService.searchByGraphTraversal).mockResolvedValueOnce({
+        results: [{ uuid: 'node-1', name: 'QA entity', type: 'Entity', summary: 'Node summary' }],
+      } as any);
+      render(<EnhancedSearch defaultSearchMode="graphTraversal" />);
+      const result = await screen.findByTestId('select-result');
+      expect(result).toHaveAttribute('data-score', 'null');
+      expect(result).toHaveAttribute('data-source', 'project.search.modes.graph');
+      fireEvent.click(result);
+      expect(screen.getByTestId('cytoscape-graph')).toHaveAttribute('data-selected-node', 'node-1');
+    });
     it('should render with project and tenant IDs', () => {
       render(
         <EnhancedSearch projectId="test-project-1" tenantId="tenant-1">

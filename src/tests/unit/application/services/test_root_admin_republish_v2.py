@@ -42,6 +42,7 @@ from src.infrastructure.adapters.secondary.persistence.platform_plugin_publicati
 from src.infrastructure.adapters.secondary.persistence.platform_plugin_repository_v2 import (
     PlatformPluginRepositoryV2,
 )
+from src.infrastructure.plugins.v2.boundary import install_process_generation_host_v2
 from src.infrastructure.plugins.v2.layer_composer import (
     desired_bundle_set_digest_v2,
     profile_source_digest_v2,
@@ -267,6 +268,9 @@ async def test_rollback_creates_new_generation_while_old_a_lease_remains(rollbac
         remote = await initialize_plugin_runtime_v2(
             other_plane, session_factory=factory, publication_policy=policy
         )
+        # Both protocol planes share this test process; restore the primary plane
+        # before publishing its generation and activating its background services.
+        install_process_generation_host_v2(host)
         old_lease = await host.acquire()
         old_generation = old_lease.generation
         _desired_a, _desired_b, canvas_id = await _configure_b(factory, a.snapshot)

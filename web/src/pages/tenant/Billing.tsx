@@ -51,7 +51,7 @@ export const Billing: FC = memo(() => {
     void fetchBillingInfo();
   }, [fetchBillingInfo]);
 
-  const currentPlan = billingInfo?.tenant.plan ?? currentTenant?.plan ?? 'free';
+  const currentPlan = billingInfo?.tenant.plan ?? '';
   const getNextPlan = useCallback((plan: string): UpgradePlanRequest['plan'] | null => {
     if (plan === 'enterprise') return null;
     if (plan === 'pro' || plan === 'premium') return 'enterprise';
@@ -132,42 +132,30 @@ export const Billing: FC = memo(() => {
   // Calculate usage percentages
   const usageStats = useMemo(() => {
     if (!billingInfo) {
-      return {
-        storagePercent: 0,
-        storageUsed: '0 GB',
-        storageLimit: '10 GB',
-        projectsPercent: 0,
-        projectsUsed: 0,
-        projectsLimit: 10,
-        usersPercent: 0,
-        usersUsed: 0,
-        usersLimit: 20,
-      };
+      return null;
     }
 
     const { usage, tenant } = billingInfo;
     const storagePercent =
       tenant.storage_limit > 0 ? (usage.storage / tenant.storage_limit) * 100 : 0;
 
-    // Get limits based on plan
-    let projectsLimit = 10;
-    let usersLimit = 20;
-    if (tenant.plan === 'pro') {
-      projectsLimit = 50;
-      usersLimit = 100;
-    } else if (tenant.plan === 'enterprise') {
-      projectsLimit = 999;
-      usersLimit = 999;
-    }
+    const projectsLimit = tenant.projects_limit;
+    const usersLimit = tenant.users_limit;
 
     return {
       storagePercent: Math.min(storagePercent, 100),
       storageUsed: formatStorage(usage.storage),
       storageLimit: formatStorage(tenant.storage_limit),
-      projectsPercent: Math.min((usage.projects / projectsLimit) * 100, 100),
+      projectsPercent:
+        projectsLimit != null && projectsLimit > 0
+          ? Math.min((usage.projects / projectsLimit) * 100, 100)
+          : undefined,
       projectsUsed: usage.projects,
       projectsLimit,
-      usersPercent: Math.min((usage.users / usersLimit) * 100, 100),
+      usersPercent:
+        usersLimit != null && usersLimit > 0
+          ? Math.min((usage.users / usersLimit) * 100, 100)
+          : undefined,
       usersUsed: usage.users,
       usersLimit,
     };
@@ -185,7 +173,7 @@ export const Billing: FC = memo(() => {
     return <LoadingState message={t('common.loading')} />;
   }
 
-  if (loadError) {
+  if (loadError || !billingInfo || !usageStats) {
     return (
       <div className="max-w-full mx-auto flex flex-col gap-8">
         <div>
@@ -215,7 +203,7 @@ export const Billing: FC = memo(() => {
     );
   }
 
-  const invoices = billingInfo?.invoices || [];
+  const invoices = billingInfo.invoices;
   const pagedInvoices = invoices.slice(
     (invoicePage - 1) * INVOICES_PER_PAGE,
     invoicePage * INVOICES_PER_PAGE
@@ -321,20 +309,20 @@ export const Billing: FC = memo(() => {
               <p className="text-xl font-semibold text-slate-900 dark:text-white">
                 {usageStats.projectsUsed}{' '}
                 <span className="text-sm font-normal text-slate-400">
-                  / {usageStats.projectsLimit}
+                  / {usageStats.projectsLimit ?? t('common.status.unknown')}
                 </span>
               </p>
               <div
                 className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
                 role="progressbar"
-                aria-valuenow={Math.round(usageStats.projectsPercent)}
+                aria-valuenow={usageStats.projectsPercent}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label={t('tenant.billing.projects')}
               >
                 <div
                   className="h-full bg-blue-500 transition-[width]"
-                  style={{ width: `${String(usageStats.projectsPercent)}%` }}
+                  style={{ width: `${String(usageStats.projectsPercent ?? 0)}%` }}
                 ></div>
               </div>
             </div>
@@ -345,20 +333,20 @@ export const Billing: FC = memo(() => {
               <p className="text-xl font-semibold text-slate-900 dark:text-white">
                 {usageStats.usersUsed}{' '}
                 <span className="text-sm font-normal text-slate-400">
-                  / {usageStats.usersLimit}
+                  / {usageStats.usersLimit ?? t('common.status.unknown')}
                 </span>
               </p>
               <div
                 className="mt-2 h-1.5 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
                 role="progressbar"
-                aria-valuenow={Math.round(usageStats.usersPercent)}
+                aria-valuenow={usageStats.usersPercent}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label={t('tenant.billing.users')}
               >
                 <div
                   className="h-full bg-green-500 transition-[width]"
-                  style={{ width: `${String(usageStats.usersPercent)}%` }}
+                  style={{ width: `${String(usageStats.usersPercent ?? 0)}%` }}
                 ></div>
               </div>
             </div>

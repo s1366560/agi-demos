@@ -776,24 +776,6 @@ def _find_sandbox_id(
     return None
 
 
-def _has_memstack_content(base: Path) -> bool:
-    """Check whether ``base/.memstack/workspace/`` (or any sub-dir) has files.
-
-    Used by :func:`resolve_project_base_path` to avoid committing to a
-    sandbox or convention path whose ``.memstack/`` tree was created during
-    sandbox init but never populated with actual persona / skill files.
-    """
-    ws_dir = base / ".memstack" / "workspace"
-    if ws_dir.exists() and any(ws_dir.iterdir()):
-        return True
-    memstack_dir = base / ".memstack"
-    return memstack_dir.exists() and any(
-        child.is_dir() and any(child.iterdir())
-        for child in memstack_dir.iterdir()
-        if child.is_dir()
-    )
-
-
 def _sandbox_adapter_for_path_v2() -> MCPSandboxAdapter | None:
     """Resolve the optional sandbox path source without requiring local callers to pin."""
     try:
@@ -811,8 +793,8 @@ def _resolve_sandbox_path(
     """Try to resolve project base path from the sandbox adapter.
 
     Returns the sandbox's host-side project path if the adapter is
-    available, a matching sandbox is found, and the path contains
-    actual ``.memstack/`` content.  Returns ``None`` otherwise.
+    available and a matching sandbox declares a project path. Empty or
+    not-yet-created directories still belong to that project.
     """
     from pathlib import Path
 
@@ -845,20 +827,8 @@ def _resolve_sandbox_path(
         return None
 
     resolved = Path(project_path)
-    if resolved.exists() and _has_memstack_content(resolved):
-        logger.info(
-            "Resolved project base path from sandbox adapter: %s",
-            resolved,
-        )
-        return resolved
-
-    if resolved.exists():
-        logger.info(
-            "Sandbox adapter path %s exists but .memstack/workspace "
-            "is empty, falling through to next strategy",
-            resolved,
-        )
-    return None
+    logger.info("Resolved project base path from sandbox adapter: %s", resolved)
+    return resolved
 
 
 def resolve_project_base_path(
@@ -874,7 +844,8 @@ def resolve_project_base_path(
 
     Falls back to the well-known naming convention
     ``/tmp/memstack_{project_id}`` when the adapter lookup fails, and
-    finally to ``Path.cwd()`` for local development without sandboxes.
+    to ``Path.cwd()`` only for unscoped local development without a project ID.
+    Missing skills or tools never change an identified project's filesystem scope.
 
     Args:
         project_id: Project ID to resolve path for.
@@ -894,18 +865,10 @@ def resolve_project_base_path(
     # Strategy 2: Direct construction from known naming convention
     # Both project_sandbox_lifecycle_service.py and unified_sandbox_service.py
     # hardcode f"/tmp/memstack_{project_id}" as the host-side project path.
-    candidate = Path(f"/tmp/memstack_{project_id}")
-    if candidate.exists() and _has_memstack_content(candidate):
-        logger.info(
-            "Resolved project base path from convention: %s (has .memstack content)",
-            candidate,
-        )
+    if project_id:
+        candidate = Path(f"/tmp/memstack_{project_id}")
+        logger.info("Resolved project base path from convention: %s", candidate)
         return candidate
-    if candidate.exists():
-        logger.info(
-            "Convention path %s exists but .memstack/ is empty, falling through to cwd",
-            candidate,
-        )
 
     # Strategy 3: Fall back to cwd (local development)
     cwd = Path.cwd()
@@ -2546,8 +2509,6 @@ async def get_or_create_skills(
         List of Skill domain entities
     """
 
-    from pathlib import Path
-
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
@@ -2592,33 +2553,8 @@ async def get_or_create_skills(
                 len(loaded_by_name),
             )
 
-            # P1-Fix1: Multi-path scanning — if base_path is NOT cwd,
-            # also scan cwd as a fallback source (local development skills).
-            cwd = Path.cwd()
-            if base_path.resolve() != cwd.resolve():
-                cwd_scanner = FileSystemSkillScanner(
-                    skill_dirs=[".memstack/skills/"],
-                )
-                cwd_loader = FileSystemSkillLoader(
-                    base_path=cwd,
-                    tenant_id=tenant_id,
-                    project_id=project_id,
-                    scanner=cwd_scanner,
-                )
-                cwd_result = await cwd_loader.load_all()
-                cwd_count = 0
-                for loaded in cwd_result.skills:
-                    if loaded.skill.name not in loaded_by_name:
-                        loaded_by_name[loaded.skill.name] = loaded.skill
-                        cwd_count += 1
-                all_errors.extend(cwd_result.errors)
-                if cwd_count > 0:
-                    logger.info(
-                        "Agent Worker: Fallback cwd scan at %s added %d skills",
-                        cwd,
-                        cwd_count,
-                    )
-
+            # The resolved project root is the filesystem authority. The API
+            # process cwd can belong to another project and must not contribute.
             await _merge_database_skills_for_worker(
                 loaded_by_name,
                 tenant_id=tenant_id,

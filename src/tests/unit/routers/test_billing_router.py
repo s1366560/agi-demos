@@ -233,8 +233,7 @@ class TestGetBillingInfo:
         data = response.json()
         assert data["usage"]["projects"] == 3
         assert data["usage"]["memories"] == 6
-        # Storage will be 0 since Project model doesn't have storage_used field
-        assert data["usage"]["storage"] == 0
+        assert data["usage"]["storage"] == 6 * len("Content")
 
     @pytest.mark.asyncio
     async def test_get_billing_invoices_limit(

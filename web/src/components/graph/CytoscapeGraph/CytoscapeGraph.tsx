@@ -7,7 +7,7 @@
  * - Legacy props API (backward compatible)
  */
 
-import React, { useState, createContext, useContext, useCallback, useMemo } from 'react';
+import React, { useState, createContext, useContext, useCallback, useMemo, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -154,6 +154,7 @@ nodeInfoPanelMarker.displayName = 'CytoscapeGraphNodeInfoPanel';
 // ========================================
 
 interface CytoscapeGraphProps {
+  selectedNodeUuid?: string | undefined;
   /** Configuration object (new API) */
   config?: Partial<GraphConfig> | undefined;
   /** Children for composite component pattern */
@@ -233,6 +234,30 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<NodeData | null>(null);
   const [cyInstance, setCyInstance] = useState<cytoscape.Core | null>(null);
+
+  useEffect(() => {
+    if (!props.selectedNodeUuid || !cyInstance || loading) return;
+    const matching = cyInstance
+      .nodes()
+      .filter(
+        (node) =>
+          node.data('uuid') === props.selectedNodeUuid || node.id() === props.selectedNodeUuid
+      );
+    const onSelected = (event: cytoscape.EventObjectNode) => {
+      setSelectedNode(event.target.data() as NodeData);
+    };
+    const onUnselected = () => {
+      setSelectedNode(null);
+    };
+    cyInstance.on('select', 'node', onSelected);
+    cyInstance.on('unselect', 'node', onUnselected);
+    cyInstance.$(':selected').unselect();
+    matching.select();
+    return () => {
+      cyInstance.off('select', 'node', onSelected);
+      cyInstance.off('unselect', 'node', onUnselected);
+    };
+  }, [cyInstance, loading, props.selectedNodeUuid]);
 
   // Handle node selection
   const handleNodeClick = useCallback(

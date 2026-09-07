@@ -55,6 +55,16 @@ export type WorkspaceOverviewModel = {
   recentActivity: WorkspaceActivitySummary[];
 };
 
+export function workspaceKnowledgeIsAvailable(
+  knowledge: WorkspaceOverviewModel['knowledge'],
+): boolean {
+  return (
+    knowledge.memories !== null &&
+    knowledge.graphNodes !== null &&
+    knowledge.storageBytes !== null
+  );
+}
+
 type BuildWorkspaceOverviewModelInput = {
   workspace: WorkspaceSummary | null;
   project: ProjectSummary | null;
@@ -72,7 +82,7 @@ export type WorkspaceSandboxStatusPresentation = {
 };
 
 const ATTENTION_STATUSES = new Set(['needs_input', 'needs_approval']);
-const READY_STATUSES = new Set(['ready_review', 'completed']);
+const READY_STATUSES = new Set(['ready_review']);
 const READY_SANDBOX_STATUSES = new Set(['ready', 'running', 'connected', 'healthy']);
 const PREPARING_SANDBOX_STATUSES = new Set([
   'pending',

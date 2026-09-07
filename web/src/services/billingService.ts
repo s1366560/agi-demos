@@ -11,6 +11,8 @@ export interface BillingTenant {
   name: string | null;
   plan: string;
   storage_limit: number;
+  projects_limit?: number | null;
+  users_limit?: number | null;
 }
 
 export interface BillingUsage {

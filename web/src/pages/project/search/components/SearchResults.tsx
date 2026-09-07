@@ -27,7 +27,7 @@ import { formatDateOnly } from '@/utils/date';
 
 export interface SearchResult {
   content: string;
-  score: number;
+  score: number | null;
   metadata: {
     type: string;
     name?: string | undefined;
@@ -303,7 +303,7 @@ const SearchResultCard = memo<SearchResultCardProps>(
               </div>
             )}
           </div>
-          {viewMode === 'grid' && (
+          {viewMode === 'grid' && result.score !== null && (
             <div className="flex flex-col items-end">
               <span className={`text-sm font-bold tabular-nums ${getScoreColor(result.score)}`}>
                 {Math.round(result.score * 100)}%
@@ -329,13 +329,15 @@ const SearchResultCard = memo<SearchResultCardProps>(
                     onCopyId={onCopyId}
                   />
                 )}
-                <div className="flex flex-col items-end">
-                  <span
-                    className={`text-sm font-bold tabular-nums ${getScoreColor(result.score)} leading-none`}
-                  >
-                    {Math.round(result.score * 100)}%
-                  </span>
-                </div>
+                {result.score !== null && (
+                  <div className="flex flex-col items-end">
+                    <span
+                      className={`text-sm font-bold tabular-nums ${getScoreColor(result.score)} leading-none`}
+                    >
+                      {Math.round(result.score * 100)}%
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

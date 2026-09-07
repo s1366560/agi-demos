@@ -18,7 +18,6 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     Project,
     Tenant,
-    UserProject,
     UserTenant,
 )
 
@@ -75,6 +74,8 @@ class BillingTenantRecordV2:
     name: str
     plan: str
     storage_limit: int
+    projects_limit: int | None = None
+    users_limit: int | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -164,8 +165,13 @@ class SqlBillingPersistenceV2:
         )
         users_result = await self._session.execute(
             refresh_select_statement(
-                select(func.count(func.distinct(UserProject.user_id))).where(
-                    UserProject.project_id.in_(project_ids)
+                select(func.count(UserTenant.id)).where(UserTenant.tenant_id == tenant_id)
+            )
+        )
+        storage_result = await self._session.execute(
+            refresh_select_statement(
+                select(func.sum(func.length(Memory.content))).where(
+                    Memory.project_id.in_(project_ids)
                 )
             )
         )
@@ -173,7 +179,7 @@ class SqlBillingPersistenceV2:
             projects=len(projects),
             memories=int(memories_result.scalar() or 0),
             users=int(users_result.scalar() or 0),
-            storage=sum(int(getattr(project, "storage_used", 0) or 0) for project in projects),
+            storage=int(storage_result.scalar() or 0),
         )
 
     async def list_invoices(
@@ -209,9 +215,7 @@ class SqlBillingPersistenceV2:
 
     async def _tenant_model(self, *, tenant_id: str) -> Tenant | None:
         return await self._session.scalar(
-            select(Tenant)
-            .where(Tenant.id == tenant_id)
-            .execution_options(populate_existing=True)
+            select(Tenant).where(Tenant.id == tenant_id).execution_options(populate_existing=True)
         )
 
 
@@ -221,6 +225,8 @@ def _tenant_record_v2(tenant: Tenant) -> BillingTenantRecordV2:
         name=tenant.name,
         plan=getattr(tenant, "plan", "free"),
         storage_limit=getattr(tenant, "max_storage", _DEFAULT_STORAGE_LIMIT_V2),
+        projects_limit=tenant.max_projects,
+        users_limit=tenant.max_users,
     )
 
 
@@ -310,6 +316,8 @@ def _tenant_payload_v2(tenant: BillingTenantRecordV2) -> dict[str, Any]:
         "name": tenant.name,
         "plan": tenant.plan,
         "storage_limit": tenant.storage_limit,
+        "projects_limit": tenant.projects_limit,
+        "users_limit": tenant.users_limit,
     }
 
 

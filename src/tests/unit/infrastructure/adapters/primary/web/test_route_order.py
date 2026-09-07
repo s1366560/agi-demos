@@ -1,3 +1,6 @@
+import asyncio
+from functools import cache
+
 import pytest
 from fastapi.routing import APIRoute
 
@@ -7,8 +10,24 @@ from src.infrastructure.adapters.primary.web.startup.generation_http_v2 import (
 )
 
 
+@cache
 def _routes() -> list[APIRoute]:
-    return [route for route in create_app().routes if isinstance(route, APIRoute)]
+    async def published_routes() -> list[APIRoute]:
+        from src.infrastructure.adapters.primary.web.startup.plugin_runtime_v2 import (
+            initialize_plugin_runtime_v2,
+        )
+
+        app = create_app()
+        host = await initialize_plugin_runtime_v2(app)
+        try:
+            publication = app.state.platform_plugin_route_registry_v2.current
+            assert publication is not None
+            assert publication.descriptor == host.manager.current.descriptor
+            return [route for route in publication.table._routes if isinstance(route, APIRoute)]
+        finally:
+            await host.close()
+
+    return asyncio.run(published_routes())
 
 
 def _route_index(path: str, method: str) -> int:
@@ -34,13 +53,12 @@ def test_generation_dispatcher_precedes_non_kernel_builtin_routes() -> None:
         for index, route in enumerate(routes)
         if isinstance(route, APIRoute) and route.path == "/api/v1/auth/token"
     )
-    project_index = next(
-        index
-        for index, route in enumerate(routes)
-        if isinstance(route, APIRoute) and route.path == "/api/v1/projects/"
+    assert auth_index < dispatcher_index
+    assert not any(
+        isinstance(route, APIRoute) and route.path == "/api/v1/projects/" for route in routes
     )
-
-    assert auth_index < dispatcher_index < project_index
+    assert _route_index("/api/v1/auth/token", "POST") >= 0
+    assert _route_index("/api/v1/projects/", "GET") >= 0
 
 
 def _is_dynamic_segment(segment: str) -> bool:

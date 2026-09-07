@@ -28,8 +28,8 @@ services:
       - bash
       - -c
       - |
-        pip install -e . --quiet 2>/dev/null || true &&
-        ray start --head --port=6379 --dashboard-host=0.0.0.0 --dashboard-port=8265 --ray-client-server-port=10001 --object-store-memory=1073741824 --memory=4294967296 --disable-usage-stats --block
+        uv pip install --system -r /app/pyproject.toml &&
+        exec ray start --head --port=6379 --dashboard-host=0.0.0.0 --dashboard-port=8265 --ray-client-server-port=10001 --object-store-memory=1073741824 --memory=4294967296 --disable-usage-stats --block
     # Add development labels
     labels:
       - "memstack.environment=development"
@@ -47,8 +47,8 @@ services:
       - bash
       - -c
       - |
-        pip install -e . --quiet 2>/dev/null || true &&
-        ray start --address=ray-head:6379 --object-store-memory=1073741824 --memory=4294967296 --block
+        uv pip install --system -r /app/pyproject.toml &&
+        exec ray start --address=ray-head:6379 --object-store-memory=1073741824 --memory=4294967296 --block
     # Add development labels
     labels:
       - "memstack.environment=development"

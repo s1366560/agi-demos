@@ -23,6 +23,7 @@ from src.infrastructure.plugins.v2.builtin_modules import builtin_runtime_defini
 from src.infrastructure.plugins.v2.composer import compose_profile_v2, load_profile_document_v2
 from src.infrastructure.plugins.v2.protocol import parse_plugin_manifest_v2
 from src.infrastructure.plugins.v2.runtime import GenerationManagerV2, LoaderV2, RuntimeV2Error
+from src.infrastructure.plugins.v2.skill_evolution_runtime import SKILL_EVOLUTION_RUNTIME_SERVICE_V2
 
 _ROOT = Path(__file__).resolve().parents[6]
 _PROFILE_PATH = _ROOT / "config/plugin-profiles/memstack-default.v2.yaml"
@@ -39,6 +40,10 @@ async def _manager() -> GenerationManagerV2:
     generation = await LoaderV2(builtin_runtime_definitions_v2()).stage(snapshot)
     manager = GenerationManagerV2()
     await manager.publish(generation)
+    async with pin_operation_context_v2(
+        manager, operation_id="activate-dispatcher", scope=ScopeV2(kind=ScopeKindV2.ROOT)
+    ) as operation:
+        await operation.require(SKILL_EVOLUTION_RUNTIME_SERVICE_V2).activate(operation)
     return manager
 
 

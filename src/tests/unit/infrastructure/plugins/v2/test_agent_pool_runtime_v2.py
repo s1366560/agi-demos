@@ -232,10 +232,8 @@ async def test_pinned_generation_missing_pool_never_uses_legacy_global_adapter(
     assert publication.accepted is True
 
     async with pin_generation_v2(host):
-        with pytest.raises(RuntimeV2Error) as error:
-            await pool_router._get_pool_manager_optional()
+        assert await pool_router._get_pool_manager_optional() is None
 
-    assert error.value.code == "missing_service"
     legacy.assert_not_awaited()
     await host.close()
 

@@ -206,13 +206,13 @@ async def test_llm_setup_failure_rolls_back_execution_claim(
     )
 
     @asynccontextmanager
-    async def noop_agent_turn_operation(**_kwargs: object) -> AsyncIterator[None]:
+    async def noop_agent_turn_operation(*_args: object, **_kwargs: object) -> AsyncIterator[None]:
         yield None
 
-    async def fail_resolve_turn() -> object:
-        raise RuntimeError("provider unavailable")
+    fail_resolve_turn = AsyncMock(side_effect=RuntimeError("provider unavailable"))
 
-    monkeypatch.setattr(chat_handler, "pin_agent_turn_operation_v2", noop_agent_turn_operation)
+    monkeypatch.setattr(chat_handler, "acquire_scoped_chat_turn_v2", AsyncMock(return_value=object()))
+    monkeypatch.setattr(chat_handler, "pin_scoped_agent_turn_operation_v2", noop_agent_turn_operation)
     monkeypatch.setattr(chat_handler, "current_agent_turn_service_v2", fail_resolve_turn)
     context = _StreamContext(test_db)
 
@@ -232,4 +232,5 @@ async def test_llm_setup_failure_rolls_back_execution_claim(
     persisted = await repository.find("conversation-1", "desktop-message-llm-failure")
     assert persisted is not None
     assert persisted.status is AgentClientTurnStatus.ACCEPTED
+    fail_resolve_turn.assert_awaited_once_with()
     context.connection_manager.send_to_session.assert_awaited_once()

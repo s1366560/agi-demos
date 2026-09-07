@@ -1309,6 +1309,35 @@ describe('streamEventHandlers', () => {
     );
   });
 
+  it('retains a terminal initialization error after routing and toast dismissal', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    mockState.isStreaming = true;
+    mockState.agentState = 'thinking';
+    handlers.onExecutionPathDecided!({
+      type: 'execution_path_decided',
+      data: { path: 'react_loop', confidence: 1, reason: 'Selected runtime' },
+    } as any);
+    handlers.onError!({
+      type: 'error',
+      data: { message: 'Skill source conflict', code: 'agent_capability_conflict' },
+    } as any);
+
+    expect(mockState).toMatchObject({
+      isStreaming: false,
+      agentState: 'idle',
+      streamStatus: 'error',
+      isThinkingStreaming: false,
+      pendingToolsStack: [],
+    });
+    expect(mockState.activeToolCalls.size).toBe(0);
+    mockUpdateConversationState(conversationId, { error: null });
+    expect(mockState.timeline.at(-1)).toMatchObject({
+      type: 'error',
+      message: 'Skill source conflict',
+      code: 'agent_capability_conflict',
+    });
+  });
+
   it('should persist execution insights events in conversation state', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
 

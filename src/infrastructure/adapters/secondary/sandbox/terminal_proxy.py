@@ -13,6 +13,8 @@ from typing import Any, cast
 from docker.client import from_env
 from docker.errors import NotFound
 
+from src.infrastructure.i18n import gettext as _
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +105,20 @@ class TerminalProxy:
         # Create exec instance with TTY
         exec_id = container.client.api.exec_create(
             container.id,
-            shell,
+            [
+                "/bin/sh",
+                "-c",
+                'if cd -- "$1" 2>/dev/null && physical=$(pwd -P 2>/dev/null) '
+                '&& [ -n "$physical" ]; then :; '
+                'else cd / || exit 1; printf "%s\\n" "$3" >&2; fi; exec "$2"',
+                "terminal",
+                container.attrs.get("Config", {}).get("WorkingDir") or "/",
+                shell,
+                _("Workspace directory is unavailable; terminal started in /."),
+            ],
+            # A deleted bind mount can make runc reject the configured cwd before
+            # any shell code runs. Enter the namespace at / and validate cwd there.
+            workdir="/",
             stdin=True,
             stdout=True,
             stderr=True,

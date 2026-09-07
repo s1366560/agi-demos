@@ -115,8 +115,34 @@ async function loadWorkspaceSurface(
         ['items'],
         signal,
       );
-      data = { posts: posts.items };
-      responses = [posts.response];
+      const replies = await Promise.all(
+        posts.items.map(async (post) => {
+          if (typeof post.id !== "string" || !post.id.trim()) {
+            throw workspaceContractError("workspace_surface_contract_invalid");
+          }
+          const collection = await getScopedCollection(
+            config,
+            `${scopedBase}/blackboard/posts/${encodeURIComponent(post.id)}/replies`,
+            scope,
+            ["items"],
+            signal,
+          );
+          if (collection.items.some((reply) => reply.post_id !== post.id)) {
+            throw workspaceContractError("workspace_surface_contract_invalid");
+          }
+          return collection;
+        }),
+      );
+      data = {
+        posts: posts.items.map((post, index) => ({
+          ...post,
+          replies: replies[index].items,
+        })),
+      };
+      responses = [
+        posts.response,
+        ...replies.map((collection) => collection.response),
+      ];
       empty = posts.items.length === 0;
       break;
     }

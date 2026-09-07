@@ -2494,6 +2494,12 @@ export function createStreamEventHandlers(
 
       updateConversationState(handlerConversationId, {
         error: getStreamErrorMessage(event.data),
+        timeline: appendSSEEventToTimeline(convState.timeline, {
+          ...event,
+          data: { ...event.data, message: getStreamErrorMessage(event.data) },
+        }),
+        agentState: 'idle',
+        activeToolCalls: new Map(),
         isStreaming: false,
         streamStatus: 'error',
         pendingToolsStack: [],

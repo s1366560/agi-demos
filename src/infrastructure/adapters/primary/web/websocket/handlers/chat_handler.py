@@ -1582,12 +1582,28 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
         logger.info("[WS] Stream cancelled for conversation %s", conversation_id)
     except Exception as exc:
         logger.error("[WS] Error admitting websocket stream: %s", exc, exc_info=True)
+        from src.infrastructure.adapters.primary.web.websocket.chat_admission_error import (
+            persist_chat_admission_error,
+        )
+
+        error_data: dict[str, Any] = _agent_turn_error_data(exc)
+        try:
+            error_data = await persist_chat_admission_error(
+                user_id=context.user_id,
+                tenant_id=context.tenant_id,
+                project_id=project_id,
+                conversation_id=conversation_id,
+                message_id=turn_id,
+                data=_agent_turn_error_data(exc),
+            )
+        except Exception:
+            logger.warning("[WS] Failed to persist admission error", exc_info=True)
         await manager.send_to_session(
             context.session_id,
             {
                 "type": "error",
                 "conversation_id": conversation_id,
-                "data": _agent_turn_error_data(exc),
+                "data": error_data,
             },
         )
 

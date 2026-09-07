@@ -2,9 +2,13 @@ services:
   agent-actor-worker:
     image: agi-demos-ray-head:latest
     container_name: memstack-agent-actor-worker
-    command: >
-      bash -c "pip install -e . --quiet 2>/dev/null || true
-      && python -m src.agent_actor_worker"
+    # Source is mounted read-only; editable installs try to rewrite its egg-info.
+    command:
+      - bash
+      - -c
+      - |
+        uv pip install --system -r /app/pyproject.toml &&
+        exec python -m src.agent_actor_worker
     environment:
       - RAY_ADDRESS=auto
       - RAY_NAMESPACE=memstack

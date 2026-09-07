@@ -4,6 +4,34 @@ import { describe, expect, it, vi } from 'vitest';
 import { SearchResults } from '@/pages/project/search';
 
 describe('SearchResults', () => {
+  it.each(['grid', 'list'] as const)(
+    'does not invent a relevance score for traversal in %s mode',
+    (viewMode) => {
+      render(
+        <SearchResults
+          results={[
+            {
+              content: 'Graph node',
+              score: null,
+              source: 'Graph traversal',
+              metadata: { type: 'Entity', uuid: 'node-1' },
+            },
+          ]}
+          loading={false}
+          isResultsCollapsed={false}
+          viewMode={viewMode}
+          copiedId={null}
+          selectedSubgraphIds={[]}
+          onResultsCollapseToggle={vi.fn()}
+          onViewModeChange={vi.fn()}
+          onResultClick={vi.fn()}
+          onCopyId={vi.fn()}
+        />
+      );
+      expect(screen.queryByText('0%')).not.toBeInTheDocument();
+      expect(screen.queryByText('unknown')).not.toBeInTheDocument();
+    }
+  );
   it('uses responsive non-overflowing header layout', () => {
     render(
       <SearchResults

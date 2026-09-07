@@ -62,6 +62,7 @@ export interface TimelineStep {
  * All possible timeline event types from unified event stream
  */
 export type TimelineEventType =
+  | 'error'
   | 'user_message'
   | 'assistant_message'
   | 'thought'
@@ -167,6 +168,12 @@ export interface AssistantMessageEvent extends BaseTimelineEvent {
   content: string;
   role: 'assistant';
   artifacts?: ArtifactReference[] | undefined;
+}
+
+export interface StreamErrorTimelineEvent extends BaseTimelineEvent {
+  type: 'error';
+  message: string;
+  code?: string | undefined;
 }
 
 /**
@@ -447,6 +454,7 @@ export interface CanonicalTimelineEvent extends Omit<BaseTimelineEvent, 'type'> 
  * Union type for all timeline events
  */
 export type TimelineEvent =
+  | StreamErrorTimelineEvent
   | UserMessageEvent
   | AssistantMessageEvent
   | ThoughtEvent

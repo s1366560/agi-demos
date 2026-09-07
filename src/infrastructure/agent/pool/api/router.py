@@ -161,6 +161,10 @@ async def _get_pool_manager_optional() -> AgentPoolManager | None:
     try:
         return agent_pool_manager_v2_from_current_generation()
     except RuntimeV2Error as exc:
+        if exc.code == "missing_service":
+            # Disabled pool entries do not publish a service in this generation.
+            # Keep that absence authoritative instead of using the legacy adapter.
+            return None
         if exc.code != "generation_not_pinned":
             raise
 

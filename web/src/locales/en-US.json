@@ -6047,6 +6047,8 @@
       "infoDesc": "Communities are automatically detected groups of related entities."
     },
     "cronJobs": {
+      "operationsUnavailable": "Some scheduled task operations are not ready and cannot be used yet. Existing tasks and run history remain available.",
+      "capabilitiesLoadFailed": "Could not verify available scheduled task operations. Changes are disabled until you retry.",
       "title": "Scheduled Tasks",
       "description": "Manage automated, recurring, and scheduled background jobs",
       "createJob": "Create Job",

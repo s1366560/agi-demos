@@ -199,3 +199,76 @@ async def test_collection_authority_fails_closed_without_a_pinned_generation(
         await db.close()
 
     assert error.value.code == "generation_not_pinned"
+
+
+async def test_create_custom_agent_uses_bound_operation_and_clears_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    registry = SimpleNamespace(get_by_id=AsyncMock(return_value=SimpleNamespace(id="custom-agent")))
+    seen_sessions = []
+
+    def build_registry(session: object) -> Any:
+        seen_sessions.append(session)
+        return registry
+
+    monkeypatch.setattr(
+        "src.infrastructure.plugins.v2.agent_persisted_definition._build_agent_registry_v2",
+        build_registry,
+    )
+    save = AsyncMock(side_effect=lambda conversation: conversation)
+    monkeypatch.setattr(SqlConversationCollectionRepositoryV2, "save", save)
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_ROOT / "config/plugin-profiles/memstack-default.v2.yaml",
+        manifest_paths=(_ROOT / "config/plugin-manifests-v2/memstack-runtime-kernel.v2.json",),
+        generation=953,
+        version=953,
+    )
+    db = AsyncSession()
+    dependency = None
+    try:
+        async with pin_generation_v2(host):
+            dependency = conversation_create_http_application_authority_dependency_v2(
+                request=_request(
+                    method="POST",
+                    path="/api/v1/agent/conversations",
+                    json_body={"project_id": "project-a"},
+                ),
+                current_user=cast(User, SimpleNamespace(id="user-a")),
+                tenant_id="tenant-a",
+                db=db,
+            )
+            authority = await anext(dependency)
+            assert current_operation_context_v2() is authority.operation
+            conversation = await authority.service.create_conversation(
+                tenant_id="tenant-a",
+                project_id="project-a",
+                user_id="user-a",
+                agent_config={"selected_agent_id": "custom-agent"},
+            )
+            assert conversation.project_id == "project-a"
+            registry.get_by_id.assert_awaited_once_with(
+                agent_id="custom-agent", tenant_id="tenant-a", project_id="project-a"
+            )
+            assert seen_sessions == [db]
+            with pytest.raises(RuntimeV2Error, match="scope does not match"):
+                await authority.service.create_conversation(
+                    tenant_id="tenant-other",
+                    project_id="project-a",
+                    user_id="user-a",
+                    agent_config={"selected_agent_id": "custom-agent"},
+                )
+            assert save.await_count == 1
+            await dependency.aclose()
+            with pytest.raises(RuntimeV2Error) as error:
+                current_operation_context_v2()
+            assert error.value.code == "operation_context_not_pinned"
+    finally:
+        if dependency is not None:
+            await dependency.aclose()
+        await db.close()
+        await host.close()

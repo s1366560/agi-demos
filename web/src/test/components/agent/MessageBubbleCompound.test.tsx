@@ -262,6 +262,21 @@ const mockArtifactEvent: any = {
 };
 
 describe('MessageBubble Compound Component', () => {
+  it('renders terminal errors as an accessible persistent alert', () => {
+    render(
+      <MessageBubble
+        event={{
+          id: 'error-1',
+          type: 'error',
+          message: 'Initialization failed',
+          timestamp: 1,
+          eventTimeUs: 1000,
+          eventCounter: 0,
+        }}
+      />
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Initialization failed');
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

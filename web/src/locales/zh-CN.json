@@ -6070,6 +6070,8 @@
       "infoDesc": "社区是知识图中自动检测的相关实体组。"
     },
     "cronJobs": {
+      "operationsUnavailable": "部分定时任务操作尚未就绪，暂不可使用。仍可查看现有任务和运行历史。",
+      "capabilitiesLoadFailed": "无法确认定时任务的可用操作，暂时禁止修改，请重试。",
       "title": "定时任务",
       "description": "管理自动、周期性和计划执行的后台任务",
       "createJob": "创建任务",

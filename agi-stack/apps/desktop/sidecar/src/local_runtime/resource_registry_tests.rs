@@ -1,4 +1,57 @@
 use super::*;
+
+#[test]
+fn builtin_skill_tenant_identity_survives_legacy_registry_recovery() {
+    let store = DesktopSessionStore::in_memory().expect("session store");
+    let mut skill = stored_resource(
+        &store,
+        ManagedResourceKind::Skill,
+        "tenant",
+        "local",
+        "implementation",
+    );
+    assert_eq!(skill["tenant_id"], "local");
+    skill
+        .as_object_mut()
+        .expect("skill object")
+        .remove("tenant_id");
+    write_legacy_resource(
+        &store,
+        ManagedResourceKind::Skill,
+        "tenant",
+        "local",
+        "implementation",
+        skill,
+    );
+    {
+        let connection = store.connection().expect("registry connection");
+        initialize_resource_registry(&connection).expect("recover legacy tenant identity");
+    }
+    let recovered = stored_resource(
+        &store,
+        ManagedResourceKind::Skill,
+        "tenant",
+        "local",
+        "implementation",
+    );
+    assert_eq!(recovered["tenant_id"], "local");
+    assert_eq!(recovered["scope"], "tenant");
+    assert_eq!(recovered["is_system_skill"], true);
+    {
+        let connection = store.connection().expect("registry connection");
+        initialize_resource_registry(&connection).expect("repeat recovery");
+    }
+    assert_eq!(
+        stored_resource(
+            &store,
+            ManagedResourceKind::Skill,
+            "tenant",
+            "local",
+            "implementation",
+        ),
+        recovered
+    );
+}
 use rusqlite::Connection;
 
 #[test]

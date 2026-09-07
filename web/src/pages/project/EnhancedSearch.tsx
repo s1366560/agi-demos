@@ -212,7 +212,11 @@ function getStringArrayField(
   return undefined;
 }
 
-function toSearchResult(item: unknown, fallbackContent: string): SearchResult {
+function toSearchResult(
+  item: unknown,
+  fallbackContent: string,
+  fallbackSource: string
+): SearchResult {
   const record = isRecord(item) ? item : {};
   const metadata = isRecord(record.metadata) ? record.metadata : {};
 
@@ -227,7 +231,7 @@ function toSearchResult(item: unknown, fallbackContent: string): SearchResult {
 
   return {
     content,
-    score: getNumberField(record, 'score') ?? 0,
+    score: getNumberField(record, 'score') ?? null,
     metadata: {
       ...metadata,
       type: getStringField(record, 'type', 'entity_type') ?? 'Result',
@@ -237,7 +241,7 @@ function toSearchResult(item: unknown, fallbackContent: string): SearchResult {
       created_at: createdAt,
       tags,
     },
-    source: getStringField(record, 'source') ?? 'unknown',
+    source: getStringField(record, 'source') ?? fallbackSource,
   };
 }
 
@@ -534,7 +538,11 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
 
         // Map the raw results to our display format
         const mappedResults = data.results.map((item) =>
-          toSearchResult(item, t('project.search.results.no_content'))
+          toSearchResult(
+            item,
+            t('project.search.results.no_content'),
+            params.searchMode === 'graphTraversal' ? t('project.search.modes.graph') : ''
+          )
         );
 
         setResults(mappedResults);
@@ -848,6 +856,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                       projectId={projectId}
                       tenantId={tenantId}
                       highlightNodeIds={highlightNodeIds}
+                      selectedNodeUuid={selectedSubgraphIds[0]}
                       subgraphNodeIds={isSubgraphMode ? selectedSubgraphIds : undefined}
                       includeCommunities={true}
                       onNodeClick={(node) => {

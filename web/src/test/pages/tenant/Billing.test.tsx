@@ -92,4 +92,25 @@ describe('Billing', () => {
     ).not.toBeInTheDocument();
     expect(billingService.upgradePlan).not.toHaveBeenCalled();
   });
+
+  it('renders persisted quotas rather than limits inferred from the plan', async () => {
+    vi.mocked(billingService.getBillingInfo).mockResolvedValue({
+      ...billingInfo,
+      tenant: { ...billingInfo.tenant, projects_limit: 17, users_limit: 9 },
+      usage: { ...billingInfo.usage, storage: 59 },
+    });
+    render(<Billing />);
+
+    expect(await screen.findByText('59 B')).toBeInTheDocument();
+    expect(screen.getByText('/ 17')).toBeInTheDocument();
+    expect(screen.getByText('/ 9')).toBeInTheDocument();
+    expect(screen.queryByText('/ 20')).not.toBeInTheDocument();
+  });
+
+  it('does not invent quotas when an older API omits them', async () => {
+    render(<Billing />);
+
+    expect(await screen.findAllByText('/ common.status.unknown')).toHaveLength(2);
+    expect(screen.queryByText('/ 20')).not.toBeInTheDocument();
+  });
 });

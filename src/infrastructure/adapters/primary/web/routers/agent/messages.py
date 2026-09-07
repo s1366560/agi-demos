@@ -89,7 +89,6 @@ _LIFECYCLE_NON_DISPLAYABLE: set[AgentEventType] = {
     AgentEventType.START,
     AgentEventType.COMPLETE,
     AgentEventType.CANCELLED,
-    AgentEventType.ERROR,
     AgentEventType.MESSAGE,
     AgentEventType.PROGRESS,
     AgentEventType.TITLE_GENERATED,
@@ -1244,8 +1243,16 @@ def _build_agent_stopped(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]
     }
 
 
+def _build_stream_error(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "message": data.get("message") or data.get("error") or data.get("detail") or "",
+        "code": data.get("code"),
+    }
+
+
 # Dispatch dict: event_type -> builder function
 _EVENT_BUILDERS: dict[str, Any] = {
+    "error": _build_stream_error,
     "turn_admitted": _build_turn_admitted,
     "user_message": _build_user_message,
     "assistant_message": _build_assistant_message,

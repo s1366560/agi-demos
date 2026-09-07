@@ -17,7 +17,6 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-
 import { RefreshCw } from 'lucide-react';
 
 import {
@@ -30,6 +29,8 @@ import {
   useCronRunsTotal,
   useCronFilters,
 } from '@/stores/cron';
+
+import { useCronCapabilities } from '@/hooks/useCronCapabilities';
 
 import { formatDateTime } from '@/utils/date';
 
@@ -54,6 +55,16 @@ const formatDurationMs = (ms: number): string =>
 export const CronJobs: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const { t } = useTranslation();
+  const {
+    capabilities,
+    error: capabilityError,
+    retry: retryCapabilities,
+  } = useCronCapabilities(projectId);
+  const canCreate = capabilities?.create.allowed === true;
+  const canEdit = capabilities?.edit.allowed === true;
+  const canToggle = capabilities?.toggle.allowed === true;
+  const canRun = capabilities?.run_now.allowed === true;
+  const canDelete = capabilities?.delete.allowed === true;
   const jobs = useCronJobs();
   const runs = useCronJobRuns();
   const total = useCronTotal();
@@ -126,11 +137,13 @@ export const CronJobs: React.FC = () => {
   }, [projectId, fetchJobs, t]);
 
   const handleCreateNew = () => {
+    if (!canCreate) return;
     setEditingJob(null);
     setFormOpen(true);
   };
 
   const handleEdit = (job: CronJobResponse) => {
+    if (!canEdit) return;
     setEditingJob(job);
     setFormOpen(true);
   };
@@ -144,6 +157,9 @@ export const CronJobs: React.FC = () => {
 
   const handleFormSubmit = async (values: CronJobCreate | CronJobUpdate) => {
     if (!projectId) return;
+    if (editingJob ? !canEdit : !canCreate) {
+      throw new Error(t('project.cronJobs.operationsUnavailable'));
+    }
     try {
       if (editingJob) {
         await updateJob(projectId, editingJob.id, values as CronJobUpdate);
@@ -161,7 +177,7 @@ export const CronJobs: React.FC = () => {
   };
 
   const handleToggle = async (jobId: string, enabled: boolean) => {
-    if (!projectId) return;
+    if (!projectId || !canToggle) return;
     try {
       await toggleJob(projectId, jobId, enabled);
       message.success(
@@ -175,7 +191,7 @@ export const CronJobs: React.FC = () => {
   };
 
   const handleRunNow = async (jobId: string) => {
-    if (!projectId) return;
+    if (!projectId || !canRun) return;
     try {
       await triggerRun(projectId, jobId);
       message.success(t('project.cronJobs.triggerSuccess'));
@@ -188,7 +204,7 @@ export const CronJobs: React.FC = () => {
   };
 
   const handleDelete = async (jobId: string) => {
-    if (!projectId) return;
+    if (!projectId || !canDelete) return;
     try {
       await deleteJob(projectId, jobId);
       message.success(t('project.cronJobs.deleteSuccess'));
@@ -278,6 +294,7 @@ export const CronJobs: React.FC = () => {
       render: (enabled: boolean, record: CronJobResponse) => (
         <Switch
           checked={enabled}
+          disabled={!canToggle}
           loading={submitting}
           aria-label={t('project.cronJobs.toggleJob', { name: record.name })}
           onChange={(checked) => {
@@ -297,6 +314,7 @@ export const CronJobs: React.FC = () => {
             onClick={() => {
               handleEdit(record);
             }}
+            disabled={!canEdit}
             className="p-0"
           >
             {t('project.cronJobs.edit')}
@@ -315,11 +333,13 @@ export const CronJobs: React.FC = () => {
             onClick={() => {
               void handleRunNow(record.id);
             }}
+            disabled={!canRun}
             className="p-0"
           >
             {t('project.cronJobs.runNow')}
           </Button>
           <Popconfirm
+            disabled={!canDelete}
             title={t('project.cronJobs.deleteConfirmNamed', {
               defaultValue: 'Delete job "{{name}}"?',
               name: record.name,
@@ -328,7 +348,7 @@ export const CronJobs: React.FC = () => {
               void handleDelete(record.id);
             }}
           >
-            <Button type="link" danger className="p-0">
+            <Button type="link" danger className="p-0" disabled={!canDelete}>
               {t('common.delete')}
             </Button>
           </Popconfirm>
@@ -437,13 +457,29 @@ export const CronJobs: React.FC = () => {
           >
             {t('common.refresh', 'Refresh')}
           </Button>
-          <Button type="primary" onClick={handleCreateNew}>
+          <Button type="primary" onClick={handleCreateNew} disabled={!canCreate}>
             {t('project.cronJobs.createJob')}
           </Button>
         </Space>
       </div>
 
       <div className="min-w-0 overflow-hidden">
+        {capabilityError ? (
+          <Alert
+            type="warning"
+            showIcon
+            className="mb-4"
+            title={t('project.cronJobs.capabilitiesLoadFailed')}
+            action={<Button onClick={retryCapabilities}>{t('common.retry')}</Button>}
+          />
+        ) : capabilities && (!canCreate || !canEdit || !canToggle || !canRun || !canDelete) ? (
+          <Alert
+            type="info"
+            showIcon
+            className="mb-4"
+            title={t('project.cronJobs.operationsUnavailable')}
+          />
+        ) : null}
         {jobsError && (
           <Alert
             type="error"

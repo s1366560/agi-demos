@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -35,6 +36,28 @@ _ROOT = Path(__file__).resolve().parents[7]
 _ROUTER_PATH = _ROOT / "src/infrastructure/adapters/primary/web/routers/admin_dlq.py"
 
 
+class _RedisClient:
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str]:
+        for key in ():
+            yield key
+
+    async def delete(self, *_keys: str | bytes) -> int:
+        return 0
+
+    async def aclose(self) -> None:
+        return None
+
+    async def xadd(
+        self,
+        _stream: str,
+        _fields: dict[str, object],
+        *,
+        maxlen: int,
+        approximate: bool,
+    ) -> bytes:
+        return b"1-0"
+
+
 def _request(*, path: str, route_template: str, method: str = "GET") -> Request:
     return Request(
         {
@@ -54,7 +77,7 @@ def _request(*, path: str, route_template: str, method: str = "GET") -> Request:
 
 async def test_authority_pins_root_generation_and_disposes_after_handler() -> None:
     app = FastAPI()
-    redis_client = object()
+    redis_client = _RedisClient()
     host = await initialize_plugin_runtime_v2(app, sandbox_redis_client=redis_client)
     request = _request(
         path="/api/v1/admin/dlq/messages/dlq-secret/retry",
@@ -122,7 +145,7 @@ async def test_authority_rejects_missing_application_service_without_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app = FastAPI()
-    host = await initialize_plugin_runtime_v2(app, sandbox_redis_client=object())
+    host = await initialize_plugin_runtime_v2(app, sandbox_redis_client=_RedisClient())
     request = _request(
         path="/api/v1/admin/dlq/messages",
         route_template="/api/v1/admin/dlq/messages",

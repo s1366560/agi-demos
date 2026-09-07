@@ -31,6 +31,7 @@ import type {
 } from '../../types';
 import {
   buildWorkspaceOverviewModel,
+  workspaceKnowledgeIsAvailable,
   workspaceSandboxStatusPresentation,
   type WorkspaceSessionSummary,
 } from './workspaceOverviewModel';
@@ -368,7 +369,11 @@ export function WorkspaceOverview({
             icon={<ReaderIcon />}
             title={t('overview.projectKnowledge')}
             subtitle={t('overview.sharedAcrossProject')}
-            status={project?.stats ? t('overview.available') : t('overview.unavailable')}
+            status={
+              workspaceKnowledgeIsAvailable(model.knowledge)
+                ? t('overview.available')
+                : t('overview.unavailable')
+            }
           >
             <div className="workspace-design-knowledge-metrics">
               <KnowledgeMetric

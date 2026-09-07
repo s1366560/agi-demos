@@ -1576,7 +1576,7 @@
       },
       "contract_digest": "sha256:2390139880f8fcf586e35494cd45cee5ef1f424e285a010d5bbde71b48dae88b",
       "artifact": {
-        "digest": "sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a",
+        "digest": "sha256:a07dc1b0f2b923dec412502b9bd40943094d6bcfca6c43343c3d21327451f9b7",
         "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
       }
     },
@@ -1613,7 +1613,7 @@
       },
       "contract_digest": "sha256:b24aa25b2711be8734c6b36445a1d657fbf4d02c663a449a02920a7fcabe4465",
       "artifact": {
-        "digest": "sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a",
+        "digest": "sha256:a07dc1b0f2b923dec412502b9bd40943094d6bcfca6c43343c3d21327451f9b7",
         "source": "repo+python://src/infrastructure/plugins/v2/billing_services.py"
       }
     },
@@ -9648,7 +9648,7 @@
       },
       "contract_digest": "sha256:5b3162888c07314e05e0d99ba66bf7449fd8c603cf9f0c7ee385195dfc489ff8",
       "artifact": {
-        "digest": "sha256:9bf1b833edb7b5037513ed4892ede0fc006ef87b82463d9ed64d46aaaae436e2",
+        "digest": "sha256:cdec08167fe4a6e9fc64fdc8d587815699cf649593b0f8e83560e830058e2dbb",
         "source": "repo+python://src/infrastructure/plugins/v2/agent_persisted_definition.py"
       }
     },

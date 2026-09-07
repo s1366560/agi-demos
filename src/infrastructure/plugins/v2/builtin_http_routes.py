@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import FastAPI
-from starlette.routing import BaseRoute
+from starlette.routing import BaseRoute, compile_path
 
 from .http_routes import RouteContributionV2, RouteTableV2, install_route_definitions_v2
 from .runtime import RuntimeV2Error
@@ -165,7 +165,22 @@ def _definitions_before_root_catch_all_v2(
     catch_all = tuple(
         definition for definition in definitions if definition.path == _ROOT_PREVIEW_CATCH_ALL
     )
-    return (*regular, *catch_all)
+    ordered: list[RouteContributionV2] = []
+    for definition in regular:
+        _, _, parameters = compile_path(definition.path)
+        insertion = len(ordered)
+        if not parameters:
+            for index, previous in enumerate(ordered):
+                pattern, _, previous_parameters = compile_path(previous.path)
+                if (
+                    previous_parameters
+                    and set(previous.methods).intersection(definition.methods)
+                    and pattern.fullmatch(definition.path)
+                ):
+                    insertion = index
+                    break
+        ordered.insert(insertion, definition)
+    return (*ordered, *catch_all)
 
 
 def _ordered_builtin_row_ids_v2(

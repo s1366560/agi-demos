@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -19,8 +19,8 @@ async def test_clear_agent_running_records_finished_marker_from_running_value(
     redis.setex = AsyncMock()
     monkeypatch.setattr(
         running_state,
-        "get_redis_client",
-        AsyncMock(return_value=redis),
+        "_current_redis_client_v2",
+        MagicMock(return_value=redis),
     )
 
     await running_state.clear_agent_running("conv-1")
@@ -44,8 +44,8 @@ async def test_clear_agent_running_records_finished_marker_from_explicit_message
     redis.setex = AsyncMock()
     monkeypatch.setattr(
         running_state,
-        "get_redis_client",
-        AsyncMock(return_value=redis),
+        "_current_redis_client_v2",
+        MagicMock(return_value=redis),
     )
 
     await running_state.clear_agent_running("conv-1", "msg-explicit")
@@ -61,9 +61,9 @@ async def test_clear_agent_running_records_finished_marker_from_explicit_message
 async def test_mark_agent_finished_is_noop_without_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    get_redis = AsyncMock()
-    monkeypatch.setattr(running_state, "get_redis_client", get_redis)
+    get_redis = MagicMock()
+    monkeypatch.setattr(running_state, "_current_redis_client_v2", get_redis)
 
     await running_state.mark_agent_finished("conv-1", "")
 
-    get_redis.assert_not_awaited()
+    get_redis.assert_not_called()

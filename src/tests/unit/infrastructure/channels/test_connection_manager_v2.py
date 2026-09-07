@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -100,6 +101,11 @@ async def test_channel_runtime_rebinds_after_publish_without_leasing_its_own_gen
     )
 
     assert second.accepted
+    assert previous._lease_count == 0
+    retirement = host.manager._retirements.get(previous)
+    if retirement is not None:
+        async with asyncio.timeout(5):
+            await retirement.wait()
     assert all(fiber.phase is FiberPhaseV2.DISPOSED for fiber in previous.fibers)
     current = host.manager.current
     assert current is not None

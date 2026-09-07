@@ -262,7 +262,6 @@ class TestCacheInvalidationIntegration:
         invalidated so the new tools are immediately available.
         """
         from src.infrastructure.agent.state import agent_worker_state
-        from src.infrastructure.agent.tools import register_mcp_server as _mod
         from src.infrastructure.agent.tools.context import ToolContext
         from src.infrastructure.agent.tools.register_mcp_server import (
             register_mcp_server_tool,
@@ -279,12 +278,17 @@ class TestCacheInvalidationIntegration:
         # Populate caches before registration
         agent_worker_state._tools_cache[project_id] = {"old_tool": MagicMock()}
 
-        # Configure module-level DI state
-        monkeypatch.setattr(_mod, "_register_mcp_tenant_id", tenant_id)
-        monkeypatch.setattr(_mod, "_register_mcp_project_id", project_id)
-        monkeypatch.setattr(_mod, "_register_mcp_sandbox_adapter", mock_adapter)
-        monkeypatch.setattr(_mod, "_register_mcp_sandbox_id", "test-sandbox")
-        monkeypatch.setattr(_mod, "_register_mcp_session_factory", None)
+        from src.infrastructure.agent.tools.register_mcp_server_runtime import (
+            make_register_mcp_server_tool,
+        )
+
+        bound_tool = make_register_mcp_server_tool(
+            template=register_mcp_server_tool,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            sandbox_adapter=mock_adapter,
+            sandbox_id="test-sandbox",
+        )
 
         # Mock sandbox adapter call_tool responses
         async def mock_call_tool(**kwargs: Any) -> dict[str, Any]:
@@ -334,7 +338,7 @@ class TestCacheInvalidationIntegration:
         )
 
         # Act: Execute the tool
-        await register_mcp_server_tool.execute(
+        await bound_tool.execute(
             ctx,
             server_name="test-server",
             server_type="stdio",

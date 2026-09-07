@@ -38,6 +38,7 @@ const { mockCytoscapeInstance, cytoscapeMock } = vi.hoisted(() => {
     destroyed: vi.fn(() => false),
     boxSelectionEnabled: vi.fn(),
     $: vi.fn(() => ({ unselect: vi.fn() })),
+    nodes: vi.fn(),
     ready: vi.fn((cb?: () => void) => cb?.()),
     minZoom: 0.1,
     maxZoom: 3,
@@ -176,6 +177,28 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
   // Test Suite 1: New Config Object API
   // ========================================
   describe('Config Object API', () => {
+    it('shows details for an externally selected result after graph loading', async () => {
+      const node = {
+        id: 'n1',
+        uuid: 'u1',
+        name: 'Selected search entity',
+        type: 'Entity',
+        summary: 'Selected summary',
+      };
+      const select = vi.fn(() => {
+        const listener = mockCytoscapeInstance.on.mock.calls.find(
+          (call) => call[0] === 'select' && call[1] === 'node'
+        )?.[2];
+        listener?.({ target: { data: () => node } });
+      });
+      mockCytoscapeInstance.nodes.mockReturnValue({
+        filter: () => ({ length: 1, select, first: () => ({ data: () => node }) }),
+      });
+      render(<CytoscapeGraph projectId="p1" selectedNodeUuid="u1" />);
+      await waitFor(() => expect(screen.getByText('Selected search entity')).toBeInTheDocument());
+      expect(screen.getByText('Selected summary')).toBeInTheDocument();
+      expect(select).toHaveBeenCalled();
+    });
     it('should render with config object', async () => {
       const config: GraphConfig = {
         data: {

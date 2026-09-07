@@ -92,6 +92,15 @@ function canonicalResponse(input, revision = 7) {
       cursor,
     });
   }
+  for (const postId of ['post-1', 'post-2']) {
+    if (url === `${encodedBase}/blackboard/posts/${postId}/replies`) {
+      return json({
+        items: [scoped(`reply-${postId}`, {
+          post_id: postId, content: `Reply to ${postId}`,
+        })], revision, cursor,
+      });
+    }
+  }
   if (url === `${encodedBase}/blackboard/execution-diagnostics`) {
     return json({
       workspace_id: workspaceId,
@@ -199,6 +208,8 @@ test('loads every Web-aligned Workspace surface from canonical REST authorities'
         `${encodedBase}/objectives`,
         `${encodedRoot}/tasks`,
         `${encodedBase}/blackboard/posts`,
+        `${encodedBase}/blackboard/posts/post-1/replies`,
+        `${encodedBase}/blackboard/posts/post-2/replies`,
         `${encodedBase}/blackboard/execution-diagnostics`,
         `${encodedRoot}/tasks`,
         `${encodedBase}/agents`,
@@ -402,7 +413,7 @@ test('mutations carry authority headers then canonically refetch', async () => {
 
     assert.equal(state.status, 'ready');
     assert.equal(state.revision, 9);
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 6);
     assert.equal(calls[0].url, `${encodedBase}/collaboration/mutations`);
     assert.equal(calls[0].init.method, 'POST');
     assert.equal(calls[0].init.headers.get('X-Expected-Revision'), '8');
@@ -425,7 +436,7 @@ test('mutations carry authority headers then canonically refetch', async () => {
     assert.equal(calls[1].init.method, 'GET');
     assert.equal(calls[1].url, `${encodedBase}/collaboration/authority`);
     assert.equal(calls[2].url, `${encodedBase}/blackboard/posts`);
-    assert.equal(calls[3].url, `${encodedBase}/collaboration/authority`);
+    assert.equal(calls[5].url, `${encodedBase}/collaboration/authority`);
 
     const beforeUnsupported = calls.length;
     const unsupported = await client.mutateSurface(workspaceId, 'notes', {
@@ -588,4 +599,25 @@ test('every allowlisted action maps to an existing canonical REST route', () => 
       'workspaces/workspace%20%2F%20one',
   );
   assert.equal(descriptors.size, 48);
+});
+
+test("discussion joins canonical replies and rejects replies from a different post", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (input) => canonicalResponse(input);
+    const client = createHttpWorkspaceCollaborationClient(config());
+    const state = await client.getSurface(workspaceId, "discussion");
+    assert.equal(state.data.posts[0].replies[0].content, "Reply to post-1");
+    assert.equal(state.data.posts[1].replies[0].post_id, "post-2");
+    globalThis.fetch = async (input) =>
+      String(input).endsWith("/posts/post-1/replies")
+        ? json({ items: [scoped("wrong-reply", { post_id: "post-2" })] })
+        : canonicalResponse(input);
+    await assert.rejects(
+      client.getSurface(workspaceId, "discussion"),
+      (error) => error instanceof WorkspaceCollaborationContractError,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

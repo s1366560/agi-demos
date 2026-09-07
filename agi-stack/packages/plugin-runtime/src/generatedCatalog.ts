@@ -23,8 +23,8 @@ export interface PluginModuleCatalogV2 {
 }
 
 export const PLUGIN_MODULE_CATALOG_V2_JSON = [
-  '{"catalog_digest":"sha256:a574de1f30195be42212f89045003b8b494c5761fc9eeaab15a1ab7380',
-  'd902ba","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
+  '{"catalog_digest":"sha256:c1a1b71409f33de0ad549e4b5bafb554f60641b87bcc874441665773d5',
+  'ade72e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7b',
   'c24a2020637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plug',
   'ins/v2/agent_capabilities.py","contract":{"config_schema":{"$schema":"https://json-s',
   'chema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"strategy',
@@ -205,8 +205,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '8751e844fdad19504c7630f8b61b","entrypoint":"src.infrastructure.plugins.v2.agent_orch',
   'estration_runtime:agent_orchestration_runtime_definition_v2","module_ref":"builtin:/',
   '/memstack/agent/orchestration-runtime","plugin_id":"memstack-runtime-kernel","plugin',
-  '_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:9bf1b833edb7b5037',
-  '513ed4892ede0fc006ef87b82463d9ed64d46aaaae436e2","artifact_source":"repo+python://sr',
+  '_version":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:cdec08167fe4a6e9f',
+  'c64fdc8d587815699cf649593b0f8e83560e830058e2dbb","artifact_source":"repo+python://sr',
   'c/infrastructure/plugins/v2/agent_persisted_definition.py","contract":{"config_schem',
   'a":{"$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":',
   'false,"properties":{"source_id":{"const":"persisted-agent-definitions","type":"strin',
@@ -1055,7 +1055,7 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   'ucture.plugins.v2.background_task_services:_apply_background_task_application_v2","m',
   'odule_ref":"builtin://memstack/application/background-task-services","plugin_id":"me',
   'mstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"artifact_dig',
-  'est":"sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a","arti',
+  'est":"sha256:a07dc1b0f2b923dec412502b9bd40943094d6bcfca6c43343c3d21327451f9b7","arti',
   'fact_source":"repo+python://src/infrastructure/plugins/v2/billing_services.py","cont',
   'ract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","ad',
   'ditionalProperties":false,"properties":{"strategy":{"const":"operation-scoped-provid',
@@ -3899,8 +3899,8 @@ export const PLUGIN_MODULE_CATALOG_V2_JSON = [
   '4fdb40ffe141c","entrypoint":"src.infrastructure.plugins.v2.background_task_services:',
   '_apply_background_task_access_provider_v2","module_ref":"builtin://memstack/persiste',
   'nce/background-task-access-provider","plugin_id":"memstack-runtime-kernel","plugin_v',
-  'ersion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:a91d1ad7a61db9c6aad',
-  'ebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a","artifact_source":"repo+python://src/',
+  'ersion":"2.0.0","targets":["python"]},{"artifact_digest":"sha256:a07dc1b0f2b923dec41',
+  '2502b9bd40943094d6bcfca6c43343c3d21327451f9b7","artifact_source":"repo+python://src/',
   'infrastructure/plugins/v2/billing_services.py","contract":{"config_schema":{"$schema',
   '":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"prope',
   'rties":{"strategy":{"const":"operation-async-session","type":"string"}},"required":[',
@@ -4766,4 +4766,4 @@ export const PLUGIN_MODULE_CATALOG_V2 = JSON.parse(
 ) as PluginModuleCatalogV2;
 
 export const PLUGIN_MODULE_CATALOG_DIGEST_V2 =
-  'sha256:a574de1f30195be42212f89045003b8b494c5761fc9eeaab15a1ab7380d902ba' as const;
+  'sha256:c1a1b71409f33de0ad549e4b5bafb554f60641b87bcc874441665773d5ade72e' as const;

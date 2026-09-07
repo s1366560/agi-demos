@@ -1806,6 +1806,16 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
   ({ event, isStreaming, allEvents, isPinned, onPin, onReply, onRetry, onEdit, onDelete }) => {
     const { t } = useTranslation();
     switch (event.type) {
+      case 'error':
+        return (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+          >
+            <p className="font-medium">{t('agent.chat.errors.title')}</p>
+            <p className="whitespace-pre-wrap break-words">{event.message}</p>
+          </div>
+        );
       case 'user_message': {
         const rawContent = getContent(event);
         // Check for System Instruction prefix for SubAgent delegation

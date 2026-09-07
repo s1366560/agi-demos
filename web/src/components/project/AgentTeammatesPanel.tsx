@@ -7,7 +7,7 @@
  *   - Scope: project (AgentDefinition.project_id). Cross-tenant is future work.
  *   - Display: list of rows with avatar glyph + name + enabled dot + status.
  *   - Actions: "Start chat" opens a new conversation and jumps to
- *     AgentWorkspace. "Manage" jumps to /tenant/agent-definitions.
+ *     AgentWorkspace. Both navigation actions preserve the current tenant.
  */
 import { useState } from 'react';
 
@@ -49,6 +49,9 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
   const navigate = useNavigate();
   const currentTenant = useCurrentTenant();
   const tenantId = currentTenant?.id ?? null;
+  const definitionsPath = tenantId
+    ? `/tenant/${tenantId}/agent-definitions`
+    : '/tenant/agent-definitions';
   const [startingId, setStartingId] = useState<string | null>(null);
 
   const query = useQuery<AgentDefinition[]>({
@@ -72,6 +75,7 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
       });
       void navigate(
         buildAgentWorkspacePath({
+          tenantId: tenantId ?? undefined,
           conversationId: conversation.id,
           projectId,
         })
@@ -95,7 +99,7 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
       }
       extra={
         <Link
-          to="/tenant/agent-definitions"
+          to={definitionsPath}
           className="text-[13px] !text-blue-700 hover:!text-blue-800 dark:!text-blue-300 dark:hover:!text-blue-200"
         >
           {t('project.agentTeammates.manage')}
@@ -125,7 +129,7 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
           description={
             <Text type="secondary">
               {t('project.agentTeammates.emptyPrefix')}{' '}
-              <Link to="/tenant/agent-definitions">
+              <Link to={definitionsPath}>
                 {t('project.agentTeammates.agentDefinitions')}
               </Link>
               {t('project.agentTeammates.emptySuffix')}

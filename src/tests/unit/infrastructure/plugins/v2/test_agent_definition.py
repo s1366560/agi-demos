@@ -559,3 +559,69 @@ async def test_agent_definition_provider_disappears_when_generation_unloads() ->
             AGENT_DEFINITION_RESOLVER_SERVICE_V2,
             ScopeV2(kind=ScopeKindV2.ROOT),
         )
+
+
+@pytest.mark.unit
+async def test_persisted_definition_leases_short_session_inside_turn_without_db() -> None:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.infrastructure.plugins.v2.artifact_content_gc_runtime import (
+        ASYNC_SESSION_FACTORY_SERVICE_V2,
+        AsyncSessionFactoryServiceV2,
+    )
+    from src.infrastructure.plugins.v2.boundary import current_operation_context_v2
+
+    host = PlatformPluginRuntimeHostV2(builtin_runtime_definitions_v2())
+    await host.bootstrap(
+        profile_path=_PROFILE_PATH,
+        manifest_paths=(_MANIFEST_PATH,),
+        generation=1,
+        version=1,
+    )
+    selected = SimpleNamespace(id="persisted-agent")
+    observed = []
+    db = AsyncSession()
+
+    async def lookup(**kwargs):
+        child = current_operation_context_v2()
+        observed.append(child)
+        assert child.require(OPERATION_DB_SESSION_SERVICE_V2) is db
+        assert kwargs == {
+            "agent_id": "persisted-agent",
+            "tenant_id": "tenant-a",
+            "project_id": "project-a",
+        }
+        return selected
+
+    factory = Mock(return_value=db)
+    repository = SimpleNamespace(get_by_id=AsyncMock(side_effect=lookup))
+    try:
+        with patch(
+            "src.infrastructure.plugins.v2.agent_persisted_definition._build_agent_registry_v2",
+            return_value=repository,
+        ):
+            async with pin_operation_context_v2(
+                host,
+                operation_id="turn-without-db",
+                scope=ScopeV2(
+                    kind=ScopeKindV2.SESSION,
+                    tenant_id="tenant-a",
+                    project_id="project-a",
+                    session_id="conversation-a",
+                ),
+                services={ASYNC_SESSION_FACTORY_SERVICE_V2: AsyncSessionFactoryServiceV2(factory=factory)},
+            ) as parent:
+                result = await ReActAgent(model="test-model", tools={})._load_selected_agent(
+                    agent_id="persisted-agent",
+                    tenant_id="tenant-a",
+                    project_id="project-a",
+                )
+                assert result is selected
+                assert current_operation_context_v2() is parent
+                assert observed[0].generation is parent.generation
+                assert observed[0].context.scope == parent.context.scope
+                assert observed[0].phase.value == "disposed"
+                factory.assert_called_once_with()
+    finally:
+        await db.close()
+        await host.close()

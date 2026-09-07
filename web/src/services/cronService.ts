@@ -29,7 +29,23 @@ export interface CronJobRunListParams {
   offset?: number | undefined;
 }
 
+export interface CronActionCapability {
+  allowed: boolean;
+  reason_code?: string | null;
+}
+
+export interface CronCapabilities {
+  read: boolean;
+  create: CronActionCapability;
+  edit: CronActionCapability;
+  toggle: CronActionCapability;
+  run_now: CronActionCapability;
+  delete: CronActionCapability;
+}
+
 export const cronAPI = {
+  capabilities: async (projectId: string): Promise<CronCapabilities> =>
+    await api.get<CronCapabilities>(`/projects/${projectId}/cron-jobs/capabilities`),
   /**
    * List all cron jobs for a project
    */

@@ -151,8 +151,20 @@ describe('AgentTeammatesPanel', () => {
     );
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith(
-        '/tenant/agent-workspace/conv-1?projectId=project-1'
+        '/tenant/tenant-1/agent-workspace/conv-1?projectId=project-1'
       );
     });
+  });
+
+  it('keeps the current tenant in management links for an empty project roster', async () => {
+    vi.mocked(definitionsService.list).mockResolvedValueOnce([]);
+    renderPanel();
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('link')).toHaveLength(2);
+    });
+    for (const link of screen.getAllByRole('link')) {
+      expect(link).toHaveAttribute('href', '/tenant/tenant-1/agent-definitions');
+    }
   });
 });

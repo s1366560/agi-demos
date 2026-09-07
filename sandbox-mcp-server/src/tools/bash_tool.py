@@ -28,6 +28,15 @@ MAX_OUTPUT_SIZE = 16 * 1024 * 1024
 # Default timeout (5 minutes)
 DEFAULT_TIMEOUT = 300
 
+# Reserve the wrapper's failure code for a cwd that cannot be physically resolved.
+_CWD_UNAVAILABLE_EXIT_CODE = 125
+_CWD_GUARDED_COMMAND = (
+    "physical=$(pwd -P 2>/dev/null); "
+    'if [ -z "$physical" ]; then '
+    'printf "%s\\n" "Error: Working directory is unavailable or cannot be resolved." >&2; '
+    f'exit {_CWD_UNAVAILABLE_EXIT_CODE}; fi; exec /bin/sh -c "$1"'
+)
+
 
 async def execute_bash(
     command: str,
@@ -84,16 +93,14 @@ async def execute_bash(
         else:
             cwd = _workspace_dir
 
-        # Ensure working directory exists, or use a fallback
-        try:
-            os.makedirs(cwd, exist_ok=True)
-        except (OSError, PermissionError):
-            # If we can't create the workspace, check if it exists
-            if not os.path.exists(cwd):
-                # Fallback to current directory if workspace is unavailable
-                cwd = os.getcwd()
-                logger.warning(f"Workspace {_workspace_dir} unavailable, using {cwd}")
-            # If it exists but we can't create it, we'll try to use it anyway
+        # Never redirect file commands to a different directory or recreate a
+        # missing workspace mount. The child also checks getcwd: a detached bind
+        # mount can pass isdir/chdir while no longer resolving to a physical path.
+        if not os.path.isdir(cwd):
+            return {
+                "content": [{"type": "text", "text": "Error: Working directory is unavailable."}],
+                "isError": True,
+            }
 
         logger.info(f"Executing: {command[:100]}... (timeout={timeout}s, cwd={cwd})")
 
@@ -114,7 +121,11 @@ async def execute_bash(
         for var in ["HOST_PATH", "PROJECT_PATH", "WORKSPACE_PATH"]:
             sanitized_env.pop(var, None)
 
-        process = await asyncio.create_subprocess_shell(
+        process = await asyncio.create_subprocess_exec(
+            "/bin/sh",
+            "-c",
+            _CWD_GUARDED_COMMAND,
+            "sandbox-command",
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -182,7 +193,9 @@ async def execute_bash(
             "isError": is_error,
             "metadata": {
                 "exit_code": process.returncode,
-                "working_dir": cwd,
+                **(
+                    {"working_dir": cwd} if process.returncode != _CWD_UNAVAILABLE_EXIT_CODE else {}
+                ),
             },
         }
 

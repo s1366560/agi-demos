@@ -275,6 +275,23 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
   const { eventTimeUs, eventCounter, timestamp } = extractEventOrdering(event.data);
 
   switch (event.type) {
+    case 'error': {
+      const data = event.data as {
+        message?: string;
+        error?: string;
+        detail?: string;
+        code?: string;
+      };
+      return {
+        id: generateTimelineEventId('error'),
+        type: 'error',
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        message: data.message || data.error || data.detail || '',
+        code: data.code,
+      };
+    }
     case 'message': {
       const data = event.data as MessageEventData;
       const baseEvent: BaseTimelineEvent = {
@@ -1104,7 +1121,6 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     case 'cost_update':
     case 'retry':
     case 'compact_needed':
-    case 'error':
     case 'doom_loop_detected':
     case 'doom_loop_intervened':
     case 'permission_asked':
@@ -1356,6 +1372,7 @@ export function isSupportedEventType(eventType: string): boolean {
     return true;
   }
   const supportedTypes = [
+    'error',
     'message',
     'thought',
     'act',

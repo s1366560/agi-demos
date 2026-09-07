@@ -41,6 +41,30 @@ def test_displayable_events_include_a2ui_action_asked() -> None:
     assert "a2ui_action_asked" in _DISPLAYABLE_EVENTS
 
 
+def test_history_retains_persisted_error_after_routing() -> None:
+    assert "error" in _DISPLAYABLE_EVENTS
+    timeline = _build_timeline(
+        events=[
+            _StubEvent("execution_path_decided", {"path": "react_loop", "confidence": 1}),
+            _StubEvent(
+                "error",
+                {"message": "Skill source conflict", "code": "agent_capability_conflict"},
+                event_time_us=2000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+    assert [item["type"] for item in timeline] == ["execution_path_decided", "error"]
+    assert timeline[-1]["message"] == "Skill source conflict"
+    assert timeline[-1]["code"] == "agent_capability_conflict"
+    assert timeline[-1]["eventTimeUs"] == 2000
+
+
 def test_displayable_events_include_legacy_subagent_timeline_events() -> None:
     assert "subagent_session_spawned" in _DISPLAYABLE_EVENTS
     assert "subagent_run_completed" in _DISPLAYABLE_EVENTS

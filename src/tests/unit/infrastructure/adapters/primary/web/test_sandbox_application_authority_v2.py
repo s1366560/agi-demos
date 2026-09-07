@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from inspect import getsource, signature
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,6 +36,21 @@ pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[7]
 
 
+class _RedisClient:
+    async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str]:
+        for key in ():
+            yield key
+
+    async def delete(self, *_keys: str | bytes) -> int:
+        return 0
+
+    async def aclose(self) -> None:
+        return None
+
+    async def xadd(self, _stream: str, _fields: dict[str, object], **_options: object) -> bytes:
+        return b"1-0"
+
+
 class _TrackedSandboxAdapter(MCPSandboxAdapter):
     def __init__(self) -> None:
         self.close_calls = 0
@@ -48,7 +64,7 @@ class _TrackedSandboxAdapter(MCPSandboxAdapter):
 
 async def test_operation_authority_uses_exact_generation_scope_and_db() -> None:
     adapter = _TrackedSandboxAdapter()
-    redis_client = object()
+    redis_client = _RedisClient()
     host = PlatformPluginRuntimeHostV2(
         builtin_runtime_definitions_v2(
             sandbox_runtime_factory=lambda: adapter,

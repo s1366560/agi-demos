@@ -6,8 +6,8 @@ from typing import Final
 
 # fmt: off
 PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
-    '{"catalog_digest":"sha256:a574de1f30195be42212f89045003b8b494c5761fc9eeaab15a1ab7380d902'
-    'ba","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
+    '{"catalog_digest":"sha256:c1a1b71409f33de0ad549e4b5bafb554f60641b87bcc874441665773d5ade7'
+    '2e","modules":[{"artifact_digest":"sha256:4dc67e39c671866756b3b5e5385402c015ee7bc24a2020'
     '637c49e904c556cf68","artifact_source":"repo+python://src/infrastructure/plugins/v2/agent'
     '_capabilities.py","contract":{"config_schema":{"$schema":"https://json-schema.org/draft/'
     '2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ordered-'
@@ -180,8 +180,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '19504c7630f8b61b","entrypoint":"src.infrastructure.plugins.v2.agent_orchestration_runtim'
     'e:agent_orchestration_runtime_definition_v2","module_ref":"builtin://memstack/agent/orch'
     'estration-runtime","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targe'
-    'ts":["python"]},{"artifact_digest":"sha256:9bf1b833edb7b5037513ed4892ede0fc006ef87b82463'
-    'd9ed64d46aaaae436e2","artifact_source":"repo+python://src/infrastructure/plugins/v2/agen'
+    'ts":["python"]},{"artifact_digest":"sha256:cdec08167fe4a6e9fc64fdc8d587815699cf649593b0f'
+    '8e83560e830058e2dbb","artifact_source":"repo+python://src/infrastructure/plugins/v2/agen'
     't_persisted_definition.py","contract":{"config_schema":{"$schema":"https://json-schema.o'
     'rg/draft/2020-12/schema","additionalProperties":false,"properties":{"source_id":{"const"'
     ':"persisted-agent-definitions","type":"string"},"strategy":{"const":"operation-agent-reg'
@@ -991,7 +991,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     'point":"src.infrastructure.plugins.v2.background_task_services:_apply_background_task_ap'
     'plication_v2","module_ref":"builtin://memstack/application/background-task-services","pl'
     'ugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0","targets":["python"]},{"arti'
-    'fact_digest":"sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8db2c3961dd8ed861604ae5505a","'
+    'fact_digest":"sha256:a07dc1b0f2b923dec412502b9bd40943094d6bcfca6c43343c3d21327451f9b7","'
     'artifact_source":"repo+python://src/infrastructure/plugins/v2/billing_services.py","cont'
     'ract":{"config_schema":{"$schema":"https://json-schema.org/draft/2020-12/schema","additi'
     'onalProperties":false,"properties":{"strategy":{"const":"operation-scoped-provider","typ'
@@ -3706,8 +3706,8 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '40ffe141c","entrypoint":"src.infrastructure.plugins.v2.background_task_services:_apply_b'
     'ackground_task_access_provider_v2","module_ref":"builtin://memstack/persistence/backgrou'
     'nd-task-access-provider","plugin_id":"memstack-runtime-kernel","plugin_version":"2.0.0",'
-    '"targets":["python"]},{"artifact_digest":"sha256:a91d1ad7a61db9c6aadebd165b77ff0bed5de8d'
-    'b2c3961dd8ed861604ae5505a","artifact_source":"repo+python://src/infrastructure/plugins/v'
+    '"targets":["python"]},{"artifact_digest":"sha256:a07dc1b0f2b923dec412502b9bd40943094d6bc'
+    'fca6c43343c3d21327451f9b7","artifact_source":"repo+python://src/infrastructure/plugins/v'
     '2/billing_services.py","contract":{"config_schema":{"$schema":"https://json-schema.org/d'
     'raft/2020-12/schema","additionalProperties":false,"properties":{"strategy":{"const":"ope'
     'ration-async-session","type":"string"}},"required":["strategy"],"type":"object"},"events'
@@ -4528,7 +4528,7 @@ PLUGIN_MODULE_CATALOG_V2_JSON: Final[str] = (
     '-runtime-kernel","plugin_version":"2.0.0","targets":["python"]}],"schema_version":2}\n'
 )
 PLUGIN_MODULE_CATALOG_DIGEST_V2: Final[str] = (
-    "sha256:a574de1f30195be42212f89045003b8b494c5761fc9eeaab15a1ab7380d902ba"
+    "sha256:c1a1b71409f33de0ad549e4b5bafb554f60641b87bcc874441665773d5ade72e"
 )
 # fmt: on
 

@@ -7,6 +7,7 @@ const {
   beginDesktopRuntimeScopeTransition,
   beginWorkspaceRuntimeTransition,
   buildWorkspaceOverviewModel,
+  workspaceKnowledgeIsAvailable,
   workspaceSandboxStatusPresentation,
 } = require(
   '/tmp/agistack-desktop-test-dist/src/features/workspace/workspaceOverviewModel.js'
@@ -128,6 +129,26 @@ test('workspace overview projects only authoritative workspace and project field
     { title: 'Targeted test suite passed', detail: 'Code agent · 2 min ago' },
   ]);
   assert.deepEqual(model.environment, { sandboxStatus: 'connected' });
+});
+
+test('approving a run removes it from the workspace pending review count', () => {
+  const input = {
+    workspace: null,
+    project: null,
+    conversations: [conversation('reviewed-run', 'Review result', 'ready_review')],
+    members: { status: 'unavailable', items: [], error: null },
+    agents: { status: 'unavailable', items: [], error: null },
+    plan: null,
+    sandboxStatus: null,
+  };
+  assert.equal(buildWorkspaceOverviewModel(input).sessionCounts.ready, 1);
+
+  const completed = buildWorkspaceOverviewModel({
+    ...input,
+    conversations: [conversation('reviewed-run', 'Review result', 'completed')],
+  });
+  assert.deepEqual(completed.sessionCounts, { total: 1, running: 0, attention: 0, ready: 0 });
+  assert.equal(completed.recentSessions[0].status, 'completed');
 });
 
 test('workspace overview exposes unavailable values instead of inventing operational data', () => {
@@ -353,4 +374,16 @@ test('desktop runtime transition invalidates data at its exact authority boundar
     myWork: [],
     myWorkError: null,
   });
+});
+
+test('knowledge availability requires all authoritative metrics, including valid zeroes', () => {
+  assert.equal(workspaceKnowledgeIsAvailable({
+    memories: null, graphNodes: null, storageBytes: null,
+  }), false);
+  assert.equal(workspaceKnowledgeIsAvailable({
+    memories: 12, graphNodes: null, storageBytes: 500,
+  }), false);
+  assert.equal(workspaceKnowledgeIsAvailable({
+    memories: 0, graphNodes: 0, storageBytes: 0,
+  }), true);
 });

@@ -417,9 +417,9 @@ class TestModelOverrideApplication:
         if not normalized_override:
             return config
 
-        current_provider_norm = cls._normalize_provider(current_provider) or cls._infer_provider_from_model_name(
-            config.model
-        )
+        current_provider_norm = cls._normalize_provider(
+            current_provider
+        ) or cls._infer_provider_from_model_name(config.model)
         override_provider_norm = cls._normalize_provider(
             override_provider
         ) or cls._infer_provider_from_model_name(normalized_override)
@@ -604,7 +604,7 @@ class TestProjectReActAgentForwarding:
             yield {"type": "complete", "data": {"content": "done"}}
 
         mock_react_agent.stream = mock_stream
-        mock_react_agent.stream = AsyncMock(side_effect=mock_stream)
+        mock_react_agent.stream = MagicMock(side_effect=mock_stream)
 
         # Build a minimal ProjectReActAgent with mocked internals
         from src.infrastructure.agent.core.project_react_agent import (
@@ -617,8 +617,7 @@ class TestProjectReActAgentForwarding:
             project_id="p1",
             agent_mode="default",
         )
-        agent = ProjectReActAgent.__new__(ProjectReActAgent)
-        agent.config = config
+        agent = ProjectReActAgent(config)
         agent._react_agent = mock_react_agent
         agent._status = MagicMock()
         agent._status.active_chats = 0
@@ -670,7 +669,7 @@ class TestProjectReActAgentForwarding:
         async def mock_stream(**kwargs: Any):  # type: ignore[no-untyped-def]
             yield {"type": "complete", "data": {"content": "done"}}
 
-        mock_react_agent.stream = AsyncMock(side_effect=mock_stream)
+        mock_react_agent.stream = MagicMock(side_effect=mock_stream)
 
         from src.infrastructure.agent.core.project_react_agent import (
             ProjectAgentConfig,
@@ -682,8 +681,7 @@ class TestProjectReActAgentForwarding:
             project_id="p1",
             agent_mode="default",
         )
-        agent = ProjectReActAgent.__new__(ProjectReActAgent)
-        agent.config = config
+        agent = ProjectReActAgent(config)
         agent._react_agent = mock_react_agent
         agent._status = MagicMock()
         agent._status.active_chats = 0
@@ -723,7 +721,7 @@ class TestProjectReActAgentForwarding:
         async def mock_stream(**kwargs: Any):  # type: ignore[no-untyped-def]
             yield {"type": "complete", "data": {"content": "done"}}
 
-        mock_react_agent.stream = AsyncMock(side_effect=mock_stream)
+        mock_react_agent.stream = MagicMock(side_effect=mock_stream)
 
         from src.infrastructure.agent.core.project_react_agent import (
             ProjectAgentConfig,
@@ -735,8 +733,7 @@ class TestProjectReActAgentForwarding:
             project_id="p1",
             agent_mode="default",
         )
-        agent = ProjectReActAgent.__new__(ProjectReActAgent)
-        agent.config = config
+        agent = ProjectReActAgent(config)
         agent._react_agent = mock_react_agent
         agent._status = MagicMock()
         agent._status.active_chats = 0
