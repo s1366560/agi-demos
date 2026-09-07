@@ -102,6 +102,83 @@ mod tests {
     }
 
     #[test]
+    fn job_projection_reports_latest_finished_run_without_changing_mutation_receipts() {
+        let store = DesktopSessionStore::in_memory().unwrap();
+        let created = FixedAutomationClock::at("2099-03-01T10:00:00Z");
+        let job = seed_job(&store, "projection", 4, 2, true, created.now());
+        let before = automation_store::get(&store, "local-project", "projection").unwrap();
+        assert!(before["state"]["last_run_at"].is_null());
+        for (key, status, expected_status, at) in [
+            (
+                "first",
+                AutomationRunStatus::Success,
+                "success",
+                "2099-03-01T10:00:00Z",
+            ),
+            (
+                "second",
+                AutomationRunStatus::Failed,
+                "failed",
+                "2099-03-01T10:01:00Z",
+            ),
+        ] {
+            let clock = FixedAutomationClock::at(at);
+            enqueue_manual_run(
+                &store,
+                ManualRunCommand {
+                    user_id: "local-user",
+                    project_id: "local-project",
+                    job_id: "projection",
+                    expected_revision: 4,
+                    idempotency_key: key,
+                    request_hash: key,
+                    conversation_id: None,
+                },
+                &clock,
+            )
+            .unwrap();
+            let claim = claim_next_operation(&store, "worker", Duration::from_secs(30), &clock)
+                .unwrap()
+                .unwrap();
+            let running = automation_store::get(&store, "local-project", "projection").unwrap();
+            if key == "second" {
+                assert_eq!(running["state"]["last_run_status"], "success");
+            }
+            settle_operation(&store, &claim, status, None, &clock).unwrap();
+            let projected = automation_store::get(&store, "local-project", "projection").unwrap();
+            assert_eq!(projected["state"]["last_run_at"], clock.now().to_rfc3339());
+            assert_eq!(projected["state"]["last_run_status"], expected_status);
+            assert_eq!(projected["revision"], 4);
+            let (listed, _) = automation_store::list(&store, "local-project", true, 10, 0).unwrap();
+            assert_eq!(listed[0], projected);
+        }
+        let replay = automation_store::create(
+            &store,
+            "local-user",
+            "local-project",
+            "seed-projection",
+            "seed-hash-projection",
+            &job,
+            &created.now().to_rfc3339(),
+        )
+        .unwrap();
+        assert!(replay.replayed);
+        assert_eq!(replay.value, job);
+        // Corrupt foreign-scope rows must not appear in this project's projection.
+        store
+            .connection()
+            .unwrap()
+            .execute(
+                "UPDATE desktop_automation_runs SET tenant_id='foreign' WHERE status='failed'",
+                [],
+            )
+            .unwrap();
+        let projected = automation_store::get(&store, "local-project", "projection").unwrap();
+        assert_eq!(projected["state"]["last_run_status"], "success");
+        assert!(automation_store::get(&store, "foreign", "projection").is_err());
+    }
+
+    #[test]
     fn run_now_v2_is_durable_replayable_and_payload_conflicts_fail_closed() {
         let clock = FixedAutomationClock::at("2099-03-01T10:00:00Z");
         let store = DesktopSessionStore::in_memory().expect("session store");

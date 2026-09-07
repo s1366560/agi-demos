@@ -392,10 +392,18 @@ const JOB_PROJECTION_SQL: &str = "
        WHERE run.job_id = job.id AND run.project_id = job.project_id
          AND run.tenant_id = json_extract(job.value_json, '$.tenant_id')
          AND run.status = 'skipped'
-         AND run.error_code = 'local_automation_app_was_not_running')
+         AND run.error_code = 'local_automation_app_was_not_running'),
+      last_run.finished_at, last_run.status
     FROM desktop_automation_jobs AS job
     LEFT JOIN desktop_automation_schedule_state AS schedule
-      ON schedule.job_id = job.id AND schedule.project_id = job.project_id";
+      ON schedule.job_id = job.id AND schedule.project_id = job.project_id
+    LEFT JOIN desktop_automation_runs AS last_run ON last_run.id = (
+      SELECT run.id FROM desktop_automation_runs AS run
+      WHERE run.job_id = job.id AND run.project_id = job.project_id
+        AND run.tenant_id = json_extract(job.value_json, '$.tenant_id')
+        AND run.finished_at IS NOT NULL
+        AND run.status IN ('success', 'failed', 'timeout', 'cancelled', 'skipped')
+      ORDER BY run.finished_at DESC, run.id ASC LIMIT 1)";
 
 fn decode_job_projection(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     let encoded: String = row.get(0)?;
@@ -404,9 +412,18 @@ fn decode_job_projection(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     })?;
     let next_fire_at: Option<String> = row.get(1)?;
     let missed_run_count: u64 = row.get(2)?;
+    let last_run_at: Option<String> = row.get(3)?;
+    let last_run_status: Option<String> = row.get(4)?;
     let Some(state) = job.get_mut("state").and_then(Value::as_object_mut) else {
         return Err(rusqlite::Error::InvalidQuery);
     };
+    if let (Some(at), Some(status)) = (last_run_at, last_run_status) {
+        state.insert("last_run_at".into(), Value::from(at));
+        state.insert("last_run_status".into(), Value::from(status));
+    } else {
+        state.remove("last_run_at");
+        state.remove("last_run_status");
+    }
     state.insert("execution_target".into(), Value::from("local"));
     state.insert("missed_run_count".into(), Value::from(missed_run_count));
     state.insert(

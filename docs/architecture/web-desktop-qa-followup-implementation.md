@@ -574,3 +574,13 @@ Cron closed. This is a real database/stub model integration, not real provider o
 legacy-scheduler cutover acceptance. Evidence: `/tmp/memstack-cron-driver-live.log`,
 `/tmp/memstack-cron-driver-server-full.log`, `/tmp/memstack-cron-driver-pg-regression.log`,
 `/tmp/memstack-cron-driver-legacy-pg.log`.
+
+I4.19 fixes the native observation that completed run history coexisted with a
+"never run" job summary. Local list/detail now project the latest finished run
+within tenant/project/job scope, while pending runs retain the previous completed
+summary. Stored jobs, revisions and immutable mutation receipts are unchanged.
+The new real-ledger regression failed on the missing timestamp, then passed with
+all 33 local automation tests; it also checks latest status, list/detail agreement,
+receipt replay and exclusion of foreign-tenant rows. No migration/capability change.
+Native visual recheck is pending the next canonical rebuild. Evidence:
+`/tmp/automation-last-run-red.log` and `/tmp/automation-last-run-tests.log`.
