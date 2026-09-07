@@ -28,6 +28,6 @@ mod rerank;
 mod structured;
 
 pub use anthropic::AnthropicLlm;
-pub use embedding::HttpEmbedding;
+pub use embedding::{HttpEmbedding, VerifiedEmbedding, VerifiedEmbeddingError};
 pub use openai::HttpLlm;
 pub use rerank::HttpRerank;

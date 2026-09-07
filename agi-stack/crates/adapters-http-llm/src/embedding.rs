@@ -5,6 +5,9 @@ use agistack_core::ports::{CoreError, CoreResult, EmbeddingPort};
 
 use crate::endpoint::Endpoint;
 
+mod verified;
+pub use verified::{VerifiedEmbedding, VerifiedEmbeddingError};
+
 #[derive(Serialize)]
 struct EmbeddingRequest {
     model: String,
