@@ -21,6 +21,7 @@ import type {
 import { openFilesWithDesktopDialog } from '../runtime/nativeFileBridge';
 import {
   loadComposerCatalog,
+  composerCatalogErrorMessage,
   type ComposerCatalog,
   type ComposerCatalogClient,
 } from './composerCatalogModel';
@@ -57,6 +58,7 @@ type Category = {
   label: string;
   Icon: typeof UploadIcon;
   items?: CatalogItem[];
+  error?: string | null;
 };
 
 type ComposerPlusMenuProps = {
@@ -139,11 +141,11 @@ export function ComposerPlusMenu({
       })
       .catch((caught) => {
         if (!controller.signal.aborted && catalogApiRef.current === api) {
-          setCatalogError(caught instanceof Error ? caught.message : String(caught));
+          setCatalogError(composerCatalogErrorMessage(caught) ?? t('composer.resourcesUnavailable'));
         }
       });
     return () => controller.abort();
-  }, [api, catalog, open]);
+  }, [api, catalog, open, t]);
 
   const categories = useMemo<Category[]>(() => {
     const resourceItem = (
@@ -163,6 +165,7 @@ export function ComposerPlusMenu({
       { id: 'attachments', label: t('composer.attachments'), Icon: UploadIcon },
       {
         id: 'agents',
+        error: catalog?.errors?.workspaceAgents,
         label: t('composer.agents'),
         Icon: PersonIcon,
         items: (catalog?.workspaceAgents ?? [])
@@ -183,6 +186,7 @@ export function ComposerPlusMenu({
       },
       {
         id: 'agentDefinitions',
+        error: catalog?.errors?.agents,
         label: t('composer.agentDefinitions'),
         Icon: PersonIcon,
         items: (catalog?.agents ?? [])
@@ -204,6 +208,7 @@ export function ComposerPlusMenu({
       },
       {
         id: 'subagents',
+        error: catalog?.errors?.subagents,
         label: t('composer.subagents'),
         Icon: PersonIcon,
         items: (catalog?.subagents ?? [])
@@ -225,6 +230,7 @@ export function ComposerPlusMenu({
       },
       {
         id: 'skills',
+        error: catalog?.errors?.skills,
         label: t('composer.skills'),
         Icon: MagicWandIcon,
         items: (catalog?.skills ?? [])
@@ -238,6 +244,7 @@ export function ComposerPlusMenu({
       },
       {
         id: 'plugins',
+        error: catalog?.errors?.plugins,
         label: t('composer.plugins'),
         Icon: ComponentInstanceIcon,
         items: (catalog?.plugins ?? [])
@@ -362,7 +369,7 @@ export function ComposerPlusMenu({
       {open ? (
         <div className="plus-menu" role="menu" aria-label={t('composer.addContext')}>
           <div className="plus-menu-header">{t('composer.addContext')}</div>
-          {categories.map(({ id, label, Icon, items }) => (
+          {categories.map(({ id, label, Icon, items, error }) => (
             <div className="plus-menu-group" key={id}>
               <button
                 className={`plus-menu-category${expanded === id ? ' expanded' : ''}`}
@@ -436,8 +443,10 @@ export function ComposerPlusMenu({
                     ))
                   ) : (
                     <div className="plus-menu-empty">
-                      {catalogError ??
-                        (catalog ? t('composer.noResources') : t('composer.loadingResources'))}
+                      {error !== undefined
+                        ? error ?? t('composer.resourcesUnavailable')
+                        : catalogError ??
+                          (catalog ? t('composer.noResources') : t('composer.loadingResources'))}
                     </div>
                   )}
                 </div>

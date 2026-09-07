@@ -64,20 +64,44 @@ export type ComposerCatalog = {
   skills: ManagedSkill[];
   plugins: ManagedPlugin[];
   subagents: ManagedSubAgent[];
+  errors?: Partial<Record<'workspaceAgents' | 'agents' | 'skills' | 'plugins' | 'subagents', string | null>>;
 };
+
+export function composerCatalogErrorMessage(error: unknown): string | null {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    for (const key of ['message', 'detail', 'reasonCode', 'reason_code', 'code']) {
+      if (typeof record[key] === 'string') return record[key];
+    }
+  }
+  return null;
+}
 
 export async function loadComposerCatalog(
   api: ComposerCatalogClient,
   signal?: AbortSignal,
 ): Promise<ComposerCatalog> {
+  const errors: NonNullable<ComposerCatalog['errors']> = {};
+  const load = async <T>(key: keyof typeof errors, request: () => Promise<T[]>): Promise<T[]> => {
+    try {
+      return await request();
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      errors[key] = composerCatalogErrorMessage(error);
+      return [];
+    }
+  };
   const [workspaceAgents, agents, skills, plugins, subagents] = await Promise.all([
-    api.listWorkspaceAgents(signal),
-    api.listManagedAgents(signal),
-    api.listManagedSkills(signal),
-    api.listMarketplacePlugins(signal),
-    api.listManagedSubAgents(signal),
+    load('workspaceAgents', () => api.listWorkspaceAgents(signal)),
+    load('agents', () => api.listManagedAgents(signal)),
+    load('skills', () => api.listManagedSkills(signal)),
+    load('plugins', () => api.listMarketplacePlugins(signal)),
+    load('subagents', () => api.listManagedSubAgents(signal)),
   ]);
-  return { workspaceAgents, agents, skills, plugins, subagents };
+  return { workspaceAgents, agents, skills, plugins, subagents,
+    ...(Object.keys(errors).length ? { errors } : {}),
+  };
 }
 
 export function unboundComposerCatalogClient(api: ComposerCatalogClient): ComposerCatalogClient {

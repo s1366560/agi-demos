@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -46,18 +48,29 @@ def _scope() -> ScopeV2:
 
 @pytest.mark.unit
 def test_profile_v2_compose_p95_within_budget() -> None:
-    profile, manifests = _sources()
-
-    for _ in range(10):
-        compose_profile_v2(profile, manifests, generation=1)
-    samples: list[float] = []
-    for _ in range(_ITERATIONS):
-        started = time.perf_counter()
-        compose_profile_v2(profile, manifests, generation=1)
-        samples.append((time.perf_counter() - started) * 1000.0)
-
+    """Measure production composition alone, not the whole service's latency SLO."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.tests.unit.infrastructure.plugins.v2.profile_compose_benchmark_v2",
+        ],
+        cwd=_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    measurements = json.loads(result.stdout)
+    samples = measurements["samples_ms"]
+    assert measurements["gc_enabled"] is True
+    assert measurements["warmup"] == 10
+    assert len(samples) == _ITERATIONS
     p95 = _p95(samples)
-    assert p95 < 100.0, f"protocol-v2 profile compose p95 {p95:.2f}ms exceeds 100ms"
+    assert p95 < 100.0, (
+        f"protocol-v2 profile compose p95 {p95:.2f}ms exceeds 100ms; samples={samples}"
+    )
 
 
 @pytest.mark.unit

@@ -63,3 +63,25 @@ test('composer catalog keeps workspace scope behavior for bound clients', async 
   assert.deepEqual(catalog.workspaceAgents, [{ id: 'binding-1' }]);
   assert.deepEqual(catalog.subagents, []);
 });
+
+test('unavailable catalog preserves other resources and its structured error', async () => {
+  const catalog = await loadComposerCatalog({
+    listWorkspaceAgents: async () => [],
+    listManagedAgents: async () => [],
+    listManagedSkills: async () => [{ id: 'qa-skill', status: 'active', name: 'QA skill' }],
+    listManagedSubAgents: async () => [],
+    listMarketplacePlugins: async () => { throw { reasonCode: 'catalog_unavailable' }; },
+  });
+  assert.equal(catalog.skills[0].id, 'qa-skill');
+  assert.deepEqual(catalog.errors, { plugins: 'catalog_unavailable' });
+  assert.deepEqual(catalog.plugins, []);
+});
+
+test('unknown structured catalog errors remain unavailable rather than stringify objects', async () => {
+  const catalog = await loadComposerCatalog({
+    listWorkspaceAgents: async () => [], listManagedAgents: async () => [],
+    listManagedSkills: async () => { throw { detail: { unavailable: true } }; },
+    listManagedSubAgents: async () => [], listMarketplacePlugins: async () => [],
+  });
+  assert.deepEqual(catalog.errors, { skills: null });
+});

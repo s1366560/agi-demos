@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException
@@ -16,22 +16,17 @@ from src.infrastructure.adapters.primary.web.routers.agent.schemas import ToolPo
 async def test_get_tool_capabilities_sanitizes_internal_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    class FailingRuntimeManager:
-        ensure_loaded = AsyncMock(side_effect=RuntimeError("internal plugin secret"))
+    from src.infrastructure.plugins.v2 import boundary
 
-    import src.infrastructure.agent.plugins.manager as plugin_manager
-
-    monkeypatch.setattr(
-        plugin_manager,
-        "get_plugin_runtime_manager",
-        lambda: FailingRuntimeManager(),
-    )
+    failure = Mock(side_effect=RuntimeError("internal plugin secret"))
+    monkeypatch.setattr(boundary, "current_generation_v2", failure)
 
     with pytest.raises(HTTPException) as exc_info:
         await tools_router.get_tool_capabilities(
             current_user=SimpleNamespace(id="user-1", tenant_id="tenant-1")
         )
 
+    failure.assert_called_once_with()
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "Failed to get tool capabilities"
     assert "internal" not in exc_info.value.detail

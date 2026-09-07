@@ -955,6 +955,16 @@ async def test_publish_plan_run_status_persists_and_broadcasts_authority(
             self.name = name
             self.close_calls = 0
 
+        async def scan_iter(self, *, match: str, count: int) -> AsyncIterator[str]:
+            for key in ():
+                yield key
+
+        async def delete(self, *_keys: str | bytes) -> int:
+            return 0
+
+        async def xadd(self, _stream: str, _fields: dict[str, object], **_options: object) -> bytes:
+            return b"1-0"
+
         async def aclose(self) -> None:
             self.close_calls += 1
 
