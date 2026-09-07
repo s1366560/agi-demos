@@ -67,7 +67,8 @@ pub struct NewCronScheduledFire {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CronScheduledFireResult {
     pub run_id: String,
-    pub operation_id: String,
+    /// Skipped overlaps have history but no executable operation.
+    pub operation_id: Option<String>,
     pub scheduled_for: DateTime<Utc>,
     pub schedule_status: CronScheduleStatus,
     pub next_fire_at: Option<DateTime<Utc>>,
@@ -161,6 +162,17 @@ impl PgCronScheduleFireRepository {
             return Ok(None);
         }
 
+        let active = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM cron_job_runs \
+             WHERE job_id = $1 AND project_id = $2 \
+               AND status IN ('queued', 'running', 'waiting_human'))",
+        )
+        .bind(&candidate.snapshot.job_id)
+        .bind(scope.project_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(storage)?;
+
         let max_retries = candidate.max_retries.max(1);
         let input_json = json!({
             "conversation_id": candidate.conversation_id,
@@ -189,8 +201,22 @@ impl PgCronScheduleFireRepository {
         .execute(&mut *tx)
         .await
         .map_err(storage)?;
-        sqlx::query(
-            "INSERT INTO agistack_cron_operations ( \
+        if active {
+            sqlx::query(
+                "UPDATE cron_job_runs \
+                 SET status = 'skipped', error_message = 'automation_previous_run_active', \
+                     finished_at = $2, duration_ms = 0, result_summary = $3 \
+                 WHERE id = $1",
+            )
+            .bind(&fire.run_id)
+            .bind(observed_at)
+            .bind(json!({"reason_code": "automation_previous_run_active"}))
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        } else {
+            sqlx::query(
+                "INSERT INTO agistack_cron_operations ( \
                 id, tenant_id, project_id, job_id, job_revision, schedule_revision, \
                 operation_kind, run_id, trigger_type, scheduled_for, input_json, status, \
                 attempt_count, max_attempts, next_attempt_at, actor_user_id, actor_api_key_id, \
@@ -198,22 +224,23 @@ impl PgCronScheduleFireRepository {
              ) VALUES ( \
                 $1,$2,$3,$4,$5,$6,'execute_run',$7,'scheduled',$8,$9,'pending',0,$10,$11, \
                 $12,NULL,NULL,'{}'::jsonb,$11,$11)",
-        )
-        .bind(&fire.operation_id)
-        .bind(scope.tenant_id)
-        .bind(scope.project_id)
-        .bind(&candidate.snapshot.job_id)
-        .bind(candidate.snapshot.job_revision)
-        .bind(candidate.snapshot.schedule_revision)
-        .bind(&fire.run_id)
-        .bind(candidate.scheduled_for)
-        .bind(&input_json)
-        .bind(max_retries.saturating_add(1))
-        .bind(observed_at)
-        .bind(actor_user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(storage)?;
+            )
+            .bind(&fire.operation_id)
+            .bind(scope.tenant_id)
+            .bind(scope.project_id)
+            .bind(&candidate.snapshot.job_id)
+            .bind(candidate.snapshot.job_revision)
+            .bind(candidate.snapshot.schedule_revision)
+            .bind(&fire.run_id)
+            .bind(candidate.scheduled_for)
+            .bind(&input_json)
+            .bind(max_retries.saturating_add(1))
+            .bind(observed_at)
+            .bind(actor_user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage)?;
+        }
         let updated = sqlx::query(
             "UPDATE agistack_cron_schedule_state \
              SET status = $7, next_fire_at = $8, last_fire_at = $6, \
@@ -241,7 +268,7 @@ impl PgCronScheduleFireRepository {
         tx.commit().await.map_err(storage)?;
         Ok(Some(CronScheduledFireResult {
             run_id: fire.run_id.clone(),
-            operation_id: fire.operation_id.clone(),
+            operation_id: (!active).then(|| fire.operation_id.clone()),
             scheduled_for: candidate.scheduled_for,
             schedule_status: next.status,
             next_fire_at: next.next_fire_at,

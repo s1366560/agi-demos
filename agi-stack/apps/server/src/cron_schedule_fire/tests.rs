@@ -49,7 +49,7 @@ impl CronScheduleFireStore for FakeStore {
             .push((next.clone(), fire.clone()));
         Ok(self.commit.then(|| CronScheduledFireResult {
             run_id: fire.run_id.clone(),
-            operation_id: fire.operation_id.clone(),
+            operation_id: Some(fire.operation_id.clone()),
             scheduled_for: candidate.scheduled_for,
             schedule_status: next.status,
             next_fire_at: next.next_fire_at,

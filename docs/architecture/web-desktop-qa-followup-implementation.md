@@ -197,3 +197,14 @@ parity audit for the committed cloud pagination policy and a Run Review fixture'
 profile entry count (436, now 437). Neither is ignored; final full Desktop/native gates
 remain pending after formal inventory regeneration and fixture correction. This extraction
 can be reverted without a protocol, authority or data migration.
+
+I4.7 makes scheduled cloud overlap admission atomic under the existing fenced cursor/job
+lock: queued/running/waiting-human predecessors produce terminal skipped history, no
+execution operation, and an advanced cursor. The result explicitly has no operation ID
+for a skip. A real PostgreSQL regression first produced queued history incorrectly, then
+passed for all three predecessor states, terminal release and cursor replay. Five server
+coordinator tests and strict all-target adapter Clippy passed. The broader Server suite
+reported 612 passed / 1 failed: its live conversation-session fixture still references the
+retired `workspace_tasks` table. That existing V1 dependency remains an I0 follow-up, not
+a passing full-server result. Rollback must keep overlap admission disabled or retain the
+serialization guard; existing skipped history is retained and needs no schema migration.
