@@ -341,3 +341,12 @@ delete/restore, identity/scope rejection and push receipts ahead of the pull cur
 Native pull transport, explicit conflict-resolution UI and bidirectional acceptance
 remain pending. The additive schema preserves pending data and does not advertise a
 renderer capability before the complete application protocol is installed.
+
+I4.11 constructs Cron scheduler resources and configuration inside each V2 candidate,
+with activation after publication and stop/drain ownership retained by that generation.
+Shared PostgreSQL and engine infrastructure remain host resources. Candidate failure,
+replacement, cancellation and stale PostgreSQL epochs have focused coverage. The server
+suite passed 634 tests; three generation PostgreSQL tests and three adapter PostgreSQL
+tests passed. Clippy retained 17 existing warnings. The three worker artifacts sharing
+the changed source were refreshed with the formal generator, whose check passed.
+Cloud ownership cutover and native scheduling acceptance remain pending.

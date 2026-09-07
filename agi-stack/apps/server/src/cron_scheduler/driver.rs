@@ -33,8 +33,8 @@ pub(crate) fn build_pg_cron_scheduler(
     pool: PgPool,
     engine: Arc<ReActEngine>,
     registry: HotPlugRegistry,
+    config: CronSchedulerConfig,
 ) -> SharedCronScheduler {
-    let config = CronSchedulerConfig::from_env();
     let ownership = Arc::new(PgCronSchedulerOwnerRepository::new(pool.clone()));
     let lease_store: Arc<dyn CronSchedulerLeaseStore> = ownership.clone();
     let ownership_store: Arc<dyn CronSchedulerOwnershipStore> = ownership;

@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use crate::{
     background_worker_control_v2::{BackgroundWorkerControllerV2, WorkerFactoryV2},
+    cron_scheduler::{build_pg_cron_scheduler, CronSchedulerConfig},
     AppState,
 };
 
@@ -27,6 +28,29 @@ const WORKER_CONTRACTS_V2: [&str; 3] = [
     "sha256:0d1758bbf225811a434022ffae90c4b72ef5bdc6eb538ed0c85c29256bf75984",
     "sha256:86e82e004640593f1d1ce1017fec173af733f249fa3fab8e66ebd1786cf11867",
 ];
+
+pub(crate) type CronWorkerResourceFactoryV2 = Arc<dyn Fn() -> WorkerFactoryV2 + Send + Sync>;
+
+pub(crate) fn definitions_with_cron_resources_v2(
+    skill: WorkerFactoryV2,
+    outbox: WorkerFactoryV2,
+    cron: CronWorkerResourceFactoryV2,
+) -> Vec<PluginDefinitionV2> {
+    let modules: [Arc<dyn PluginModuleRuntimeV2>; 3] = [
+        Arc::new(SkillEvolutionWorkerModuleV2 { factory: skill }),
+        Arc::new(ChannelOutboxWorkerModuleV2 { factory: outbox }),
+        Arc::new(CronSchedulerWorkerModuleV2 { factory: cron }),
+    ];
+    modules
+        .into_iter()
+        .enumerate()
+        .map(|(index, module)| PluginDefinitionV2 {
+            module_ref: WORKER_MODULES_V2[index].into(),
+            contract_digest: WORKER_CONTRACTS_V2[index].into(),
+            module,
+        })
+        .collect()
+}
 
 pub(crate) struct SkillEvolutionWorkerModuleV2 {
     factory: WorkerFactoryV2,
@@ -73,7 +97,7 @@ impl PluginModuleRuntimeV2 for ChannelOutboxWorkerModuleV2 {
 }
 
 pub(crate) struct CronSchedulerWorkerModuleV2 {
-    factory: WorkerFactoryV2,
+    factory: CronWorkerResourceFactoryV2,
 }
 
 #[async_trait]
@@ -83,10 +107,13 @@ impl PluginModuleRuntimeV2 for CronSchedulerWorkerModuleV2 {
         context: &mut ContextV2,
         config: &BTreeMap<String, Value>,
     ) -> Result<(), RuntimeV2Error> {
+        // Construct one scheduler/config snapshot per candidate. This closure only
+        // activates after publication, and its controller owns the resources through drain.
+        let factory = (self.factory)();
         let controller = prepare_worker_controller_v2(
             context,
             config,
-            &self.factory,
+            &factory,
             "service:rust-server.cron-scheduler-worker",
         )?;
         context.provide("service:rust-server.cron-scheduler-worker", controller)?;
@@ -123,8 +150,13 @@ fn prepare_worker_controller_v2(
 pub(crate) fn worker_definitions_v2(state: Option<&AppState>) -> Vec<PluginDefinitionV2> {
     let skill = state.and_then(|state| state.skill_evolution_worker.clone());
     let outbox = state.and_then(|state| state.channel_outbox_delivery_worker.clone());
-    let cron = state.and_then(|state| state.cron_scheduler.clone());
-    let factories: [WorkerFactoryV2; 3] = [
+    let cron_infrastructure = state.and_then(|state| {
+        state
+            .worker_postgres
+            .clone()
+            .map(|pool| (pool, Arc::clone(&state.engine), state.registry.clone()))
+    });
+    definitions_with_cron_resources_v2(
         Arc::new(move || {
             skill
                 .as_ref()
@@ -135,30 +167,25 @@ pub(crate) fn worker_definitions_v2(state: Option<&AppState>) -> Vec<PluginDefin
                 .as_ref()
                 .and_then(|worker| worker.clone().spawn_if_enabled())
         }),
-        Arc::new(move || {
-            cron.as_ref()
-                .and_then(|worker| worker.clone().spawn_if_enabled())
+        Arc::new(move || match &cron_infrastructure {
+            Some((pool, engine, registry)) => {
+                let scheduler = build_pg_cron_scheduler(
+                    pool.clone(),
+                    Arc::clone(engine),
+                    registry.clone(),
+                    CronSchedulerConfig::from_env(),
+                );
+                Arc::new(move || scheduler.clone().spawn_if_enabled())
+            }
+            None => Arc::new(|| None),
         }),
-    ];
-    definitions_from_factories_v2(factories)
+    )
 }
 
+#[cfg(test)]
 pub(crate) fn definitions_from_factories_v2(
     factories: [WorkerFactoryV2; 3],
 ) -> Vec<PluginDefinitionV2> {
     let [skill, outbox, cron] = factories;
-    let modules: [Arc<dyn PluginModuleRuntimeV2>; 3] = [
-        Arc::new(SkillEvolutionWorkerModuleV2 { factory: skill }),
-        Arc::new(ChannelOutboxWorkerModuleV2 { factory: outbox }),
-        Arc::new(CronSchedulerWorkerModuleV2 { factory: cron }),
-    ];
-    modules
-        .into_iter()
-        .enumerate()
-        .map(|(index, module)| PluginDefinitionV2 {
-            module_ref: WORKER_MODULES_V2[index].into(),
-            contract_digest: WORKER_CONTRACTS_V2[index].into(),
-            module,
-        })
-        .collect()
+    definitions_with_cron_resources_v2(skill, outbox, Arc::new(move || cron.clone()))
 }

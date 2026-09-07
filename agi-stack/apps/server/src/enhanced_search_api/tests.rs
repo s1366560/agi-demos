@@ -157,7 +157,7 @@ fn test_state() -> AppState {
         tenant_webhooks,
         project_schema,
         cron_jobs,
-        cron_scheduler: None,
+        worker_postgres: None,
         data_stats,
         deploys,
         subagent_templates,

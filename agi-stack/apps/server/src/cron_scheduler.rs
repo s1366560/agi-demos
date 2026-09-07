@@ -4,5 +4,8 @@ mod config;
 mod driver;
 mod runner;
 
+pub(crate) use config::CronSchedulerConfig;
 pub(crate) use driver::build_pg_cron_scheduler;
-pub(crate) use runner::SharedCronScheduler;
+
+#[cfg(test)]
+mod generation_tests;

@@ -9,7 +9,7 @@
       "module_ref": "builtin://memstack/rust-server/skill-evolution-worker",
       "entrypoint": "SkillEvolutionWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
+        "digest": "sha256:625338f51a6e5de19dd68e55acc6113d32e79386f117082b2b23d99d695bb008",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [
@@ -49,7 +49,7 @@
       "module_ref": "builtin://memstack/rust-server/channel-outbox-worker",
       "entrypoint": "ChannelOutboxWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
+        "digest": "sha256:625338f51a6e5de19dd68e55acc6113d32e79386f117082b2b23d99d695bb008",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [
@@ -89,7 +89,7 @@
       "module_ref": "builtin://memstack/rust-server/cron-scheduler-worker",
       "entrypoint": "CronSchedulerWorkerModuleV2::apply",
       "artifact": {
-        "digest": "sha256:18c4682032ad4de2dde21911110274ed38e7e9d3dee2faa52f44744d3139befd",
+        "digest": "sha256:625338f51a6e5de19dd68e55acc6113d32e79386f117082b2b23d99d695bb008",
         "source": "repo+rust://agi-stack/apps/server/src/background_workers_v2.rs"
       },
       "targets": [
@@ -132,22 +132,35 @@
         "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
-      "targets": ["rust-server"],
+      "targets": [
+        "rust-server"
+      ],
       "contract": {
         "services": {
           "provides": [
-            { "service": "service:rust-server.runtime-descriptor", "version": "1.0.0" }
+            {
+              "service": "service:rust-server.runtime-descriptor",
+              "version": "1.0.0"
+            }
           ],
           "requires": []
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["strategy"],
+          "required": [
+            "strategy"
+          ],
           "properties": {
-            "strategy": { "const": "generated-catalog-bootstrap", "type": "string" }
+            "strategy": {
+              "const": "generated-catalog-bootstrap",
+              "type": "string"
+            }
           }
         }
       },
@@ -160,7 +173,9 @@
         "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
-      "targets": ["rust-server"],
+      "targets": [
+        "rust-server"
+      ],
       "contract": {
         "services": {
           "provides": [
@@ -171,18 +186,27 @@
           ],
           "requires": []
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["contribution_id", "strategy"],
+          "required": [
+            "contribution_id",
+            "strategy"
+          ],
           "properties": {
             "contribution_id": {
               "const": "memstack-rust-default-api.v1",
               "type": "string"
             },
-            "strategy": { "const": "axum-host-router", "type": "string" }
+            "strategy": {
+              "const": "axum-host-router",
+              "type": "string"
+            }
           }
         }
       },
@@ -195,7 +219,9 @@
         "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
-      "targets": ["desktop-sidecar"],
+      "targets": [
+        "desktop-sidecar"
+      ],
       "contract": {
         "services": {
           "provides": [
@@ -206,18 +232,27 @@
           ],
           "requires": []
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["contribution_id", "strategy"],
+          "required": [
+            "contribution_id",
+            "strategy"
+          ],
           "properties": {
             "contribution_id": {
               "const": "memstack-desktop-local-api.v1",
               "type": "string"
             },
-            "strategy": { "const": "axum-host-router", "type": "string" }
+            "strategy": {
+              "const": "axum-host-router",
+              "type": "string"
+            }
           }
         }
       },
@@ -230,11 +265,16 @@
         "digest": "sha256:191a31d86d41ea2f448f63189d2841be08030a52ec76002518f410b26311e923",
         "source": "repo+rust://agi-stack/crates/plugin-host/src/protocol_v2/target_modules.rs"
       },
-      "targets": ["desktop-sidecar"],
+      "targets": [
+        "desktop-sidecar"
+      ],
       "contract": {
         "services": {
           "provides": [
-            { "service": "service:desktop-sidecar.local-capability", "version": "1.0.0" }
+            {
+              "service": "service:desktop-sidecar.local-capability",
+              "version": "1.0.0"
+            }
           ],
           "requires": [
             {
@@ -244,14 +284,22 @@
             }
           ]
         },
-        "events": { "emits": [], "handles": [] },
+        "events": {
+          "emits": [],
+          "handles": []
+        },
         "config_schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
-          "required": ["strategy"],
+          "required": [
+            "strategy"
+          ],
           "properties": {
-            "strategy": { "const": "native-local-capability", "type": "string" }
+            "strategy": {
+              "const": "native-local-capability",
+              "type": "string"
+            }
           }
         }
       },

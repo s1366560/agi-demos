@@ -145,7 +145,6 @@ use crate::channel_api::{
 };
 use crate::conversation_session_api::PgConversationSessionProjectionService;
 use crate::cron_api::{DevCronJobService, PgCronJobService, SharedCronJobs};
-use crate::cron_scheduler::{build_pg_cron_scheduler, SharedCronScheduler};
 use crate::data_api::{DevDataStatsScopeService, PgDataStatsScopeService, SharedDataStats};
 use crate::deploy_api::{DevDeployService, PgDeployService, SharedDeploys};
 use crate::events_api::{DevEventLogService, PgEventLogService, SharedEventLogs};
@@ -303,9 +302,8 @@ pub(crate) struct AppState {
     /// P7 cron job read surface over Python-owned `cron_jobs` and
     /// `cron_job_runs`.
     pub(crate) cron_jobs: SharedCronJobs,
-    /// Fenced Rust scheduler cutover runtime. It is composed only with
-    /// PostgreSQL and remains double-gated at startup.
-    pub(crate) cron_scheduler: Option<SharedCronScheduler>,
+    /// Shared database infrastructure; worker resources are built by their V2 generation.
+    pub(crate) worker_postgres: Option<PgPool>,
     /// P7 exact graph data stats/export read surface over the portable
     /// GraphStore. Cleanup stays Python-owned.
     pub(crate) data_stats: SharedDataStats,
@@ -1146,8 +1144,6 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         checkpoint,
         Arc::new(SystemClock),
     ));
-    let cron_scheduler = workspace_plan_pool
-        .map(|pool| build_pg_cron_scheduler(pool, Arc::clone(&engine), registry.clone()));
 
     let plugins = Arc::new(PluginHost::new(registry.clone()));
     let control = Arc::new(Mutex::new(ControlPlane::new()));
@@ -1194,7 +1190,7 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
         tenant_webhooks,
         project_schema,
         cron_jobs,
-        cron_scheduler,
+        worker_postgres: workspace_plan_pool,
         data_stats,
         deploys,
         subagent_templates,
