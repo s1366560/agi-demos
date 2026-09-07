@@ -79,7 +79,14 @@ export function createDesktopNativeKnowledgeSyncHttpV2(
           body: { scope: native, ...request.body },
           ...(request.idempotencyKey === undefined
             ? {}
-            : { mutation: { idempotencyKey: request.idempotencyKey } }),
+            : {
+                mutation: {
+                  idempotencyKey: request.idempotencyKey,
+                  ...(request.expectedRevision === undefined
+                    ? {}
+                    : { expectedRevision: request.expectedRevision }),
+                },
+              }),
         },
       );
       options.signal?.throwIfAborted();
@@ -102,9 +109,38 @@ function wire(command: NativeKnowledgeCommand): Readonly<{
   path: string;
   body: Readonly<Record<string, unknown>>;
   idempotencyKey?: string;
+  expectedRevision?: number;
 }> {
   const { operation, ...fields } = command;
   switch (command.operation) {
+    case 'create':
+      return {
+        path: 'mutations',
+        body: { mutation: { operation, memory: command.memory } },
+        idempotencyKey: command.idempotency_key,
+      };
+    case 'update':
+      return {
+        path: 'mutations',
+        body: {
+          mutation: {
+            operation,
+            memory: command.memory,
+            expected_revision: command.expected_revision,
+          },
+        },
+        idempotencyKey: command.idempotency_key,
+        expectedRevision: command.expected_revision,
+      };
+    case 'delete':
+      return {
+        path: 'mutations',
+        body: {
+          mutation: { operation, id: command.id, expected_revision: command.expected_revision },
+        },
+        idempotencyKey: command.idempotency_key,
+        expectedRevision: command.expected_revision,
+      };
     case 'sync_link':
       return { path: 'sync-link', body: { link: command.link } };
     case 'sync_push':

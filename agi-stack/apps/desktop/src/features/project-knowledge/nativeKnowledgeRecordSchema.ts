@@ -1,5 +1,29 @@
 import * as s from './nativeKnowledgeSchema';
 
+const embedding = s.nullable(
+  s.array((value) => typeof value === 'number' && Number.isFinite(Math.fround(value))),
+);
+const storedMemoryFields = {
+  id: s.identifier,
+  project_id: s.identifier,
+  title: s.text,
+  content: s.text,
+  author_id: s.identifier,
+  content_type: s.text,
+  tags: s.array(s.text),
+  entities: s.array(s.object({ name: s.text, kind: s.text })),
+  version: s.localRevision,
+  status: s.text,
+  created_at_ms: s.integer(-Number.MAX_SAFE_INTEGER),
+};
+export const mutationMemory = s.object(storedMemoryFields, { embedding });
+export const storedMemory = s.object({ ...storedMemoryFields, embedding });
+export const mutationResult = s.object({
+  receipt: s.object({ sequence: s.sequence, memory: storedMemory, deleted: s.bool }),
+  replayed: s.bool,
+  processing_status: s.literal('accepted'),
+});
+
 export const link = s.object({
   remote_tenant_id: s.identifier,
   remote_project_id: s.identifier,

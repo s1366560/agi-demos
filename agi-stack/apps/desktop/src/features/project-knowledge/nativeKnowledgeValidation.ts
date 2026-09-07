@@ -107,6 +107,9 @@ export function requireNativeKnowledgeCommandOptions(
   const prepared = prepareNativeKnowledgeOptions(options);
   if (
     [
+      'create',
+      'update',
+      'delete',
       'sync_link',
       'resolve_pull',
       'resolve_push',
@@ -116,6 +119,12 @@ export function requireNativeKnowledgeCommandOptions(
     prepared.expectedScope === undefined
   ) {
     throw projectKnowledgeError('native_knowledge_expected_scope_required', 422);
+  }
+  if (
+    (command.operation === 'create' || command.operation === 'update') &&
+    command.memory.project_id !== prepared.expectedScope?.project_id
+  ) {
+    throw projectKnowledgeError('project_knowledge_scope_conflict', 409);
   }
   return prepared;
 }

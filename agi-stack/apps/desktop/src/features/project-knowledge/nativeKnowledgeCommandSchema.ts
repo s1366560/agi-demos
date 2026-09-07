@@ -7,7 +7,25 @@ const command = (
   optional: s.NativeShape = {},
 ): s.NativeCheck => s.object({ operation: s.literal(operation), ...fields }, optional);
 const limit = s.integer(1, 200);
+const writableRevision = s.integer(1, 4_294_967_294);
 export const commands: Readonly<Record<NativeKnowledgeOperation, s.NativeCheck>> = Object.freeze({
+  get: command('get', { id: s.identifier }),
+  create: (value) =>
+    command('create', { memory: r.mutationMemory, idempotency_key: s.idempotencyKey })(value) &&
+    (value as { memory: { version: number } }).memory.version === 1,
+  update: (value) =>
+    command('update', {
+      memory: r.mutationMemory,
+      expected_revision: writableRevision,
+      idempotency_key: s.idempotencyKey,
+    })(value) &&
+    (value as { memory: { version: number } }).memory.version ===
+      (value as { expected_revision: number }).expected_revision,
+  delete: command('delete', {
+    id: s.identifier,
+    expected_revision: writableRevision,
+    idempotency_key: s.idempotencyKey,
+  }),
   sync_status: command('sync_status'),
   sync_link: command('sync_link', { link: r.link }),
   sync_push: command('sync_push'),
@@ -43,6 +61,10 @@ export const commands: Readonly<Record<NativeKnowledgeOperation, s.NativeCheck>>
   reconciliation_context: command('reconciliation_context', { resolution_id: s.uuid }),
 });
 export const results: Readonly<Record<NativeKnowledgeOperation, s.NativeCheck>> = Object.freeze({
+  get: s.object({ memory: r.storedMemory }),
+  create: r.mutationResult,
+  update: r.mutationResult,
+  delete: r.mutationResult,
   sync_status: s.object({ status: r.status }),
   sync_link: s.object({
     status: r.status,

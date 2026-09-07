@@ -41,6 +41,21 @@ export type NativeKnowledgeMemory = Readonly<{
   created_at_ms: number;
   embedding: readonly number[] | null;
 }>;
+export type NativeKnowledgeEntity = Readonly<{ name: string; kind: string }>;
+export type NativeKnowledgeStoredMemory = Omit<NativeKnowledgeMemory, 'entities'> &
+  Readonly<{ entities: readonly NativeKnowledgeEntity[] }>;
+export type NativeKnowledgeMutationMemory = Omit<NativeKnowledgeStoredMemory, 'embedding'> &
+  Readonly<{ embedding?: readonly number[] | null }>;
+export type NativeKnowledgeMutationResult = Readonly<{
+  receipt: Readonly<{
+    sequence: number;
+    memory: NativeKnowledgeStoredMemory;
+    deleted: boolean;
+  }>;
+  replayed: boolean;
+  /** Durable storage acceptance; extraction, indexing and synchronization may still be pending. */
+  processing_status: 'accepted';
+}>;
 export type NativeKnowledgeContent = Readonly<{
   title: string;
   content: string;
@@ -196,6 +211,14 @@ type Page = Readonly<{ limit: number }>;
 type Id = Readonly<{ id: string }>;
 type ResolutionId = Readonly<{ resolution_id: string }>;
 export interface NativeKnowledgeRequestMap {
+  get: Id;
+  create: Readonly<{ memory: NativeKnowledgeMutationMemory; idempotency_key: string }>;
+  update: Readonly<{
+    memory: NativeKnowledgeMutationMemory;
+    expected_revision: number;
+    idempotency_key: string;
+  }>;
+  delete: Id & Readonly<{ expected_revision: number; idempotency_key: string }>;
   sync_status: Readonly<Record<never, never>>;
   sync_link: Readonly<{ link: NativeKnowledgeLink }>;
   sync_push: Readonly<Record<never, never>>;
@@ -222,6 +245,10 @@ export type NativeKnowledgeCommand = {
   [K in NativeKnowledgeOperation]: Readonly<{ operation: K }> & NativeKnowledgeRequestMap[K];
 }[NativeKnowledgeOperation];
 export interface NativeKnowledgeResultMap {
+  get: Readonly<{ memory: NativeKnowledgeStoredMemory }>;
+  create: NativeKnowledgeMutationResult;
+  update: NativeKnowledgeMutationResult;
+  delete: NativeKnowledgeMutationResult;
   sync_status: Readonly<{ status: NativeKnowledgeStatus }>;
   sync_link: Readonly<{
     status: NativeKnowledgeStatus;
@@ -301,6 +328,9 @@ export type NativeKnowledgeSyncOptions = Readonly<{
   expectedScope?: NativeKnowledgeScope;
 }>;
 export type NativeKnowledgeSelectedOperation =
+  | 'create'
+  | 'update'
+  | 'delete'
   | 'sync_link'
   | 'resolve_pull'
   | 'resolve_push'

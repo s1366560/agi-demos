@@ -94,6 +94,18 @@ function record(r: K.NativeKnowledgeResolutionRecord, scope: ProjectKnowledgeSco
   });
 }
 
+function mutationMemoryMatches(
+  actual: K.NativeKnowledgeStoredMemory,
+  requested: K.NativeKnowledgeMutationMemory,
+  version: number,
+): boolean {
+  // Rust stores embeddings as f32 and defaults omitted embeddings to null.
+  return sameJson(
+    { ...actual, embedding: actual.embedding?.map(Math.fround) ?? null },
+    { ...requested, version, embedding: requested.embedding?.map(Math.fround) ?? null },
+  );
+}
+
 /** Called only after the result's structural schema has succeeded. */
 export function validNativeRelationships(
   c: K.NativeKnowledgeCommand,
@@ -106,6 +118,29 @@ export function validNativeRelationships(
     if (items.length > c.limit) return false;
   }
   switch (c.operation) {
+    case 'get':
+      return sameMemory((result as K.NativeKnowledgeResultMap['get']).memory, c.id, scope);
+    case 'create':
+    case 'update': {
+      const receipt = (result as K.NativeKnowledgeMutationResult).receipt;
+      return (
+        !receipt.deleted &&
+        sameMemory(receipt.memory, c.memory.id, scope) &&
+        mutationMemoryMatches(
+          receipt.memory,
+          c.memory,
+          c.operation === 'create' ? 1 : c.expected_revision + 1,
+        )
+      );
+    }
+    case 'delete': {
+      const receipt = (result as K.NativeKnowledgeMutationResult).receipt;
+      return (
+        receipt.deleted &&
+        sameMemory(receipt.memory, c.id, scope) &&
+        receipt.memory.version === c.expected_revision + 1
+      );
+    }
     case 'sync_status':
       return true;
     case 'sync_link':
