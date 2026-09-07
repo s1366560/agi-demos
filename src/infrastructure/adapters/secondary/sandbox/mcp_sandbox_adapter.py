@@ -20,6 +20,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
+from time import monotonic
 from typing import TYPE_CHECKING, Any, Protocol, cast, override
 
 from docker.client import DockerClient
@@ -1579,19 +1580,16 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         sandbox_id: str,
         timeout: float = 30.0,
-        max_retries: int = 3,
+        max_retries: int | None = None,
         backoff_factor: float = 1.0,
     ) -> bool:
         """
-        Connect MCP client to sandbox with retry and auto-rebuild.
-
-        If the container is dead or unhealthy, attempts to rebuild it
-        before retrying the connection.
+        Connect MCP client within a shared connection and backoff time budget.
 
         Args:
             sandbox_id: Sandbox identifier
-            timeout: Connection timeout in seconds
-            max_retries: Maximum number of retry attempts
+            timeout: Total connection and backoff budget in seconds
+            max_retries: Optional maximum connection attempts within the budget
             backoff_factor: Backoff multiplier between retries
 
         Returns:
@@ -1605,10 +1603,7 @@ class MCPSandboxAdapter(SandboxPort):
                 operation="connect_mcp",
             )
 
-        if not instance.mcp_auth_token:
-            logger.error("MCP authentication capability missing for sandbox %s", sandbox_id)
-
-        elif instance.mcp_client and instance.mcp_client.is_connected:
+        if instance.mcp_auth_token and instance.mcp_client and instance.mcp_client.is_connected:
             logger.debug(f"MCP client already connected: {sandbox_id}")
             return True
 
@@ -1634,32 +1629,44 @@ class MCPSandboxAdapter(SandboxPort):
         )
 
         # Connect with exponential backoff retry
-        for attempt in range(max_retries):
-            try:
-                connected = await client.connect(timeout=timeout)
-                if connected:
-                    instance.mcp_client = client
-                    logger.info(f"MCP client connected: {sandbox_id}")
-                    return True
-            except asyncio.CancelledError:
-                await client.disconnect()
-                raise
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    wait_time = backoff_factor * (2**attempt)
+        connected = False
+        attempt = 0
+        retry_delay = backoff_factor
+        deadline = monotonic() + timeout
+        try:
+            async with asyncio.timeout(timeout):
+                while max_retries is None or attempt < max_retries:
+                    remaining = deadline - monotonic()
+                    if remaining <= 0:
+                        break
+                    attempt += 1
+                    failure = "client returned False"
+                    try:
+                        connected = await client.connect(timeout=remaining)
+                        if connected:
+                            instance.mcp_client = client
+                            logger.info(f"MCP client connected: {sandbox_id}")
+                            return True
+                    except Exception as e:
+                        failure = type(e).__name__
+
+                    remaining = deadline - monotonic()
+                    if remaining <= 0 or (max_retries is not None and attempt >= max_retries):
+                        break
+                    wait_time = min(retry_delay, remaining)
                     logger.warning(
-                        f"MCP connection attempt {attempt + 1}/{max_retries} "
-                        f"failed for {sandbox_id}: {e}. Retrying in {wait_time}s..."
+                        f"MCP connection attempt {attempt} "
+                        f"failed for {sandbox_id}: {failure}. Retrying in {wait_time}s..."
                     )
                     await asyncio.sleep(wait_time)
-                else:
-                    logger.error(
-                        f"Failed to connect MCP client after {max_retries} attempts: {sandbox_id}"
-                    )
-                    await client.disconnect()
-                    return False
-
-        await client.disconnect()
+                    retry_delay = min(retry_delay * 2, timeout)
+        except TimeoutError:
+            logger.warning("MCP connection budget expired for sandbox %s", sandbox_id)
+        finally:
+            # Cancellation can occur during either connection or backoff.
+            if not connected:
+                await client.disconnect()
+        logger.error(f"Failed to connect MCP client after {attempt} attempts: {sandbox_id}")
         return False
 
     async def disconnect_mcp(self, sandbox_id: str) -> None:
