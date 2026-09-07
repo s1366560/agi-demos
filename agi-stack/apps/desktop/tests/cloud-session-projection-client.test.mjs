@@ -258,3 +258,49 @@ function decodeExpectedProjection() {
     ],
   };
 }
+
+test('main-to-renderer session projection preserves validated knowledge stats through auth state', async () => {
+  const { projectVaultBoundCloudSession } = require('/tmp/agistack-desktop-test-dist/electron/main/cloudRequestPolicy.js');
+  const { decodeCloudSessionProjection } = require(compiledModule);
+  const { createProjectedCloudSessionState } = require('/tmp/agistack-desktop-test-dist/src/features/auth/nativeOAuthSessionModel.js');
+  const payload = projectionPayload();
+  const raw = await projectVaultBoundCloudSession({
+    async loadTrustedSession() { return {
+      version: 1, api_base_url: 'https://cloud.memstack.test', runtime_mode: 'cloud',
+      credential_kind: 'cloud_bearer', credential: 'test-only-vault-token', expires_at: '2099-08-10T00:00:00Z',
+    }; },
+    async fetch(url) {
+      const path = new URL(url).pathname;
+      let data;
+      if (path === '/api/v1/auth/me') data = payload.user;
+      else if (path === '/api/v1/workspace-context') data = payload.workspace_context;
+      else if (path === '/api/v1/tenants/') data = { tenants: payload.tenants, total: 1, page: 1, page_size: 100 };
+      else data = { projects: [{ ...payload.projects[0], stats: {
+        memory_count: 1, node_count: 3, storage_used: 59, private_field: 'discard',
+      } }], total: 1, page: 1, page_size: 100, owner_ids: ['user-1'] };
+      return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
+    },
+  });
+  const decoded = decodeCloudSessionProjection(raw);
+  assert.ok(decoded, 'renderer must accept the current main projection');
+  const state = createProjectedCloudSessionState(decoded, {});
+  assert.deepEqual(state.auth.projects[0].stats, { memory_count: 1, node_count: 3, storage_used: 59 });
+  assert.equal(JSON.stringify(decoded).includes('test-only-vault-token'), false);
+});
+
+for (const stats of [{ memory_count: -1 }, { node_count: Infinity }, { storage_used: '59' }, { memory_count: null }, { secret: 'forbidden' }, []]) {
+  test(`renderer rejects invalid or extra knowledge stats ${JSON.stringify(stats)}`, () => {
+    const { decodeCloudSessionProjection } = require(compiledModule);
+    const payload = projectionPayload();
+    payload.projects[0].stats = stats;
+    assert.equal(decodeCloudSessionProjection(payload), null);
+  });
+}
+
+test('renderer preserves absent stats and partial zero values without inventing missing fields', () => {
+  const { decodeCloudSessionProjection } = require(compiledModule);
+  const payload = projectionPayload();
+  assert.equal(Object.hasOwn(decodeCloudSessionProjection(payload).projects[0], 'stats'), false);
+  payload.projects[0].stats = { memory_count: 0 };
+  assert.deepEqual(decodeCloudSessionProjection(payload).projects[0].stats, { memory_count: 0 });
+});

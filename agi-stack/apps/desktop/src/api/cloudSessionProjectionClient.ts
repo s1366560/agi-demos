@@ -31,7 +31,8 @@ const WORKSPACE_SCOPE_KEYS = new Set([
   'updated_at',
 ]);
 const TENANT_KEYS = new Set(['id', 'name', 'slug', 'description']);
-const PROJECT_KEYS = new Set(['id', 'tenant_id', 'name', 'description', 'is_public']);
+const PROJECT_KEYS = new Set(['id', 'tenant_id', 'name', 'description', 'is_public', 'stats']);
+const PROJECT_STATS_KEYS = new Set(['memory_count', 'node_count', 'storage_used']);
 
 export type CloudSessionIdentityProjection = Readonly<{
   userId: string;
@@ -142,6 +143,8 @@ function decodeProjects(value: unknown, tenantId: string): readonly ProjectSumma
   const ids = new Set<string>();
   for (const candidate of value) {
     if (!isAllowedRecord(candidate, PROJECT_KEYS)) return null;
+    const stats = candidate.stats === undefined ? undefined : decodeProjectStats(candidate.stats);
+    if (stats === null) return null;
     const id = identifier(candidate.id);
     const observedTenantId = identifier(candidate.tenant_id);
     const name = displayString(candidate.name);
@@ -167,10 +170,21 @@ function decodeProjects(value: unknown, tenantId: string): readonly ProjectSumma
         name,
         ...(description === undefined ? {} : { description }),
         ...(candidate.is_public === undefined ? {} : { is_public: candidate.is_public }),
+        ...(stats === undefined ? {} : { stats }),
       }),
     );
   }
   return Object.freeze(projects);
+}
+
+function decodeProjectStats(value: unknown): Readonly<Record<string, number>> | null {
+  if (!isAllowedRecord(value, PROJECT_STATS_KEYS)) return null;
+  const stats: Record<string, number> = {};
+  for (const [key, metric] of Object.entries(value)) {
+    if (typeof metric !== 'number' || !Number.isFinite(metric) || metric < 0) return null;
+    stats[key] = metric;
+  }
+  return Object.freeze(stats);
 }
 
 export function desktopCloudSessionProjectionClient(): CloudSessionProjectionClient | null {
