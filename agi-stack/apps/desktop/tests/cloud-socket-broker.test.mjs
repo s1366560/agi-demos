@@ -156,3 +156,21 @@ function fakeSocket(url, protocols) {
     },
   };
 }
+
+test('renderer failure cleanup code closes and releases the native connection', async () => {
+  const { DesktopCloudSocketBroker } = require(compiledModule);
+  const socket = fakeSocket(policy.url, policy.protocols);
+  const broker = new DesktopCloudSocketBroker({
+    authorize: async () => policy,
+    createSocket: () => socket,
+    emit: () => {},
+  });
+  await broker.open(17, {
+    socketId: 'cloud-socket-broker-0099',
+    request: { kind: 'voice', url: policy.url, scope: policy.scope },
+  });
+  socket.open('memstack.auth');
+  await broker.close(17, { socketId: 'cloud-socket-broker-0099', code: 3008, reason: 'bridge_failure' });
+  assert.equal(socket.closeCalls.at(-1).code, 3008);
+  assert.equal(broker.activeCount, 0);
+});

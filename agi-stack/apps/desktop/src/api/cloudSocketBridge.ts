@@ -263,7 +263,7 @@ export class CloudSocketBridge {
     this.#dispatch('error', Object.freeze({ type: 'error', target: this, reason }));
     if (shouldRequestClose) {
       void this.#transport
-        .close(Object.freeze({ socketId: this.#socketId, code: 1008, reason }))
+        .close(Object.freeze({ socketId: this.#socketId, code: 3008, reason }))
         .catch(() => undefined);
     }
     this.#unsubscribe?.();

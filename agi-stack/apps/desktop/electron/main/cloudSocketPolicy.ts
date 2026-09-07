@@ -143,7 +143,9 @@ export async function authorizeVaultBoundCloudSocket(
     await dependencies.loadTrustedSession(),
     dependencies.now?.() ?? Date.now()
   );
-  const observedScope = await observeWorkspaceContext(session, dependencies);
+  const observedScope = await observeSocketWorkspaceScope(
+    request.scope, await observeWorkspaceContext(session, dependencies), session, dependencies,
+  );
   assertObservedScope(request.scope, observedScope);
   const target = authorizeSocketUrl(request, session);
   const protocols = ['memstack.auth', session.credential];
@@ -531,6 +533,41 @@ async function observeWorkspaceContext(
             'cloud socket workspace scope is invalid'
           ),
   });
+}
+
+async function observeSocketWorkspaceScope(
+  requested: CloudSocketScope,
+  observed: Awaited<ReturnType<typeof observeWorkspaceContext>>,
+  session: TrustedCloudSession,
+  dependencies: VaultBoundCloudSocketDependencies,
+): Promise<typeof observed> {
+  assertObservedScope({ ...requested, workspace_id: observed.workspaceId }, observed);
+  if (requested.workspace_id === null || observed.workspaceId !== null) return observed;
+  const path = `/api/v1/tenants/${encodeURIComponent(observed.tenantId)}/projects/${
+    encodeURIComponent(observed.projectId)
+  }/workspaces/${encodeURIComponent(requested.workspace_id)}`;
+  const response = await dependencies.fetch(`${session.apiBaseUrl}${path}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json', Authorization: `Bearer ${session.credential}` },
+    credentials: 'omit', redirect: 'manual',
+  });
+  if (!response.ok) throw new Error('cloud socket workspace scope observation failed');
+  const text = await boundedResponseText(response);
+  if (text.includes(session.credential)) {
+    throw new Error('cloud socket workspace scope contains protected credential');
+  }
+  if (!(response.headers.get('content-type') ?? '').toLowerCase().includes('application/json')) {
+    throw new Error('cloud socket workspace scope contract is invalid');
+  }
+  let body: unknown;
+  try { body = JSON.parse(text) as unknown; } catch {
+    throw new Error('cloud socket workspace scope contract is invalid');
+  }
+  if (!isRecord(body) || body.id !== requested.workspace_id ||
+      body.tenant_id !== observed.tenantId || body.project_id !== observed.projectId) {
+    throw new Error('cloud socket workspace scope observation failed');
+  }
+  return Object.freeze({ ...observed, workspaceId: requested.workspace_id });
 }
 
 async function boundedResponseText(response: Response): Promise<string> {

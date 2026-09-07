@@ -251,3 +251,14 @@ function fakeTransport(options = {}) {
     },
   };
 }
+
+test('internal failure cleanup uses an application close code accepted by the native broker', async () => {
+  const { createCloudSocketBridge } = require(compiledModule);
+  const transport = fakeTransport({ openError: new Error('native unavailable') });
+  createCloudSocketBridge(request, transport, { socketId: 'renderer-cloud-socket-0099' });
+  await transport.opened;
+  await Promise.resolve();
+  const close = transport.commands.find((command) => command.command === 'close');
+  assert.ok(close);
+  assert.equal(close.input.code, 3008);
+});
