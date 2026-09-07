@@ -245,3 +245,12 @@ through Alembic. No production database migration was applied. Before release, e
 content bootstrap, all legacy writers, indexing and generation-owned mounting must join
 this protocol. Disable the route to roll back; retain all metadata tables/receipts and
 conflict snapshots once any real synchronization data exists.
+
+I4.8 shares civil-time cron projection through `agistack-automation-schedule`, used by
+both the cloud server and native sidecar. Cloud regression tests first reproduced spring
+02:30 snapping to 03:00 and a fall-fold result preceding the observation instant. Both
+runtimes now skip missing civil times and use only the first instant of a repeated time,
+while preserving stagger offsets and strictly future cursors. Cloud schedule tests: 22
+passed; local automation tests: 30 passed; shared crate strict Clippy passed. No new
+external dependency version was introduced. Native execution and cloud readiness gates
+remain outstanding.

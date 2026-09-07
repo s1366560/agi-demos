@@ -11,6 +11,7 @@ name = "agistack-desktop-sidecar"
 path = "src/main.rs"
 
 [dependencies]
+agistack-automation-schedule = { path = "../../../crates/automation-schedule" }
 aes-gcm = { version = "0.10", features = ["zeroize"] }
 async-trait.workspace = true
 axum = { version = "0.7", features = ["ws"] }

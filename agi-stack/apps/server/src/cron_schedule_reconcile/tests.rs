@@ -219,3 +219,33 @@ async fn stale_source_revision_never_projects_schedule_state() {
     assert_eq!(failure.code, CronOperationErrorCode::StaleRevision);
     assert!(store.applied.lock().expect("applied lock").is_empty());
 }
+
+#[test]
+fn cron_dst_gap_skips_missing_civil_time() {
+    let target = snapshot(
+        "cron",
+        json!({"expr": "30 2 * * *", "timezone": "America/New_York"}),
+    );
+    let result = project_schedule(&target, ts("2026-03-08T05:00:00Z")).unwrap();
+    assert_eq!(result.next_fire_at, Some(ts("2026-03-09T06:30:00Z")));
+}
+
+#[test]
+fn cron_dst_fold_fires_only_first_instant() {
+    let target = snapshot(
+        "cron",
+        json!({"expr": "30 1 * * *", "timezone": "America/New_York"}),
+    );
+    for (observed, expected) in [
+        ("2026-11-01T04:00:00Z", "2026-11-01T05:30:00Z"),
+        ("2026-11-01T05:30:00Z", "2026-11-02T06:30:00Z"),
+        ("2026-11-01T06:00:00Z", "2026-11-02T06:30:00Z"),
+    ] {
+        let result = project_schedule(&target, ts(observed)).unwrap();
+        assert_eq!(
+            result.next_fire_at,
+            Some(ts(expected)),
+            "observed: {observed}"
+        );
+    }
+}

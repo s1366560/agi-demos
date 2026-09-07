@@ -5,6 +5,7 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
+agistack-automation-schedule = { path = "../../crates/automation-schedule" }
 agistack-core = { path = "../../crates/core" }
 agistack-plugin-host = { path = "../../crates/plugin-host" }
 agistack-adapters-mem = { path = "../../crates/adapters-mem" }

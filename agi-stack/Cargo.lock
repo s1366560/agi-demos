@@ -250,6 +250,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "agistack-automation-schedule"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "chrono-tz 0.10.4",
+ "croner",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "agistack-bench"
 version = "0.1.0"
 dependencies = [
@@ -307,6 +317,7 @@ dependencies = [
  "agistack-adapters-local-tools",
  "agistack-adapters-mem",
  "agistack-adapters-wasmtime",
+ "agistack-automation-schedule",
  "agistack-core",
  "agistack-plugin-host",
  "async-trait",
@@ -408,6 +419,7 @@ dependencies = [
  "agistack-adapters-secrets",
  "agistack-adapters-smtp",
  "agistack-adapters-wasmtime",
+ "agistack-automation-schedule",
  "agistack-core",
  "agistack-parity",
  "agistack-plugin-host",

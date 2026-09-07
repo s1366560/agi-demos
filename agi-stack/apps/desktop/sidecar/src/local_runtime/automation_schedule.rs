@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, Duration, TimeZone, Utc};
+use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
 use croner::Cron;
 use serde_json::{json, Value};
@@ -107,7 +107,8 @@ pub(super) fn project_job_schedule(
             let cron = Cron::from_str(expression)
                 .map_err(|_| AutomationScheduleProjectionError::Invalid)?;
             let search_at = add_seconds(observed_at, -stagger_seconds)?;
-            let next = next_cron_fire(&cron, timezone, search_at)?;
+            let next = agistack_automation_schedule::next_cron_fire(&cron, timezone, search_at)
+                .map_err(|_| AutomationScheduleProjectionError::Invalid)?;
             Some(add_seconds(next, stagger_seconds)?)
         }
         _ => return Err(AutomationScheduleProjectionError::Invalid),
@@ -122,33 +123,6 @@ pub(super) fn project_job_schedule(
         fingerprint,
         next_fire_at,
     })
-}
-
-fn next_cron_fire(
-    cron: &Cron,
-    timezone: Tz,
-    observed_at: DateTime<Utc>,
-) -> Result<DateTime<Utc>, AutomationScheduleProjectionError> {
-    // Search civil calendar values without the library's gap snapping policy.
-    // Resolve each value once: gaps are absent, folds use their earliest instant.
-    let mut civil_cursor = observed_at.with_timezone(&timezone).naive_local().and_utc();
-    loop {
-        let candidate = cron
-            .find_next_occurrence(&civil_cursor, false)
-            .map_err(|_| AutomationScheduleProjectionError::Invalid)?;
-        if candidate <= civil_cursor {
-            return Err(AutomationScheduleProjectionError::Invalid);
-        }
-        civil_cursor = candidate;
-        if let Some(instant) = timezone
-            .from_local_datetime(&candidate.naive_utc())
-            .earliest()
-        {
-            if instant.with_timezone(&Utc) > observed_at {
-                return Ok(instant.with_timezone(&Utc));
-            }
-        }
-    }
 }
 
 fn next_interval_fire(

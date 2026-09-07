@@ -175,10 +175,8 @@ pub(crate) fn project_schedule(
             let cron = Cron::from_str(expression).map_err(|_| ScheduleProjectionError::Invalid)?;
             let stagger = i64::from(snapshot.stagger_seconds);
             let search_at = add_seconds(observed_at, -stagger)?;
-            let next = cron
-                .find_next_occurrence(&search_at.with_timezone(&timezone), false)
-                .map_err(|_| ScheduleProjectionError::Invalid)?
-                .with_timezone(&Utc);
+            let next = agistack_automation_schedule::next_cron_fire(&cron, timezone, search_at)
+                .map_err(|_| ScheduleProjectionError::Invalid)?;
             (
                 CronScheduleStatus::Active,
                 Some(add_seconds(next, stagger)?),
