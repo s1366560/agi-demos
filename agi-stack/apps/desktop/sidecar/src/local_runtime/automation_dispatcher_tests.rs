@@ -418,6 +418,88 @@ mod tests {
         assert_eq!(runs[0]["conversation_id"], "local-automation-conversation");
     }
 
+    #[test]
+    fn separate_workers_cannot_execute_the_same_job_concurrently() {
+        let clock = FixedAutomationClock::at("2099-08-02T08:00:00Z");
+        let store = DesktopSessionStore::in_memory().expect("session store");
+        seed_job(&store, "job-serial", 1, 1, false, clock.now());
+        let command = ManualRunCommand {
+            user_id: "local-user",
+            project_id: "local-project",
+            job_id: "job-serial",
+            expected_revision: 1,
+            idempotency_key: "serial-first",
+            request_hash: "serial-first",
+            conversation_id: None,
+        };
+        enqueue_manual_run(&store, command, &clock).expect("first run");
+        let first = claim_next_operation(&store, "worker-a", Duration::from_secs(60), &clock)
+            .expect("claim")
+            .expect("first run claim");
+        enqueue_manual_run(
+            &store,
+            ManualRunCommand {
+                idempotency_key: "serial-second",
+                request_hash: "serial-second",
+                ..command
+            },
+            &clock,
+        )
+        .expect("second run queued");
+        assert!(
+            claim_next_operation(&store, "worker-b", Duration::from_secs(60), &clock)
+                .expect("claim must respect job serialization")
+                .is_none()
+        );
+
+        seed_job(&store, "job-independent", 1, 1, false, clock.now());
+        enqueue_manual_run(
+            &store,
+            ManualRunCommand {
+                job_id: "job-independent",
+                idempotency_key: "independent",
+                request_hash: "independent",
+                ..command
+            },
+            &clock,
+        )
+        .expect("independent run");
+        let other = claim_next_operation(&store, "worker-b", Duration::from_secs(60), &clock)
+            .expect("claim")
+            .expect("other job can proceed");
+        assert_eq!(other.job_id, "job-independent");
+        settle_operation(&store, &first, AutomationRunStatus::Success, None, &clock)
+            .expect("settle first run");
+        let second = claim_next_operation(&store, "worker-c", Duration::from_secs(60), &clock)
+            .expect("claim")
+            .expect("second run released after terminal");
+        assert_eq!(second.job_id, first.job_id);
+        assert_ne!(second.run_id, first.run_id);
+        settle_operation(
+            &store,
+            &second,
+            AutomationRunStatus::WaitingHuman,
+            None,
+            &clock,
+        )
+        .expect("park second run for human response");
+        enqueue_manual_run(
+            &store,
+            ManualRunCommand {
+                idempotency_key: "serial-third",
+                request_hash: "serial-third",
+                ..command
+            },
+            &clock,
+        )
+        .expect("third run queued");
+        assert!(
+            claim_next_operation(&store, "worker-d", Duration::from_secs(60), &clock)
+                .expect("human wait must retain job serialization")
+                .is_none()
+        );
+    }
+
     fn schedule_cursor(
         store: &DesktopSessionStore,
         job_id: &str,

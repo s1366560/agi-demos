@@ -82,6 +82,18 @@ member contract tests without generation initialization and was interrupted at A
 259.67 seconds (49 passed). ACP passed alone and with preceding e2e/telemetry tests (50/50).
 This is not a full Backend pass; both scope and interrupted execution remain explicit.
 
+I4.1 adds per-job serialization to local operation claims. A running or waiting-human
+run blocks another claim for the same tenant/project/job; unrelated jobs remain eligible.
+The regression failed before the change and passed afterward, including release after
+terminal completion and retention during HITL. All 26 automation tests passed. The full
+sidecar strict Clippy check reports pre-existing warnings outside this patch; it is not
+recorded as passing. Overlapping scheduled-fire history and missed-fire policy remain
+pending and this batch does not enable cloud execution.
+
+A unit-tree run was interrupted with 3745 passed, 43 failed and 27 setup errors after
+reading an in-progress Desktop artifact whose generated manifest had not yet been rebuilt.
+This run is diagnostic only. Subsequent full checks must use frozen generated artifacts.
+
 - Knowledge: tenant/project-scoped reads and deletes, CAS writes, atomic processing
   outbox, index recovery, per-action availability and cloud pagination/mutations.
 - Sync: explicit project association, stable IDs, revisions, change IDs, cursor,

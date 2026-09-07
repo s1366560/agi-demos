@@ -375,6 +375,14 @@ pub(super) fn claim_next_operation(
              INNER JOIN desktop_automation_runs AS run ON run.id = operation.run_id
              WHERE operation.status = 'queued' AND operation.available_at_ms <= ?1
                AND run.status = 'queued'
+               AND NOT EXISTS (
+                 SELECT 1 FROM desktop_automation_runs AS active
+                 WHERE active.tenant_id = run.tenant_id
+                   AND active.project_id = run.project_id
+                   AND active.job_id = run.job_id
+                   AND active.id != run.id
+                   AND active.status IN ('running', 'waiting_human')
+               )
              ORDER BY operation.available_at_ms ASC, operation.created_at ASC,
                       operation.id ASC
              LIMIT 1",
