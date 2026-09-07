@@ -166,6 +166,11 @@ async def _create_legacy_schema(test_url: URL) -> None:
                 )
             )
             await connection.exec_driver_sql(
+                "CREATE TABLE agent_bindings (id text PRIMARY KEY, agent_id text NOT NULL, "
+                "CONSTRAINT agent_bindings_agent_id_fkey "
+                "FOREIGN KEY (agent_id) REFERENCES agent_definitions (id))"
+            )
+            await connection.exec_driver_sql(
                 "ALTER TABLE conversations ADD CONSTRAINT fk_conversations_workspace_id "
                 "FOREIGN KEY (workspace_id) REFERENCES workspaces (id) ON DELETE SET NULL"
             )

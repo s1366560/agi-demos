@@ -145,6 +145,10 @@ async def _create_legacy_workspace_link_fixtures(test_dsn: str) -> None:
     connection = await asyncpg.connect(test_dsn)
     try:
         await connection.execute(
+            "CREATE TABLE agent_definitions (id text PRIMARY KEY);"
+            "CREATE TABLE agent_bindings (id text PRIMARY KEY, agent_id text NOT NULL, "
+            "CONSTRAINT agent_bindings_agent_id_fkey "
+            "FOREIGN KEY (agent_id) REFERENCES agent_definitions (id));"
             "CREATE TABLE workspaces (id text PRIMARY KEY);"
             "CREATE TABLE workspace_tasks (id text PRIMARY KEY);"
             "CREATE TABLE workspace_messages (id text PRIMARY KEY);"
