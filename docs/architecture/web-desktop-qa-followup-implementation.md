@@ -323,3 +323,21 @@ tests passed; five added PostgreSQL regressions passed without skips using tempo
 platform tables and a controlled Core HTTP fixture. Existing projection PostgreSQL
 tests also passed with the retired tables absent. Clippy completed with 17 existing
 warnings. This verifies code/protocol closure, not a new native cloud acceptance run.
+
+I3.5 adds trusted local pull storage with atomic cursor compare-and-swap, remote
+baselines, indexing changes and retained conflict copies. Remote applies never enqueue
+local-origin outbox entries. Pending local edits/deletions preserve both versions and
+block new pushes for that memory while unrelated memories continue. Local revisions
+remain independent from remote revisions, and complete remote metadata is retained.
+When pull observes a prepared local change whose HTTP receipt was lost, it passes the
+journal's immutable receipt fields through the existing strict receipt verifier inside
+the page transaction; this acknowledges the original write without overwriting later
+local edits. Malformed later events roll back that acknowledgment with the whole page.
+
+Pull storage 17 tests and the existing knowledge storage 18 tests passed; strict
+Core/device all-target Clippy passed. Coverage includes concurrent connections/local
+edits, injected cursor-write rollback, v4-to-v5 upgrade, restart, corrupt-v5 refusal,
+delete/restore, identity/scope rejection and push receipts ahead of the pull cursor.
+Native pull transport, explicit conflict-resolution UI and bidirectional acceptance
+remain pending. The additive schema preserves pending data and does not advertise a
+renderer capability before the complete application protocol is installed.

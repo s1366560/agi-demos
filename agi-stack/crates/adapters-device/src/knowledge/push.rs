@@ -10,6 +10,45 @@ use super::*;
 #[path = "push_receipts.rs"]
 mod receipts;
 
+/// A verified change-log event carries the same immutable applied receipt fields.
+/// Reuse receipt validation so observing our own committed write can recover a
+/// lost HTTP response without creating a false conflict or replacing local edits.
+pub(super) fn accept_journal_receipt(
+    tx: &Transaction<'_>,
+    scope: &KnowledgeScope,
+    target: &KnowledgeSyncTarget,
+    change_id: &str,
+    sequence: u64,
+    version: &Value,
+) -> KnowledgeResult<()> {
+    let local_sequence: Option<u64> = tx
+        .query_row(
+            "SELECT p.sequence FROM knowledge_sync_pushes p
+         JOIN knowledge_sync_outbox o ON o.sequence=p.sequence
+         JOIN knowledge_processing_changes c ON c.sequence=p.sequence
+         WHERE c.tenant_id=?1 AND c.project_id=?2 AND o.change_id=?3",
+            params![scope.tenant_id, scope.project_id, change_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(storage)?;
+    if let Some(local_sequence) = local_sequence {
+        receipts::accept(
+            tx,
+            scope,
+            target,
+            local_sequence,
+            json!({
+                "replayed": false,
+                "receipt": {"status":"applied", "change_id":change_id,
+                            "sequence":sequence, "version":version}
+            }),
+            None,
+        )?;
+    }
+    Ok(())
+}
+
 impl SqliteKnowledgeRepository {
     /// Synchronous form for a trusted caller that must hold its identity fence
     /// until the receipt and baseline commit. No external or async work occurs.
@@ -71,7 +110,7 @@ pub(super) fn migrate(tx: &Transaction<'_>, previous_version: i64) -> KnowledgeR
     .map_err(storage)
 }
 
-fn check_target(
+pub(super) fn check_target(
     conn: &Connection,
     scope: &KnowledgeScope,
     target: &KnowledgeSyncTarget,
@@ -189,6 +228,11 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
                  JOIN knowledge_processing_changes c ON c.sequence=o.sequence
                  LEFT JOIN knowledge_sync_pushes p ON p.sequence=o.sequence
                  WHERE c.tenant_id=?1 AND c.project_id=?2 AND p.receipt_json IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM knowledge_sync_pull_conflicts pc
+                     WHERE pc.tenant_id=c.tenant_id AND pc.project_id=c.project_id
+                       AND pc.memory_id=c.memory_id
+                   )
                    AND NOT EXISTS (
                      SELECT 1 FROM knowledge_sync_outbox eo
                      JOIN knowledge_processing_changes ec ON ec.sequence=eo.sequence

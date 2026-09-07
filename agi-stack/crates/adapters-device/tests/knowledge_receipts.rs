@@ -202,7 +202,7 @@ fn version_one_upgrade_preserves_existing_content_and_changes() {
         let version: i64 = connection
             .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         drop(upgraded);
         drop(connection);
         std::fs::remove_file(path).unwrap();

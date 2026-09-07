@@ -90,6 +90,7 @@ dependencies = [
  "instant-distance",
  "petgraph",
  "rusqlite",
+ "serde",
  "serde_json",
  "uuid",
 ]

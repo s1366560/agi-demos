@@ -13,9 +13,10 @@ use rusqlite::{params, Connection, OptionalExtension};
 
 mod mutations;
 mod push;
+mod pull;
 mod sync;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 4;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 5;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -86,6 +87,7 @@ impl SqliteKnowledgeRepository {
         )
         .map_err(storage)?;
         sync::migrate(&tx, version)?;
+        pull::migrate(&tx, version)?;
         tx.execute(
             "UPDATE knowledge_schema SET version=?1",
             [KNOWLEDGE_SCHEMA_VERSION],
