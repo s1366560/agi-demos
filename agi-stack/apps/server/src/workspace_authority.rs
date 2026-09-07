@@ -16,6 +16,13 @@ pub(crate) struct WorkspaceAuthorityScope {
     pub(crate) is_archived: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkspaceAuthorityProfile {
+    pub(crate) scope: WorkspaceAuthorityScope,
+    pub(crate) name: String,
+    pub(crate) task_linked: bool,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum WorkspaceAuthorityError {
     #[error("Workspace Core is unavailable")]
@@ -29,6 +36,15 @@ pub(crate) trait WorkspaceAuthority: Send + Sync {
         user_id: &str,
         workspace_id: &str,
     ) -> Result<Option<WorkspaceAuthorityScope>, WorkspaceAuthorityError>;
+
+    async fn read_profile(
+        &self,
+        _user_id: &str,
+        _workspace_id: &str,
+        _task_id: Option<&str>,
+    ) -> Result<Option<WorkspaceAuthorityProfile>, WorkspaceAuthorityError> {
+        Err(WorkspaceAuthorityError::Unavailable)
+    }
 }
 
 pub(crate) type SharedWorkspaceAuthority = Arc<dyn WorkspaceAuthority>;
@@ -67,6 +83,23 @@ impl WorkspaceAuthority for CoreWorkspaceAuthority {
         user_id: &str,
         workspace_id: &str,
     ) -> Result<Option<WorkspaceAuthorityScope>, WorkspaceAuthorityError> {
+        self.read_profile(user_id, workspace_id, None)
+            .await
+            .map(|profile| profile.map(|profile| profile.scope))
+    }
+
+    async fn read_profile(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        task_id: Option<&str>,
+    ) -> Result<Option<WorkspaceAuthorityProfile>, WorkspaceAuthorityError> {
+        if !valid_identifier(user_id)
+            || !valid_identifier(workspace_id)
+            || task_id.is_some_and(|id| !valid_identifier(id))
+        {
+            return Err(WorkspaceAuthorityError::Unavailable);
+        }
         let response = self
             .client
             .post(format!("{}{}", self.base_url, AUTHORITY_QUERY_PATH))
@@ -74,6 +107,13 @@ impl WorkspaceAuthority for CoreWorkspaceAuthority {
             .json(&AuthorityQueryRequest {
                 actor: AuthorityActor { user_id },
                 workspace_ids: [workspace_id],
+                task_refs: task_id
+                    .map(|task_id| AuthorityTaskRef {
+                        workspace_id,
+                        task_id,
+                    })
+                    .into_iter()
+                    .collect(),
             })
             .send()
             .await
@@ -85,17 +125,36 @@ impl WorkspaceAuthority for CoreWorkspaceAuthority {
             .json::<AuthorityQueryResponse>()
             .await
             .map_err(|_| WorkspaceAuthorityError::Unavailable)?;
+        let task_linked = match (task_id, response.task_links.as_slice()) {
+            (None, []) => true,
+            (Some(expected), [link])
+                if link.workspace_id == workspace_id && link.task_id == expected =>
+            {
+                link.linked
+            }
+            _ => return Err(WorkspaceAuthorityError::Unavailable),
+        };
+        if response.profiles.len() > 1 {
+            return Err(WorkspaceAuthorityError::Unavailable);
+        }
         let Some(profile) = response.profiles.into_iter().next() else {
             return Ok(None);
         };
-        if profile.workspace_id != workspace_id {
+        if profile.workspace_id != workspace_id
+            || !valid_identifier(&profile.tenant_id)
+            || !valid_identifier(&profile.project_id)
+        {
             return Err(WorkspaceAuthorityError::Unavailable);
         }
-        Ok(Some(WorkspaceAuthorityScope {
-            tenant_id: profile.tenant_id,
-            project_id: profile.project_id,
-            workspace_id: profile.workspace_id,
-            is_archived: profile.is_archived,
+        Ok(Some(WorkspaceAuthorityProfile {
+            scope: WorkspaceAuthorityScope {
+                tenant_id: profile.tenant_id,
+                project_id: profile.project_id,
+                workspace_id: profile.workspace_id,
+                is_archived: profile.is_archived,
+            },
+            name: profile.name,
+            task_linked,
         }))
     }
 }
@@ -104,6 +163,21 @@ impl WorkspaceAuthority for CoreWorkspaceAuthority {
 struct AuthorityQueryRequest<'a> {
     actor: AuthorityActor<'a>,
     workspace_ids: [&'a str; 1],
+    task_refs: Vec<AuthorityTaskRef<'a>>,
+}
+
+#[derive(Serialize)]
+struct AuthorityTaskRef<'a> {
+    workspace_id: &'a str,
+    task_id: &'a str,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityTaskLink {
+    workspace_id: String,
+    task_id: String,
+    linked: bool,
 }
 
 #[derive(Serialize)]
@@ -115,14 +189,20 @@ struct AuthorityActor<'a> {
 #[serde(deny_unknown_fields)]
 struct AuthorityQueryResponse {
     profiles: Vec<AuthorityProfile>,
+    task_links: Vec<AuthorityTaskLink>,
 }
 
 #[derive(Deserialize)]
 struct AuthorityProfile {
+    name: String,
     workspace_id: String,
     tenant_id: String,
     project_id: String,
     is_archived: bool,
+}
+
+fn valid_identifier(value: &str) -> bool {
+    !value.is_empty() && value == value.trim()
 }
 
 fn required_env(name: &'static str) -> Result<String, WorkspaceAuthorityError> {
@@ -146,3 +226,9 @@ impl WorkspaceAuthority for UnavailableWorkspaceAuthority {
         Err(WorkspaceAuthorityError::Unavailable)
     }
 }
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+pub(crate) mod test_support;

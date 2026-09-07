@@ -307,3 +307,19 @@ cover 51, 52, the JavaScript safe maximum and overflow rejection. Run history ac
 the declared skipped status and rejects unknown statuses. Rust automation 31 passed;
 Desktop focused 87 passed; production and test TypeScript checks passed. Native UI
 recovery acceptance is still pending a canonical restart with this sidecar build.
+
+I0.3 removes retired platform Workspace table reads from the Rust conversation,
+event-replay and session projections. Platform repositories return membership and
+scope facts; the application composes those facts with Workspace Core authorization,
+including exact tenant/project, archive status and task linkage. Owner/admin status
+does not bypass Workspace authorization. The Core response decoder now accepts its
+actual profiles-and-task-links envelope. Retired attempt/plan compatibility fields
+remain empty, matching the Python projection rather than querying retired tables.
+
+Cross-review additionally reproduced and fixed missing Core checks on WebSocket send
+and stop admission, source-workspace authorization before rebinding, and effective
+workspace linkage for legacy metadata/ID-backed rows in lists and replay. 631 server
+tests passed; five added PostgreSQL regressions passed without skips using temporary
+platform tables and a controlled Core HTTP fixture. Existing projection PostgreSQL
+tests also passed with the retired tables absent. Clippy completed with 17 existing
+warnings. This verifies code/protocol closure, not a new native cloud acceptance run.

@@ -6,6 +6,25 @@ use agistack_core::ports::{CoreError, CoreResult};
 
 use crate::PgPool;
 
+/// Resolve persisted Workspace linkage in the same order for every conversation consumer.
+pub fn effective_conversation_workspace_id<'a>(
+    conversation_id: &'a str,
+    workspace_id: Option<&'a str>,
+    metadata: Option<&'a Value>,
+) -> Option<&'a str> {
+    [
+        workspace_id,
+        metadata
+            .and_then(|value| value.get("workspace_id"))
+            .and_then(Value::as_str),
+        conversation_id.strip_prefix("workspace-chat:"),
+    ]
+    .into_iter()
+    .flatten()
+    .map(str::trim)
+    .find(|value| !value.is_empty())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationMutationAccess {
     Allowed,
@@ -87,11 +106,10 @@ impl PgAgentConversationRepository {
                     c.message_count, c.created_at, c.updated_at, c.summary, c.agent_config, \
                     c.meta AS metadata, c.parent_conversation_id, c.branch_point_message_id, \
                     c.conversation_mode, c.workspace_id, c.linked_workspace_task_id, \
-                    w.name AS workspace_name, c.participant_agents, c.coordinator_agent_id, \
+                    NULL::text AS workspace_name, c.participant_agents, c.coordinator_agent_id, \
                     c.focused_agent_id \
              FROM conversations c \
              LEFT JOIN last_activity la ON la.conversation_id = c.id \
-             LEFT JOIN workspaces w ON w.id = c.workspace_id \
              WHERE c.project_id = $1 \
                AND c.tenant_id = (SELECT tenant_id FROM projects WHERE id = $1) \
                AND ($2::text IS NULL OR c.status = $2) \
@@ -189,10 +207,9 @@ impl PgAgentConversationRepository {
                     c.message_count, c.created_at, c.updated_at, c.summary, c.agent_config, \
                     c.meta AS metadata, c.parent_conversation_id, c.branch_point_message_id, \
                     c.conversation_mode, c.workspace_id, c.linked_workspace_task_id, \
-                    w.name AS workspace_name, c.participant_agents, c.coordinator_agent_id, \
+                    NULL::text AS workspace_name, c.participant_agents, c.coordinator_agent_id, \
                     c.focused_agent_id \
              FROM conversations c \
-             LEFT JOIN workspaces w ON w.id = c.workspace_id \
              WHERE c.id = $1 AND c.project_id = $2",
         )
         .bind(conversation_id)
@@ -356,53 +373,13 @@ impl PgAgentConversationRepository {
         self.get_conversation(conversation_id, project_id).await
     }
 
-    pub async fn workspace_access(
-        &self,
-        user_id: &str,
-        project_id: &str,
-        workspace_id: &str,
-    ) -> CoreResult<ConversationMutationAccess> {
-        let Some((tenant_id,)) = sqlx::query_as::<_, (String,)>(
-            "SELECT tenant_id FROM workspaces WHERE id = $1 AND project_id = $2",
-        )
-        .bind(workspace_id)
-        .bind(project_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(storage)?
-        else {
-            return Ok(ConversationMutationAccess::NotFound);
-        };
-
-        let count = sqlx::query_as::<_, (i64,)>(
-            "SELECT count(*) FROM workspace_members \
-             WHERE workspace_id = $1 AND user_id = $2",
-        )
-        .bind(workspace_id)
-        .bind(user_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(storage)?
-        .0;
-        if count > 0 {
-            Ok(ConversationMutationAccess::Allowed)
-        } else {
-            let admin_count = sqlx::query_as::<_, (i64,)>(
-                "SELECT count(*) FROM user_tenants \
-                 WHERE user_id = $1 AND tenant_id = $2 AND role IN ('admin', 'owner')",
-            )
-            .bind(user_id)
-            .bind(tenant_id)
-            .fetch_one(&self.pool)
+    /// Resolve only the platform project scope; Workspace ACLs are Core-owned.
+    pub async fn project_tenant_id(&self, project_id: &str) -> CoreResult<Option<String>> {
+        sqlx::query_scalar("SELECT tenant_id FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(&self.pool)
             .await
-            .map_err(storage)?
-            .0;
-            if admin_count > 0 {
-                Ok(ConversationMutationAccess::Allowed)
-            } else {
-                Ok(ConversationMutationAccess::Denied)
-            }
-        }
+            .map_err(storage)
     }
 }
 

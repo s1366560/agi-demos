@@ -8,11 +8,17 @@ use agistack_core::ports::{CoreError, CoreResult};
 
 use crate::PgPool;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConversationReplayAccess {
     Allowed,
     Denied,
     NotFound,
+    /// Platform membership is valid; only Workspace Core can authorize this scope.
+    WorkspaceAuthorityRequired {
+        tenant_id: String,
+        project_id: String,
+        workspace_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -123,33 +129,19 @@ impl PgAgentExecutionEventRepository {
         let (project_scope_exists, active_project_member, tenant_admin) = self
             .conversation_scope_access(user_id, &conversation.tenant_id, &conversation.project_id)
             .await?;
-        if !project_scope_exists {
+        if !project_scope_exists || (!tenant_admin && !active_project_member) {
             return Ok(ConversationReplayAccess::Denied);
         }
-        if tenant_admin {
-            return Ok(ConversationReplayAccess::Allowed);
-        }
-        if !active_project_member {
-            return Ok(ConversationReplayAccess::Denied);
-        }
-        if conversation.user_id == user_id {
-            return Ok(ConversationReplayAccess::Allowed);
-        }
-
         if let Some(workspace_id) = conversation.workspace_id() {
-            if self
-                .user_has_workspace_access(
-                    user_id,
-                    &conversation.tenant_id,
-                    &conversation.project_id,
-                    &workspace_id,
-                )
-                .await?
-            {
-                return Ok(ConversationReplayAccess::Allowed);
-            }
+            return Ok(ConversationReplayAccess::WorkspaceAuthorityRequired {
+                tenant_id: conversation.tenant_id,
+                project_id: conversation.project_id,
+                workspace_id,
+            });
         }
-
+        if tenant_admin || conversation.user_id == user_id {
+            return Ok(ConversationReplayAccess::Allowed);
+        }
         Ok(ConversationReplayAccess::Denied)
     }
 
@@ -346,33 +338,6 @@ impl PgAgentExecutionEventRepository {
         .await
         .map_err(storage)
     }
-
-    async fn user_has_workspace_access(
-        &self,
-        user_id: &str,
-        tenant_id: &str,
-        project_id: &str,
-        workspace_id: &str,
-    ) -> CoreResult<bool> {
-        let count = sqlx::query_as::<_, (i64,)>(
-            "SELECT count(*) \
-             FROM workspace_members wm \
-             JOIN workspaces w ON wm.workspace_id = w.id \
-             WHERE wm.user_id = $1 \
-               AND wm.workspace_id = $2 \
-               AND w.tenant_id = $3 \
-               AND w.project_id = $4",
-        )
-        .bind(user_id)
-        .bind(workspace_id)
-        .bind(tenant_id)
-        .bind(project_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(storage)?
-        .0;
-        Ok(count > 0)
-    }
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -387,31 +352,12 @@ struct ConversationAccessRow {
 
 impl ConversationAccessRow {
     fn workspace_id(&self) -> Option<String> {
-        if let Some(workspace_id) = self
-            .workspace_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            return Some(workspace_id.to_string());
-        }
-
-        if let Some(workspace_id) = self
-            .metadata
-            .as_ref()
-            .and_then(|value| value.get("workspace_id"))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            return Some(workspace_id.to_string());
-        }
-
-        self.id
-            .strip_prefix("workspace-chat:")
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string)
+        crate::effective_conversation_workspace_id(
+            &self.id,
+            self.workspace_id.as_deref(),
+            self.metadata.as_ref(),
+        )
+        .map(ToString::to_string)
     }
 }
 

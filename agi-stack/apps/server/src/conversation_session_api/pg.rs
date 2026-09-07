@@ -7,6 +7,9 @@ use agistack_adapters_postgres::{
     PgAgentExecutionEventRepository, PgPool,
 };
 
+use crate::conversation_authority::read_scoped_workspace_profile;
+use crate::workspace_authority::SharedWorkspaceAuthority;
+
 use super::{
     build_projection, sanitized_scalar, sanitized_text, string_list, ConversationSessionApiError,
     ConversationSessionAuthoritySnapshot, ConversationSessionProjectionResponse,
@@ -16,7 +19,7 @@ use super::{
     SessionPermissionProfile, SessionPermissionRequestResponse, SessionPermissionRiskLevel,
     SessionPlanRunResponse, SessionRunEnvironmentKind, SessionRunEnvironmentResponse,
     SessionToolExecutionAuthority, SessionToolExecutionResponse, SessionWorkspaceAttemptResponse,
-    SessionWorkspacePlanContextResponse, SessionWorkspacePlanNodeResponse,
+    SessionWorkspacePlanContextResponse,
 };
 
 const TOOL_RECORD_LIMIT: i64 = 200;
@@ -40,14 +43,16 @@ pub(crate) struct PgConversationSessionProjectionService {
     pool: PgPool,
     conversations: PgAgentConversationRepository,
     events: PgAgentExecutionEventRepository,
+    workspace_authority: SharedWorkspaceAuthority,
 }
 
 impl PgConversationSessionProjectionService {
-    pub(crate) fn new(pool: PgPool) -> Self {
+    pub(crate) fn new(pool: PgPool, workspace_authority: SharedWorkspaceAuthority) -> Self {
         Self {
             conversations: PgAgentConversationRepository::new(pool.clone()),
             events: PgAgentExecutionEventRepository::new(pool.clone()),
             pool,
+            workspace_authority,
         }
     }
 
@@ -57,13 +62,47 @@ impl PgConversationSessionProjectionService {
         conversation_id: &str,
         query: &ConversationSessionQuery,
     ) -> Result<Option<ConversationSessionProjectionResponse>, ConversationSessionApiError> {
+        let Some(mut conversation) = self
+            .load_conversation(conversation_id, query)
+            .await
+            .map_err(ConversationSessionApiError::internal)?
+        else {
+            return Ok(None);
+        };
         let read_access = self
             .events
             .replay_access(user_id, conversation_id)
             .await
             .map_err(ConversationSessionApiError::internal)?;
-        if !matches!(read_access, ConversationReplayAccess::Allowed) {
-            return Ok(None);
+        match read_access {
+            ConversationReplayAccess::WorkspaceAuthorityRequired {
+                tenant_id,
+                project_id,
+                workspace_id,
+            } => {
+                if conversation.tenant_id != tenant_id
+                    || conversation.project_id != project_id
+                    || conversation.workspace_id.as_deref() != Some(workspace_id.as_str())
+                {
+                    return Ok(None);
+                }
+                let Some(profile) = read_scoped_workspace_profile(
+                    self.workspace_authority.as_ref(),
+                    user_id,
+                    &tenant_id,
+                    &project_id,
+                    &workspace_id,
+                    conversation.linked_workspace_task_id.as_deref(),
+                )
+                .await
+                .map_err(|_| ConversationSessionApiError::workspace_unavailable())?
+                else {
+                    return Ok(None);
+                };
+                conversation.workspace_name = Some(profile.name);
+            }
+            ConversationReplayAccess::Allowed if conversation.workspace_id.is_none() => {}
+            _ => return Ok(None),
         }
 
         let can_send_message = matches!(
@@ -73,7 +112,7 @@ impl PgConversationSessionProjectionService {
                 .map_err(ConversationSessionApiError::internal)?,
             ConversationMutationAccess::Allowed
         );
-        self.load_projection(user_id, conversation_id, query, can_send_message)
+        self.load_projection(user_id, conversation.into_response(), can_send_message)
             .await
             .map_err(|error| {
                 ConversationSessionApiError::internal(format!(
@@ -85,14 +124,9 @@ impl PgConversationSessionProjectionService {
     async fn load_projection(
         &self,
         user_id: &str,
-        conversation_id: &str,
-        query: &ConversationSessionQuery,
+        conversation: SessionConversationResponse,
         can_send_message: bool,
     ) -> Result<Option<ConversationSessionProjectionResponse>, sqlx::Error> {
-        let Some(conversation_row) = self.load_conversation(conversation_id, query).await? else {
-            return Ok(None);
-        };
-        let conversation = conversation_row.into_response();
         let (
             attempts,
             runs,
@@ -138,15 +172,11 @@ impl PgConversationSessionProjectionService {
     ) -> Result<Option<ConversationRow>, sqlx::Error> {
         sqlx::query_as::<_, ConversationRow>(
             "SELECT c.id, c.tenant_id, c.project_id, c.workspace_id, \
-                    c.linked_workspace_task_id, w.name AS workspace_name, c.user_id, c.title, \
+                    c.linked_workspace_task_id, NULL::text AS workspace_name, c.user_id, c.title, \
                     c.summary, c.status, c.current_mode, c.conversation_mode, c.agent_config, \
                     c.message_count, c.participant_agents, c.coordinator_agent_id, \
                     c.focused_agent_id, c.created_at, c.updated_at \
              FROM conversations AS c \
-             LEFT JOIN workspaces AS w \
-               ON w.id = c.workspace_id \
-              AND w.tenant_id = c.tenant_id \
-              AND w.project_id = c.project_id \
              WHERE c.id = $1 \
                AND c.tenant_id = $2 \
                AND c.project_id = $3 \
@@ -154,14 +184,7 @@ impl PgConversationSessionProjectionService {
                     SELECT 1 FROM projects AS p \
                     WHERE p.id = c.project_id AND p.tenant_id = c.tenant_id \
                ) \
-               AND ( \
-                    ($4::text IS NULL AND c.workspace_id IS NULL) \
-                    OR ( \
-                        $4::text IS NOT NULL \
-                        AND c.workspace_id = $4 \
-                        AND w.id IS NOT NULL \
-                    ) \
-               ) \
+               AND c.workspace_id IS NOT DISTINCT FROM $4::text \
              LIMIT 1",
         )
         .bind(conversation_id)
@@ -176,30 +199,10 @@ impl PgConversationSessionProjectionService {
         &self,
         conversation: &SessionConversationResponse,
     ) -> Result<Vec<SessionWorkspaceAttemptResponse>, sqlx::Error> {
-        let (Some(workspace_id), Some(workspace_task_id)) = (
-            conversation.workspace_id.as_deref(),
-            conversation.linked_workspace_task_id.as_deref(),
-        ) else {
-            return Ok(Vec::new());
-        };
-        let rows = sqlx::query_as::<_, AttemptRow>(
-            "SELECT id, workspace_task_id, root_goal_task_id, workspace_id, \
-                    conversation_id, attempt_number, status, worker_agent_id, leader_agent_id, \
-                    candidate_summary, candidate_artifacts_json, \
-                    candidate_verifications_json, leader_feedback, adjudication_reason, \
-                    created_at, updated_at, completed_at \
-             FROM workspace_task_session_attempts \
-             WHERE conversation_id = $1 \
-               AND workspace_id = $2 \
-               AND workspace_task_id = $3 \
-             ORDER BY attempt_number DESC, created_at DESC, id DESC",
-        )
-        .bind(&conversation.id)
-        .bind(workspace_id)
-        .bind(workspace_task_id)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(rows.into_iter().map(AttemptRow::into_response).collect())
+        // Match the Python projection: Workspace Core owns attempts; the retired
+        // platform attempt table is not a fallback authority.
+        let _ = conversation;
+        Ok(Vec::new())
     }
 
     async fn load_runs(
@@ -251,52 +254,10 @@ impl PgConversationSessionProjectionService {
         &self,
         conversation: &SessionConversationResponse,
     ) -> Result<Option<SessionWorkspacePlanContextResponse>, sqlx::Error> {
-        let (Some(workspace_id), Some(workspace_task_id)) = (
-            conversation.workspace_id.as_deref(),
-            conversation.linked_workspace_task_id.as_deref(),
-        ) else {
-            return Ok(None);
-        };
-        let Some(plan) = sqlx::query_as::<_, PlanRow>(
-            "SELECT plan.id, plan.workspace_id, plan.goal_id, plan.status, \
-                    plan.created_at, plan.updated_at \
-             FROM workspace_plans AS plan \
-             WHERE plan.workspace_id = $1 \
-               AND EXISTS ( \
-                    SELECT 1 FROM workspace_plan_nodes AS node \
-                    WHERE node.plan_id = plan.id AND node.workspace_task_id = $2 \
-               ) \
-             ORDER BY plan.created_at DESC, plan.id DESC \
-             LIMIT 1",
-        )
-        .bind(workspace_id)
-        .bind(workspace_task_id)
-        .fetch_optional(&self.pool)
-        .await?
-        else {
-            return Ok(None);
-        };
-        let nodes = sqlx::query_as::<_, PlanNodeRow>(
-            "SELECT id, plan_id, workspace_task_id, kind, title, description, intent, \
-                    execution, progress, assignee_agent_id, current_attempt_id, \
-                    created_at, updated_at, completed_at \
-             FROM workspace_plan_nodes \
-             WHERE plan_id = $1 AND workspace_task_id = $2 \
-             ORDER BY created_at ASC, id ASC",
-        )
-        .bind(&plan.id)
-        .bind(workspace_task_id)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(Some(SessionWorkspacePlanContextResponse {
-            id: plan.id,
-            workspace_id: plan.workspace_id,
-            goal_id: plan.goal_id,
-            status: plan.status,
-            created_at: plan.created_at,
-            updated_at: plan.updated_at,
-            linked_nodes: nodes.into_iter().map(PlanNodeRow::into_response).collect(),
-        }))
+        // The platform Workspace Plan projection was retired. Agent plan/run
+        // authority is projected separately by load_runs.
+        let _ = conversation;
+        Ok(None)
     }
 
     async fn load_pending_hitl(
@@ -454,51 +415,6 @@ impl ConversationRow {
             focused_agent_id: self.focused_agent_id,
             created_at: self.created_at,
             updated_at: self.updated_at,
-        }
-    }
-}
-
-#[derive(FromRow)]
-struct AttemptRow {
-    id: String,
-    workspace_task_id: String,
-    root_goal_task_id: String,
-    workspace_id: String,
-    conversation_id: String,
-    attempt_number: i32,
-    status: String,
-    worker_agent_id: Option<String>,
-    leader_agent_id: Option<String>,
-    candidate_summary: Option<String>,
-    candidate_artifacts_json: Value,
-    candidate_verifications_json: Value,
-    leader_feedback: Option<String>,
-    adjudication_reason: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: Option<DateTime<Utc>>,
-    completed_at: Option<DateTime<Utc>>,
-}
-
-impl AttemptRow {
-    fn into_response(self) -> SessionWorkspaceAttemptResponse {
-        SessionWorkspaceAttemptResponse {
-            id: self.id,
-            workspace_task_id: self.workspace_task_id,
-            root_goal_task_id: self.root_goal_task_id,
-            workspace_id: self.workspace_id,
-            conversation_id: self.conversation_id,
-            attempt_number: self.attempt_number,
-            status: self.status,
-            worker_agent_id: self.worker_agent_id,
-            leader_agent_id: self.leader_agent_id,
-            candidate_summary: self.candidate_summary,
-            candidate_artifact_refs: string_list(&self.candidate_artifacts_json),
-            candidate_verification_refs: string_list(&self.candidate_verifications_json),
-            leader_feedback: self.leader_feedback,
-            adjudication_reason: self.adjudication_reason,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-            completed_at: self.completed_at,
         }
     }
 }
@@ -680,55 +596,6 @@ impl ConversationTaskRow {
             order_index: self.order_index,
             created_at: self.created_at,
             updated_at: self.updated_at,
-        }
-    }
-}
-
-#[derive(FromRow)]
-struct PlanRow {
-    id: String,
-    workspace_id: String,
-    goal_id: String,
-    status: String,
-    created_at: DateTime<Utc>,
-    updated_at: Option<DateTime<Utc>>,
-}
-
-#[derive(FromRow)]
-struct PlanNodeRow {
-    id: String,
-    plan_id: String,
-    workspace_task_id: String,
-    kind: String,
-    title: String,
-    description: String,
-    intent: String,
-    execution: String,
-    progress: Value,
-    assignee_agent_id: Option<String>,
-    current_attempt_id: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: Option<DateTime<Utc>>,
-    completed_at: Option<DateTime<Utc>>,
-}
-
-impl PlanNodeRow {
-    fn into_response(self) -> SessionWorkspacePlanNodeResponse {
-        SessionWorkspacePlanNodeResponse {
-            id: self.id,
-            plan_id: self.plan_id,
-            workspace_task_id: self.workspace_task_id,
-            kind: self.kind,
-            title: self.title,
-            description: self.description,
-            intent: self.intent,
-            execution: self.execution,
-            progress: self.progress.as_object().cloned().unwrap_or_default(),
-            assignee_agent_id: self.assignee_agent_id,
-            current_attempt_id: self.current_attempt_id,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-            completed_at: self.completed_at,
         }
     }
 }

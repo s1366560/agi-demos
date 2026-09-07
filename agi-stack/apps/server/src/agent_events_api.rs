@@ -24,12 +24,17 @@ use agistack_adapters_postgres::{
 use agistack_core::ports::EventStream;
 
 use crate::auth::Identity;
+use crate::conversation_authority::resolve_replay_access;
+use crate::workspace_authority::SharedWorkspaceAuthority;
 use crate::AppState;
 
 const DEFAULT_REPLAY_LIMIT: i64 = 1000;
 const MAX_REPLAY_LIMIT: i64 = 10_000;
 const MAX_EVENT_TYPE_FILTERS: usize = 20;
 const MAX_EVENT_TYPE_LENGTH: usize = 80;
+
+#[cfg(test)]
+mod pg_tests;
 
 pub(crate) type SharedAgentEvents = Arc<dyn AgentEventReplayService>;
 
@@ -45,11 +50,18 @@ pub(crate) trait AgentEventReplayService: Send + Sync {
 
 pub(crate) struct PgAgentEventReplayService {
     repo: PgAgentExecutionEventRepository,
+    workspace_authority: SharedWorkspaceAuthority,
 }
 
 impl PgAgentEventReplayService {
-    pub(crate) fn new(repo: PgAgentExecutionEventRepository) -> Self {
-        Self { repo }
+    pub(crate) fn new(
+        repo: PgAgentExecutionEventRepository,
+        workspace_authority: SharedWorkspaceAuthority,
+    ) -> Self {
+        Self {
+            repo,
+            workspace_authority,
+        }
     }
 }
 
@@ -61,14 +73,22 @@ impl AgentEventReplayService for PgAgentEventReplayService {
         conversation_id: &str,
         cursor: ValidatedEventReplayQuery,
     ) -> Result<EventReplayResponse, AgentEventsApiError> {
-        match self
+        let access = self
             .repo
             .replay_access(user_id, conversation_id)
             .await
-            .map_err(AgentEventsApiError::internal)?
-        {
+            .map_err(AgentEventsApiError::internal)?;
+        match resolve_replay_access(access, self.workspace_authority.as_ref(), user_id)
+            .await
+            .map_err(|_| {
+                AgentEventsApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Workspace Core is unavailable",
+                )
+            })? {
             ConversationReplayAccess::Allowed => {}
-            ConversationReplayAccess::Denied => {
+            ConversationReplayAccess::Denied
+            | ConversationReplayAccess::WorkspaceAuthorityRequired { .. } => {
                 return Err(AgentEventsApiError::forbidden(
                     "Access denied to this conversation",
                 ));

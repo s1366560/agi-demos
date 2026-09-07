@@ -12,7 +12,6 @@ async fn agent_conversation_repo_creates_lists_and_links_workspace_session() {
     ensure_python_shaped_tables(&pool).await;
     clean_event_rows(&pool, "conv_repo").await;
     seed_conversation_project_access(&pool).await;
-    seed_workspace(&pool, "conv_repo_workspace").await;
 
     let repo = PgAgentConversationRepository::new(pool.clone());
     let created = repo
@@ -64,14 +63,16 @@ async fn agent_conversation_repo_creates_lists_and_links_workspace_session() {
         .iter()
         .any(|conversation| conversation.id == "conv_repo_created"));
     assert_eq!(
-        repo.workspace_access(
-            "conv_events_user",
-            "conv_events_project",
-            "conv_repo_workspace",
-        )
-        .await
-        .expect("workspace access check succeeds"),
-        ConversationMutationAccess::Allowed
+        repo.project_tenant_id("conv_events_project")
+            .await
+            .expect("platform project scope"),
+        Some("conv_events_tenant".to_string()),
+    );
+    assert!(
+        listed
+            .iter()
+            .all(|conversation| conversation.workspace_name.is_none()),
+        "the repository does not project a name from retired Workspace storage"
     );
 }
 
@@ -241,7 +242,6 @@ async fn agent_execution_event_replay_access_preserves_conversation_membership_p
     ensure_python_shaped_tables(&pool).await;
     clean_event_rows(&pool, "conv_access").await;
     seed_conversation(&pool, "conv_access_scoped").await;
-    seed_workspace(&pool, "conv_access_workspace").await;
     sqlx::query("UPDATE conversations SET workspace_id = $1 WHERE id = $2")
         .bind("conv_access_workspace")
         .bind("conv_access_scoped")
@@ -276,16 +276,6 @@ async fn agent_execution_event_replay_access_preserves_conversation_membership_p
     .execute(&pool)
     .await
     .expect("seed tenant admin");
-    sqlx::query(
-        "INSERT INTO workspace_members (id, workspace_id, user_id, role) \
-         VALUES ($1, $2, $3, 'member') ON CONFLICT DO NOTHING",
-    )
-    .bind("conv_access_workspace_membership")
-    .bind("conv_access_workspace")
-    .bind("conv_access_member")
-    .execute(&pool)
-    .await
-    .expect("seed workspace member");
     sqlx::query(
         "INSERT INTO user_tenants (id, user_id, tenant_id, role, permissions) \
          VALUES ($1, $2, $3, 'member', '{}'::json) ON CONFLICT DO NOTHING",
@@ -348,25 +338,41 @@ async fn agent_execution_event_replay_access_preserves_conversation_membership_p
         repo.replay_access("conv_events_user", "conv_access_scoped")
             .await
             .expect("owner access resolves"),
-        ConversationReplayAccess::Allowed
+        ConversationReplayAccess::WorkspaceAuthorityRequired {
+            tenant_id: "conv_events_tenant".into(),
+            project_id: "conv_events_project".into(),
+            workspace_id: "conv_access_workspace".into(),
+        }
     );
     assert_eq!(
         repo.replay_access("conv_access_admin", "conv_access_scoped")
             .await
             .expect("tenant admin access resolves"),
-        ConversationReplayAccess::Allowed
+        ConversationReplayAccess::WorkspaceAuthorityRequired {
+            tenant_id: "conv_events_tenant".into(),
+            project_id: "conv_events_project".into(),
+            workspace_id: "conv_access_workspace".into(),
+        }
     );
     assert_eq!(
         repo.replay_access("conv_access_member", "conv_access_scoped")
             .await
             .expect("workspace member access resolves"),
-        ConversationReplayAccess::Allowed
+        ConversationReplayAccess::WorkspaceAuthorityRequired {
+            tenant_id: "conv_events_tenant".into(),
+            project_id: "conv_events_project".into(),
+            workspace_id: "conv_access_workspace".into(),
+        }
     );
     assert_eq!(
         repo.replay_access("conv_access_unrelated", "conv_access_scoped")
             .await
             .expect("unrelated access resolves"),
-        ConversationReplayAccess::Denied
+        ConversationReplayAccess::WorkspaceAuthorityRequired {
+            tenant_id: "conv_events_tenant".into(),
+            project_id: "conv_events_project".into(),
+            workspace_id: "conv_access_workspace".into(),
+        }
     );
     assert_eq!(
         repo.replay_access("conv_events_user", "conv_access_missing")
@@ -687,34 +693,6 @@ async fn seed_conversation(pool: &PgPool, conversation_id: &str) {
     .execute(pool)
     .await
     .expect("seed conversation");
-}
-
-async fn seed_workspace(pool: &PgPool, workspace_id: &str) {
-    sqlx::query(
-        "INSERT INTO workspaces \
-             (id, tenant_id, project_id, name, created_by, is_archived, metadata_json, \
-              office_status, hex_layout_config_json, default_blocking_categories_json) \
-         VALUES ($1, $2, $3, $4, $5, false, '{}'::json, 'inactive', '{}'::json, '[]'::json) \
-         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
-    )
-    .bind(workspace_id)
-    .bind("conv_events_tenant")
-    .bind("conv_events_project")
-    .bind(format!("Conversation Repo Workspace {workspace_id}"))
-    .bind("conv_events_user")
-    .execute(pool)
-    .await
-    .expect("seed workspace");
-    sqlx::query(
-        "INSERT INTO workspace_members (id, workspace_id, user_id, role) \
-         VALUES ($1, $2, $3, 'owner') ON CONFLICT DO NOTHING",
-    )
-    .bind(format!("{workspace_id}_member"))
-    .bind(workspace_id)
-    .bind("conv_events_user")
-    .execute(pool)
-    .await
-    .expect("seed workspace member");
 }
 
 async fn seed_event(

@@ -33,10 +33,12 @@ use agistack_core::ports::EventStream;
 
 use crate::agent_events_api::agent_stream_topic;
 use crate::auth::Identity;
+use crate::conversation_authority::{read_scoped_workspace_profile, resolve_replay_access};
 use crate::conversation_session_api::{
     standalone_projection, ConversationSessionApiError, ConversationSessionProjectionResponse,
     ConversationSessionQuery, PgConversationSessionProjectionService, StandaloneConversationSource,
 };
+use crate::workspace_authority::{SharedWorkspaceAuthority, WorkspaceAuthorityProfile};
 use crate::AppState;
 
 const DEFAULT_CONVERSATION_LIMIT: i64 = 50;
@@ -81,7 +83,8 @@ impl From<ConversationReplayAccess> for ConversationSocketAccess {
     fn from(access: ConversationReplayAccess) -> Self {
         match access {
             ConversationReplayAccess::Allowed => Self::Allowed,
-            ConversationReplayAccess::Denied => Self::Denied,
+            ConversationReplayAccess::Denied
+            | ConversationReplayAccess::WorkspaceAuthorityRequired { .. } => Self::Denied,
             ConversationReplayAccess::NotFound => Self::NotFound,
         }
     }
@@ -163,6 +166,7 @@ pub(crate) struct PgAgentConversationService {
     events: PgAgentExecutionEventRepository,
     hitl: PgHitlRequestRepository,
     session_projection: PgConversationSessionProjectionService,
+    workspace_authority: SharedWorkspaceAuthority,
 }
 
 impl PgAgentConversationService {
@@ -171,13 +175,105 @@ impl PgAgentConversationService {
         events: PgAgentExecutionEventRepository,
         hitl: PgHitlRequestRepository,
         session_projection: PgConversationSessionProjectionService,
+        workspace_authority: SharedWorkspaceAuthority,
     ) -> Self {
         Self {
             conversations,
             events,
             hitl,
             session_projection,
+            workspace_authority,
         }
+    }
+
+    async fn require_workspace_profile(
+        &self,
+        user_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        task_id: Option<&str>,
+    ) -> Result<WorkspaceAuthorityProfile, AgentConversationsApiError> {
+        let tenant_id = self
+            .conversations
+            .project_tenant_id(project_id)
+            .await
+            .map_err(AgentConversationsApiError::internal)?
+            .ok_or_else(|| AgentConversationsApiError::not_found("Project not found"))?;
+        read_scoped_workspace_profile(
+            self.workspace_authority.as_ref(),
+            user_id,
+            &tenant_id,
+            project_id,
+            workspace_id,
+            task_id,
+        )
+        .await
+        .map_err(|_| {
+            AgentConversationsApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Workspace Core is unavailable",
+            )
+        })?
+        .ok_or_else(|| AgentConversationsApiError::forbidden("Workspace access required"))
+    }
+
+    async fn enrich_workspace_names(
+        &self,
+        user_id: &str,
+        records: Vec<AgentConversationRecord>,
+        initial_profile: Option<WorkspaceAuthorityProfile>,
+    ) -> Result<Vec<AgentConversationResponse>, AgentConversationsApiError> {
+        let mut names = BTreeMap::new();
+        if let Some(profile) = initial_profile {
+            names.insert(
+                (
+                    profile.scope.tenant_id,
+                    profile.scope.project_id,
+                    profile.scope.workspace_id,
+                ),
+                profile.name,
+            );
+        }
+        let mut result = Vec::with_capacity(records.len());
+        for mut record in records {
+            if let Some(workspace_id) =
+                agistack_adapters_postgres::effective_conversation_workspace_id(
+                    &record.id,
+                    record.workspace_id.as_deref(),
+                    record.metadata.as_ref(),
+                )
+            {
+                let key = (
+                    record.tenant_id.clone(),
+                    record.project_id.clone(),
+                    workspace_id.to_string(),
+                );
+                if !names.contains_key(&key) {
+                    let profile = read_scoped_workspace_profile(
+                        self.workspace_authority.as_ref(),
+                        user_id,
+                        &record.tenant_id,
+                        &record.project_id,
+                        workspace_id,
+                        None,
+                    )
+                    .await
+                    .map_err(|_| {
+                        AgentConversationsApiError::new(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            "Workspace Core is unavailable",
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        AgentConversationsApiError::forbidden("Workspace access required")
+                    })?;
+                    names.insert(key.clone(), profile.name);
+                }
+                record.workspace_name = names.get(&key).cloned();
+            }
+            result.push(record.into());
+        }
+        Ok(result)
     }
 }
 
@@ -188,11 +284,20 @@ impl AgentConversationApiService for PgAgentConversationService {
         user_id: &str,
         conversation_id: &str,
     ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
-        self.events
+        let access = self
+            .events
             .replay_access(user_id, conversation_id)
             .await
+            .map_err(AgentConversationsApiError::internal)?;
+        resolve_replay_access(access, self.workspace_authority.as_ref(), user_id)
+            .await
             .map(ConversationSocketAccess::from)
-            .map_err(AgentConversationsApiError::internal)
+            .map_err(|_| {
+                AgentConversationsApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Workspace Core is unavailable",
+                )
+            })
     }
 
     async fn authorize_session_stop(
@@ -200,11 +305,18 @@ impl AgentConversationApiService for PgAgentConversationService {
         user_id: &str,
         conversation_id: &str,
     ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
-        self.conversations
+        let access = self
+            .conversations
             .owner_access(user_id, conversation_id)
             .await
-            .map(ConversationSocketAccess::from)
-            .map_err(AgentConversationsApiError::internal)
+            .map_err(AgentConversationsApiError::internal)?;
+        match access {
+            ConversationMutationAccess::Allowed => {
+                self.authorize_event_subscription(user_id, conversation_id)
+                    .await
+            }
+            access => Ok(access.into()),
+        }
     }
 
     async fn authorize_message_send(
@@ -213,11 +325,18 @@ impl AgentConversationApiService for PgAgentConversationService {
         conversation_id: &str,
         project_id: &str,
     ) -> Result<ConversationSocketAccess, AgentConversationsApiError> {
-        self.conversations
+        let access = self
+            .conversations
             .message_send_access(user_id, project_id, conversation_id)
             .await
-            .map(ConversationSocketAccess::from)
-            .map_err(AgentConversationsApiError::internal)
+            .map_err(AgentConversationsApiError::internal)?;
+        match access {
+            ConversationMutationAccess::Allowed => {
+                self.authorize_event_subscription(user_id, conversation_id)
+                    .await
+            }
+            access => Ok(access.into()),
+        }
     }
 
     async fn list_conversations(
@@ -226,24 +345,13 @@ impl AgentConversationApiService for PgAgentConversationService {
         query: ConversationListRequest,
     ) -> Result<PaginatedConversationsResponse, AgentConversationsApiError> {
         let validated = query.validated()?;
-        if let Some(workspace_id) = validated.workspace_id.as_deref() {
-            match self
-                .conversations
-                .workspace_access(user_id, &validated.project_id, workspace_id)
-                .await
-                .map_err(AgentConversationsApiError::internal)?
-            {
-                ConversationMutationAccess::Allowed => {}
-                ConversationMutationAccess::Denied => {
-                    return Err(AgentConversationsApiError::forbidden(
-                        "Workspace access required",
-                    ));
-                }
-                ConversationMutationAccess::NotFound => {
-                    return Err(AgentConversationsApiError::not_found("Workspace not found"));
-                }
-            }
-        }
+        let workspace_profile = match validated.workspace_id.as_deref() {
+            Some(workspace_id) => Some(
+                self.require_workspace_profile(user_id, &validated.project_id, workspace_id, None)
+                    .await?,
+            ),
+            None => None,
+        };
 
         let query_ref = ConversationListQuery {
             user_id,
@@ -253,14 +361,14 @@ impl AgentConversationApiService for PgAgentConversationService {
             limit: validated.limit,
             offset: validated.offset,
         };
-        let items = self
+        let records = self
             .conversations
             .list_conversations(query_ref)
             .await
-            .map_err(AgentConversationsApiError::internal)?
-            .into_iter()
-            .map(AgentConversationResponse::from)
-            .collect::<Vec<_>>();
+            .map_err(AgentConversationsApiError::internal)?;
+        let items = self
+            .enrich_workspace_names(user_id, records, workspace_profile)
+            .await?;
         let total = self
             .conversations
             .count_conversations(query_ref)
@@ -336,26 +444,59 @@ impl AgentConversationApiService for PgAgentConversationService {
                 ));
             }
         }
-        if let Some(Some(workspace_id)) = request.workspace_id.as_ref() {
-            match self
-                .conversations
-                .workspace_access(user_id, project_id, workspace_id)
-                .await
-                .map_err(AgentConversationsApiError::internal)?
-            {
-                ConversationMutationAccess::Allowed => {}
-                ConversationMutationAccess::Denied => {
-                    return Err(AgentConversationsApiError::forbidden(
-                        "Workspace access required",
-                    ));
-                }
-                ConversationMutationAccess::NotFound => {
-                    return Err(AgentConversationsApiError::not_found("Workspace not found"));
-                }
+        let current = self
+            .conversations
+            .get_conversation(conversation_id, project_id)
+            .await
+            .map_err(AgentConversationsApiError::internal)?
+            .ok_or_else(|| AgentConversationsApiError::not_found("Conversation not found"))?;
+        match self
+            .authorize_session_stop(user_id, conversation_id)
+            .await?
+        {
+            ConversationSocketAccess::Allowed => {}
+            ConversationSocketAccess::Denied => {
+                return Err(AgentConversationsApiError::forbidden("Access denied"));
+            }
+            ConversationSocketAccess::NotFound => {
+                return Err(AgentConversationsApiError::not_found(
+                    "Conversation not found",
+                ));
             }
         }
+        let current_workspace_id = agistack_adapters_postgres::effective_conversation_workspace_id(
+            &current.id,
+            current.workspace_id.as_deref(),
+            current.metadata.as_ref(),
+        )
+        .map(ToString::to_string);
+        let workspace_id = request
+            .workspace_id
+            .as_ref()
+            .unwrap_or(&current_workspace_id);
+        let task_id = request
+            .linked_workspace_task_id
+            .as_ref()
+            .unwrap_or(&current.linked_workspace_task_id);
+        let workspace_profile = match workspace_id.as_deref() {
+            Some(workspace_id) => Some(
+                self.require_workspace_profile(
+                    user_id,
+                    project_id,
+                    workspace_id,
+                    task_id.as_deref(),
+                )
+                .await?,
+            ),
+            None if task_id.is_some() => {
+                return Err(AgentConversationsApiError::unprocessable(
+                    "A linked workspace task requires a workspace",
+                ))
+            }
+            None => None,
+        };
 
-        let record = self
+        let mut record = self
             .conversations
             .update_mode(
                 conversation_id,
@@ -369,6 +510,7 @@ impl AgentConversationApiService for PgAgentConversationService {
             .await
             .map_err(AgentConversationsApiError::internal)?
             .ok_or_else(|| AgentConversationsApiError::not_found("Conversation not found"))?;
+        record.workspace_name = workspace_profile.map(|profile| profile.name);
         Ok(record.into())
     }
 
@@ -379,14 +521,22 @@ impl AgentConversationApiService for PgAgentConversationService {
         query: ConversationMessagesQuery,
     ) -> Result<ConversationMessagesResponse, AgentConversationsApiError> {
         let validated = query.validated()?;
-        match self
+        let access = self
             .events
             .replay_access(user_id, conversation_id)
             .await
-            .map_err(AgentConversationsApiError::internal)?
-        {
+            .map_err(AgentConversationsApiError::internal)?;
+        match resolve_replay_access(access, self.workspace_authority.as_ref(), user_id)
+            .await
+            .map_err(|_| {
+                AgentConversationsApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "Workspace Core is unavailable",
+                )
+            })? {
             ConversationReplayAccess::Allowed => {}
-            ConversationReplayAccess::Denied => {
+            ConversationReplayAccess::Denied
+            | ConversationReplayAccess::WorkspaceAuthorityRequired { .. } => {
                 return Err(AgentConversationsApiError::forbidden(
                     "Access denied to this conversation",
                 ));
@@ -2264,6 +2414,9 @@ fn tool_lookup_keys(
     }
     keys
 }
+
+#[cfg(test)]
+mod pg_tests;
 
 #[cfg(test)]
 mod tests {

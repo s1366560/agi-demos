@@ -44,6 +44,7 @@ mod background_worker_control_v2;
 mod background_workers_v2;
 mod billing_api;
 mod channel_api;
+mod conversation_authority;
 mod conversation_session_api;
 mod cron_api;
 mod cron_automation_runtime;
@@ -949,6 +950,7 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
     let agent_events: SharedAgentEvents = match workspace_plan_pool.clone() {
         Some(pool) => Arc::new(PgAgentEventReplayService::new(
             PgAgentExecutionEventRepository::new(pool),
+            Arc::clone(&workspace_authority),
         )),
         None => Arc::new(DevAgentEventReplayService::new(Arc::clone(&events))),
     };
@@ -957,7 +959,8 @@ async fn build_state(database_url: &DatabaseUrl) -> ServerResult<AppState> {
             PgAgentConversationRepository::new(pool.clone()),
             PgAgentExecutionEventRepository::new(pool.clone()),
             PgHitlRequestRepository::new(pool.clone()),
-            PgConversationSessionProjectionService::new(pool),
+            PgConversationSessionProjectionService::new(pool, Arc::clone(&workspace_authority)),
+            Arc::clone(&workspace_authority),
         )),
         None => Arc::new(DevAgentConversationService::new(Arc::clone(&events))),
     };

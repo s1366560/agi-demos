@@ -109,8 +109,9 @@ pub use conversation_events_repo::{
     ToolExecutionRecord,
 };
 pub use conversation_repo::{
-    AgentConversationRecord, ConversationCreateRecord, ConversationListQuery,
-    ConversationModePatch, ConversationMutationAccess, PgAgentConversationRepository,
+    effective_conversation_workspace_id, AgentConversationRecord, ConversationCreateRecord,
+    ConversationListQuery, ConversationModePatch, ConversationMutationAccess,
+    PgAgentConversationRepository,
 };
 pub use cron_control_repo::{
     CronControlRepositoryError, CronControlScope, CronReconcileAdmission, PgCronControlRepository,

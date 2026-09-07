@@ -75,6 +75,14 @@ impl ConversationSessionApiError {
         }
     }
 
+    pub(crate) fn workspace_unavailable() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            detail: "Workspace Core is unavailable".into(),
+            diagnostic: None,
+        }
+    }
+
     fn into_diagnostic(self) -> String {
         self.diagnostic.unwrap_or(self.detail)
     }
@@ -732,3 +740,6 @@ pub(super) fn string_list(value: &Value) -> Vec<String> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod pg_tests;
