@@ -1055,3 +1055,16 @@ pub(super) async fn ensure_trust_tables(pool: &PgPool) {
             .unwrap_or_else(|e| panic!("trust ddl failed: {ddl}\n{e}"));
     }
 }
+
+/// Empty test databases need the new fence table; deployed schemas stay Alembic-owned.
+pub(super) async fn ensure_legacy_cron_admission_fixture(pool: &PgPool) {
+    let managed: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.alembic_version') IS NOT NULL")
+            .fetch_one(pool)
+            .await
+            .expect("inspect migration ownership");
+    if !managed {
+        sqlx::query("CREATE TABLE IF NOT EXISTS agistack_legacy_cron_admissions (scope_id text NOT NULL, status text NOT NULL)")
+            .execute(pool).await.expect("create empty legacy admission fixture");
+    }
+}

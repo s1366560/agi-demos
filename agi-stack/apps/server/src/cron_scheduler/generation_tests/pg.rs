@@ -24,6 +24,10 @@ async fn postgres_cron_generations_preserve_owner_fencing_and_private_resource_l
         .execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO pg_temp.agistack_cron_scheduler_owners (scope_id, owner_kind) VALUES ('global', 'rust')")
         .execute(&pool).await.unwrap();
+    sqlx::query("CREATE TEMP TABLE agistack_legacy_cron_admissions (scope_id text, status text)")
+        .execute(&pool)
+        .await
+        .unwrap();
     let repository = Arc::new(PgCronSchedulerOwnerRepository::new(pool.clone()));
     let prior = repository
         .try_acquire_global("prior-owner", 60, Utc::now())

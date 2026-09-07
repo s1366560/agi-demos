@@ -58,6 +58,8 @@ class ProjectChatRequest:
     api_auth_token: str | None = field(default=None, repr=False)
     # Server-owned durable automation run correlation. Never sourced from message text.
     automation_run_id: str | None = None
+    # Independent scheduler admission capability; never supplied by a user message.
+    legacy_cron_admission: dict[str, str | int] | None = field(default=None, repr=False)
     # Server-owned canonical AgentRun authority. Defaults to message_id for root chat.
     canonical_run_id: str | None = None
     # Process-safe v2 generation identity; never contains host/runtime objects.

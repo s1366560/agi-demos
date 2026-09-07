@@ -40,6 +40,13 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event
 from src.infrastructure.adapters.secondary.persistence.sql_agent_run_authority import (
     mark_agent_run_running,
 )
+from src.infrastructure.agent.actor.legacy_cron_admission import (
+    complete_legacy_cron_admission,
+    complete_legacy_cron_stream,
+    maybe_park_legacy_hitl,
+    request_for_legacy_hitl_resume,
+    validate_legacy_cron_admission,
+)
 from src.infrastructure.agent.actor.state.running_state import (
     clear_agent_running,
     refresh_agent_running_ttl,
@@ -923,6 +930,13 @@ async def execute_project_chat(  # noqa: PLR0915
         message_id=request.message_id,
         automation_run_id=request.automation_run_id,
     )
+    legacy_admission = await validate_legacy_cron_admission(
+        request.legacy_cron_admission,
+        tenant_id=agent.config.tenant_id,
+        project_id=agent.config.project_id,
+        conversation_id=request.conversation_id,
+        message_id=request.message_id,
+    )
     run_authority_id = request.canonical_run_id or request.message_id
 
     await _mark_root_run_authority_running(
@@ -1078,6 +1092,7 @@ async def execute_project_chat(  # noqa: PLR0915
             outcome="failed" if ss.is_error else "success",
             error=ss.error_message,
         )
+        await complete_legacy_cron_stream(legacy_admission, ss.events, ss.is_error)
 
         return ProjectChatResult(
             conversation_id=request.conversation_id,
@@ -1107,6 +1122,15 @@ async def execute_project_chat(  # noqa: PLR0915
         )
         raise
     except Exception as e:
+        pending = await maybe_park_legacy_hitl(
+            legacy_admission,
+            e,
+            lambda pause: handle_hitl_pending(
+                agent, request, pause, time_gen.last_time_us, time_gen.last_counter
+            ),
+        )
+        if pending is not None:
+            return pending
         await _project_automation_stream_terminal(
             automation_identity,
             outcome="timeout" if isinstance(e, TimeoutError) else "failed",
@@ -1131,6 +1155,9 @@ async def execute_project_chat(  # noqa: PLR0915
             run_id=run_authority_id,
             outcome="failed",
             error=str(e),
+        )
+        await complete_legacy_cron_admission(
+            legacy_admission, "timeout" if isinstance(e, TimeoutError) else "failed"
         )
         return result
     finally:
@@ -1175,6 +1202,7 @@ async def handle_hitl_pending(
         user_id=request.user_id,
         correlation_id=request.correlation_id,
         automation_run_id=request.automation_run_id,
+        legacy_cron_admission=request.legacy_cron_admission,
         canonical_run_id=request.canonical_run_id,
         agent_id=request.agent_id,
         parent_session_id=request.parent_session_id,
@@ -1219,7 +1247,7 @@ async def handle_hitl_pending(
     )
 
 
-async def continue_project_chat(  # noqa: PLR0915
+async def continue_project_chat(  # noqa: PLR0912, PLR0915
     agent: ProjectReActAgent,
     request_id: str,
     response_data: object,
@@ -1287,6 +1315,18 @@ async def continue_project_chat(  # noqa: PLR0915
         conversation_id=state.conversation_id,
         message_id=state.message_id,
         automation_run_id=state.automation_run_id,
+    )
+    legacy_admission = (
+        await validate_legacy_cron_admission(
+            state.legacy_cron_admission,
+            tenant_id=agent.config.tenant_id,
+            project_id=agent.config.project_id,
+            conversation_id=state.conversation_id,
+            message_id=state.message_id,
+            resume=True,
+        )
+        if state.legacy_cron_admission is not None
+        else None
     )
     run_authority_id = state.canonical_run_id or state.message_id
     await _mark_root_run_authority_running(
@@ -1412,6 +1452,7 @@ async def continue_project_chat(  # noqa: PLR0915
             outcome="failed" if ss.is_error else "success",
             error=ss.error_message,
         )
+        await complete_legacy_cron_stream(legacy_admission, ss.events, ss.is_error)
 
         return ProjectChatResult(
             conversation_id=state.conversation_id,
@@ -1441,6 +1482,19 @@ async def continue_project_chat(  # noqa: PLR0915
         )
         raise
     except Exception as e:
+        pending = await maybe_park_legacy_hitl(
+            legacy_admission,
+            e,
+            lambda pause: handle_hitl_pending(
+                agent,
+                request_for_legacy_hitl_resume(state),
+                pause,
+                time_gen.last_time_us,
+                time_gen.last_counter,
+            ),
+        )
+        if pending is not None:
+            return pending
         await _project_automation_stream_terminal(
             automation_identity,
             outcome="timeout" if isinstance(e, TimeoutError) else "failed",
@@ -1466,6 +1520,9 @@ async def continue_project_chat(  # noqa: PLR0915
             run_id=run_authority_id,
             outcome="failed",
             error=str(e),
+        )
+        await complete_legacy_cron_admission(
+            legacy_admission, "timeout" if isinstance(e, TimeoutError) else "failed"
         )
         return result
     finally:

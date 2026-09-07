@@ -137,6 +137,7 @@ async fn acquire_authority(
 }
 
 async fn ensure_control_tables(pool: &PgPool) {
+    ensure_legacy_cron_admission_fixture(pool).await;
     for ddl in [
         "CREATE TABLE IF NOT EXISTS agistack_cron_operations ( \
             id text PRIMARY KEY, tenant_id text NOT NULL, project_id text NOT NULL, \

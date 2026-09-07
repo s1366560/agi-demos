@@ -71,6 +71,10 @@ async fn scheduled_overlaps_record_skipped_history_without_queuing_operations() 
     ] {
         sqlx::query(ddl).execute(&pool).await.unwrap();
     }
+    sqlx::query("CREATE TABLE agistack_legacy_cron_admissions (scope_id text, status text)")
+        .execute(&pool)
+        .await
+        .unwrap();
     let now = Utc.with_ymd_and_hms(2099, 9, 7, 0, 0, 0).unwrap();
     sqlx::query(
         "INSERT INTO cron_jobs VALUES (

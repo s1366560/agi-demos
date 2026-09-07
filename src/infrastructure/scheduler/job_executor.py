@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from src.domain.model.cron.cron_job import CronJob
 from src.domain.model.cron.cron_job_run import CronJobRun
+from src.domain.model.cron.legacy_admission import LegacyCronAdmissionIdentity
 from src.domain.model.cron.value_objects import (
     ConversationMode,
     CronRunStatus,
@@ -69,7 +70,7 @@ async def execute_cron_job(job_id: str) -> None:
         run = CronJobRun(
             job_id=job.id,
             project_id=job.project_id,
-            status=CronRunStatus.SUCCESS,
+            status=CronRunStatus.RUNNING,
             trigger_type=TriggerType.SCHEDULED,
             started_at=datetime.now(UTC),
         )
@@ -78,7 +79,10 @@ async def execute_cron_job(job_id: str) -> None:
             conversation_id = await _resolve_conversation(job, session)
             run.conversation_id = conversation_id
 
-            await _execute_payload(job, conversation_id, session)
+            admission = await _admit_legacy_execution(job, run, conversation_id, session)
+            if admission is None:
+                return
+            await _execute_payload(job, conversation_id, session, admission)
 
             # Mark success
             run.mark_finished(
@@ -155,6 +159,34 @@ async def execute_cron_job(job_id: str) -> None:
     )
 
 
+async def _admit_legacy_execution(
+    job: CronJob, run: CronJobRun, conversation_id: str, session: AsyncSession
+) -> LegacyCronAdmissionIdentity | None:
+    """Commit the blocker and conversation before asynchronous dispatch can begin."""
+    from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
+        SqlCronJobRunRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_legacy_cron_admission_repository import (
+        SqlLegacyCronAdmissionRepository,
+    )
+
+    admission = await SqlLegacyCronAdmissionRepository(session).admit(
+        tenant_id=job.tenant_id,
+        project_id=job.project_id,
+        job_id=job.id,
+        run_id=run.id,
+        message_id=str(uuid.uuid4()),
+        conversation_id=conversation_id,
+    )
+    if admission is None:
+        await session.rollback()
+        logger.info("[CronExecutor] Scheduler ownership denies job %s", job.id)
+        return None
+    await SqlCronJobRunRepository(session).save(run)
+    await session.commit()
+    return admission
+
+
 # ---------------------------------------------------------------------------
 # Conversation resolution
 # ---------------------------------------------------------------------------
@@ -209,13 +241,14 @@ async def _execute_payload(
     job: CronJob,
     conversation_id: str,
     session: AsyncSession,
+    admission: LegacyCronAdmissionIdentity,
 ) -> None:
     """Execute the job payload with timeout."""
     timeout = job.timeout_seconds or 300
 
     try:
         await asyncio.wait_for(
-            _dispatch_payload(job, conversation_id, session),
+            _dispatch_payload(job, conversation_id, session, admission),
             timeout=timeout,
         )
     except TimeoutError as err:
@@ -226,14 +259,15 @@ async def _dispatch_payload(
     job: CronJob,
     conversation_id: str,
     session: AsyncSession,
+    admission: LegacyCronAdmissionIdentity,
 ) -> None:
     """Dispatch the payload to the correct handler."""
     payload_type = job.payload.kind
 
     if payload_type == PayloadType.AGENT_TURN:
-        await _execute_agent_turn(job, conversation_id, session)
+        await _execute_agent_turn(job, conversation_id, session, admission)
     elif payload_type == PayloadType.SYSTEM_EVENT:
-        await _execute_system_event(job, conversation_id, session)
+        await _execute_system_event(job, conversation_id, session, admission)
     else:
         raise ValueError(f"Unknown payload type: {payload_type}")
 
@@ -242,6 +276,7 @@ async def _execute_agent_turn(
     job: CronJob,
     conversation_id: str,
     session: AsyncSession,
+    admission: LegacyCronAdmissionIdentity,
 ) -> None:
     """Execute an agent turn via the runtime bootstrapper."""
     from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
@@ -254,7 +289,7 @@ async def _execute_agent_turn(
         raise ValueError(f"Conversation {conversation_id} not found for agent turn")
 
     message = job.payload.config.get("message", "")
-    message_id = str(uuid.uuid4())
+    message_id = admission.message_id
 
     bootstrapper = _get_bootstrapper()
     _ = await bootstrapper.start_chat_actor(
@@ -263,6 +298,7 @@ async def _execute_agent_turn(
         user_message=message,
         conversation_context=[],
         correlation_id=f"cron:{job.id}",
+        legacy_cron_admission=admission.to_wire(),
     )
 
     logger.info(
@@ -276,6 +312,7 @@ async def _execute_system_event(
     job: CronJob,
     conversation_id: str,
     session: AsyncSession,
+    admission: LegacyCronAdmissionIdentity,
 ) -> None:
     """Execute a system event payload by injecting content as an agent message."""
     from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
@@ -288,7 +325,7 @@ async def _execute_system_event(
         raise ValueError(f"Conversation {conversation_id} not found for system event")
 
     content = job.payload.config.get("content", "")
-    message_id = str(uuid.uuid4())
+    message_id = admission.message_id
 
     bootstrapper = _get_bootstrapper()
     _ = await bootstrapper.start_chat_actor(
@@ -297,6 +334,7 @@ async def _execute_system_event(
         user_message=f"[System Event] {content}",
         conversation_context=[],
         correlation_id=f"cron:{job.id}",
+        legacy_cron_admission=admission.to_wire(),
     )
 
     logger.info(

@@ -320,6 +320,7 @@ async fn insert_job_and_run(
 }
 
 async fn ensure_runtime_schema(pool: &PgPool) {
+    ensure_legacy_cron_admission_fixture(pool).await;
     for ddl in [
         "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS accepted_at timestamptz DEFAULT now() NOT NULL",
         "ALTER TABLE cron_job_runs ADD COLUMN IF NOT EXISTS job_revision bigint DEFAULT 1 NOT NULL",

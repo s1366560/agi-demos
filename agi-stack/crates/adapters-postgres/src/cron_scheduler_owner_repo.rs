@@ -16,6 +16,8 @@ SET owner_id = $2, owner_epoch = owner_epoch + 1, \
     lease_expires_at = $3 + ($4 * interval '1 second'), acquired_at = $3, updated_at = $3 \
 WHERE scope_id = $1 AND owner_kind = 'rust' \
   AND (lease_token IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= $3) \
+  AND NOT EXISTS (SELECT 1 FROM agistack_legacy_cron_admissions \
+                  WHERE scope_id = $1 AND status = 'active') \
 RETURNING scope_id, owner_id, owner_epoch, lease_token, lease_expires_at, acquired_at";
 
 const RENEW_SQL: &str = "UPDATE agistack_cron_scheduler_owners \

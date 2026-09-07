@@ -417,6 +417,7 @@ class AgentRuntimeBootstrapper:
         preferred_language: str | None = None,
         api_auth_token: str | None = None,
         automation_run_id: str | None = None,
+        legacy_cron_admission: dict[str, str | int] | None = None,
         canonical_run_id: str | None = None,
     ) -> str:
         """Start agent execution using configured runtime mode."""
@@ -506,6 +507,7 @@ class AgentRuntimeBootstrapper:
             else None,
             api_auth_token=api_auth_token,
             automation_run_id=automation_run_id,
+            legacy_cron_admission=legacy_cron_admission,
             canonical_run_id=canonical_run_id,
             plugin_generation=plugin_generation,
             plugin_distribution=plugin_distribution,

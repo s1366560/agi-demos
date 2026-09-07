@@ -90,6 +90,7 @@ async fn scheduler_owner_requires_rust_cutover_and_fences_every_lease_snapshot()
 }
 
 async fn ensure_owner_table(pool: &PgPool) {
+    ensure_legacy_cron_admission_fixture(pool).await;
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS agistack_cron_scheduler_owners ( \
             scope_id varchar(100) PRIMARY KEY, owner_kind varchar(20) NOT NULL DEFAULT 'off', \
