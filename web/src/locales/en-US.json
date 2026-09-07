@@ -3447,6 +3447,7 @@
       "notFound": "Deploy record not found",
       "defaultDescription": "New deployment",
       "manualDescription": "Manual deploy",
+      "instanceRequired": "Open an instance to create a deployment.",
       "triggeredByName": "by {{name}}",
       "streamFailed": "Live progress updates were interrupted. The page may be out of date.",
       "reconnect": "Reconnect",

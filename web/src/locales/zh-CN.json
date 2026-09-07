@@ -3630,6 +3630,7 @@
       "notFound": "未找到部署记录",
       "defaultDescription": "新部署",
       "manualDescription": "手动部署",
+      "instanceRequired": "请从实例页面发起部署。",
       "triggeredByName": "由 {{name}} 触发",
       "streamFailed": "实时进度更新已中断，页面内容可能不是最新。",
       "reconnect": "重新连接",

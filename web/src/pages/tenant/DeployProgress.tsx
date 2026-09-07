@@ -379,9 +379,21 @@ export const DeployProgress: React.FC = () => {
         <Title level={3} className="!mb-0">
           {t('tenant.deploy.listTitle', 'Deployment History')}
         </Title>
-        <LazyButton type="primary" loading={isSubmitting} onClick={handleNewDeploy}>
-          {t('tenant.deploy.actions.new', 'New Deploy')}
-        </LazyButton>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <LazyButton
+            type="primary"
+            loading={isSubmitting}
+            disabled={!instanceId}
+            onClick={handleNewDeploy}
+          >
+            {t('tenant.deploy.actions.new', 'New Deploy')}
+          </LazyButton>
+          {!instanceId && (
+            <Text type="secondary">
+              {t('tenant.deploy.instanceRequired', 'Open an instance to create a deployment.')}
+            </Text>
+          )}
+        </div>
       </div>
 
       {error && (
