@@ -392,3 +392,15 @@ Evidence: `/tmp/memstack-qa-20260907/native-automation-recovery.txt` and
 `/tmp/memstack-qa-20260907/native-automation-timeline.json`. Default session configuration,
 run-result navigation and live history refresh remain product follow-ups; this result
 does not close cloud scheduling acceptance.
+
+I3.8 adds an online CAS primitive sharing the sync transaction, object revision,
+journal, tombstone and successful receipt path. Online stale/deleted writes roll back
+with a conflict error and do not create offline conflicts or failed receipts. Online
+and offline request identities remain distinct. Review uncovered that write receipt
+replay checked membership but not current object-write permission; both paths now
+revalidate that permission before replay. Viewer downgrades and revoked edit shares
+are rejected, while authorized delete replay still uses the retained tombstone author.
+Seventy sync regressions passed, including nine new PostgreSQL tests; Mypy, Pyright,
+Ruff, format and diff checks passed. Consumers and enrollment behavior are unchanged
+in this batch. Reverting this primitive before consumer integration preserves the
+existing database schema and sync data.

@@ -138,29 +138,52 @@ class SqlKnowledgeSyncRepository:
     async def mutate(
         self, scope: KnowledgeSyncScope, change_id: str, mutation: MemorySyncMutation
     ) -> KnowledgeSyncOutcome:
-        request = canonical({"mutation": mutation.to_dict()})
+        return await self._mutate(scope, change_id, mutation, online=False)
+
+    async def mutate_online(
+        self, scope: KnowledgeSyncScope, change_id: str, mutation: MemorySyncMutation
+    ) -> KnowledgeSyncOutcome:
+        """Apply an online CAS command without persisting an offline conflict on rejection.
+
+        Consumers must supply the authenticated actor and the observed revision.
+        This primitive neither enrolls a project nor commits the outer transaction.
+        """
+        return await self._mutate(scope, change_id, mutation, online=True)
+
+    async def _mutate(
+        self,
+        scope: KnowledgeSyncScope,
+        change_id: str,
+        mutation: MemorySyncMutation,
+        *,
+        online: bool,
+    ) -> KnowledgeSyncOutcome:
+        request = canonical({"online_mutation" if online else "mutation": mutation.to_dict()})
         async with self._transaction():
             member = await self._authorize(scope, lock=True)
-            replay = await self._replay(scope, change_id, request)
-            if replay is not None:
-                return replay
             current = await self._current(scope, mutation.memory_id)
             await authorize_write(
                 self.db, scope, member, current, deleting=mutation.operation == "delete"
             )
-            pending = await self.db.scalar(
-                select(Conflict.id).where(
-                    Conflict.tenant_id == scope.tenant_id,
-                    Conflict.project_id == scope.project_id,
-                    Conflict.actor_id == scope.actor_id,
-                    Conflict.memory_id == mutation.memory_id,
-                    Conflict.resolved_change_id.is_(None),
+            replay = await self._replay(scope, change_id, request)
+            if replay is not None:
+                return replay
+            if not online:
+                pending = await self.db.scalar(
+                    select(Conflict.id).where(
+                        Conflict.tenant_id == scope.tenant_id,
+                        Conflict.project_id == scope.project_id,
+                        Conflict.actor_id == scope.actor_id,
+                        Conflict.memory_id == mutation.memory_id,
+                        Conflict.resolved_change_id.is_(None),
+                    )
                 )
-            )
-            if pending is not None:
-                raise KnowledgeSyncError("knowledge_sync_conflict_pending")
+                if pending is not None:
+                    raise KnowledgeSyncError("knowledge_sync_conflict_pending")
             revision = current.revision if current else 0
             if revision != mutation.expected_revision or (current is not None and current.deleted):
+                if online:
+                    raise KnowledgeSyncError("knowledge_sync_write_conflict")
                 conflict_id = str(uuid4())
                 self.db.add(
                     Conflict(
