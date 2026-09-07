@@ -411,3 +411,12 @@ async fn contract_rejects_attempt_to_open_release_through_profile_config() {
     ));
     assert!(!directory.0.exists());
 }
+
+#[path = "pull_http_tests.rs"]
+mod pull_http_tests;
+
+#[path = "pull_session_tests.rs"]
+mod pull_session_tests;
+
+#[path = "pull_admission_tests.rs"]
+mod pull_admission_tests;

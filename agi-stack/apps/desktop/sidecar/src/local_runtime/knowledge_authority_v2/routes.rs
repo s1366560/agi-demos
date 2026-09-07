@@ -20,6 +20,7 @@ pub(super) fn router() -> Router<Arc<LocalRuntimeState>> {
         .route("/api/v1/knowledge/mutations", post(mutate))
         .route("/api/v1/knowledge/sync-link", post(configure_sync_link))
         .route("/api/v1/knowledge/sync-push", post(push_once))
+        .route("/api/v1/knowledge/sync-pull", post(pull_once))
 }
 
 #[derive(Deserialize)]
@@ -39,6 +40,7 @@ enum KnowledgeQuery {
     SyncStatus,
     RemoteBaseline { id: String },
     PushConflicts { limit: usize },
+    PullConflicts { limit: usize },
     SyncOutbox { after_sequence: u64, limit: usize },
 }
 
@@ -61,6 +63,10 @@ async fn query(
     let result = match request.query {
         KnowledgeQuery::RemoteBaseline { id } => {
             json!({"version":operation.remote_baseline(&id).await.map_err(IntoResponse::into_response)?})
+        }
+        KnowledgeQuery::PullConflicts { limit } => {
+            validate_limit(limit).map_err(invalid_page)?;
+            json!({"items":operation.pull_conflicts(limit).await.map_err(IntoResponse::into_response)?})
         }
         KnowledgeQuery::PushConflicts { limit } => {
             validate_limit(limit).map_err(invalid_page)?;
@@ -226,6 +232,33 @@ async fn push_once(
         .ok_or_else(|| KnowledgeAuthorityErrorV2::TransportUnavailable.into_response())?;
     let result = operation
         .push_once(&broker)
+        .await
+        .map_err(IntoResponse::into_response)?;
+    Ok(Json(
+        json!({"contract_version":VERSION,"scope":request.scope,"result":result}),
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PullRequest {
+    scope: KnowledgeOperationScopeV2,
+}
+
+async fn pull_once(
+    State(state): State<Arc<LocalRuntimeState>>,
+    Extension(lease): Extension<Arc<ActivePlatformPluginGenerationLeaseV2>>,
+    Extension(authenticated): Extension<AuthenticatedContext>,
+    Json(request): Json<PullRequest>,
+) -> RouteResult {
+    let operation = KnowledgeOperationV2::admit(lease, &authenticated, &request.scope)
+        .map_err(IntoResponse::into_response)?;
+    let broker = state
+        .platform_plugin_authority_v2
+        .trusted_sessions()
+        .ok_or_else(|| KnowledgeAuthorityErrorV2::TransportUnavailable.into_response())?;
+    let result = operation
+        .pull_once(&broker)
         .await
         .map_err(IntoResponse::into_response)?;
     Ok(Json(

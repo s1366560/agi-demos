@@ -183,7 +183,8 @@ async fn executable_catalog_negative_routes_enforce_closed_release() {
             "/api/v1/knowledge/query",
             "/api/v1/knowledge/mutations",
             "/api/v1/knowledge/sync-link",
-            "/api/v1/knowledge/sync-push"
+            "/api/v1/knowledge/sync-push",
+            "/api/v1/knowledge/sync-pull"
         ])
     );
     assert!(!directory.0.exists());

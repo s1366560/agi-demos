@@ -350,3 +350,11 @@ suite passed 634 tests; three generation PostgreSQL tests and three adapter Post
 tests passed. Clippy retained 17 existing warnings. The three worker artifacts sharing
 the changed source were refreshed with the formal generator, whose check passed.
 Cloud ownership cutover and native scheduling acceptance remain pending.
+
+I3.6 adds generation-admitted native pull through the trusted cloud session broker.
+The sidecar obtains the durable cursor and remote page itself, verifies current auth
+and project access, and commits the page while holding the unchanged session identity.
+Renderer requests carry scope only. Session clear/rotation/expiry, permission denial,
+malformed pages and timeout/retry have regression coverage. The complete sidecar suite
+passed 677 tests; Clippy added no knowledge-sync diagnostics. Conflict resolution,
+cloud writer enrollment and native bidirectional acceptance remain pending.

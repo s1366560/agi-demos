@@ -2657,6 +2657,17 @@
       "expected_status": 503,
       "expected_reason_code": "knowledge_release_closed",
       "body": {}
+    },
+    {
+      "area": "project_memories",
+      "method": "POST",
+      "uri": "/api/v1/knowledge/sync-pull",
+      "source": "sidecar_knowledge",
+      "source_marker": "/api/v1/knowledge/sync-pull",
+      "authority": "knowledge_release_closed",
+      "expected_status": 503,
+      "expected_reason_code": "knowledge_release_closed",
+      "body": {}
     }
   ]
 }

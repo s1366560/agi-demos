@@ -1,3 +1,4 @@
+use agistack_core::knowledge::sync::pull::{KnowledgePullReceipt, KnowledgePullRepository};
 use agistack_core::knowledge::sync::{
     KnowledgeSyncLink, KnowledgeSyncOutboxChange, KnowledgeSyncRepository, KnowledgeSyncStatus,
 };
@@ -7,6 +8,46 @@ use crate::trusted_session::TrustedSessionBroker;
 use agistack_core::knowledge::sync::push::{KnowledgePushReceipt, KnowledgePushRepository};
 
 impl KnowledgeOperationV2 {
+    pub(super) async fn pull_once(
+        &self,
+        broker: &TrustedSessionBroker,
+    ) -> Result<KnowledgePullReceipt, KnowledgeAuthorityErrorV2> {
+        if !self.writable {
+            return Err(KnowledgeAuthorityErrorV2::Forbidden);
+        }
+        let repository = self.authority.repository()?;
+        let link = repository
+            .sync_status(&self.scope)
+            .await?
+            .link
+            .ok_or(KnowledgeAuthorityErrorV2::ScopeMismatch)?;
+        let transport =
+            super::sync_transport::VerifiedCloudTransport::connect(broker, link).await?;
+        let after = repository
+            .pull_cursor(&self.scope, &transport.target)
+            .await?;
+        let response = transport.pull(after).await?;
+        transport.with_current_session(|| {
+            Ok(repository.accept_pull_page_durable(
+                &self.scope,
+                &transport.target,
+                after,
+                response,
+            )?)
+        })
+    }
+
+    pub(super) async fn pull_conflicts(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<serde_json::Value>, KnowledgeAuthorityErrorV2> {
+        Ok(self
+            .authority
+            .repository()?
+            .pull_conflicts(&self.scope, limit)
+            .await?)
+    }
+
     pub(super) async fn push_once(
         &self,
         broker: &TrustedSessionBroker,

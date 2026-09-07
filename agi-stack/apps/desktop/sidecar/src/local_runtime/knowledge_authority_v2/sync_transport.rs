@@ -109,6 +109,16 @@ impl VerifiedCloudTransport {
         Ok(result)
     }
 
+    pub(super) async fn pull(&self, after: u64) -> Result<Value, KnowledgeAuthorityErrorV2> {
+        let mut url = self.project_url(&["knowledge-sync", "changes"])?;
+        // One maximum-size memory, including JSON escaping and metadata, fits
+        // within bounded_json. The receipt's has_more drives subsequent calls.
+        url.query_pairs_mut()
+            .append_pair("after", &after.to_string())
+            .append_pair("limit", "1");
+        self.get(url).await
+    }
+
     pub(super) async fn push(
         &self,
         prepared: &PreparedKnowledgePush,
