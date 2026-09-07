@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,11 +56,15 @@ async def authorize_write(
     scope: KnowledgeSyncScope,
     member: UserProject,
     current: MemorySyncVersion | None,
+    *,
+    deleting: bool = False,
 ) -> None:
     if member.role not in {"owner", "admin", "member"}:
         raise KnowledgeSyncError("knowledge_sync_forbidden")
     if current is None or current.author_id == scope.actor_id or member.role in {"owner", "admin"}:
         return
+    if deleting:
+        raise KnowledgeSyncError("knowledge_sync_forbidden")
     shares = (
         await db.scalars(
             select(MemoryShare).where(
@@ -83,7 +87,7 @@ def snapshot(memory: Memory) -> MemorySyncVersion:
         revision=memory.version,
         deleted=False,
         author_id=memory.author_id,
-        created_at_ms=int(created.timestamp() * 1000),
+        created_at_ms=(created - datetime(1970, 1, 1, tzinfo=UTC)) // timedelta(milliseconds=1),
         content=MemorySyncContent(
             title=memory.title,
             content=memory.content,

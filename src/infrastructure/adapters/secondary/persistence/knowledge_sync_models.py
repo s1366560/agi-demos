@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -47,7 +51,19 @@ class KnowledgeSyncChangeModel(Base):
     memory_id: Mapped[str] = mapped_column(String, nullable=False)
     revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # PostgreSQL's migration installs txid_current(); SQLite has no deferred
+    # guard and uses NULL. The database records the root transaction, including
+    # changes inserted inside SQLAlchemy savepoints.
+    transaction_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, server_default=text("NULL")
+    )
+    source_kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="mutation", server_default="mutation"
+    )
     __table_args__ = (
+        CheckConstraint(
+            "source_kind IN ('mutation', 'bootstrap')", name="ck_knowledge_sync_change_source"
+        ),
         UniqueConstraint(
             "tenant_id",
             "project_id",
@@ -128,5 +144,34 @@ class KnowledgeSyncConflictModel(Base):
             "actor_id",
             "memory_id",
             "resolved_change_id",
+        ),
+    )
+
+
+class KnowledgeSyncEnrollmentModel(Base):
+    """A per-project fence separating enrolled and unchanged legacy writers."""
+
+    __tablename__ = "knowledge_sync_enrollments"
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    bootstrap_actor_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    bootstrap_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    bootstrap_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    bootstrap_cursor: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "bootstrap_count >= 0 AND bootstrap_cursor >= 0",
+            name="ck_knowledge_sync_bootstrap_nonnegative",
         ),
     )

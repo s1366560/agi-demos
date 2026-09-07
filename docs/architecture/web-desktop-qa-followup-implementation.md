@@ -281,3 +281,20 @@ and generated artifact checks passed; sidecar Clippy retains existing failures. 
 route enrollment/mounting, pull, manual conflict resolution and native bidirectional
 acceptance remain pending. Rollback disables the new push entry point and retains the
 SQLite outbox, receipts and remote baselines.
+
+I3.4 adds explicit, currently unmounted cloud project enrollment. Bootstrap locks the
+project and enrollment fence, journals the existing content snapshot with its actual
+initiating administrator, and enables guarded writes atomically. PostgreSQL guards
+require matching revision intent and a same-root-transaction exact snapshot journal;
+content, tombstone and terminal state must agree at commit. Disabled projects retain
+legacy write behavior, including their existing parent foreign-key deletion policy.
+Reserved tombstone IDs also reject cross-scope UPDATE-ID collisions. Parent cascades
+are permitted only when the parent project is actually absent, not merely its fence.
+
+46 focused tests passed, including 24 enrollment PostgreSQL cases for concurrent
+bootstrap/writes, repeatable-read conflicts, savepoints, stale journals, deletion and
+restoration, and both restrictive and cascading parent foreign keys in isolated test
+schemas. Ruff and type checks passed. No production enrollment or migration is applied;
+all existing content writers and indexing must migrate before enrollment is exposed.
+Rollback must stop synchronization consumers before removing the guard; preserved
+journals must not be advertised as a continuous cursor after unguarded writes resume.

@@ -42,6 +42,9 @@ from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models imp
     KnowledgeSyncReceiptModel as Receipt,
     KnowledgeSyncTombstoneModel as Tombstone,
 )
+from src.infrastructure.adapters.secondary.persistence.knowledge_sync_write_intent import (
+    register_write_intent,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     MemoryChunk,
@@ -142,7 +145,9 @@ class SqlKnowledgeSyncRepository:
             if replay is not None:
                 return replay
             current = await self._current(scope, mutation.memory_id)
-            await authorize_write(self.db, scope, member, current)
+            await authorize_write(
+                self.db, scope, member, current, deleting=mutation.operation == "delete"
+            )
             pending = await self.db.scalar(
                 select(Conflict.id).where(
                     Conflict.tenant_id == scope.tenant_id,
@@ -206,6 +211,7 @@ class SqlKnowledgeSyncRepository:
             else int(datetime.now(UTC).timestamp() * 1000),
             content=content,
         )
+        await register_write_intent(self.db, scope, memory_id, current, deleted=deleted)
         if deleted:
             _ = await self.db.execute(delete(MemoryShare).where(MemoryShare.memory_id == memory_id))
             _ = await self.db.execute(
@@ -252,10 +258,6 @@ class SqlKnowledgeSyncRepository:
                 "processing_status": "PENDING",
             }
             if current is None or current.deleted:
-                if current is not None:
-                    _ = await self.db.execute(
-                        delete(Tombstone).where(Tombstone.memory_id == memory_id)
-                    )
                 self.db.add(
                     Memory(
                         id=memory_id,
@@ -279,6 +281,8 @@ class SqlKnowledgeSyncRepository:
                 if result != memory_id:
                     raise KnowledgeSyncError("knowledge_sync_resolution_stale")
         await self.db.flush()
+        if not deleted and current is not None and current.deleted:
+            _ = await self.db.execute(delete(Tombstone).where(Tombstone.memory_id == memory_id))
         return version
 
     async def _accepted(
@@ -341,7 +345,14 @@ class SqlKnowledgeSyncRepository:
             if row.resolved_change_id is not None:
                 raise KnowledgeSyncError("knowledge_sync_conflict_resolved")
             current = await self._current(scope, row.memory_id)
-            await authorize_write(self.db, scope, member, current)
+            proposed = MemorySyncMutation.from_dict(row.proposed)
+            await authorize_write(
+                self.db,
+                scope,
+                member,
+                current,
+                deleting=resolution.decision == "use_proposed" and proposed.operation == "delete",
+            )
             if (current.revision if current else 0) != resolution.expected_current_revision:
                 raise KnowledgeSyncError("knowledge_sync_resolution_stale")
             row.resolved_change_id = change_id
@@ -356,7 +367,6 @@ class SqlKnowledgeSyncRepository:
                         "conflict_id": row.id,
                     },
                 )
-            proposed = MemorySyncMutation.from_dict(row.proposed)
             content = resolution.content if resolution.decision == "merged" else proposed.content
             deleted = resolution.decision == "use_proposed" and proposed.operation == "delete"
             version = await self._apply(scope, row.memory_id, current, content, deleted=deleted)

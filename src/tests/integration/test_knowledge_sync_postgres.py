@@ -59,10 +59,21 @@ DEPENDENCY_TABLES = (
 )
 
 
+class _PublicVector(sa.types.UserDefinedType):
+    cache_ok = True
+
+    def get_col_spec(self, **kw):
+        return "public.vector"
+
+
 def bootstrap(connection: sa.Connection) -> None:
+    connection.dialect.default_schema_name = connection.exec_driver_sql(
+        "SELECT current_schema()"
+    ).scalar_one()
     metadata = sa.MetaData()
     for name in DEPENDENCY_TABLES:
         Base.metadata.tables[name].to_metadata(metadata)
+    metadata.tables["memory_chunks"].c.embedding.type = _PublicVector()
     context = MigrationContext.configure(connection)
     generated = produce_migrations(context, metadata)
     assert generated.upgrade_ops is not None
@@ -88,6 +99,19 @@ def bootstrap(connection: sa.Connection) -> None:
         revision.downgrade()
         assert "knowledge_sync_changes" not in sa.inspect(connection).get_table_names()
         revision.upgrade()
+        guard_path = (
+            Path(__file__).parents[3]
+            / "alembic/versions/b353e93ff302_fence_enrolled_knowledge_writes_and_.py"
+        )
+        guard_spec = importlib.util.spec_from_file_location("sync_guard_revision", guard_path)
+        assert guard_spec and guard_spec.loader
+        guard_revision = importlib.util.module_from_spec(guard_spec)
+        guard_spec.loader.exec_module(guard_revision)
+        guard_revision.upgrade()
+        assert "knowledge_sync_enrollments" in sa.inspect(connection).get_table_names()
+        guard_revision.downgrade()
+        assert "knowledge_sync_enrollments" not in sa.inspect(connection).get_table_names()
+        guard_revision.upgrade()
 
 
 @pytest.fixture
@@ -100,7 +124,7 @@ async def pg_sync() -> AsyncGenerator[
     engine = create_async_engine(
         url,
         poolclass=sa.pool.NullPool,
-        connect_args={"server_settings": {"search_path": schema + ",public"}},
+        connect_args={"server_settings": {"search_path": schema}},
     )
     async with engine.begin() as connection:
         await connection.execute(sa.text(f'CREATE SCHEMA "{schema}"'))

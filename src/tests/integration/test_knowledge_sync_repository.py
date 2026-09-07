@@ -289,3 +289,44 @@ async def test_member_needs_author_or_explicit_nonexpired_edit_share(
     await db.commit()
     outcome = await repo.mutate(other, str(uuid4()), mutation("update", 1))
     assert outcome.to_dict()["receipt"]["version"]["author_id"] == sync_scope.actor_id
+
+
+async def test_edit_share_does_not_grant_delete_permission(
+    db: AsyncSession, sync_scope: KnowledgeSyncScope, another_user: User
+) -> None:
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        MemoryShare,
+        UserProject,
+        UserTenant,
+    )
+
+    repo = SqlKnowledgeSyncRepository(db)
+    await repo.mutate(sync_scope, str(uuid4()), mutation())
+    db.add_all(
+        [
+            UserTenant(
+                id="delete-ut",
+                tenant_id=sync_scope.tenant_id,
+                user_id=another_user.id,
+                role="member",
+            ),
+            UserProject(
+                id="delete-up",
+                project_id=sync_scope.project_id,
+                user_id=another_user.id,
+                role="member",
+            ),
+            MemoryShare(
+                id="delete-share",
+                memory_id="sync-memory-1",
+                shared_with_user_id=another_user.id,
+                permissions={"edit": True},
+                shared_by=sync_scope.actor_id,
+            ),
+        ]
+    )
+    await db.commit()
+    other = await repo.resolve_scope(another_user.id, sync_scope.project_id)
+    with pytest.raises(KnowledgeSyncError, match="forbidden"):
+        await repo.mutate(other, str(uuid4()), mutation("delete", 1))
+    assert await db.get(Memory, "sync-memory-1") is not None
