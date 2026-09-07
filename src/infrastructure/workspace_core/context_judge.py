@@ -155,7 +155,8 @@ class AgentWorkspaceContextJudge:
                 tools=[_selection_tool(len(request.candidates))],
                 tool_choice={"type": "function", "function": {"name": _CONTEXT_TOOL_NAME}},
                 temperature=0.0,
-                max_tokens=384,
+                # Reasoning models consume this budget before emitting the tool call.
+                max_tokens=4096,
                 model=judge_candidate.model_name,
             )
             output_json = _extract_context_tool_call(response)
@@ -301,6 +302,8 @@ def _object_list(value: object) -> list[object]:
 
 
 def _object_mapping(value: object) -> Mapping[str, object] | None:
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="python")
     if not isinstance(value, dict):
         return None
     candidate = cast("dict[object, object]", value)

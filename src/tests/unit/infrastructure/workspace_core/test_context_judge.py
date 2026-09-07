@@ -136,3 +136,41 @@ async def test_context_judge_rejects_candidate_index_outside_the_supplied_set() 
 
     with pytest.raises(WorkspaceContextJudgeUnavailable, match="candidate index"):
         await judge.select(_request())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("candidate_index", [0, 1, 7])
+async def test_context_judge_accepts_litellm_tool_call_models(candidate_index: int) -> None:
+    from unittest.mock import AsyncMock
+
+    from litellm.types.utils import ChatCompletionMessageToolCall
+
+    client = SimpleNamespace(
+        generate=AsyncMock(
+            return_value={
+                "tool_calls": [
+                    ChatCompletionMessageToolCall(
+                        function={
+                            "name": "select_workspace_context",
+                            "arguments": json.dumps(
+                                {
+                                    "candidate_index": candidate_index,
+                                    "rationale": "Select an available membership.",
+                                    "evidence": ["Membership is supplied in the candidate set."],
+                                }
+                            ),
+                        }
+                    )
+                ],
+                "finish_reason": "tool_calls",
+            }
+        )
+    )
+    judge = AgentWorkspaceContextJudge(pool_service=_FakePool(), client_factory=lambda _: client)
+    if candidate_index == 7:
+        with pytest.raises(WorkspaceContextJudgeUnavailable, match="candidate index"):
+            await judge.select(_request())
+    else:
+        verdict = await judge.select(_request())
+        assert verdict.selected == _request().candidates[candidate_index]
+        assert verdict.output_json["candidate_index"] == candidate_index
