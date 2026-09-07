@@ -118,7 +118,7 @@ def test_avernet_registers_complete_proxy_group_without_legacy_handlers() -> Non
     register_workspace_core_routes(app)
 
     assert _workspace_routes(app) == []
-    assert len(_avernet_routes(app)) == 92
+    assert len(_avernet_routes(app)) == 95
 
 
 @pytest.mark.unit

@@ -115,7 +115,7 @@ def test_workspace_core_row_is_a_complete_explicit_v2_contribution() -> None:
     legacy = _route_map(_legacy_app())
     claimed = _route_map(_claimed_app())
 
-    assert len(legacy) == len(claimed) == len(definitions) == 88
+    assert len(legacy) == len(claimed) == len(definitions) == 91
     assert {
         definition.endpoint.__module__.rsplit(".", maxsplit=1)[-1] for definition in definitions
     } == _SOURCE_MODULES

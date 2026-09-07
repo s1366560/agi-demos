@@ -21,7 +21,7 @@
     "src.infrastructure.adapters.primary.web.routers.cyber_objectives": 6,
     "src.infrastructure.adapters.primary.web.routers.topology": 10,
     "src.infrastructure.adapters.primary.web.routers.workspace_agent_policy": 4,
-    "src.infrastructure.adapters.primary.web.routers.workspace_autonomy": 1,
+    "src.infrastructure.adapters.primary.web.routers.workspace_autonomy": 4,
     "src.infrastructure.adapters.primary.web.routers.workspace_chat": 3,
     "src.infrastructure.adapters.primary.web.routers.workspace_collaboration_mutations": 3,
     "src.infrastructure.adapters.primary.web.routers.workspace_context": 2,
@@ -29,7 +29,7 @@
     "src.infrastructure.adapters.primary.web.routers.workspace_tasks": 14,
     "src.infrastructure.adapters.primary.web.routers.workspaces": 14
   },
-  "routeCount": 92,
+  "routeCount": 95,
   "routes": [
     {
       "method": "GET",
@@ -5229,6 +5229,211 @@
       "deprecated": false
     },
     {
+      "method": "GET",
+      "path": "/api/v1/workspaces/{workspace_id}/autonomy/attentions",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_autonomy",
+      "operationId": "list_workspace_autonomy_attentions_api_v1_workspaces__workspace_id__autonomy_attentions_get",
+      "tags": [
+        "workspace-autonomy"
+      ],
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Workspace Id"
+          }
+        },
+        {
+          "name": "authorization",
+          "in": "header",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AutonomyAttentionResponse"
+                },
+                "title": "Response List Workspace Autonomy Attentions Api V1 Workspaces  Workspace Id  Autonomy Attentions Get"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/autonomy/attentions/{attention_id}/resolve",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_autonomy",
+      "operationId": "resolve_workspace_autonomy_attention_api_v1_workspaces__workspace_id__autonomy_attentions__attention_id__resolve_post",
+      "tags": [
+        "workspace-autonomy"
+      ],
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Workspace Id"
+          }
+        },
+        {
+          "name": "attention_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Attention Id"
+          }
+        },
+        {
+          "name": "authorization",
+          "in": "header",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutonomyAttentionResolveResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [],
+      "deprecated": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workspaces/{workspace_id}/autonomy/attentions/{attention_id}/retry",
+      "module": "src.infrastructure.adapters.primary.web.routers.workspace_autonomy",
+      "operationId": "retry_workspace_autonomy_attention_api_v1_workspaces__workspace_id__autonomy_attentions__attention_id__retry_post",
+      "tags": [
+        "workspace-autonomy"
+      ],
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Workspace Id"
+          }
+        },
+        {
+          "name": "attention_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Attention Id"
+          }
+        },
+        {
+          "name": "authorization",
+          "in": "header",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutonomyAttentionRetryResponse"
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      },
+      "security": [],
+      "deprecated": false
+    },
+    {
       "method": "POST",
       "path": "/api/v1/workspaces/{workspace_id}/autonomy/tick",
       "module": "src.infrastructure.adapters.primary.web.routers.workspace_autonomy",
@@ -7960,6 +8165,102 @@
           "workspace_agent_id"
         ],
         "title": "AssignAgentRequest"
+      },
+      "AutonomyAttentionResolveResponse": {
+        "properties": {
+          "attention_id": {
+            "type": "string",
+            "title": "Attention Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "committed_revision": {
+            "type": "integer",
+            "title": "Committed Revision"
+          },
+          "replayed": {
+            "type": "boolean",
+            "title": "Replayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attention_id",
+          "status",
+          "committed_revision",
+          "replayed"
+        ],
+        "title": "AutonomyAttentionResolveResponse"
+      },
+      "AutonomyAttentionResponse": {
+        "properties": {
+          "attention_id": {
+            "type": "string",
+            "title": "Attention Id"
+          },
+          "root_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Task Id"
+          },
+          "source_kind": {
+            "type": "string",
+            "title": "Source Kind"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at_ms": {
+            "type": "integer",
+            "title": "Created At Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attention_id",
+          "root_task_id",
+          "source_kind",
+          "source_id",
+          "reason",
+          "status",
+          "created_at_ms"
+        ],
+        "title": "AutonomyAttentionResponse"
+      },
+      "AutonomyAttentionRetryResponse": {
+        "properties": {
+          "attention_id": {
+            "type": "string",
+            "title": "Attention Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attention_id",
+          "status"
+        ],
+        "title": "AutonomyAttentionRetryResponse"
       },
       "AutonomyProfileModel": {
         "properties": {
@@ -14535,5 +14836,5 @@
     },
     "securitySchemes": {}
   },
-  "contractSha256": "c7563012aaf94f8d798897013be127d9d60d0c4d38e078b18c71858a131ad113"
+  "contractSha256": "a0d6fb2d3ae01d30e767c184b29f07544cb33d86b9c55ee04391cb7f40117c30"
 }

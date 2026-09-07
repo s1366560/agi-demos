@@ -17,6 +17,9 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.primary.web.routers.workspace_leader_bootstrap import (
     maybe_auto_trigger_existing_root_execution,
 )
+from src.infrastructure.adapters.primary.web.workspace_authority import (
+    workspace_core_unavailable_error,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
@@ -69,7 +72,9 @@ async def trigger_workspace_autonomy_tick(
             force=force,
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied")) from exc
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied")
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -84,12 +89,62 @@ async def trigger_workspace_autonomy_tick(
         raise
 
     if outcome.get("reason") == "workspace_not_found":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=_("Workspace not found")
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Workspace not found"))
 
     return AutonomyTickResponse(
         triggered=bool(outcome.get("triggered", False)),
         root_task_id=outcome.get("root_task_id"),
         reason=str(outcome.get("reason", "")),
     )
+
+
+class AutonomyAttentionResponse(BaseModel):
+    attention_id: str
+    root_task_id: str | None
+    source_kind: str
+    source_id: str
+    reason: str
+    status: str
+    created_at_ms: int
+
+
+class AutonomyAttentionRetryResponse(BaseModel):
+    attention_id: str
+    status: str
+
+
+class AutonomyAttentionResolveResponse(AutonomyAttentionRetryResponse):
+    committed_revision: int
+    replayed: bool
+
+
+@router.get("/attentions", response_model=list[AutonomyAttentionResponse])
+async def list_workspace_autonomy_attentions(
+    workspace_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> list[AutonomyAttentionResponse]:
+    """List open attention records through the Workspace Core authority."""
+    raise workspace_core_unavailable_error()
+
+
+@router.post("/attentions/{attention_id}/retry", response_model=AutonomyAttentionRetryResponse)
+async def retry_workspace_autonomy_attention(
+    workspace_id: str,
+    attention_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> AutonomyAttentionRetryResponse:
+    """Retry an attention through the Workspace Core authority."""
+    raise workspace_core_unavailable_error()
+
+
+@router.post("/attentions/{attention_id}/resolve", response_model=AutonomyAttentionResolveResponse)
+async def resolve_workspace_autonomy_attention(
+    workspace_id: str,
+    attention_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> AutonomyAttentionResolveResponse:
+    """Resolve an attention with Core-enforced revision and idempotency headers."""
+    raise workspace_core_unavailable_error()

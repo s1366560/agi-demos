@@ -13,14 +13,14 @@ REPO_ROOT = Path(__file__).resolve().parents[7]
 GENERATOR_PATH = REPO_ROOT / "scripts/workspace-core/generate-route-manifest.py"
 MANIFEST_PATH = REPO_ROOT / "docs/architecture/workspace-core-route-manifest.json"
 
-EXPECTED_CONTRACT_SHA256 = "c7563012aaf94f8d798897013be127d9d60d0c4d38e078b18c71858a131ad113"
+EXPECTED_CONTRACT_SHA256 = "a0d6fb2d3ae01d30e767c184b29f07544cb33d86b9c55ee04391cb7f40117c30"
 EXPECTED_MODULE_COUNTS = {
     "src.infrastructure.adapters.primary.web.routers.blackboard": 19,
     "src.infrastructure.adapters.primary.web.routers.cyber_genes": 5,
     "src.infrastructure.adapters.primary.web.routers.cyber_objectives": 6,
     "src.infrastructure.adapters.primary.web.routers.topology": 10,
     "src.infrastructure.adapters.primary.web.routers.workspace_agent_policy": 4,
-    "src.infrastructure.adapters.primary.web.routers.workspace_autonomy": 1,
+    "src.infrastructure.adapters.primary.web.routers.workspace_autonomy": 4,
     "src.infrastructure.adapters.primary.web.routers.workspace_chat": 3,
     "src.infrastructure.adapters.primary.web.routers.workspace_collaboration_mutations": 3,
     "src.infrastructure.adapters.primary.web.routers.workspace_context": 2,
@@ -102,9 +102,9 @@ def test_manifest_freezes_workspace_route_inventory() -> None:
     route_keys = {(route["method"], route["path"]) for route in routes}
 
     assert manifest["manifestVersion"] == 1
-    assert manifest["routeCount"] == 92
-    assert len(routes) == 92
-    assert len(route_keys) == 92
+    assert manifest["routeCount"] == 95
+    assert len(routes) == 95
+    assert len(route_keys) == 95
     assert manifest["moduleCounts"] == EXPECTED_MODULE_COUNTS
     assert manifest["routerModules"] == sorted(EXPECTED_MODULE_COUNTS)
     assert manifest["contractSha256"] == EXPECTED_CONTRACT_SHA256
