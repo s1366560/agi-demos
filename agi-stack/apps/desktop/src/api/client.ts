@@ -1884,10 +1884,15 @@ export class DesktopApiClient {
       : await response.text().catch(() => '');
 
     if (!response.ok) {
+      const detail = isRecord(payload) ? payload.detail : null;
       const message =
-        typeof payload === 'object' && payload && 'detail' in payload
-          ? String((payload as { detail: unknown }).detail)
-          : `HTTP ${response.status}`;
+        typeof detail === 'string'
+          ? detail
+          : isRecord(detail) && typeof detail.message === 'string'
+            ? detail.message
+            : isRecord(detail) && typeof detail.code === 'string'
+              ? detail.code
+              : `HTTP ${response.status}`;
       throw new DesktopApiError(message, response.status, payload);
     }
 

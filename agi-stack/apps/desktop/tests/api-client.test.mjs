@@ -5376,3 +5376,30 @@ test('browser audit numeric storage rows preserve denied outcomes without tenant
     assert.equal(entry.origin, '');
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('local marketplace failures preserve status and payload with readable structured detail', async () => {
+  const originalFetch = globalThis.fetch;
+  const client = new DesktopApiClient({ ...DEFAULT_CONFIG, mode: 'local', apiBaseUrl: 'http://127.0.0.1:8765' });
+  try {
+    for (const [detail, expected] of [
+      [{ code: 'plugin_marketplace_v2_cloud_authority_unavailable', message: 'The protocol-v2 cloud marketplace authority is unavailable' }, 'The protocol-v2 cloud marketplace authority is unavailable'],
+      [{ code: 'plugin_marketplace_v2_cloud_authority_unavailable' }, 'plugin_marketplace_v2_cloud_authority_unavailable'],
+      [{ unknown: true }, 'HTTP 503'],
+      ['Cloud login required', 'Cloud login required'],
+    ]) {
+      const payload = { detail };
+      globalThis.fetch = async () => new Response(JSON.stringify(payload), {
+        status: 503, headers: { 'content-type': 'application/json' },
+      });
+      await assert.rejects(client.listMarketplacePlugins(), (error) => {
+        assert.ok(error instanceof DesktopApiError);
+        assert.equal(error.status, 503);
+        assert.equal(error.message, expected);
+        assert.deepEqual(error.payload, payload);
+        return true;
+      });
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
