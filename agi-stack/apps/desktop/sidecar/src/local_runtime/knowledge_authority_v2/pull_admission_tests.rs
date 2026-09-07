@@ -132,7 +132,9 @@ fn v4_pull_upgrade_backs_up_before_adding_cursor_journal_and_conflict_tables() {
             row.get(0)
         })
         .unwrap();
-    connection.execute_batch(super::storage_tests::DROP_CLOUD_SCHEMA).unwrap();
+    connection
+        .execute_batch(super::storage_tests::DROP_CLOUD_SCHEMA)
+        .unwrap();
     connection.execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; DROP TABLE knowledge_sync_pull_cursors; DROP TABLE knowledge_sync_pull_events; DROP TABLE knowledge_sync_pull_conflicts; UPDATE knowledge_schema SET version=4;").unwrap();
     drop(storage_lifecycle::open(&directory.0).unwrap());
     let backups: Vec<_> = fs::read_dir(&knowledge)
@@ -152,5 +154,8 @@ fn v4_pull_upgrade_backs_up_before_adding_cursor_journal_and_conflict_tables() {
     let upgraded: i64 = connection
         .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(upgraded, 7);
+    assert_eq!(
+        upgraded,
+        agistack_adapters_device::knowledge::KNOWLEDGE_SCHEMA_VERSION
+    );
 }

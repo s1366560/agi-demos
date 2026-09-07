@@ -133,7 +133,7 @@ fn version_four_upgrade_preserves_replica_prepared_outbox_and_restart_cursor_wit
             .unwrap();
         drop(repo);
         db.connection().execute_batch("DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;").unwrap();
-        db.connection().execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; DROP TABLE knowledge_sync_pull_cursors; DROP TABLE knowledge_sync_pull_events; DROP TABLE knowledge_sync_pull_conflicts; UPDATE knowledge_schema SET version=4;").unwrap();
+        db.connection().execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; DROP TABLE knowledge_sync_pull_cursors; DROP TABLE knowledge_sync_pull_events; DROP TABLE knowledge_sync_pull_conflicts; DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_processing_jobs; DROP TABLE knowledge_derived_projections; UPDATE knowledge_schema SET version=4;").unwrap();
         let repo = db.open();
         assert_eq!(
             repo.prepare_push(&scope(), &target())
@@ -153,7 +153,10 @@ fn version_four_upgrade_preserves_replica_prepared_outbox_and_restart_cursor_wit
             .connection()
             .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(
+            version,
+            agistack_adapters_device::knowledge::KNOWLEDGE_SCHEMA_VERSION
+        );
         let remote = super::edges::own_event(&push, 6);
         repo.accept_pull_page(&scope(), &target(), 0, page(vec![remote], 6))
             .await

@@ -249,7 +249,7 @@ fn version_six_migrates_without_losing_original_conflicts_and_missing_current_ob
     drop(repo);
     db.sql().execute_batch(DROP_CLOUD_SCHEMA).unwrap();
     db.sql()
-        .execute_batch("UPDATE knowledge_schema SET version=6;")
+        .execute_batch("DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_processing_jobs; DROP TABLE knowledge_derived_projections; UPDATE knowledge_schema SET version=6;")
         .unwrap();
     let repo = db.open();
     assert_eq!(
@@ -270,7 +270,10 @@ fn version_six_migrates_without_losing_original_conflicts_and_missing_current_ob
         .sql()
         .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(
+        version,
+        agistack_adapters_device::knowledge::KNOWLEDGE_SCHEMA_VERSION
+    );
     for (kind, name) in [
         ("VIEW", "knowledge_pending_outbox"),
         ("TABLE", "knowledge_cloud_resolutions"),

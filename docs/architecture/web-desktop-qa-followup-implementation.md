@@ -782,3 +782,19 @@ Evidence: `/tmp/memstack-permission-producer-sha256.txt`,
 `/tmp/memstack-permission-capability-green.log`,
 `/tmp/memstack-permission-producer-pg-final.log`. Rollback producer wiring together;
 retain pending durable intents and never route them through ordinary HITL.
+
+I3.21 adds revision-bound local processing storage, schema v8. The accepted change
+transaction enqueues pending work, supersedes outstanding older attempts and
+invalidates current derived output; deletion produces a terminal receipt immediately.
+Claim/renew/reclaim/complete/fail/retry validate scope, current source and token/attempt.
+Completed history stays immutable; derived reads verify current revision and payload.
+This storage batch performs no model invocation and does not open release gates.
+Validation: 108 device tests (17 processing), strict core/device all-target Clippy;
+43 Sidecar knowledge tests and strict Sidecar all-target Clippy passed. The new
+Sidecar v7-to-v8 test proves backup-before-migration, retained source/revision,
+pending-work backfill and lease persistence across reopen. Synthetic v2-v7 fixtures
+remove the v8 objects before upgrade. Evidence: `/tmp/rust-processing-device.log`,
+`/tmp/rust-processing-clippy.log`, `/tmp/knowledge-processing-sidecar.log`,
+`/tmp/knowledge-processing-sidecar-clippy.log`. Rollback must use the verified
+pre-v8 backup with an older binary; v8 user content must be exported or retained
+before any restore. Disabling processing does not delete source or sync records.

@@ -1,24 +1,103 @@
 use super::*;
 use rusqlite::Connection;
 
-pub(super) const DROP_CLOUD_SCHEMA: &str = "DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;";
+pub(super) const DROP_PROCESSING_SCHEMA: &str = "DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;";
+
+#[tokio::test]
+async fn v7_processing_upgrade_backs_up_source_and_rebuilds_only_pending_work() {
+    use agistack_core::knowledge::{processing::ProcessingRepository, ScopedMemoryRepository};
+
+    let directory = TestDirectory::new();
+    let state = test_state(TOKEN);
+    let auth = authenticated(&state);
+    let scope = agistack_core::knowledge::KnowledgeScope {
+        tenant_id: auth.workspace.tenant_id.clone(),
+        project_id: auth.workspace.project_id.clone(),
+    };
+    let MemoryMutation::Create { memory } = mutation(&auth) else {
+        panic!("create fixture")
+    };
+    let repo = storage_lifecycle::open(&directory.0).unwrap();
+    let source = repo.create(&scope, memory).await.unwrap();
+    drop(repo);
+    let knowledge = directory.0.join("knowledge");
+    let db = Connection::open(knowledge.join("memories.db")).unwrap();
+    db.execute_batch(DROP_PROCESSING_SCHEMA).unwrap();
+    db.execute_batch("UPDATE knowledge_schema SET version=7;")
+        .unwrap();
+    let repo = storage_lifecycle::open(&directory.0).unwrap();
+    let backups: Vec<_> = fs::read_dir(&knowledge)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.file_name().unwrap().to_string_lossy().contains("pre-v7-"))
+        .collect();
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
+    let original: (i64, i64, String) = backup
+        .query_row(
+            "SELECT (SELECT version FROM knowledge_schema),
+         (SELECT count(*) FROM sqlite_master WHERE name='knowledge_processing_jobs'),
+         (SELECT payload FROM knowledge_memories)",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!((original.0, original.1), (7, 0));
+    let saved: Memory = serde_json::from_str(&original.2).unwrap();
+    assert_eq!(saved.content, source.content);
+    assert_eq!(saved.version, source.version);
+    let lease = repo
+        .claim(&scope, "upgrade-test", 100, 100)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(lease.source.memory_id, source.id);
+    assert_eq!(lease.source.revision, source.version);
+    drop(repo);
+    let reopened = storage_lifecycle::open(&directory.0).unwrap();
+    assert!(reopened
+        .claim(&scope, "other", 101, 100)
+        .await
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        fs::read_dir(&knowledge)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains("pre-v7-"))
+            .count(),
+        1
+    );
+}
+
+pub(super) const DROP_CLOUD_SCHEMA: &str = "DROP TRIGGER knowledge_processing_enqueue; DROP TABLE knowledge_derived_projections; DROP TABLE knowledge_processing_jobs;DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;";
 
 #[test]
 fn v6_cloud_resolution_upgrade_backs_up_before_journal_and_mapping_creation() {
-    let directory=TestDirectory::new();
+    let directory = TestDirectory::new();
     drop(storage_lifecycle::open(&directory.0).unwrap());
-    let knowledge=directory.0.join("knowledge");
-    let db=Connection::open(knowledge.join("memories.db")).unwrap();
+    let knowledge = directory.0.join("knowledge");
+    let db = Connection::open(knowledge.join("memories.db")).unwrap();
     db.execute_batch(DROP_CLOUD_SCHEMA).unwrap();
-    db.execute_batch("UPDATE knowledge_schema SET version=6;").unwrap();
+    db.execute_batch("UPDATE knowledge_schema SET version=6;")
+        .unwrap();
     drop(storage_lifecycle::open(&directory.0).unwrap());
-    let backups:Vec<_>=fs::read_dir(&knowledge).unwrap().map(|e|e.unwrap().path()).filter(|p|p.file_name().unwrap().to_string_lossy().contains("pre-v6-")).collect();
-    assert_eq!(backups.len(),1);
-    let backup=Connection::open(&backups[0]).unwrap();
+    let backups: Vec<_> = fs::read_dir(&knowledge)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.file_name().unwrap().to_string_lossy().contains("pre-v6-"))
+        .collect();
+    assert_eq!(backups.len(), 1);
+    let backup = Connection::open(&backups[0]).unwrap();
     let original:(i64,i64)=backup.query_row("SELECT (SELECT version FROM knowledge_schema),(SELECT count(*) FROM sqlite_master WHERE name='knowledge_cloud_resolutions')",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
-    assert_eq!(original,(6,0));
-    let version:i64=db.query_row("SELECT version FROM knowledge_schema",[],|r|r.get(0)).unwrap();
-    assert_eq!(version,7);
+    assert_eq!(original, (6, 0));
+    let version: i64 = db
+        .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        version,
+        agistack_adapters_device::knowledge::KNOWLEDGE_SCHEMA_VERSION
+    );
 }
 
 #[test]
@@ -149,7 +228,10 @@ fn version_upgrade_backs_up_wal_and_validates_before_modifying() {
     let migrated: i64 = source
         .query_row("SELECT version FROM knowledge_schema", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(migrated, 7);
+    assert_eq!(
+        migrated,
+        agistack_adapters_device::knowledge::KNOWLEDGE_SCHEMA_VERSION
+    );
     drop(repository);
     drop(storage_lifecycle::open(&directory.0).unwrap());
     assert_eq!(

@@ -11,14 +11,15 @@ use agistack_core::Memory;
 use async_trait::async_trait;
 use rusqlite::{params, Connection, OptionalExtension};
 
-mod mutations;
 mod cloud_resolution;
-mod resolution;
-mod push;
+mod mutations;
+mod processing;
 mod pull;
+mod push;
+mod resolution;
 mod sync;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 7;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 8;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -92,6 +93,7 @@ impl SqliteKnowledgeRepository {
         pull::migrate(&tx, version)?;
         resolution::migrate(&tx, version)?;
         cloud_resolution::migrate(&tx, version)?;
+        processing::migrate(&tx, version)?;
         tx.execute(
             "UPDATE knowledge_schema SET version=?1",
             [KNOWLEDGE_SCHEMA_VERSION],
