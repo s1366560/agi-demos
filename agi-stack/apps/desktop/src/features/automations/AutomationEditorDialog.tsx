@@ -310,7 +310,7 @@ function draftFromJob(job: AutomationJob | null): AutomationDraft {
     payloadKind: job?.payload.kind === 'system_event' ? 'system_event' : 'agent_turn',
     payloadMessage: String(job?.payload.config.message ?? job?.payload.config.content ?? ''),
     deliveryKind: isDeliveryKind(job?.delivery.kind) ? job.delivery.kind : 'none',
-    conversationMode: job?.conversation_mode === 'fresh' ? 'fresh' : 'reuse',
+    conversationMode: job?.conversation_mode === 'reuse' ? 'reuse' : 'fresh',
     timezone: job?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     timeoutSeconds: String(job?.timeout_seconds ?? 300),
     maxRetries: String(job?.max_retries ?? 0),

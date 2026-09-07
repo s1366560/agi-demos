@@ -20,6 +20,21 @@ const BARE_I18N_KEY =
 
 test.describe.configure({ mode: 'parallel' });
 
+test('automation creation uses a fresh conversation and editing preserves a bound session', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('agistack.desktop.locale', 'en'));
+  await page.goto('/qa/automations.html');
+  await page.getByRole('button', { name: 'New automation', exact: true }).click();
+  const editor = page.getByRole('dialog');
+  await expect(editor.getByRole('combobox', { name: 'Conversation', exact: true }))
+    .toHaveText('Start fresh conversation');
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(editor.getByRole('combobox', { name: 'Conversation', exact: true }))
+    .toHaveText('Reuse conversation');
+});
+
 for (const variant of buildBrowserQaMatrix()) {
   test(variant.id, async ({ page }) => {
     const runtimeErrors = [];

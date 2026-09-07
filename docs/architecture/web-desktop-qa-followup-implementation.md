@@ -404,3 +404,16 @@ Seventy sync regressions passed, including nine new PostgreSQL tests; Mypy, Pyri
 Ruff, format and diff checks passed. Consumers and enrollment behavior are unchanged
 in this batch. Reverting this primitive before consumer integration preserves the
 existing database schema and sync data.
+
+I4.12 aligns new Desktop automation drafts with the local API's fresh-conversation
+default; editing an existing reuse job preserves its selected mode. A rendered browser
+regression first failed on the default and then passed, including preservation of the
+existing bound-session mode. TypeScript passed. Canonical native QA then created
+`QA Native Scheduled 20260907` without changing the default conversation mode. Its
+17:15 +08:00 scheduled trigger succeeded in 4350 ms, and the persisted assistant reply
+was `NATIVE_AUTOMATION_SCHEDULE_20260907_OK` with a successful complete event. Evidence:
+`/tmp/memstack-qa-20260907/native-automation-scheduled.txt` and
+`/tmp/memstack-qa-20260907/native-automation-scheduled-timeline.json`. The earlier recovery
+answer was also visible in the native conversation after restart, with Kimi selected.
+This default-only change has no migration; reverting it leaves saved jobs unchanged.
+Explicit reuse-session selection and richer run-detail navigation remain follow-ups.
