@@ -21,6 +21,7 @@ pub(super) fn accept_journal_receipt(
     sequence: u64,
     version: &Value,
 ) -> KnowledgeResult<()> {
+    super::cloud_resolution::accept_journal(tx, scope, change_id, sequence, version)?;
     let local_sequence: Option<u64> = tx
         .query_row(
             "SELECT p.sequence FROM knowledge_sync_pushes p
@@ -228,29 +229,23 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
         // conflict cannot cancel an HTTP write whose result is still unknown.
         let candidate: Option<(u64, String, String, String, Option<String>)> = tx
             .query_row(
-                "SELECT c.sequence, o.change_id, c.payload, c.operation, p.request_json
-                 FROM knowledge_sync_outbox o
-                 JOIN knowledge_processing_changes c ON c.sequence=o.sequence
-                 LEFT JOIN knowledge_sync_pushes p ON p.sequence=o.sequence
-                 WHERE c.tenant_id=?1 AND c.project_id=?2 AND p.receipt_json IS NULL
-                   AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=o.sequence)
-                   AND (p.request_json IS NOT NULL OR NOT EXISTS (
-                     SELECT 1 FROM knowledge_sync_pull_conflicts pc
+                "SELECT c.sequence, c.change_id, c.payload, c.operation, c.request_json
+                 FROM knowledge_pending_outbox c
+                 WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.receipt_json IS NULL
+                   AND (c.request_json IS NOT NULL OR NOT EXISTS (
+                     SELECT 1 FROM knowledge_active_pull_conflicts pc
                      WHERE pc.tenant_id=c.tenant_id AND pc.project_id=c.project_id
                        AND pc.memory_id=c.memory_id
-                       AND NOT EXISTS (SELECT 1 FROM knowledge_sync_resolved_pull_conflicts r
-                         WHERE r.tenant_id=pc.tenant_id AND r.project_id=pc.project_id AND r.sequence=pc.sequence)
                    ))
                    AND NOT EXISTS (
-                     SELECT 1 FROM knowledge_sync_outbox eo
-                     JOIN knowledge_processing_changes ec ON ec.sequence=eo.sequence
-                     LEFT JOIN knowledge_sync_pushes ep ON ep.sequence=eo.sequence
+                     SELECT 1 FROM knowledge_pending_outbox ec
                      WHERE ec.tenant_id=c.tenant_id AND ec.project_id=c.project_id
                        AND ec.memory_id=c.memory_id AND ec.sequence<c.sequence
-                       AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=eo.sequence)
-                       AND (ep.receipt_json IS NULL OR ep.conflict_json IS NOT NULL)
                    )
-                 ORDER BY (p.request_json IS NULL), c.sequence LIMIT 1",
+                   AND NOT EXISTS (SELECT 1 FROM knowledge_cloud_resolutions r
+                     WHERE r.tenant_id=c.tenant_id AND r.project_id=c.project_id AND r.memory_id=c.memory_id
+                       AND r.rejection_json IS NULL AND r.reconciliation_json IS NULL)
+                 ORDER BY (c.request_json IS NULL), c.sequence LIMIT 1",
                 params![scope.tenant_id, scope.project_id],
                 |row| {
                     Ok((
@@ -327,10 +322,9 @@ impl KnowledgePushRepository for SqliteKnowledgeRepository {
         let conn = self.conn.lock().map_err(storage)?;
         let mut statement = conn
             .prepare(
-                "SELECT p.conflict_json FROM knowledge_sync_pushes p
-                 JOIN knowledge_processing_changes c ON c.sequence=p.sequence
-                 WHERE c.tenant_id=?1 AND c.project_id=?2 AND p.conflict_json IS NOT NULL
-                 ORDER BY c.sequence LIMIT ?3",
+                "SELECT conflict_json FROM knowledge_unsettled_pushes
+                 WHERE tenant_id=?1 AND project_id=?2 AND conflict_json IS NOT NULL
+                 ORDER BY sequence LIMIT ?3",
             )
             .map_err(storage)?;
         let rows = statement

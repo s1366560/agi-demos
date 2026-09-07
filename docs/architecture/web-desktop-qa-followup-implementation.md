@@ -543,3 +543,21 @@ persisted bindings and run history. Evidence: `/tmp/automation-picker-model-test
 `/tmp/automation-picker-browser-tests.log`, `/tmp/automation-picker-desktop-full.log`,
 `/tmp/memstack-qa-20260907/native-automation-reuse-persistence.json`, and
 `/tmp/memstack-qa-20260907/native-automation-reuse-after-restart.txt`.
+
+I3.13 adds SQLite knowledge schema 7 with a separate immutable cloud-resolution
+journal and stable resolution IDs. Verified receipts preserve the original mutation
+and handle no-sequence/null keep-current responses. Concurrent local edits or newer
+remote versions preserve cloud success and require explicit local reconciliation;
+no automatic semantic choice is made. Applied receipts can recover through the
+server journal; unknown/network outcomes remain retryable. Active views exclude
+resolved/superseded records without deleting history. Schema upgrade uses the
+existing backup path and fails closed on missing required tables/views. Device 68
+and native knowledge 31 tests passed, with strict Core/Device Clippy. Transport and
+UI are not wired; tombstone-baseline preparation remains a subsequent batch.
+Rollback keeps sync closed and retains the schema-7 database/backup; an older binary
+must not open newer schema data. Evidence: `/tmp/knowledge-cloud-resolution-device-all.log`,
+`/tmp/knowledge-cloud-resolution-sidecar.log`, `/tmp/knowledge-cloud-resolution-clippy-all.log`.
+
+Post-commit I4.18 entry validation remains blocked by the parity audit revision
+7da7f53a differing from the newly committed App.tsx. Formal matrix regeneration and
+agent review are pending source freeze; the full Desktop gate is not yet green.

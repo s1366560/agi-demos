@@ -6,10 +6,8 @@ pub(super) fn context(
 ) -> KnowledgeResult<Option<KnowledgePullConflictContext>> {
     let mut stmt = conn
         .prepare(
-            "SELECT c.sequence FROM knowledge_sync_pull_conflicts c
-        WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.memory_id=?3 AND NOT EXISTS (
-          SELECT 1 FROM knowledge_sync_resolved_pull_conflicts r
-          WHERE r.tenant_id=c.tenant_id AND r.project_id=c.project_id AND r.sequence=c.sequence)
+            "SELECT c.sequence FROM knowledge_active_pull_conflicts c
+        WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.memory_id=?3
         ORDER BY c.sequence LIMIT 10001",
         )
         .map_err(storage)?;
@@ -40,10 +38,8 @@ pub(super) fn context(
         .transpose()?
         .unwrap_or_default();
     let local_metadata:Option<String>=conn.query_row("SELECT m.metadata_json FROM knowledge_sync_outbox_metadata m
-        JOIN knowledge_processing_changes c ON c.sequence=m.sequence
+        JOIN knowledge_pending_outbox c ON c.sequence=m.sequence
         WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.memory_id=?3
-          AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=m.sequence)
-          AND NOT EXISTS (SELECT 1 FROM knowledge_sync_pushes p WHERE p.sequence=m.sequence AND p.receipt_json IS NOT NULL AND p.conflict_json IS NULL)
         ORDER BY m.sequence DESC LIMIT 1",params![scope.tenant_id,scope.project_id,id],|row|row.get(0)).optional().map_err(storage)?;
     Ok(Some(KnowledgePullConflictContext {
         memory_id: id.into(),
@@ -79,10 +75,8 @@ pub(super) fn validate_guard(
     }
     let unresolved_push: bool = tx
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM knowledge_sync_pushes p
-        JOIN knowledge_processing_changes c ON c.sequence=p.sequence
-        WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.memory_id=?3
-          AND (p.receipt_json IS NULL OR p.conflict_json IS NOT NULL))",
+            "SELECT EXISTS(SELECT 1 FROM knowledge_unsettled_pushes WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3)
+        OR EXISTS(SELECT 1 FROM knowledge_cloud_resolutions WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3 AND rejection_json IS NULL AND reconciliation_json IS NULL)",
             params![scope.tenant_id, scope.project_id, command.memory_id],
             |row| row.get(0),
         )
@@ -90,12 +84,9 @@ pub(super) fn validate_guard(
     if unresolved_push {
         return Err(KnowledgeError::Conflict);
     }
-    let mut statement=tx.prepare("SELECT o.sequence FROM knowledge_sync_outbox o
-        JOIN knowledge_processing_changes c ON c.sequence=o.sequence
-        WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.memory_id=?3
-          AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=o.sequence)
-          AND NOT EXISTS (SELECT 1 FROM knowledge_sync_pushes p WHERE p.sequence=o.sequence AND p.receipt_json IS NOT NULL)
-        ORDER BY o.sequence").map_err(storage)?;
+    let mut statement=tx.prepare("SELECT sequence FROM knowledge_pending_outbox
+        WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3 AND receipt_json IS NULL
+        ORDER BY sequence").map_err(storage)?;
     let sequences = statement
         .query_map(
             params![scope.tenant_id, scope.project_id, command.memory_id],

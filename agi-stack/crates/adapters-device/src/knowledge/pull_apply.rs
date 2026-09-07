@@ -76,16 +76,9 @@ pub(super) fn apply_event(
     ).optional().map_err(storage)?;
     let pending: bool = tx
         .query_row(
-            "SELECT EXISTS(SELECT 1 FROM knowledge_sync_outbox o
-         JOIN knowledge_processing_changes c ON c.sequence=o.sequence
-         LEFT JOIN knowledge_sync_pushes p ON p.sequence=o.sequence
-         WHERE c.tenant_id=?1 AND c.project_id=?2 AND c.memory_id=?3
-           AND (p.receipt_json IS NULL OR p.conflict_json IS NOT NULL)
-           AND NOT EXISTS (SELECT 1 FROM knowledge_sync_superseded_outbox s WHERE s.sequence=o.sequence))
-         OR EXISTS(SELECT 1 FROM knowledge_sync_pull_conflicts pc
-         WHERE pc.tenant_id=?1 AND pc.project_id=?2 AND pc.memory_id=?3
-           AND NOT EXISTS (SELECT 1 FROM knowledge_sync_resolved_pull_conflicts r
-             WHERE r.tenant_id=pc.tenant_id AND r.project_id=pc.project_id AND r.sequence=pc.sequence))",
+            "SELECT EXISTS(SELECT 1 FROM knowledge_pending_outbox WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3)
+         OR EXISTS(SELECT 1 FROM knowledge_active_pull_conflicts WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3)
+         OR EXISTS(SELECT 1 FROM knowledge_cloud_resolutions WHERE tenant_id=?1 AND project_id=?2 AND memory_id=?3 AND rejection_json IS NULL AND reconciliation_json IS NULL)",
             params![scope.tenant_id, scope.project_id, remote.memory_id],
             |row| row.get(0),
         )

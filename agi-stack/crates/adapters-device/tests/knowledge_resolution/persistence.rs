@@ -142,6 +142,7 @@ fn schema_five_upgrade_keeps_conflicts_and_replica_and_current_missing_table_is_
         .sql()
         .query_row("SELECT replica_id FROM knowledge_replica", [], |r| r.get(0))
         .unwrap();
+    db.sql().execute_batch("DROP VIEW knowledge_active_pull_conflicts; DROP VIEW knowledge_pending_outbox; DROP VIEW knowledge_unsettled_pushes; DROP TABLE knowledge_cloud_resolved_pushes; DROP TABLE knowledge_cloud_resolved_pull_conflicts; DROP TABLE knowledge_cloud_superseded_outbox; DROP TABLE knowledge_cloud_resolutions;").unwrap();
     db.sql().execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; UPDATE knowledge_schema SET version=5;").unwrap();
     let repo = db.open();
     assert_eq!(
@@ -153,7 +154,7 @@ fn schema_five_upgrade_keeps_conflicts_and_replica_and_current_missing_table_is_
         1
     );
     let current:(i64,String)=db.sql().query_row("SELECT (SELECT version FROM knowledge_schema),(SELECT replica_id FROM knowledge_replica)",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
-    assert_eq!(current, (6, replica));
+    assert_eq!(current, (7, replica));
     drop(repo);
     db.sql()
         .execute_batch("DROP TABLE knowledge_sync_outbox_metadata;")

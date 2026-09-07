@@ -198,6 +198,7 @@ fn resolution_schema_upgrade_preserves_v5_backup_before_creating_resolution_tabl
     drop(storage_lifecycle::open(&directory.0).unwrap());
     let knowledge = directory.0.join("knowledge");
     let db = rusqlite::Connection::open(knowledge.join("memories.db")).unwrap();
+    db.execute_batch(super::storage_tests::DROP_CLOUD_SCHEMA).unwrap();
     db.execute_batch("DROP TABLE knowledge_sync_outbox_metadata; DROP TABLE knowledge_sync_superseded_outbox; DROP TABLE knowledge_sync_resolved_pull_conflicts; DROP TABLE knowledge_sync_resolutions; UPDATE knowledge_schema SET version=5;").unwrap();
     drop(storage_lifecycle::open(&directory.0).unwrap());
     let paths: Vec<_> = fs::read_dir(&knowledge)
@@ -212,5 +213,5 @@ fn resolution_schema_upgrade_preserves_v5_backup_before_creating_resolution_tabl
     let version: i64 = db
         .query_row("SELECT version FROM knowledge_schema", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
 }

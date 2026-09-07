@@ -12,12 +12,13 @@ use async_trait::async_trait;
 use rusqlite::{params, Connection, OptionalExtension};
 
 mod mutations;
+mod cloud_resolution;
 mod resolution;
 mod push;
 mod pull;
 mod sync;
 
-pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 6;
+pub const KNOWLEDGE_SCHEMA_VERSION: i64 = 7;
 
 pub struct SqliteKnowledgeRepository {
     conn: Mutex<Connection>,
@@ -90,6 +91,7 @@ impl SqliteKnowledgeRepository {
         sync::migrate(&tx, version)?;
         pull::migrate(&tx, version)?;
         resolution::migrate(&tx, version)?;
+        cloud_resolution::migrate(&tx, version)?;
         tx.execute(
             "UPDATE knowledge_schema SET version=?1",
             [KNOWLEDGE_SCHEMA_VERSION],

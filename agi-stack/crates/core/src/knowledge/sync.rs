@@ -55,3 +55,4 @@ pub trait KnowledgeSyncRepository: Send + Sync {
 }
 
 pub mod resolution;
+pub mod cloud_resolution;
