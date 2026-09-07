@@ -41,12 +41,17 @@ import {
   automationRunStatus,
   automationRunTrigger,
 } from './automationModel';
+import {
+  EMPTY_AUTOMATION_CONVERSATIONS,
+  type AutomationConversationChoice,
+} from './automationConversationModel';
 import './AutomationsPage.css';
 
 type AutomationsPageProps = {
   api: DesktopAutomationApi;
   projectId: string;
   projectName?: string | null;
+  conversations?: readonly AutomationConversationChoice[];
   runCapability: DesktopCapabilityView;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
@@ -56,6 +61,7 @@ export function AutomationsPage({
   api,
   projectId,
   projectName,
+  conversations = EMPTY_AUTOMATION_CONVERSATIONS,
   runCapability,
   onOpenProjectSettings,
 }: AutomationsPageProps) {
@@ -454,6 +460,7 @@ export function AutomationsPage({
       <AutomationEditorDialog
         open={editorOpen}
         job={editorJob}
+        conversations={conversations}
         busy={mutationBusy}
         error={mutationError}
         onOpenChange={setEditorOpenWithFocusReturn}

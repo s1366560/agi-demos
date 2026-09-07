@@ -6,12 +6,19 @@ import { Theme } from '@radix-ui/themes';
 import { DesktopApiError } from '../api/client';
 import { AutomationsPage } from '../features/automations/AutomationsPage';
 import { I18nProvider } from '../i18n';
-import type { AutomationCapabilities, AutomationJob, AutomationRun } from '../types';
+import type {
+  AutomationCapabilities,
+  AutomationCreateInput,
+  AutomationJob,
+  AutomationRun,
+  AutomationUpdateInput,
+} from '../types';
 import '../styles/global.css';
 import './automationsQa.css';
 
 declare global {
   var __automationsQaRoot: Root | undefined;
+  var __automationSubmittedInput: AutomationCreateInput | AutomationUpdateInput | undefined;
 }
 
 type QaState = 'populated' | 'empty' | 'unavailable' | 'permission' | 'error';
@@ -179,11 +186,13 @@ function AutomationsQa() {
           ? readOnlyCapabilities('project_write_required')
           : guardedCapabilities();
       },
-      async createAutomation(input: { name: string }) {
-        return { ...jobs[0]!, id: 'automation-created', name: input.name, revision: 1 };
+      async createAutomation(input: AutomationCreateInput) {
+        globalThis.__automationSubmittedInput = input;
+        return { ...jobs[0]!, ...input, id: 'automation-created', name: input.name, revision: 1 };
       },
-      async updateAutomation(_automationId: string, input: { name?: string }) {
-        return { ...jobs[0]!, name: input.name ?? jobs[0]!.name, revision: 8 };
+      async updateAutomation(_automationId: string, input: AutomationUpdateInput) {
+        globalThis.__automationSubmittedInput = input;
+        return { ...jobs[0]!, ...input, name: input.name ?? jobs[0]!.name, revision: 8 };
       },
       async toggleAutomation(_automationId: string, input: { enabled: boolean }) {
         return { ...jobs[0]!, enabled: input.enabled, revision: 8 };
@@ -226,6 +235,18 @@ function AutomationsQa() {
           api={api}
           projectId="local-project"
           projectName="Desktop Client"
+          conversations={[
+            {
+              id: 'conversation-nightly-review',
+              title: 'Nightly review conversation',
+              workspaceId: 'workspace-nightly',
+            },
+            {
+              id: 'conversation-selected',
+              title: 'Selected review conversation',
+              workspaceId: 'workspace-selected',
+            },
+          ]}
           runCapability={
             state === 'unavailable'
               ? {

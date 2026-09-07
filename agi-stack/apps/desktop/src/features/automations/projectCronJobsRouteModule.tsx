@@ -7,6 +7,8 @@ import type { DesktopRouteContext } from '../navigation/desktopRouteRegistry';
 import type { DesktopCapabilityView } from '../runtime/capabilitySnapshot';
 import type { DesktopAutomationApi } from './automationClient';
 
+import type { AutomationConversationChoice } from './automationConversationModel';
+
 const PROJECT_CRON_JOBS_ROUTE_ID = 'project-project-cron-jobs' as const;
 const PROJECT_CRON_JOBS_LOCAL_POLICY = 'native_equivalent' as const;
 const CONTEXT_UNAVAILABLE_REASON =
@@ -31,6 +33,7 @@ export type ProjectCronJobsRouteBinding = Readonly<{
   api: DesktopAutomationApi;
   scope: ProjectCronJobsRouteScope;
   projectName: string | null;
+  conversations?: readonly AutomationConversationChoice[];
   runCapability: DesktopCapabilityView;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
@@ -115,6 +118,7 @@ function BoundProjectCronJobsRoute({
       api={binding.api}
       projectId={context.projectId}
       projectName={binding.projectName}
+      conversations={binding.conversations}
       runCapability={binding.runCapability}
       onOpenProjectSettings={binding.onOpenProjectSettings}
       onOpenConnection={binding.onOpenConnection}

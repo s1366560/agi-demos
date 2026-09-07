@@ -1,4 +1,4 @@
-import type { ProjectSummary } from '../../types';
+import type { AgentConversation, ProjectSummary } from '../../types';
 import {
   desktopCapability,
   type DesktopCapabilitySnapshot,
@@ -9,6 +9,8 @@ import type {
   ProjectCronJobsRouteContext,
   ProjectCronJobsRouteScope,
 } from './projectCronJobsRouteModule';
+
+import { automationConversationChoices } from './automationConversationModel';
 
 const AUTOMATION_RUN_CAPABILITY_ID = 'automation_run' as const;
 
@@ -30,6 +32,7 @@ export type ProjectCronJobsRouteBindingInputV2 = Readonly<{
   api: DesktopAutomationApi;
   scope: ProjectCronJobsRouteScope;
   projects: readonly ProjectSummary[];
+  conversations?: readonly AgentConversation[];
   capabilitySnapshot: DesktopCapabilitySnapshot | null;
   onOpenProjectSettings: () => void;
   onOpenConnection: () => void;
@@ -67,6 +70,7 @@ export function createProjectCronJobsRouteBindingProviderV2():
         scope,
         projectName: (project?.name ?? project?.id ?? scope.projectId) || null,
         runCapability,
+        conversations: automationConversationChoices(input.conversations ?? [], scope),
         onOpenProjectSettings: input.onOpenProjectSettings,
         onOpenConnection: input.onOpenConnection,
       });

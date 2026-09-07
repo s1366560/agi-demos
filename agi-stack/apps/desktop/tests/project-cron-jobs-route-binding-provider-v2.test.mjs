@@ -148,3 +148,20 @@ test('unavailable automation evidence propagates without fallback synthesis', ()
   assert.equal(binding.runCapability.reason_code, 'sidecar_offline');
   assert.equal(binding.runCapability.available, false);
 });
+
+test('cron jobs bindings publish only detached workspace conversations from the exact scope', () => {
+  const provider = createProjectCronJobsRouteBindingProviderV2();
+  const conversation = { id: 'conversation', title: 'Review', tenant_id: tenantId,
+    project_id: projectId, workspace_id: 'workspace' };
+  provider.publish(input({ conversations: [conversation,
+    { ...conversation, id: 'other', tenant_id: 'other' },
+    { ...conversation, id: 'no-workspace', workspace_id: null },
+  ] }));
+  conversation.title = 'Changed';
+  const binding = provider.resolve({ tenantId, projectId });
+  assert.deepEqual(binding.conversations, [
+    { id: 'conversation', title: 'Review', workspaceId: 'workspace' },
+  ]);
+  assert.ok(Object.isFrozen(binding.conversations));
+  assert.ok(Object.isFrozen(binding.conversations[0]));
+});

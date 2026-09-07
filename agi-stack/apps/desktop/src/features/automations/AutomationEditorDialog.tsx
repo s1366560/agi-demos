@@ -4,6 +4,11 @@ import { Button, Dialog, Select, Switch, Text, TextArea, TextField } from '@radi
 import { useI18n } from '../../i18n';
 import type { AutomationCreateInput, AutomationJob } from '../../types';
 
+import {
+  automationConversationBinding,
+  type AutomationConversationChoice,
+} from './automationConversationModel';
+
 type ScheduleKind = 'cron' | 'every' | 'at';
 type PayloadKind = 'system_event' | 'agent_turn';
 type DeliveryKind = 'none' | 'announce' | 'webhook';
@@ -18,6 +23,7 @@ type AutomationDraft = {
   payloadMessage: string;
   deliveryKind: DeliveryKind;
   conversationMode: 'reuse' | 'fresh';
+  conversationId: string;
   timezone: string;
   timeoutSeconds: string;
   maxRetries: string;
@@ -27,6 +33,7 @@ type AutomationDraft = {
 type AutomationEditorDialogProps = {
   open: boolean;
   job: AutomationJob | null;
+  conversations: readonly AutomationConversationChoice[];
   busy: boolean;
   error: string | null;
   onOpenChange: (open: boolean) => void;
@@ -36,6 +43,7 @@ type AutomationEditorDialogProps = {
 export function AutomationEditorDialog({
   open,
   job,
+  conversations,
   busy,
   error,
   onOpenChange,
@@ -48,12 +56,28 @@ export function AutomationEditorDialog({
     if (open) setDraft(draftFromJob(job));
   }, [job, open]);
 
+  const conversationBinding = automationConversationBinding(
+    draft.conversationMode,
+    draft.conversationId,
+    conversations,
+    job,
+  );
+  const savedConversationMissing =
+    Boolean(job?.conversation_id) &&
+    !conversations.some((conversation) => conversation.id === job?.conversation_id);
+
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const timeoutSeconds = Number(draft.timeoutSeconds);
     const maxRetries = Number(draft.maxRetries);
     const schedule = scheduleInput(draft);
-    if (!schedule || !Number.isInteger(timeoutSeconds) || !Number.isInteger(maxRetries)) return;
+    if (
+      !conversationBinding ||
+      !schedule ||
+      !Number.isInteger(timeoutSeconds) ||
+      !Number.isInteger(maxRetries)
+    )
+      return;
     await onSubmit({
       name: draft.name.trim(),
       description: draft.description.trim(),
@@ -69,6 +93,7 @@ export function AutomationEditorDialog({
       },
       delivery: { kind: draft.deliveryKind, config: {} },
       conversation_mode: draft.conversationMode,
+      ...conversationBinding,
       timezone: draft.timezone.trim(),
       stagger_seconds: 0,
       timeout_seconds: timeoutSeconds,
@@ -185,6 +210,36 @@ export function AutomationEditorDialog({
               ['fresh', t('automations.form.freshConversation')],
             ]}
           />
+          {draft.conversationMode === 'reuse' ? (
+            <div className="automation-form-span">
+              <AutomationSelect
+                label={t('automations.form.conversation')}
+                value={draft.conversationId}
+                placeholder={t('automations.form.chooseConversation')}
+                onValueChange={(conversationId) => setDraft({ ...draft, conversationId })}
+                disabled={busy}
+                options={[
+                  ...(savedConversationMissing && job?.conversation_id
+                    ? [
+                        [job.conversation_id, t('automations.form.savedConversation')] as [
+                          string,
+                          string,
+                        ],
+                      ]
+                    : []),
+                  ...conversations.map((conversation): [string, string] => [
+                    conversation.id,
+                    conversation.title,
+                  ]),
+                ]}
+              />
+              {!conversations.length ? (
+                <Text as="p" size="1" color="gray">
+                  {t('automations.form.noConversations')}
+                </Text>
+              ) : null}
+            </div>
+          ) : null}
           <label className="automation-form-field">
             <Text size="1" weight="bold">
               {t('automations.form.timezone')}
@@ -253,7 +308,7 @@ export function AutomationEditorDialog({
                 {t('automations.form.cancel')}
               </Button>
             </Dialog.Close>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || conversationBinding === null}>
               {busy
                 ? t('automations.form.saving')
                 : job
@@ -271,12 +326,14 @@ function AutomationSelect({
   label,
   value,
   options,
+  placeholder,
   disabled,
   onValueChange,
 }: {
   label: string;
   value: string;
   options: Array<[string, string]>;
+  placeholder?: string;
   disabled: boolean;
   onValueChange: (value: string) => void;
 }) {
@@ -286,7 +343,7 @@ function AutomationSelect({
         {label}
       </Text>
       <Select.Root value={value} onValueChange={onValueChange} disabled={disabled}>
-        <Select.Trigger />
+        <Select.Trigger placeholder={placeholder} aria-label={label} />
         <Select.Content>
           {options.map(([optionValue, optionLabel]) => (
             <Select.Item key={optionValue} value={optionValue}>
@@ -311,6 +368,7 @@ function draftFromJob(job: AutomationJob | null): AutomationDraft {
     payloadMessage: String(job?.payload.config.message ?? job?.payload.config.content ?? ''),
     deliveryKind: isDeliveryKind(job?.delivery.kind) ? job.delivery.kind : 'none',
     conversationMode: job?.conversation_mode === 'reuse' ? 'reuse' : 'fresh',
+    conversationId: job?.conversation_id ?? '',
     timezone: job?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     timeoutSeconds: String(job?.timeout_seconds ?? 300),
     maxRetries: String(job?.max_retries ?? 0),

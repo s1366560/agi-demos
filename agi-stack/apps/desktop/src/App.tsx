@@ -6588,6 +6588,7 @@ export function App() {
       projectId: config.projectId,
     }),
     projects: auth.projects,
+    conversations: Object.values(dataset.conversationsByWorkspace).flat(),
     capabilitySnapshot: desktopCapabilityState.snapshot,
     onOpenProjectSettings: openWorkspaceSettings,
     onOpenConnection: openConnectionSettings,

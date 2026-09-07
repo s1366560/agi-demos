@@ -35,6 +35,28 @@ test('automation creation uses a fresh conversation and editing preserves a boun
     .toHaveText('Reuse conversation');
 });
 
+test('automation reuse requires an explicit conversation and submits its workspace', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('agistack.desktop.locale', 'en'));
+  await page.goto('/qa/automations.html');
+  await page.getByRole('button', { name: 'New automation', exact: true }).click();
+  const editor = page.getByRole('dialog');
+  await editor.getByRole('combobox', { name: 'Conversation', exact: true }).click();
+  await page.getByRole('option', { name: 'Reuse conversation', exact: true }).click();
+  const create = editor.getByRole('button', { name: 'Create automation', exact: true });
+  await expect(create).toBeDisabled();
+  await editor.getByRole('textbox', { name: 'Name', exact: true }).fill('QA reuse');
+  await editor.getByRole('textbox', { name: 'Instruction or event content', exact: true }).fill('Review this conversation');
+  await editor.getByRole('combobox', { name: 'Existing conversation', exact: true }).click();
+  await page.getByRole('option', { name: 'Selected review conversation', exact: true }).click();
+  await expect(create).toBeEnabled();
+  await create.click();
+  await expect(editor).not.toBeVisible();
+  const submitted = await page.evaluate(() => globalThis.__automationSubmittedInput);
+  expect(submitted.conversation_mode).toBe('reuse');
+  expect(submitted.conversation_id).toBe('conversation-selected');
+  expect(submitted.workspace_id).toBe('workspace-selected');
+});
+
 for (const variant of buildBrowserQaMatrix()) {
   test(variant.id, async ({ page }) => {
     const runtimeErrors = [];

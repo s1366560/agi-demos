@@ -527,3 +527,19 @@ ports; retirement of old binaries remains a release prerequisite. Rollback must 
 Cloud Cron closed and preserve checkpoints, HITL requests and durable run records.
 Evidence: `/tmp/memstack-cron-run-persistence-live.log` and
 `/tmp/memstack-cron-run-server-full.log`.
+
+I4.18 adds an explicit workspace conversation picker for reuse mode. The route
+binding publishes detached exact-tenant/project choices; fresh inputs omit saved
+conversation IDs and existing unloaded bindings are preserved for authority recheck.
+New reuse jobs cannot submit without a selection. Twenty-two model/binding tests,
+two browser form tests and TypeScript passed. Desktop full run observed 4265 passed,
+2 skipped and one revision-bound entry test blocked by the uncommitted App.tsx;
+that test is rerun after this commit rather than weakening the integrity check.
+Canonical native launch verified create (paused), manual execution with Kimi,
+matching conversation/workspace IDs, the real answer NATIVE_AUTOMATION_REUSE_20260907_OK,
+and both replies visible in the same conversation after full application restart.
+The QA job remains paused. No migration or capability gate changed; rollback keeps
+persisted bindings and run history. Evidence: `/tmp/automation-picker-model-tests.log`,
+`/tmp/automation-picker-browser-tests.log`, `/tmp/automation-picker-desktop-full.log`,
+`/tmp/memstack-qa-20260907/native-automation-reuse-persistence.json`, and
+`/tmp/memstack-qa-20260907/native-automation-reuse-after-restart.txt`.
