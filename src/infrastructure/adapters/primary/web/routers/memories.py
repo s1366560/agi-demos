@@ -849,10 +849,23 @@ async def delete_memory(
     memory_application: MemoryApplicationAuthorityV2 = Depends(
         memory_application_authority_dependency_v2
     ),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    expected_revision: str | None = Header(None, alias="X-Memory-Expected-Revision"),
 ) -> JSONResponse | Response:
     """Delete a memory from all storage systems (DB, Graphiti)."""
     db = memory_application.db
     graph_service = memory_application.services.graph_service
+    from .memory_online_mutations import try_enrolled_memory_mutation
+
+    admitted = await try_enrolled_memory_mutation(
+        memory_id=memory_id,
+        actor_id=str(current_user.id),
+        authority=memory_application,
+        change_id=idempotency_key,
+        expected_revision=expected_revision,
+    )
+    if admitted is not None:
+        return admitted
     # 1. Get memory to check permissions and project_id
     result = await db.execute(
         refresh_select_statement(select(Memory).where(Memory.id == memory_id))
@@ -1112,10 +1125,24 @@ async def update_memory(
     memory_application: MemoryApplicationAuthorityV2 = Depends(
         memory_application_authority_dependency_v2
     ),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    expected_revision: str | None = Header(None, alias="X-Memory-Expected-Revision"),
 ) -> Any:
     """Update an existing memory with optimistic locking."""
     db = memory_application.db
     graph_service = memory_application.services.graph_service
+    from .memory_online_mutations import try_enrolled_memory_mutation
+
+    admitted = await try_enrolled_memory_mutation(
+        memory_id=memory_id,
+        actor_id=str(current_user.id),
+        authority=memory_application,
+        change_id=idempotency_key,
+        expected_revision=expected_revision,
+        patch_data=memory_data,
+    )
+    if admitted is not None:
+        return admitted
     # 1. Get memory
     result = await db.execute(
         refresh_select_statement(select(Memory).where(Memory.id == memory_id))

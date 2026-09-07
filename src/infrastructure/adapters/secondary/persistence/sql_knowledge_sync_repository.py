@@ -30,6 +30,7 @@ from src.domain.model.knowledge_sync.contracts import (
     MemorySyncVersion,
     require_change_id,
 )
+from src.domain.model.knowledge_sync.online_patch import MemoryOnlinePatch
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_access import (
     authorize_scope,
     authorize_write,
@@ -149,6 +150,39 @@ class SqlKnowledgeSyncRepository:
         This primitive neither enrolls a project nor commits the outer transaction.
         """
         return await self._mutate(scope, change_id, mutation, online=True)
+
+    async def mutate_online_patch(
+        self, scope: KnowledgeSyncScope, change_id: str, patch: MemoryOnlinePatch
+    ) -> KnowledgeSyncOutcome:
+        """Replay the original partial command before materializing its full snapshot."""
+        request = canonical({"online_patch": patch.to_dict()})
+        async with self._transaction():
+            member = await self._authorize(scope, lock=True)
+            current = await self._current(scope, patch.memory_id)
+            await authorize_write(self.db, scope, member, current, deleting=False)
+            replay = await self._replay(scope, change_id, request)
+            if replay is not None:
+                return replay
+            if current is None or current.deleted or current.revision != patch.expected_revision:
+                raise KnowledgeSyncError("knowledge_sync_write_conflict")
+            version = await self._apply(
+                scope, patch.memory_id, current, patch.apply(current.content), deleted=False
+            )
+            memory = await self.db.get(Memory, patch.memory_id, populate_existing=True)
+            if memory is None:
+                raise KnowledgeSyncError("knowledge_sync_write_conflict")
+            # These fields remain outside the portable journal. Capture them in
+            # the original receipt so HTTP replay cannot read a later projection.
+            retained_fields = {
+                "entities": memory.entities,
+                "relationships": memory.relationships,
+                "collaborators": memory.collaborators,
+                "is_public": memory.is_public,
+                "updated_at": memory.updated_at.isoformat() if memory.updated_at else None,
+            }
+            return await self._accepted(
+                scope, change_id, request, version, retained_fields=retained_fields
+            )
 
     async def _mutate(
         self,
@@ -309,7 +343,13 @@ class SqlKnowledgeSyncRepository:
         return version
 
     async def _accepted(
-        self, scope: KnowledgeSyncScope, change_id: str, request: str, version: MemorySyncVersion
+        self,
+        scope: KnowledgeSyncScope,
+        change_id: str,
+        request: str,
+        version: MemorySyncVersion,
+        *,
+        retained_fields: dict[str, Any] | None = None,
     ) -> KnowledgeSyncOutcome:
         cursor = await self.db.get(
             Cursor, (scope.tenant_id, scope.project_id), populate_existing=True
@@ -332,11 +372,18 @@ class SqlKnowledgeSyncRepository:
                 snapshot=version.to_dict(),
             )
         )
+        value: dict[str, Any] = {
+            "status": "applied",
+            "sequence": cursor.sequence,
+            "version": version.to_dict(),
+        }
+        if retained_fields is not None:
+            value["retained_fields"] = retained_fields
         return await self._receipt(
             scope,
             change_id,
             request,
-            {"status": "applied", "sequence": cursor.sequence, "version": version.to_dict()},
+            value,
         )
 
     async def _conflict_row(self, scope: KnowledgeSyncScope, conflict_id: str) -> Conflict:

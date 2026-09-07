@@ -8,6 +8,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.online_memory_commands import OnlineMemoryCommands
 from src.infrastructure.adapters.primary.web.routers.memories import (
     MemoryCreate,
     _check_memory_edit_permission,
@@ -22,6 +23,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
     User,
     UserTenant,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_online_memory_repository import (
+    SqlOnlineMemoryRepository,
 )
 
 
@@ -51,7 +55,10 @@ def _make_memory(memory_id: str, project: Project, author: User) -> Memory:
 def _memory_application(db: AsyncSession, graph_service: object | None) -> SimpleNamespace:
     return SimpleNamespace(
         db=db,
-        services=SimpleNamespace(graph_service=graph_service),
+        services=SimpleNamespace(
+            graph_service=graph_service,
+            online_commands=OnlineMemoryCommands(SqlOnlineMemoryRepository(db)),
+        ),
     )
 
 

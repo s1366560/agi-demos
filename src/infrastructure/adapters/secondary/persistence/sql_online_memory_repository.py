@@ -9,11 +9,13 @@ from src.domain.model.knowledge_sync.contracts import (
     KnowledgeSyncScope,
     MemorySyncMutation,
 )
+from src.domain.model.knowledge_sync.online_patch import MemoryOnlinePatch
 from src.domain.ports.repositories.online_memory_repository import OnlineMemoryContext
 from src.infrastructure.adapters.secondary.persistence.knowledge_sync_models import (
     KnowledgeSyncEnrollmentModel as Enrollment,
+    KnowledgeSyncTombstoneModel as Tombstone,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Project
+from src.infrastructure.adapters.secondary.persistence.models import Memory, Project
 from src.infrastructure.adapters.secondary.persistence.sql_knowledge_sync_repository import (
     SqlKnowledgeSyncRepository,
 )
@@ -56,3 +58,29 @@ class SqlOnlineMemoryRepository:
         self, scope: KnowledgeSyncScope, change_id: str, mutation: MemorySyncMutation
     ) -> KnowledgeSyncOutcome:
         return await SqlKnowledgeSyncRepository(self.db).mutate_online(scope, change_id, mutation)
+
+    async def _memory_project(self, memory_id: str) -> str | None:
+        project_id = await self.db.scalar(select(Memory.project_id).where(Memory.id == memory_id))
+        if project_id is None:
+            project_id = await self.db.scalar(
+                select(Tombstone.project_id).where(Tombstone.memory_id == memory_id)
+            )
+        return project_id
+
+    async def open_memory(self, actor_id: str, memory_id: str) -> OnlineMemoryContext | None:
+        # Discover identity without retaining an ORM snapshot across the lock.
+        project_id = await self._memory_project(memory_id)
+        if project_id is None:
+            return None
+        context = await self.open(actor_id, project_id)
+        current_project = await self._memory_project(memory_id)
+        if current_project is not None and current_project != project_id:
+            raise KnowledgeSyncError("knowledge_sync_write_conflict")
+        return context
+
+    async def patch(
+        self, scope: KnowledgeSyncScope, change_id: str, patch: MemoryOnlinePatch
+    ) -> KnowledgeSyncOutcome:
+        return await SqlKnowledgeSyncRepository(self.db).mutate_online_patch(
+            scope, change_id, patch
+        )

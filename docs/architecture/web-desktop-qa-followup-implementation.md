@@ -500,3 +500,16 @@ rollback preserves all saved conversations and run records. Native end-to-end
 acceptance of reuse selection remains pending the editor's conversation picker.
 Evidence: `/tmp/automation-conversation-sidecar-tests.log` and
 `/tmp/automation-conversation-model-tests.log`.
+
+I3.12 connects enrolled HTTP PATCH/delete to the shared command boundary. PATCH
+stores the original partial request before materializing a snapshot; same-key replay
+after later edits/deletion returns the original response, including retained SQL
+fields outside the portable journal. Current write permission is checked on replay.
+Project locks serialize bootstrap and online writes; disabled behavior is preserved.
+Delete atomically removes shares/chunks and writes its tombstone plus deferred
+projection task. The final 142-test run includes 25 new PostgreSQL HTTP tests;
+Mypy, Pyright, Ruff, formatting and diff checks passed. No migration was added.
+Rollback must keep enrollment closed and preserve receipts/tasks; it cannot restore
+legacy writes on already enrolled projects. MemoryService/tools/use-cases and old
+reprocess/derived consumers still need closure before sync is exposed. Evidence:
+`/tmp/online-mutations-final.log`.
