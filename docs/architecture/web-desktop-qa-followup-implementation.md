@@ -368,3 +368,13 @@ Derived-state and PostgreSQL regressions passed 91 tests; HTTP regressions passe
 production startup/bundle passed nine after formal artifact regeneration. Mypy and
 Ruff passed; Pyright reported zero errors. Same-task attempt fencing and complete
 portable-writer synchronization remain follow-up work.
+
+I0.4 fixes native Automation editor state loss during periodic capability refresh.
+The renderer generation host now memoizes using the generation state's actual fields,
+so an unchanged generation preserves its route registry and mounted editor. A new
+regression first failed on registry identity, then passed with generation replacement
+and disable invalidation; eight focused lifecycle tests passed. Full Desktop observed
+4257 passes, two binary-gated skips and two stale parity-artifact failures pending
+regeneration. After source freeze, native QA retained the draft across refreshes and
+successfully created a one-shot local task scheduled for 2026-09-07 16:52 +08:00.
+The app exited before that trigger; recovery acceptance is still in progress.

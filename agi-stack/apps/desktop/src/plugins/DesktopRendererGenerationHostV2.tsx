@@ -72,6 +72,8 @@ export function useDesktopRendererGenerationHostV2(
     });
   }, [generation]);
 
+  // The hook projects a fresh state wrapper on each render. Depend on all of its
+  // fields so ordinary refreshes retain the mounted route and its local drafts.
   return useMemo(() => {
     const authority = resolveDesktopRendererAuthorityStateV2(generationState, enabled);
     const routeRegistry = projectDesktopRouteRegistryV2(composition, authority);
@@ -91,9 +93,9 @@ export function useDesktopRendererGenerationHostV2(
     actions,
     composition,
     enabled,
+    generation,
     generationDigest,
     generationError,
-    generationState,
     generationStatus,
   ]);
 }
