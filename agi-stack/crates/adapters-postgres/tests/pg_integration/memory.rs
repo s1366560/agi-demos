@@ -27,7 +27,16 @@ async fn memory_repository_roundtrips_against_shared_schema() {
     .await
     .unwrap();
 
-    let repo = PgMemoryRepository::new(pool.clone());
+    // This legacy fixture builds a reduced schema; the cross-runtime suite
+    // separately exercises the complete, real Alembic enrollment migrations.
+    sqlx::query("CREATE TABLE IF NOT EXISTS knowledge_sync_enrollments (project_id text PRIMARY KEY, tenant_id text NOT NULL, enabled boolean NOT NULL DEFAULT false)")
+        .execute(&pool).await.unwrap();
+    sqlx::query("CREATE TABLE IF NOT EXISTS knowledge_sync_tombstones (memory_id text PRIMARY KEY, project_id text NOT NULL)")
+        .execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO knowledge_sync_enrollments (project_id, tenant_id, enabled) VALUES ($1, 't_pg', false) ON CONFLICT DO NOTHING")
+        .bind(project_id).execute(&pool).await.unwrap();
+
+    let repo = PgMemoryRepository::new(pool.clone()).await.unwrap();
     let id = "m_pg_1";
     sqlx::query("DELETE FROM memories WHERE id = $1")
         .bind(id)
@@ -92,6 +101,7 @@ async fn memory_repository_roundtrips_against_shared_schema() {
     // delete
     assert!(repo.delete(id).await.unwrap());
     assert!(repo.find_by_id(id).await.unwrap().is_none());
+    repo.close_write_admission().await;
 }
 
 #[tokio::test]

@@ -13,6 +13,7 @@
 //! robust regardless of whether SQLAlchemy emitted `json` or `jsonb`, and
 //! tolerant of rows Python wrote with a richer entity shape.
 
+mod admission;
 use async_trait::async_trait;
 use sqlx::types::chrono::{DateTime, Utc};
 
@@ -24,11 +25,16 @@ use crate::PgPool;
 /// `MemoryRepository` backed by a shared PostgreSQL `memories` table.
 pub struct PgMemoryRepository {
     pool: PgPool,
+    admission_pool: PgPool,
 }
 
 impl PgMemoryRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub async fn new(pool: PgPool) -> CoreResult<Self> {
+        let admission_pool = admission::admission_pool(&pool).await?;
+        Ok(Self {
+            pool,
+            admission_pool,
+        })
     }
 }
 
@@ -121,7 +127,20 @@ fn storage_err(e: sqlx::Error) -> CoreError {
 
 #[async_trait]
 impl MemoryRepository for PgMemoryRepository {
+    async fn begin_legacy_write(
+        &self,
+        project_id: &str,
+        memory_id: Option<&str>,
+    ) -> CoreResult<Box<dyn agistack_core::ports::legacy_memory::LegacyMemoryWriteLease>> {
+        admission::lease(&self.admission_pool, project_id, memory_id).await
+    }
+    async fn close_write_admission(&self) {
+        self.admission_pool.close().await;
+    }
+
     async fn save(&self, memory: Memory) -> CoreResult<Memory> {
+        let mut transaction = self.pool.begin().await.map_err(storage_err)?;
+        admission::check(&mut transaction, Some(&memory.project_id), Some(&memory.id)).await?;
         let tags_json = serde_json::to_string(&memory.tags)
             .map_err(|e| CoreError::Storage(format!("encode tags: {e}")))?;
         let entities_json = serde_json::to_string(&memory.entities)
@@ -131,7 +150,7 @@ impl MemoryRepository for PgMemoryRepository {
         // written with their Python defaults so the row remains valid for Python
         // readers. `processing_status = COMPLETED` because the Rust ingest path
         // extracts + embeds synchronously before saving.
-        sqlx::query(
+        let result = sqlx::query(
             "INSERT INTO memories \
              (id, project_id, title, content, content_type, tags, entities, relationships, \
               version, author_id, collaborators, is_public, status, processing_status, meta, created_at) \
@@ -141,7 +160,8 @@ impl MemoryRepository for PgMemoryRepository {
                title = EXCLUDED.title, content = EXCLUDED.content, \
                content_type = EXCLUDED.content_type, tags = EXCLUDED.tags, \
                entities = EXCLUDED.entities, version = EXCLUDED.version, \
-               status = EXCLUDED.status, updated_at = now()",
+               status = EXCLUDED.status, updated_at = now() \
+             WHERE memories.project_id = EXCLUDED.project_id",
         )
         .bind(&memory.id)
         .bind(&memory.project_id)
@@ -154,10 +174,16 @@ impl MemoryRepository for PgMemoryRepository {
         .bind(&memory.author_id)
         .bind(&memory.status)
         .bind(memory.created_at_ms)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await
         .map_err(storage_err)?;
 
+        if result.rows_affected() == 0 {
+            return Err(
+                agistack_core::ports::legacy_memory::LegacyMemoryWriteError::Conflict.into(),
+            );
+        }
+        transaction.commit().await.map_err(storage_err)?;
         Ok(memory)
     }
 
@@ -233,11 +259,15 @@ impl MemoryRepository for PgMemoryRepository {
     }
 
     async fn delete(&self, id: &str) -> CoreResult<bool> {
-        let result = sqlx::query("DELETE FROM memories WHERE id = $1")
+        let mut transaction = self.pool.begin().await.map_err(storage_err)?;
+        let scope = admission::check(&mut transaction, None, Some(id)).await?;
+        let result = sqlx::query("DELETE FROM memories WHERE id = $1 AND project_id = $2")
             .bind(id)
-            .execute(&self.pool)
+            .bind(&scope.project_id)
+            .execute(&mut *transaction)
             .await
             .map_err(storage_err)?;
+        transaction.commit().await.map_err(storage_err)?;
         Ok(result.rows_affected() > 0)
     }
 

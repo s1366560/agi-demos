@@ -706,7 +706,7 @@ async fn build_memory_and_auth(
 
             let memory = Arc::new(
                 MemoryService::new(
-                    Arc::new(PgMemoryRepository::new(pool.clone())),
+                    Arc::new(PgMemoryRepository::new(pool.clone()).await?),
                     llm,
                     embedding,
                     Arc::new(SystemClock),
@@ -1234,6 +1234,7 @@ async fn main() -> ServerResult<()> {
     let state = build_state(&database_url).await?;
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     let plugin_runtime_v2 = start_plugin_runtime_v2(Some(&state)).await?;
+    let memory_admission = state.memory.clone();
     let app = plugin_runtime_v2.bind(state)?;
     println!("agistack-server listening on http://{addr}");
     let workers = plugin_runtime_v2.workers.clone();
@@ -1247,6 +1248,7 @@ async fn main() -> ServerResult<()> {
         .with_graceful_shutdown(shutdown)
         .await;
     let plugin_shutdown_result = plugin_runtime_v2.shutdown().await;
+    memory_admission.close_write_admission().await;
     plugin_shutdown_result?;
     serve_result?;
     Ok(())

@@ -698,3 +698,23 @@ Desktop full suite: 4273 passed, 2 skipped, 1 audited-revision parity failure pe
 final source freeze. No authority, readiness, catalog or UI changes. Evidence:
 `/tmp/knowledge-wire-red.log`, `/tmp/knowledge-wire-green.log`,
 `/tmp/knowledge-wire-tsc.log`, `/tmp/knowledge-wire-desktop-all.log`.
+
+I3.18 fences Rust legacy memory create/delete/episode ingestion before extraction,
+embedding, SQL, vector and graph side effects. PostgreSQL resolves actual project
+and tenant from durable rows, rejects enrolled projects without sync context, and
+holds compatible locks through all effects. An independent bounded admission pool
+prevents data-pool exhaustion; cancellation drops the transaction. Repository SQL
+writes independently validate admission. Local adapters opt in explicitly; core
+leases are bound to their issuing repository. Graph uses canonical tenant scope.
+Real Alembic PostgreSQL tests: 6 adapter and 4 API passed, including queued bootstrap
+without inner SQL deadlock, graph failure/cancellation and missing fences. Core/Mem/
+Device 228 tests, server API 16 tests, server and bindings/WASM/bench checks and
+four-crate all-target strict Clippy passed. No sync enrollment or release gate enabled.
+Evidence: `/tmp/rust-legacy-queue-test.log`, `/tmp/rust-legacy-local-tests.log`,
+`/tmp/rust-legacy-api-tests.log`, `/tmp/rust-legacy-check.log`,
+`/tmp/rust-legacy-bindings-check.log`, `/tmp/rust-legacy-clippy.log`.
+
+Development API recovery: existing explicit builtin upgrade service CAS-upgraded ROOT
+desired revision 5 to 6, preserving the exact existing profile source and validating
+all replacement archives. Canonical backend startup completed; authenticated login
+and project listing returned HTTP 200. Evidence: `/tmp/knowledge-api-restored-launch.log`.

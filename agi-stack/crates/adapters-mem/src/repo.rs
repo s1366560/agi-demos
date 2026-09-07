@@ -54,6 +54,28 @@ fn poisoned() -> CoreError {
 
 #[async_trait]
 impl MemoryRepository for InMemoryMemoryRepository {
+    async fn begin_legacy_write(
+        &self,
+        project_id: &str,
+        memory_id: Option<&str>,
+    ) -> CoreResult<Box<dyn agistack_core::ports::legacy_memory::LegacyMemoryWriteLease>> {
+        use agistack_core::ports::legacy_memory::{
+            LegacyMemoryScope, LegacyMemoryWriteError, LocalMemoryWriteLease,
+        };
+        if let Some(id) = memory_id {
+            if let Some(memory) = self.find_by_id(id).await? {
+                if memory.project_id != project_id {
+                    return Err(LegacyMemoryWriteError::Conflict.into());
+                }
+            }
+        }
+        Ok(Box::new(LocalMemoryWriteLease(LegacyMemoryScope {
+            project_id: project_id.to_owned(),
+            tenant_id: None,
+        })))
+    }
+    async fn close_write_admission(&self) {}
+
     async fn save(&self, memory: Memory) -> CoreResult<Memory> {
         let mut store = self.store.lock().map_err(|_| poisoned())?;
         store.insert(memory.id.clone(), memory.clone());

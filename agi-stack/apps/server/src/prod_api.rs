@@ -86,6 +86,26 @@ impl IntoResponse for ApiError {
     }
 }
 
+fn memory_write_error(error: agistack_core::ports::CoreError) -> ApiError {
+    use agistack_core::ports::{legacy_memory::LegacyMemoryWriteError, CoreError};
+    match error {
+        CoreError::MemoryWrite(reason) => {
+            let status = match reason {
+                LegacyMemoryWriteError::Forbidden => StatusCode::FORBIDDEN,
+                LegacyMemoryWriteError::NotFound => StatusCode::NOT_FOUND,
+                LegacyMemoryWriteError::FenceMissing | LegacyMemoryWriteError::Unavailable => {
+                    StatusCode::SERVICE_UNAVAILABLE
+                }
+                LegacyMemoryWriteError::ContextRequired | LegacyMemoryWriteError::Conflict => {
+                    StatusCode::CONFLICT
+                }
+            };
+            ApiError::new(status, reason.to_string())
+        }
+        other => ApiError::internal(other.to_string()),
+    }
+}
+
 type ApiResult<T> = Result<T, ApiError>;
 
 /// Verify the caller may act within `project_id`, or map to `403`/`500`.
@@ -304,6 +324,7 @@ fn clamped_relationship_score(score: f32) -> f32 {
 async fn project_memory_extraction_to_graph(
     app: &AppState,
     project_id: &str,
+    tenant_id: Option<&str>,
     memory: &Memory,
     episode_name: &str,
     episode_content: &str,
@@ -316,7 +337,7 @@ async fn project_memory_extraction_to_graph(
             entity_type: EPISODIC_GRAPH_ENTITY_TYPE.to_string(),
             summary: episode_content.to_string(),
             project_id: project_id.to_string(),
-            tenant_id: None,
+            tenant_id: tenant_id.map(str::to_owned),
             created_at_ms: memory.created_at_ms,
             name_embedding: None,
         })
@@ -363,7 +384,7 @@ async fn project_memory_extraction_to_graph(
                     entity_type,
                     summary: format!("Mentioned by {episode_name}"),
                     project_id: project_id.to_string(),
-                    tenant_id: None,
+                    tenant_id: tenant_id.map(str::to_owned),
                     created_at_ms: memory.created_at_ms,
                     name_embedding: None,
                 })
@@ -505,7 +526,7 @@ async fn create_memory(
             entities,
         )
         .await
-        .map_err(|e| ApiError::internal(e.to_string()))?;
+        .map_err(memory_write_error)?;
 
     Ok((StatusCode::CREATED, Json(MemoryResponse::from(memory))).into_response())
 }
@@ -604,14 +625,14 @@ async fn delete_memory(
         .memory
         .get(&memory_id)
         .await
-        .map_err(|e| ApiError::internal(e.to_string()))?
+        .map_err(memory_write_error)?
         .ok_or_else(|| ApiError::not_found("Memory not found"))?;
     ensure_project_admin(&app, &identity, &memory.project_id).await?;
 
     app.memory
         .delete(&memory.project_id, &memory_id)
         .await
-        .map_err(|e| ApiError::internal(e.to_string()))?;
+        .map_err(memory_write_error)?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -637,6 +658,11 @@ async fn create_episode(
         .ok_or_else(|| ApiError::bad_request("project_id is required"))?;
     ensure_project_write(&app, &identity, &project_id).await?;
 
+    let lease = app
+        .memory
+        .begin_legacy_write(&project_id, None)
+        .await
+        .map_err(memory_write_error)?;
     let episode = agistack_core::model::Episode {
         content: req.content.clone(),
         source_type: agistack_core::model::SourceType::Text,
@@ -652,13 +678,19 @@ async fn create_episode(
     // does not gain a new hard failure mode when the graph tier is unavailable.
     let memory = app
         .memory
-        .ingest_episode(&project_id, &identity.user_id, &episode)
+        .ingest_episode_with_lease(&project_id, &identity.user_id, &episode, &lease)
         .await
-        .map_err(|e| ApiError::internal(e.to_string()))?;
+        .map_err(memory_write_error)?;
     let graph_name = req.name.clone().unwrap_or_else(|| memory.title.clone());
-    let _ =
-        project_memory_extraction_to_graph(&app, &project_id, &memory, &graph_name, &req.content)
-            .await;
+    let _ = project_memory_extraction_to_graph(
+        &app,
+        &project_id,
+        lease.scope().tenant_id.as_deref(),
+        &memory,
+        &graph_name,
+        &req.content,
+    )
+    .await;
 
     let response = EpisodeResponse {
         id: memory.id.clone(),
@@ -761,6 +793,9 @@ pub fn router() -> Router<AppState> {
 
 #[cfg(test)]
 mod unit {
+    mod legacy_memory_tests {
+        include!("legacy_memory_tests.rs");
+    }
     use std::sync::{atomic::AtomicU64, Arc, Mutex};
 
     use agistack_adapters_mem::{
@@ -1079,6 +1114,7 @@ mod unit {
         project_memory_extraction_to_graph(
             &app,
             "p1",
+            None,
             &memory,
             "Rust graph projection",
             "Rust projects extracted entities into the graph",
@@ -1181,6 +1217,7 @@ mod unit {
         project_memory_extraction_to_graph(
             &app,
             "p1",
+            None,
             &memory,
             "Rust graph relationship projection",
             "Rust uses GraphStore for memory relationships",

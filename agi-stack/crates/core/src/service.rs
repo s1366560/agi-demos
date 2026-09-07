@@ -8,10 +8,22 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::model::{Episode, Memory};
+use crate::ports::legacy_memory::{LegacyMemoryWriteError, LegacyMemoryWriteLease};
 use crate::ports::{
     Clock, CoreResult, EmbeddingPort, LlmPort, MemoryRepository, RelationshipDraft, VectorIndexPort,
 };
 use crate::util::new_memory_id;
+
+/// A service-bound lease cannot be substituted with a permissive local lease.
+pub struct MemoryWriteLease {
+    repo: Arc<dyn MemoryRepository>,
+    inner: Box<dyn LegacyMemoryWriteLease>,
+}
+impl MemoryWriteLease {
+    pub fn scope(&self) -> &crate::ports::legacy_memory::LegacyMemoryScope {
+        self.inner.scope()
+    }
+}
 
 /// Episode → Memory ingestion + retrieval.
 #[derive(Clone)]
@@ -60,6 +72,22 @@ impl MemoryService {
         self.llm.extract_relationships(memory).await
     }
 
+    pub async fn begin_legacy_write(
+        &self,
+        project_id: &str,
+        memory_id: Option<&str>,
+    ) -> CoreResult<MemoryWriteLease> {
+        let inner = self.repo.begin_legacy_write(project_id, memory_id).await?;
+        Ok(MemoryWriteLease {
+            repo: self.repo.clone(),
+            inner,
+        })
+    }
+
+    pub async fn close_write_admission(&self) {
+        self.repo.close_write_admission().await;
+    }
+
     /// Single-step "skill": extract a memory from an episode, embed it, persist
     /// it, and (if a vector index is wired) index its embedding.
     pub async fn ingest_episode(
@@ -68,6 +96,22 @@ impl MemoryService {
         author_id: &str,
         episode: &Episode,
     ) -> CoreResult<Memory> {
+        let lease = self.begin_legacy_write(project_id, None).await?;
+        self.ingest_episode_with_lease(project_id, author_id, episode, &lease)
+            .await
+    }
+
+    /// The caller owns the lease through any following graph projection.
+    pub async fn ingest_episode_with_lease(
+        &self,
+        project_id: &str,
+        author_id: &str,
+        episode: &Episode,
+        lease: &MemoryWriteLease,
+    ) -> CoreResult<Memory> {
+        if !Arc::ptr_eq(&self.repo, &lease.repo) || lease.scope().project_id != project_id {
+            return Err(LegacyMemoryWriteError::Forbidden.into());
+        }
         let draft = self.llm.extract_memory(episode).await?;
         let embedding = self.embedding.embed(&draft.content).await?;
         let created_at_ms = self.clock.now_ms();
@@ -110,6 +154,7 @@ impl MemoryService {
         tags: Vec<String>,
         entities: Vec<crate::model::Entity>,
     ) -> CoreResult<Memory> {
+        let _lease = self.begin_legacy_write(project_id, None).await?;
         let embedding = self.embedding.embed(content).await?;
         let created_at_ms = self.clock.now_ms();
         let id = new_memory_id(&format!("{project_id}:{title}:{created_at_ms}"));
@@ -204,6 +249,7 @@ impl MemoryService {
     }
 
     pub async fn delete(&self, project_id: &str, id: &str) -> CoreResult<bool> {
+        let _lease = self.begin_legacy_write(project_id, Some(id)).await?;
         let removed = self.repo.delete(id).await?;
         if removed {
             if let Some(vectors) = &self.vectors {

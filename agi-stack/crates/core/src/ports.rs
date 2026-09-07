@@ -8,6 +8,7 @@
 //! server, `wasm-bindgen-futures` in the browser, `block_on` across FFI). No
 //! port names a concrete runtime.
 
+pub mod legacy_memory;
 pub use crate::tool_definition::ToolDefinition;
 use async_trait::async_trait;
 
@@ -20,6 +21,8 @@ use crate::model::{
 /// Errors surfaced across core ports.
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
+    #[error(transparent)]
+    MemoryWrite(#[from] legacy_memory::LegacyMemoryWriteError),
     #[error("not found")]
     NotFound,
     #[error("llm error: {0}")]
@@ -525,6 +528,14 @@ pub trait EmailSender: Send + Sync {
 /// `search_by_project` fallback.
 #[async_trait]
 pub trait MemoryRepository: Send + Sync {
+    /// Required: no permissive default for a persistent authority boundary.
+    async fn begin_legacy_write(
+        &self,
+        project_id: &str,
+        memory_id: Option<&str>,
+    ) -> CoreResult<Box<dyn legacy_memory::LegacyMemoryWriteLease>>;
+    async fn close_write_admission(&self);
+
     async fn save(&self, memory: Memory) -> CoreResult<Memory>;
     async fn find_by_id(&self, id: &str) -> CoreResult<Option<Memory>>;
 
